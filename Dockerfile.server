@@ -1,0 +1,23 @@
+FROM debian:trixie-slim
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+        ca-certificates \
+        libssl3 \
+        default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Create directories
+RUN mkdir -p /app/logs /var/lib/raworc/volumes
+
+# Copy static files that rarely change
+COPY db ./db
+
+# Copy the pre-built binary from local build
+COPY target/release/raworc-server /usr/local/bin/raworc-server
+
+# Start the server
+CMD ["raworc-server"]

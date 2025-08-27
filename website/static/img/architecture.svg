@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <defs>
+    <style>
+      .title { font: 700 20px sans-serif; fill: #111 }
+      .label { font: 600 16px sans-serif; fill: #111 }
+      .small { font: 500 14px sans-serif; fill: #222 }
+      .tiny { font: 400 12px sans-serif; fill: #444 }
+      .box { fill: #fff; stroke: #222; stroke-width: 2; rx: 8; ry: 8 }
+      .group { fill: #fafafa; stroke: #666; stroke-dasharray: 6 4; stroke-width: 2; rx: 10; ry: 10 }
+      .highlight { fill: #f0f9ff; stroke: #0ea5e9; stroke-width: 2; rx: 8; ry: 8 }
+    </style>
+  </defs>
+  
+  <!-- Background -->
+  <rect x="0" y="0" width="1200" height="800" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="600" y="35" text-anchor="middle" class="title">Raworc Architecture</text>
+
+  <!-- CLI -->
+  <rect x="40" y="80" width="140" height="60" class="box"/>
+  <text x="110" y="105" text-anchor="middle" class="label">raworc CLI</text>
+  <text x="110" y="125" text-anchor="middle" class="small">kubectl-like</text>
+
+  <!-- Control Plane group -->
+  <rect x="220" y="50" width="520" height="180" class="group"/>
+  <text x="480" y="42" text-anchor="middle" class="small">Control Plane</text>
+
+  <!-- API Server -->
+  <rect x="250" y="80" width="160" height="60" class="box"/>
+  <text x="330" y="105" text-anchor="middle" class="label">API Server</text>
+  <text x="330" y="125" text-anchor="middle" class="small">REST + RBAC</text>
+
+  <!-- MySQL -->
+  <rect x="430" y="80" width="160" height="60" class="box"/>
+  <text x="510" y="105" text-anchor="middle" class="label">MySQL 8.0</text>
+  <text x="510" y="125" text-anchor="middle" class="small">State & Metadata</text>
+
+  <!-- Operator with Build Manager -->
+  <rect x="250" y="160" width="340" height="60" class="box"/>
+  <text x="420" y="185" text-anchor="middle" class="label">Operator</text>
+  <text x="420" y="205" text-anchor="middle" class="small">Session Lifecycle + Build Management</text>
+
+  <!-- Space Images Registry -->
+  <rect x="780" y="50" width="380" height="180" class="group"/>
+  <text x="970" y="42" text-anchor="middle" class="small">Space Images Registry</text>
+  
+  <!-- Agent Source Repos -->
+  <rect x="800" y="80" width="160" height="60" class="highlight"/>
+  <text x="880" y="105" text-anchor="middle" class="small">Agent Repos</text>
+  <text x="880" y="125" text-anchor="middle" class="tiny">GitHub sources</text>
+
+  <!-- Built Images -->
+  <rect x="980" y="80" width="160" height="60" class="highlight"/>
+  <text x="1060" y="100" text-anchor="middle" class="tiny">raworc_space_default:{id}</text>
+  <text x="1060" y="115" text-anchor="middle" class="tiny">raworc_space_prod:{id}</text>
+  <text x="1060" y="130" text-anchor="middle" class="small">Built Images</text>
+
+  <!-- Build Process -->
+  <rect x="800" y="160" width="340" height="60" class="box"/>
+  <text x="970" y="185" text-anchor="middle" class="small">Build Process</text>
+  <text x="970" y="205" text-anchor="middle" class="tiny">Clone → Compile → Package → Store</text>
+
+  <!-- Agent Nodes group -->
+  <rect x="60" y="280" width="1080" height="480" class="group"/>
+  <text x="600" y="272" text-anchor="middle" class="small">Agent Nodes - Session Containers</text>
+
+  <!-- Session Container 1 -->
+  <rect x="100" y="320" width="320" height="180" class="box"/>
+  <text x="260" y="345" text-anchor="middle" class="label">Session Container</text>
+  <text x="260" y="365" text-anchor="middle" class="tiny">raworc_space_default:{build-id}</text>
+  
+  <rect x="120" y="380" width="130" height="50" class="highlight"/>
+  <text x="185" y="405" text-anchor="middle" class="small">Host Agent</text>
+  <text x="185" y="420" text-anchor="middle" class="tiny">Runtime</text>
+
+  <rect x="270" y="380" width="130" height="50" class="box"/>
+  <text x="335" y="405" text-anchor="middle" class="small">Secrets</text>
+  <text x="335" y="420" text-anchor="middle" class="tiny">API Keys</text>
+
+  <rect x="120" y="440" width="280" height="50" class="highlight"/>
+  <text x="260" y="465" text-anchor="middle" class="small">Pre-built Agents</text>
+  <text x="260" y="480" text-anchor="middle" class="tiny">Python • Node.js • Rust</text>
+
+  <!-- Session Container 2 -->
+  <rect x="440" y="320" width="320" height="180" class="box"/>
+  <text x="600" y="345" text-anchor="middle" class="label">Session Container</text>
+  <text x="600" y="365" text-anchor="middle" class="tiny">raworc_space_prod:{build-id}</text>
+  
+  <rect x="460" y="380" width="130" height="50" class="highlight"/>
+  <text x="525" y="405" text-anchor="middle" class="small">Host Agent</text>
+  <text x="525" y="420" text-anchor="middle" class="tiny">Orchestration</text>
+
+  <rect x="610" y="380" width="130" height="50" class="box"/>
+  <text x="675" y="405" text-anchor="middle" class="small">Workspace</text>
+  <text x="675" y="420" text-anchor="middle" class="tiny">Persistent</text>
+
+  <rect x="460" y="440" width="280" height="50" class="highlight"/>
+  <text x="600" y="465" text-anchor="middle" class="small">Production Agents</text>
+  <text x="600" y="480" text-anchor="middle" class="tiny">Multi-agent collaboration</text>
+
+  <!-- Session Container 3 -->
+  <rect x="780" y="320" width="320" height="180" class="box"/>
+  <text x="940" y="345" text-anchor="middle" class="label">Session Container</text>
+  <text x="940" y="365" text-anchor="middle" class="tiny">raworc_space_team:{build-id}</text>
+  
+  <rect x="800" y="380" width="130" height="50" class="highlight"/>
+  <text x="865" y="405" text-anchor="middle" class="small">Host Agent</text>
+  <text x="865" y="420" text-anchor="middle" class="tiny">Computer-use</text>
+
+  <rect x="950" y="380" width="130" height="50" class="box"/>
+  <text x="1015" y="405" text-anchor="middle" class="small">Tools</text>
+  <text x="1015" y="420" text-anchor="middle" class="tiny">Browser, Files</text>
+
+  <rect x="800" y="440" width="280" height="50" class="highlight"/>
+  <text x="940" y="465" text-anchor="middle" class="small">Custom Agents</text>
+  <text x="940" y="480" text-anchor="middle" class="tiny">Domain-specific tasks</text>
+
+
+
+  <!-- Feature highlights -->
+  <rect x="100" y="520" width="1000" height="80" class="group"/>
+  <text x="600" y="545" text-anchor="middle" class="label">Key Benefits</text>
+  <text x="200" y="565" text-anchor="middle" class="small">Fast Startup</text>
+  <text x="200" y="580" text-anchor="middle" class="tiny">Pre-built agents</text>
+  <text x="400" y="565" text-anchor="middle" class="small">Space Isolation</text>
+  <text x="400" y="580" text-anchor="middle" class="tiny">RBAC + secrets</text>
+  <text x="600" y="565" text-anchor="middle" class="small">Multi-Agent</text>
+  <text x="600" y="580" text-anchor="middle" class="tiny">Collaboration</text>
+  <text x="800" y="565" text-anchor="middle" class="small">Session Persistence</text>
+  <text x="800" y="580" text-anchor="middle" class="tiny">Pause/resume</text>
+  <text x="1000" y="565" text-anchor="middle" class="small">Computer-use</text>
+  <text x="1000" y="580" text-anchor="middle" class="tiny">File, web, code</text>
+
+  <!-- Footer -->
+  <text x="600" y="770" text-anchor="middle" class="small">Enterprise-grade architecture • Pre-built space images • Isolated agent execution environments</text>
+</svg>
