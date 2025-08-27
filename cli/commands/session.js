@@ -9,6 +9,12 @@ module.exports = (program) => {
     .command('session')
     .description('Start an interactive AI agent session')
     .option('-s, --space <space>', 'Space name for the session', 'default')
+    .option('--restore <session-id>', 'Restore an existing session by ID')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session                    # Start a new session\n' +
+      '  $ raworc session --space production # Start session in production space\n' +
+      '  $ raworc session --restore abc123   # Restore and continue existing session\n')
     .action(async (options) => {
       await sessionCommand(options);
     });
@@ -31,28 +37,115 @@ async function sessionCommand(options) {
   let sessionId = null;
   
   try {
-    // Create a new session
-    const spinner = ora('Creating session...').start();
-    
-    const createResponse = await api.post('/sessions', {
-      space: options.space
-    });
-    
-    if (!createResponse.success) {
-      spinner.fail('Failed to create session');
-      console.error(chalk.red('Error:'), createResponse.error);
+    // Check if we're restoring an existing session
+    if (options.restore) {
+      sessionId = options.restore;
+      const spinner = ora('Restoring session...').start();
       
-      if (createResponse.status === 404) {
-        console.log();
-        console.log(chalk.yellow('💡 Space may not exist. Available commands:'));
-        console.log('  • List spaces: ' + chalk.white('raworc api spaces'));
+      // Check if session exists
+      const sessionResponse = await api.get(`/sessions/${sessionId}`);
+      
+      if (!sessionResponse.success) {
+        spinner.fail('Session not found');
+        console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
+        process.exit(1);
       }
       
-      process.exit(1);
+      const session = sessionResponse.data;
+      
+      // Show session info
+      console.log(chalk.gray('Session state:'), session.state);
+      console.log(chalk.gray('Space:'), session.space || session.space_name || 'default');
+      
+      // If session is paused, closed, or idle, restore it
+      if (session.state === 'paused' || session.state === 'closed' || session.state === 'idle') {
+        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
+        
+        if (!restoreResponse.success) {
+          spinner.fail('Failed to restore session');
+          console.error(chalk.red('Error:'), restoreResponse.error);
+          process.exit(1);
+        }
+        
+        spinner.succeed(`Session restored: ${sessionId}`);
+        
+        // Wait for session to become running
+        let attempts = 0;
+        while (attempts < 30) { // Wait up to 30 seconds
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const statusCheck = await api.get(`/sessions/${sessionId}`);
+          if (statusCheck.success && statusCheck.data.state === 'running') {
+            break;
+          }
+          attempts++;
+        }
+        
+      } else if (session.state === 'running') {
+        spinner.succeed(`Session already running: ${sessionId}`);
+      } else if (session.state === 'busy') {
+        spinner.succeed(`Session is being restored: ${sessionId}`);
+        
+        // Wait for session to become running
+        let attempts = 0;
+        while (attempts < 30) { // Wait up to 30 seconds
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const statusCheck = await api.get(`/sessions/${sessionId}`);
+          if (statusCheck.success && statusCheck.data.state === 'running') {
+            break;
+          }
+          attempts++;
+        }
+      } else {
+        spinner.fail(`Cannot restore session in state: ${session.state}`);
+        process.exit(1);
+      }
+      
+      // Get and display recent messages if any
+      const messagesResponse = await api.get(`/sessions/${sessionId}/messages?limit=10`);
+      if (messagesResponse.success && messagesResponse.data) {
+        const messages = Array.isArray(messagesResponse.data) ? messagesResponse.data : messagesResponse.data.messages || [];
+        
+        if (messages.length > 0) {
+          console.log();
+          console.log(chalk.gray('--- Recent messages ---'));
+          
+          // Show last few messages for context
+          const recentMessages = messages.slice(-5);
+          recentMessages.forEach(msg => {
+            if (msg.role === 'user') {
+              console.log(chalk.gray('You:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
+            } else if (msg.role === 'agent') {
+              console.log(chalk.cyan('Agent:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
+            }
+          });
+          console.log(chalk.gray('--- End of history ---'));
+        }
+      }
+      
+    } else {
+      // Create a new session
+      const spinner = ora('Creating session...').start();
+      
+      const createResponse = await api.post('/sessions', {
+        space: options.space
+      });
+      
+      if (!createResponse.success) {
+        spinner.fail('Failed to create session');
+        console.error(chalk.red('Error:'), createResponse.error);
+        
+        if (createResponse.status === 404) {
+          console.log();
+          console.log(chalk.yellow('💡 Space may not exist. Available commands:'));
+          console.log('  • List spaces: ' + chalk.white('raworc api spaces'));
+        }
+        
+        process.exit(1);
+      }
+      
+      sessionId = createResponse.data.id;
+      spinner.succeed(`Session created: ${sessionId}`);
     }
-    
-    sessionId = createResponse.data.id;
-    spinner.succeed(`Session created: ${sessionId}`);
     
     console.log();
     console.log(chalk.green('✅ Session active! Type your messages below.'));

@@ -1,4 +1,4 @@
-# /commit - Comprehensive Change Review and Commit
+# Commit
 
 ## Description
 
@@ -12,6 +12,7 @@ Review all current changes and create a comprehensive commit with proper summary
 4. Stage all changes with `git add .`
 5. Create commit with comprehensive message summarizing all changes
 6. Run `git status` to verify commit succeeded
+7. Don't `git push`
 
 ## Commit Message Guidelines
 

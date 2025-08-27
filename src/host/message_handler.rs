@@ -42,6 +42,25 @@ impl MessageHandler {
             return Ok(0);
         }
         
+        // Build a set of user message IDs that have responses
+        let mut messages_with_responses = HashSet::new();
+        let mut last_user_message_id: Option<String> = None;
+        
+        // Iterate through messages to find which user messages have agent responses
+        for message in recent_messages.iter().rev() {  // Process in chronological order
+            match message.role {
+                MessageRole::User => {
+                    last_user_message_id = Some(message.id.clone());
+                },
+                MessageRole::Agent | MessageRole::System => {
+                    // If this is a response to a user message, mark that user message as processed
+                    if let Some(user_msg_id) = &last_user_message_id {
+                        messages_with_responses.insert(user_msg_id.clone());
+                    }
+                }
+            }
+        }
+        
         // Find unprocessed user messages
         let mut processed_ids = self.processed_message_ids.lock().await;
         let mut new_messages = Vec::new();
@@ -49,7 +68,10 @@ impl MessageHandler {
         for message in recent_messages.iter() {
             if !processed_ids.contains(&message.id) {
                 if message.role == MessageRole::User {
-                    new_messages.push(message.clone());
+                    // Only consider it new if it doesn't have a response yet
+                    if !messages_with_responses.contains(&message.id) {
+                        new_messages.push(message.clone());
+                    }
                 }
                 processed_ids.insert(message.id.clone());
             }
