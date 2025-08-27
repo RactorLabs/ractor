@@ -1,6 +1,7 @@
 use anyhow::Result;
 use bollard::Docker;
-use bollard::image::BuildImageOptions;
+use bollard::image::{BuildImageOptions, CreateImageOptions};
+use futures::TryStreamExt;
 use sqlx::MySqlPool;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -91,8 +92,43 @@ impl SpaceBuilder {
                 }
             },
             Err(e) => {
-                error!("Base image {} not found: {}", base_image_name, e);
-                return Err(anyhow::anyhow!("Base image {} not available: {}", base_image_name, e));
+                warn!("Base image {} not found locally: {}", base_image_name, e);
+                info!("Attempting to pull base image {} from registry...", base_image_name);
+                
+                // Try to pull the base image from registry
+                match self.docker.create_image(
+                    Some(CreateImageOptions {
+                        from_image: base_image_name.clone(),
+                        ..Default::default()
+                    }),
+                    None,
+                    None,
+                ).try_collect::<Vec<_>>().await {
+                    Ok(_) => {
+                        info!("Successfully pulled base image {}", base_image_name);
+                        
+                        // Now inspect the pulled image to get its ID
+                        match self.docker.inspect_image(&base_image_name).await {
+                            Ok(image_info) => {
+                                if let Some(id) = &image_info.id {
+                                    info!("Using pulled image ID: {}", id);
+                                    id.clone()
+                                } else {
+                                    warn!("No image ID found after pull, using name");
+                                    base_image_name.clone()
+                                }
+                            },
+                            Err(e2) => {
+                                warn!("Could not inspect pulled image, using name: {}", e2);
+                                base_image_name.clone()
+                            }
+                        }
+                    },
+                    Err(pull_err) => {
+                        error!("Failed to pull base image {}: {}", base_image_name, pull_err);
+                        return Err(anyhow::anyhow!("Base image {} not available locally and failed to pull: {}", base_image_name, pull_err));
+                    }
+                }
             }
         };
         

@@ -67,9 +67,12 @@ class DockerManager {
       for (const component of components) {
         if (this.images[component]) {
           try {
+            console.log(`📦 Pulling ${this.images[component]}...`);
             await this.execDocker(['pull', this.images[component]]);
+            console.log(`✅ Successfully pulled ${this.images[component]}`);
           } catch (error) {
-            console.warn(`Warning: Failed to pull ${this.images[component]}: ${error.message}`);
+            console.warn(`⚠️  Warning: Failed to pull ${this.images[component]}: ${error.message}`);
+            console.warn(`   The operator will attempt to pull this image when needed.`);
           }
         }
       }
@@ -228,9 +231,15 @@ class DockerManager {
   // Pull latest images from Docker Hub
   async pull() {
     for (const [component, image] of Object.entries(this.images)) {
-      if (component !== 'mysql') { // Skip mysql as it's not our image
+      // Skip mysql (official image) and host (only needed by operator on-demand)
+      if (component !== 'mysql' && component !== 'host') {
         console.log(`📦 Pulling ${image}...`);
-        await this.execDocker(['pull', image]);
+        try {
+          await this.execDocker(['pull', image]);
+          console.log(`✅ Successfully pulled ${image}`);
+        } catch (error) {
+          console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
+        }
       }
     }
   }
