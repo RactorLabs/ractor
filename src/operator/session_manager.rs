@@ -175,8 +175,8 @@ impl SessionManager {
     pub async fn handle_destroy_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
         
-        info!("Destroying container for session {}", session_id);
-        self.docker_manager.destroy_container(&session_id).await?;
+        info!("Deleting container and volume for session {}", session_id);
+        self.docker_manager.delete_container(&session_id).await?;
         
         // No need to update session state - DELETE endpoint already soft-deletes the session
         
@@ -247,10 +247,8 @@ impl SessionManager {
         
         info!("Closing container for session {}", session_id);
         
-        // Destroy the Docker container but keep the persistent volume
-        self.docker_manager.destroy_container(&session_id).await?;
-        
-        info!("Container destroyed for session {}, persistent volume retained", session_id);
+        // Close the Docker container but keep the persistent volume
+        self.docker_manager.close_container(&session_id).await?;
         
         Ok(())
     }

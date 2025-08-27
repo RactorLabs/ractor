@@ -2,7 +2,7 @@
 
 Automate the complete release workflow for Raworc project.
 
-## What this command does:
+## What this command does
 
 1. **Stage all changes**: `git add .`
 2. **Get current version**: Read version from `Cargo.toml`
@@ -17,14 +17,7 @@ Automate the complete release workflow for Raworc project.
 8. **Commit version bump**: `git commit -m "chore: bump version to <next>"`
 9. **Push version bump**: `git push origin main`
 
-## Usage:
-
-```bash
-# From project root
-claude release
-```
-
-## Example workflow:
+## Example workflow
 
 ```
 Current version: 0.2.3
@@ -35,6 +28,7 @@ Current version: 0.2.3
 ```
 
 This triggers the automated GitHub Actions workflow to:
+
 - Build Docker images (raworc_*:0.2.3)
 - Push to Docker Hub (raworc/raworc_*:0.2.3 + latest)  
 - Publish npm package (@raworc/cli@0.2.3)
@@ -43,11 +37,13 @@ This triggers the automated GitHub Actions workflow to:
 ## Version File Management
 
 The release process updates version numbers in multiple files:
+
 - **`Cargo.toml`**: Main Rust project version
 - **`cli/package.json`**: npm CLI package version
 - **`CLAUDE.md`**: Documentation version reference
 
 **CRITICAL: After version bumping, run builds to update lock files:**
+
 ```bash
 # Build Rust project to update Cargo.lock
 cargo build --release
@@ -59,6 +55,7 @@ cd cli && npm install && cd ..
 ```
 
 This ensures:
+
 - `Cargo.lock` reflects the new version
 - `package-lock.json` is updated (if present)
 - Both Rust and Node.js builds are validated
@@ -67,3 +64,4 @@ This ensures:
 All version references are automatically updated to maintain consistency across the codebase.
 
 The project is then ready for the next development cycle at version 0.2.4.
+

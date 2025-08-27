@@ -359,10 +359,11 @@ echo 'Session structure initialized'
         Ok(container.id)
     }
 
-    pub async fn destroy_container(&self, session_id: &str) -> Result<()> {
+    // Close container but retain persistent volume (for session pause/close)
+    pub async fn close_container(&self, session_id: &str) -> Result<()> {
         let container_name = format!("raworc_session_{session_id}");
         
-        info!("Destroying container {}", container_name);
+        info!("Closing container {}", container_name);
 
         let options = RemoveContainerOptions {
             force: true,
@@ -371,9 +372,32 @@ echo 'Session structure initialized'
 
         match self.docker.remove_container(&container_name, Some(options)).await {
             Ok(_) => {
-                info!("Container {} destroyed", container_name);
+                info!("Container {} closed, persistent volume retained", container_name);
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to close container {}: {}", container_name, e);
+                Err(anyhow::anyhow!("Failed to close container: {}", e))
+            }
+        }
+    }
+
+    // Delete container and remove persistent volume (for session deletion)
+    pub async fn delete_container(&self, session_id: &str) -> Result<()> {
+        let container_name = format!("raworc_session_{session_id}");
+        
+        info!("Deleting container {}", container_name);
+
+        let options = RemoveContainerOptions {
+            force: true,
+            ..Default::default()
+        };
+
+        match self.docker.remove_container(&container_name, Some(options)).await {
+            Ok(_) => {
+                info!("Container {} deleted", container_name);
                 
-                // Also cleanup the session volume
+                // Cleanup the session volume
                 if let Err(e) = self.cleanup_session_volume(session_id).await {
                     warn!("Failed to cleanup session volume for {}: {}", session_id, e);
                 }
@@ -381,10 +405,17 @@ echo 'Session structure initialized'
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to destroy container {}: {}", container_name, e);
-                Err(anyhow::anyhow!("Failed to destroy container: {}", e))
+                error!("Failed to delete container {}: {}", container_name, e);
+                Err(anyhow::anyhow!("Failed to delete container: {}", e))
             }
         }
+    }
+
+    // Legacy method - kept for backward compatibility, but deprecated
+    // Use close_container or delete_container instead
+    pub async fn destroy_container(&self, session_id: &str) -> Result<()> {
+        warn!("destroy_container is deprecated, use close_container or delete_container instead");
+        self.delete_container(session_id).await
     }
 
     pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {

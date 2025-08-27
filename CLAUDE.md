@@ -999,6 +999,12 @@ Optional longer description explaining the change.
 - Run `cargo fmt` before committing
 - Run `cargo clippy` and address warnings
 - Test changes in development environment
+
+### Making Changes (Critical Workflow)
+- **ALWAYS run `cargo check` immediately after completing any code changes**
+- **WAIT for user instruction before testing or committing changes**
+- Complete all changes first, then run cargo check to verify compilation
+- Only proceed with testing or committing after receiving explicit user approval
 - Always use the shell scripts (scripts/ folder) for local development:
   - Use `./scripts/build.sh` instead of `cargo build` or `docker build`
   - Use `./scripts/start.sh` instead of manual `docker run` commands
