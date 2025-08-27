@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
+use super::constants::SESSION_STATE_DELETED;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
@@ -281,9 +282,11 @@ impl Session {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(r#"UPDATE sessions SET state = 'deleted' WHERE id = ? AND state != 'deleted'"#
+        let result = sqlx::query(r#"UPDATE sessions SET state = ? WHERE id = ? AND state != ?"#
         )
+        .bind(SESSION_STATE_DELETED)
         .bind(id)
+        .bind(SESSION_STATE_DELETED)
         .execute(pool)
         .await?;
 
