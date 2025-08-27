@@ -1007,6 +1007,39 @@ Optional longer description explaining the change.
   - **NEVER use `node index.js` or `node cli/index.js`** - always use the linked `raworc` command (Node.js CLI from cli/ folder)
 - Published CLI users should use `raworc` commands directly (Node.js package installed via npm)
 
+### Version Bump Requirements
+
+**CRITICAL: When bumping versions, always build both Cargo and npm to ensure success and update lock files:**
+
+```bash
+# 1. Update version in all files:
+#    - Cargo.toml: version = "0.2.5"
+#    - cli/package.json: "version": "0.2.5"  
+#    - CLAUDE.md: Current version: 0.2.5
+
+# 2. Build Rust project to validate and update Cargo.lock
+cargo build --release
+
+# 3. Build npm package to validate and update package-lock.json (if exists)
+cd cli && npm install && cd ..
+
+# 4. Verify both builds succeeded before committing
+# 5. Commit all changes including updated lock files
+git add Cargo.toml cli/package.json CLAUDE.md Cargo.lock
+git commit -m "chore: bump version to 0.2.5"
+```
+
+**Why this is required:**
+- **Rust validation**: `cargo build` ensures new version doesn't break compilation
+- **Node.js validation**: `npm install` ensures package.json changes are valid
+- **Lock file updates**: `Cargo.lock` and `package-lock.json` must reflect version changes
+- **Consistency**: Prevents version mismatches between source and lock files
+- **Release reliability**: Ensures published packages will build successfully
+
+**Lock files that must be committed with version bumps:**
+- `Cargo.lock` - Updated by `cargo build`
+- `cli/package-lock.json` - Updated by `npm install` (if exists)
+
 ### Branch Naming
 Use descriptive branch names:
 ```

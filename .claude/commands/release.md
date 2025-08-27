@@ -47,6 +47,23 @@ The release process updates version numbers in multiple files:
 - **`cli/package.json`**: npm CLI package version
 - **`CLAUDE.md`**: Documentation version reference
 
+**CRITICAL: After version bumping, run builds to update lock files:**
+```bash
+# Build Rust project to update Cargo.lock
+cargo build --release
+
+# Build npm package to update package-lock.json (if it exists)
+cd cli && npm install && cd ..
+
+# Verify both builds succeed before committing
+```
+
+This ensures:
+- `Cargo.lock` reflects the new version
+- `package-lock.json` is updated (if present)
+- Both Rust and Node.js builds are validated
+- Lock files are committed with version changes
+
 All version references are automatically updated to maintain consistency across the codebase.
 
 The project is then ready for the next development cycle at version 0.2.4.
