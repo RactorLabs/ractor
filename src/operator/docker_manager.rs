@@ -387,53 +387,6 @@ echo 'Session structure initialized'
         }
     }
 
-    pub async fn stop_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_id}");
-        
-        info!("Stopping container {}", container_name);
-        
-        // Stop the container with a 10 second timeout
-        match self.docker.stop_container(&container_name, None).await {
-            Ok(_) => {
-                info!("Container {} stopped successfully", container_name);
-                Ok(())
-            }
-            Err(e) => {
-                // Container might already be stopped, which is fine
-                if e.to_string().contains("not running") {
-                    info!("Container {} was already stopped", container_name);
-                    Ok(())
-                } else {
-                    error!("Failed to stop container {}: {}", container_name, e);
-                    Err(anyhow::anyhow!("Failed to stop container: {}", e))
-                }
-            }
-        }
-    }
-
-    pub async fn start_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_id}");
-        
-        info!("Starting container {}", container_name);
-        
-        match self.docker.start_container::<String>(&container_name, None).await {
-            Ok(_) => {
-                info!("Container {} started successfully", container_name);
-                Ok(())
-            }
-            Err(e) => {
-                // Container might already be running, which is fine
-                if e.to_string().contains("already started") || e.to_string().contains("is running") {
-                    info!("Container {} was already running", container_name);
-                    Ok(())
-                } else {
-                    error!("Failed to start container {}: {}", container_name, e);
-                    Err(anyhow::anyhow!("Failed to start container: {}", e))
-                }
-            }
-        }
-    }
-
     pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
         
@@ -461,13 +414,5 @@ echo 'Session structure initialized'
         }
 
         Ok(output_str)
-    }
-
-    pub async fn container_exists(&self, session_id: &str) -> Result<bool> {
-        let container_name = format!("raworc_session_{}", session_id);
-        match self.docker.inspect_container(&container_name, None).await {
-            Ok(_) => Ok(true),
-            Err(_) => Ok(false),
-        }
     }
 }

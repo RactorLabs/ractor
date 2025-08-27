@@ -157,7 +157,7 @@ impl SessionManager {
         info!("Creating container for session {}", session_id);
         self.docker_manager.create_container(&session_id).await?;
         
-        sqlx::query(r#"UPDATE sessions SET state = 'idle', started_at = NOW(), last_activity_at = NOW() WHERE id = ?"#
+        sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW() WHERE id = ?"#
         )
         .bind(session_id)
         .execute(&self.pool)
@@ -239,7 +239,7 @@ impl SessionManager {
     pub async fn handle_close_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
         
-        info!("Suspending container for session {}", session_id);
+        info!("Closing container for session {}", session_id);
         
         // Destroy the Docker container but keep the persistent volume
         self.docker_manager.destroy_container(&session_id).await?;
@@ -252,19 +252,19 @@ impl SessionManager {
     pub async fn handle_restore_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
         
-        info!("Resuming container for session {}", session_id);
+        info!("Restoring container for session {}", session_id);
         
-        // All resumed sessions were suspended (container destroyed), so recreate container
-        info!("Session {} was suspended, creating new container with persistent volume", session_id);
+        // All restored sessions were closed (container destroyed), so recreate container
+        info!("Session {} was closed, creating new container with persistent volume", session_id);
         self.docker_manager.create_container(&session_id).await?;
         
-        // Update last_activity_at to track when session was resumed
+        // Update last_activity_at to track when session was restored
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)
             .bind(&session_id)
             .execute(&self.pool)
             .await?;
         
-        info!("Container resumed for session {}", session_id);
+        info!("Container restored for session {}", session_id);
         
         Ok(())
     }

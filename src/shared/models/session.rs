@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use super::constants::{SESSION_STATE_IDLE};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
@@ -197,10 +196,6 @@ impl Session {
         let now = Utc::now();
         let mut query_builder = String::from("UPDATE sessions SET state = ?, last_activity_at = ?");
 
-        // Add optional fields based on state transition
-        if req.state == SESSION_STATE_IDLE {
-            query_builder.push_str(", started_at = ?");
-        }
 
 
         if req.container_id.is_some() {
@@ -218,9 +213,6 @@ impl Session {
             .bind(req.state.clone())
             .bind(now);
 
-        if req.state == SESSION_STATE_IDLE {
-            query = query.bind(now);
-        }
 
 
         if let Some(container_id) = req.container_id {

@@ -298,7 +298,7 @@ pub async fn close_session(
     // Check current state - cannot suspend if already suspended or in error
 
     if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
-        return Err(ApiError::BadRequest("Session is already suspended".to_string()));
+        return Err(ApiError::BadRequest("Session is already closed".to_string()));
     }
     if session.state == crate::shared::models::constants::SESSION_STATE_ERROR {
         return Err(ApiError::BadRequest("Cannot close session in error state".to_string()));
@@ -369,7 +369,7 @@ pub async fn restore_session(
 
     // Check current state - can only resume if suspended
     if session.state != crate::shared::models::constants::SESSION_STATE_CLOSED {
-        return Err(ApiError::BadRequest(format!("Cannot restore session in {} state - only suspended sessions can be resumed", session.state)));
+        return Err(ApiError::BadRequest(format!("Cannot restore session in {} state - only closed sessions can be restored", session.state)));
     }
 
     // Update session state to idle
