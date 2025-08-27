@@ -54,8 +54,7 @@ jobs:
       - name: Publish CLI to npm
         working-directory: ./cli
         run: |
-          # Update package.json version to match git tag
-          npm version ${{ steps.get_version.outputs.VERSION }} --no-git-tag-version
+          # Version is already set in package.json, just publish
           npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
