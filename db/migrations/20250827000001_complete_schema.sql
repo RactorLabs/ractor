@@ -1,5 +1,5 @@
 -- Raworc complete database schema with spaces terminology
--- Date: 2025-08-20
+-- Date: 2025-08-27
 
 -- Service Accounts
 CREATE TABLE IF NOT EXISTS service_accounts (
@@ -82,7 +82,30 @@ CREATE TABLE space_builds (
     INDEX idx_space_builds_started_at (started_at)
 );
 
--- Sessions
+-- Build Tasks table for operator to process
+CREATE TABLE IF NOT EXISTS build_tasks (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    task_type VARCHAR(50) NOT NULL DEFAULT 'space_build',
+    space VARCHAR(255) NOT NULL,
+    build_id VARCHAR(36) NOT NULL,
+    payload JSON NOT NULL DEFAULT ('{}'),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    started_at TIMESTAMP NULL,
+    completed_at TIMESTAMP NULL,
+    error TEXT,
+    created_by VARCHAR(255) NOT NULL,
+    
+    INDEX idx_build_tasks_status (status),
+    INDEX idx_build_tasks_space (space),
+    INDEX idx_build_tasks_build_id (build_id),
+    INDEX idx_build_tasks_created_at (created_at),
+    
+    CONSTRAINT fk_build_tasks_space FOREIGN KEY (space) REFERENCES spaces(name) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Sessions (with simplified lifecycle - removed termination and pause concepts)
 CREATE TABLE IF NOT EXISTS sessions (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     space VARCHAR(255) NOT NULL DEFAULT 'default',
@@ -92,19 +115,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     persistent_volume_id VARCHAR(255),
     parent_session_id CHAR(36),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    started_at TIMESTAMP NULL,
     last_activity_at TIMESTAMP NULL,
-    terminated_at TIMESTAMP NULL,
-    termination_reason TEXT,
     metadata JSON DEFAULT ('{}'),
-    deleted_at TIMESTAMP NULL,
-    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'paused', 'suspended', 'error')),
+    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
     CONSTRAINT fk_sessions_space FOREIGN KEY (space) REFERENCES spaces(name),
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
     INDEX idx_sessions_space (space),
     INDEX idx_sessions_created_by (created_by),
     INDEX idx_sessions_state (state),
-    INDEX idx_sessions_deleted_at (deleted_at),
     INDEX idx_sessions_parent_session_id (parent_session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
