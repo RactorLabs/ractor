@@ -300,7 +300,7 @@ pub async fn close_session(
     if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
         return Err(ApiError::BadRequest("Session is already closed".to_string()));
     }
-    if session.state == crate::shared::models::constants::SESSION_STATE_ERROR {
+    if session.state == crate::shared::models::constants::SESSION_STATE_ERRORED {
         return Err(ApiError::BadRequest("Cannot close session in error state".to_string()));
     }
 
