@@ -1,6 +1,6 @@
 {
   "name": "@raworc/cli",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Raworc CLI - Universal AI Agent Runtime",
   "main": "index.js",
   "bin": {

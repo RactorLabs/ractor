@@ -936,7 +936,7 @@ When modifying code:
 
 ## Version
 
-Current version: 0.2.5
+Current version: 0.2.6
 
 ## Notes for Claude
 
@@ -1015,7 +1015,7 @@ Optional longer description explaining the change.
 # 1. Update version in all files:
 #    - Cargo.toml: version = "0.2.5"
 #    - cli/package.json: "version": "0.2.5"  
-#    - CLAUDE.md: Current version: 0.2.5
+#    - CLAUDE.md: Current version: 0.2.6
 
 # 2. Build Rust project to validate and update Cargo.lock
 cargo build --release
