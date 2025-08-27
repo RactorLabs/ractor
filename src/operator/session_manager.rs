@@ -129,9 +129,8 @@ impl SessionManager {
             "create_session" => self.handle_create_session(task.clone()).await,
             "destroy_session" => self.handle_destroy_session(task.clone()).await,
             "execute_command" => self.handle_execute_command(task.clone()).await,
-            "pause_session" => self.handle_pause_session(task.clone()).await,
-            "suspend_session" => self.handle_suspend_session(task.clone()).await,
-            "resume_session" => self.handle_resume_session(task.clone()).await,
+            "close_session" => self.handle_close_session(task.clone()).await,
+            "restore_session" => self.handle_restore_session(task.clone()).await,
             _ => {
                 warn!("Unknown task type: {}", task.task_type);
                 Err(anyhow::anyhow!("Unknown task type"))
@@ -173,11 +172,7 @@ impl SessionManager {
         info!("Destroying container for session {}", session_id);
         self.docker_manager.destroy_container(&session_id).await?;
         
-        sqlx::query(r#"UPDATE sessions SET state = 'paused', terminated_at = NOW() WHERE id = ?"#
-        )
-        .bind(session_id)
-        .execute(&self.pool)
-        .await?;
+        // No need to update session state - DELETE endpoint already soft-deletes the session
         
         Ok(())
     }
@@ -240,20 +235,8 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_pause_session(&self, task: SessionTask) -> Result<()> {
-        let session_id = task.session_id;
-        
-        info!("Pausing container for session {}", session_id);
-        
-        // Stop the Docker container but don't remove it
-        self.docker_manager.stop_container(&session_id).await?;
-        
-        info!("Container stopped for session {}", session_id);
-        
-        Ok(())
-    }
 
-    pub async fn handle_suspend_session(&self, task: SessionTask) -> Result<()> {
+    pub async fn handle_close_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
         
         info!("Suspending container for session {}", session_id);
@@ -266,24 +249,14 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_resume_session(&self, task: SessionTask) -> Result<()> {
+    pub async fn handle_restore_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
         
         info!("Resuming container for session {}", session_id);
         
-        // Check if container exists to determine resume strategy
-        // If container exists, it's a paused session; if not, it's suspended
-        let container_exists = self.docker_manager.container_exists(&session_id).await?;
-        
-        if container_exists {
-            info!("Session {} container exists, starting existing container (was paused)", session_id);
-            // Start the existing Docker container
-            self.docker_manager.start_container(&session_id).await?;
-        } else {
-            info!("Session {} container doesn't exist, creating new container with persistent volume (was suspended)", session_id);
-            // Create a new container with the existing persistent volume
-            self.docker_manager.create_container(&session_id).await?;
-        }
+        // All resumed sessions were suspended (container destroyed), so recreate container
+        info!("Session {} was suspended, creating new container with persistent volume", session_id);
+        self.docker_manager.create_container(&session_id).await?;
         
         // Update last_activity_at to track when session was resumed
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)

@@ -5,21 +5,20 @@ pub fn can_transition_to(from: &str, to: &str) -> bool {
         ("init", "error") => true,
         
         // From IDLE (ready and waiting)
-        ("idle", "paused") => true,  // After timeout
+        ("idle", "closed") => true,  // User suspends
         ("idle", "busy") => true,  // Processing request
         ("idle", "error") => true,
         
-        // From PAUSED (container paused, waiting for reactivation)
-        ("paused", "idle") => true,  // User returns, restart container
-        ("paused", "error") => true,
+        // From SUSPENDED (container destroyed, volume preserved)
+        ("closed", "idle") => true,  // User resumes, recreate container
+        ("closed", "error") => true,
         
         // From BUSY (actively processing)
         ("busy", "idle") => true,  // Processing complete
         ("busy", "error") => true,
         
-        // From ERROR
-        ("error", "init") => true,  // Reset
-        ("error", "idle") => true,  // Recovery
+        // Terminal states: error and deleted
+        // These states have no outgoing transitions (can only be remixed)
         
         // Cannot transition to same state
         _ => false,

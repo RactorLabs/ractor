@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use super::constants::{SESSION_STATE_IDLE, SESSION_STATE_ERROR};
+use super::constants::{SESSION_STATE_IDLE};
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
@@ -14,12 +14,8 @@ pub struct Session {
     pub persistent_volume_id: Option<String>,
     pub parent_session_id: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub started_at: Option<DateTime<Utc>>,
     pub last_activity_at: Option<DateTime<Utc>>,
-    pub terminated_at: Option<DateTime<Utc>>,
-    pub termination_reason: Option<String>,
     pub metadata: serde_json::Value,
-    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +39,6 @@ pub struct UpdateSessionStateRequest {
     pub container_id: Option<String>,
     #[serde(default)]
     pub persistent_volume_id: Option<String>,
-    #[serde(default)]
-    pub termination_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,10 +68,10 @@ impl Session {
                 r#"
                 SELECT id, space, created_by, state,
                        container_id, persistent_volume_id, parent_session_id,
-                       created_at, started_at, last_activity_at, terminated_at,
-                       termination_reason, metadata, deleted_at
+                       created_at,  last_activity_at,
+                       metadata
                 FROM sessions
-                WHERE space = ? AND deleted_at IS NULL
+                WHERE space = ? AND state != 'deleted'
                 ORDER BY created_at DESC
                 "#
             )
@@ -87,10 +81,10 @@ impl Session {
                 r#"
                 SELECT id, space, created_by, state,
                        container_id, persistent_volume_id, parent_session_id,
-                       created_at, started_at, last_activity_at, terminated_at,
-                       termination_reason, metadata, deleted_at
+                       created_at,  last_activity_at,
+                       metadata
                 FROM sessions
-                WHERE deleted_at IS NULL
+                WHERE state != 'deleted'
                 ORDER BY created_at DESC
                 "#
             )
@@ -104,10 +98,10 @@ impl Session {
             r#"
             SELECT id, space, created_by, state,
                    container_id, persistent_volume_id, parent_session_id,
-                   created_at, started_at, last_activity_at, terminated_at,
-                   termination_reason, metadata, deleted_at
+                   created_at,  last_activity_at,
+                   metadata
             FROM sessions
-            WHERE id = ? AND deleted_at IS NULL
+            WHERE id = ? AND state != 'deleted'
             "#
         )
         .bind(id)
@@ -208,12 +202,6 @@ impl Session {
             query_builder.push_str(", started_at = ?");
         }
 
-        if req.state == SESSION_STATE_ERROR {
-            query_builder.push_str(", terminated_at = ?");
-            if req.termination_reason.is_some() {
-                query_builder.push_str(", termination_reason = ?");
-            }
-        }
 
         if req.container_id.is_some() {
             query_builder.push_str(", container_id = ?");
@@ -234,12 +222,6 @@ impl Session {
             query = query.bind(now);
         }
 
-        if req.state == SESSION_STATE_ERROR {
-            query = query.bind(now);
-            if let Some(reason) = req.termination_reason {
-                query = query.bind(reason);
-            }
-        }
 
         if let Some(container_id) = req.container_id {
             query = query.bind(container_id);
@@ -282,7 +264,7 @@ impl Session {
         }
 
         query_builder.push_str(&updates.join(","));
-        query_builder.push_str(" WHERE id = ? AND deleted_at IS NULL");
+        query_builder.push_str(" WHERE id = ? AND state != 'deleted'");
 
         let mut query = sqlx::query(&query_builder);
 
@@ -307,7 +289,7 @@ impl Session {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(r#"UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL"#
+        let result = sqlx::query(r#"UPDATE sessions SET state = 'deleted' WHERE id = ? AND state != 'deleted'"#
         )
         .bind(id)
         .execute(pool)

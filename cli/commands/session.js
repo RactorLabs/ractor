@@ -69,7 +69,7 @@ async function sessionCommand(options) {
     // Clean up session if it was created
     if (sessionId) {
       try {
-        await api.delete(`/sessions/${sessionId}`);
+        await api.post(`/sessions/${sessionId}/close`);
       } catch (cleanupError) {
         // Ignore cleanup errors
       }
@@ -199,13 +199,13 @@ async function chatLoop(sessionId) {
     }
     
   } finally {
-    // Delete session
+    // Close session for later restore
     try {
-      const spinner = ora('Cleaning up session...').start();
-      await api.delete(`/sessions/${sessionId}`);
-      spinner.succeed('Session ended');
+      const spinner = ora('Closing session...').start();
+      await api.post(`/sessions/${sessionId}/close`);
+      spinner.succeed('Session closed (can be restored later)');
     } catch (error) {
-      console.log(chalk.yellow('⚠️ Failed to clean up session'));
+      console.log(chalk.yellow('⚠️ Failed to close session'));
     }
   }
 }

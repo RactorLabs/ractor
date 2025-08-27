@@ -43,9 +43,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}", get(handlers::sessions::get_session))
         .route("/sessions/{id}", put(handlers::sessions::update_session))
         .route("/sessions/{id}/state", put(handlers::sessions::update_session_state))
-        .route("/sessions/{id}/pause", post(handlers::sessions::pause_session))
-        .route("/sessions/{id}/suspend", post(handlers::sessions::suspend_session))
-        .route("/sessions/{id}/resume", post(handlers::sessions::resume_session))
+        .route("/sessions/{id}/close", post(handlers::sessions::close_session))
+        .route("/sessions/{id}/restore", post(handlers::sessions::restore_session))
         .route("/sessions/{id}/remix", post(handlers::sessions::remix_session))
         .route("/sessions/{id}", delete(handlers::sessions::delete_session))
         // Message endpoints

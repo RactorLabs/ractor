@@ -24,19 +24,19 @@ pub async fn create_message(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
     
-    // Check if session is ready (paused or suspended) and needs reactivation
-    if session.state == crate::shared::models::constants::SESSION_STATE_PAUSED || session.state == crate::shared::models::constants::SESSION_STATE_SUSPENDED {
+    // Check if session is closed and needs reactivation
+    if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
         tracing::info!("Reactivating {} session {} due to new message", session.state, session_id);
         
         // Update session state to IDLE first
-        sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND (state = 'paused' OR state = 'suspended')"#
+        sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'closed'"#
         )
         .bind(&session_id)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
         
-        // Add task to reactivate container (resume_session handles both paused and suspended)
+        // Add task to reactivate container (resume_session recreates container)
         sqlx::query(r#"
             INSERT INTO session_tasks (session_id, task_type, payload, status)
             VALUES (?, 'resume_session', '{}', 'pending')

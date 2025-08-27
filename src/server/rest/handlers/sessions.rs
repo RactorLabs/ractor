@@ -21,10 +21,7 @@ pub struct SessionResponse {
     pub persistent_volume_id: Option<String>,
     pub parent_session_id: Option<String>,
     pub created_at: String,
-    pub started_at: Option<String>,
     pub last_activity_at: Option<String>,
-    pub terminated_at: Option<String>,
-    pub termination_reason: Option<String>,
     pub metadata: serde_json::Value,
 }
 
@@ -45,10 +42,7 @@ impl SessionResponse {
             persistent_volume_id: session.persistent_volume_id,
             parent_session_id: session.parent_session_id,
             created_at: session.created_at.to_rfc3339(),
-            started_at: session.started_at.map(|dt| dt.to_rfc3339()),
             last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
-            terminated_at: session.terminated_at.map(|dt| dt.to_rfc3339()),
-            termination_reason: session.termination_reason,
             metadata: session.metadata,
         })
     }
@@ -269,107 +263,12 @@ pub async fn remix_session(
 //     Ok(Json(SessionResponse::from_session(updated_session, &state.db).await?))
 // }
 
-pub async fn pause_session(
+pub async fn close_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Pausing session: {}", id);
-    
-    // Check if session exists
-    let session = match Session::find_by_id(&state.db, &id).await {
-        Ok(Some(s)) => s,
-        Ok(None) => return Err(ApiError::NotFound("Session not found".to_string())),
-        Err(e) => {
-            tracing::error!("Database error fetching session {}: {:?}", id, e);
-            return Err(ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)));
-        }
-    };
-    
-    tracing::info!("Found session in state: {} space: {}", session.state, session.space);
-
-    // Check permission for updating sessions in the space
-    tracing::info!("Checking permissions for space: {}", session.space);
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
-        .await
-        .map_err(|e| {
-            tracing::error!("Permission check failed: {:?}", e);
-            ApiError::Forbidden("Insufficient permissions to pause session".to_string())
-        })?;
-    tracing::info!("Permission check passed");
-
-    // Check current state - cannot pause if already paused or in error
-    if session.state == crate::shared::models::constants::SESSION_STATE_PAUSED {
-        return Err(ApiError::BadRequest("Session is already paused".to_string()));
-    }
-    if session.state == crate::shared::models::constants::SESSION_STATE_ERROR {
-        return Err(ApiError::BadRequest("Cannot pause session in error state".to_string()));
-    }
-
-    // Debug: Log exact values being used
-    tracing::info!("Updating session ID: '{}' to state: '{}'", id, crate::shared::models::constants::SESSION_STATE_PAUSED);
-    
-    // Update session state to paused
-    let result = query(r#"
-        UPDATE sessions 
-        SET state = ?
-        WHERE id = ?
-        "#
-    )
-    .bind(crate::shared::models::constants::SESSION_STATE_PAUSED)
-    .bind(id.clone())  // Use clone instead of reference
-    .execute(&*state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Database error during pause: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to pause session: {}", e))
-    })?;
-
-    tracing::info!("Update query executed, rows affected: {}", result.rows_affected());
-    
-    if result.rows_affected() == 0 {
-        tracing::warn!("No rows affected when pausing session {}", id);
-        return Err(ApiError::NotFound("Session not found or already in target state".to_string()));
-    }
-
-    // Get the principal name for task creation
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
-    };
-
-    // Add task to stop the container
-    sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'pause_session', ?, '{}', 'pending')
-        "#
-    )
-    .bind(&id)
-    .bind(created_by)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to create pause task: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create pause task: {}", e))
-    })?;
-    
-    tracing::info!("Created pause task for session {}", id);
-
-    // Fetch updated session
-    let updated_session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
-    Ok(Json(SessionResponse::from_session(updated_session, &state.db).await?))
-}
-
-pub async fn suspend_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Suspend request received for session: {}", id);
+    tracing::info!("Close request received for session: {}", id);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
@@ -392,16 +291,17 @@ pub async fn suspend_session(
         .await
         .map_err(|e| {
             tracing::error!("Permission check failed: {:?}", e);
-            ApiError::Forbidden("Insufficient permissions to suspend session".to_string())
+            ApiError::Forbidden("Insufficient permissions to close session".to_string())
         })?;
     tracing::info!("Permission check passed");
 
     // Check current state - cannot suspend if already suspended or in error
-    if session.state == crate::shared::models::constants::SESSION_STATE_SUSPENDED {
+
+    if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
         return Err(ApiError::BadRequest("Session is already suspended".to_string()));
     }
     if session.state == crate::shared::models::constants::SESSION_STATE_ERROR {
-        return Err(ApiError::BadRequest("Cannot suspend session in error state".to_string()));
+        return Err(ApiError::BadRequest("Cannot close session in error state".to_string()));
     }
 
     // Update session state to suspended
@@ -410,13 +310,13 @@ pub async fn suspend_session(
         SET state = ?
         WHERE id = ?
     "#)
-    .bind(crate::shared::models::constants::SESSION_STATE_SUSPENDED)
+    .bind(crate::shared::models::constants::SESSION_STATE_CLOSED)
     .bind(id.clone())
     .execute(&*state.db)
     .await
     .map_err(|e| {
         tracing::error!("Database error during suspend: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to suspend session: {}", e))
+        ApiError::Internal(anyhow::anyhow!("Failed to close session: {}", e))
     })?;
 
     tracing::info!("Update query executed, rows affected: {}", result.rows_affected());
@@ -428,7 +328,7 @@ pub async fn suspend_session(
     // Add task to destroy the container but keep volume
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'suspend_session', ?, '{}', 'pending')
+        VALUES (?, 'close_session', ?, '{}', 'pending')
         "#
     )
     .bind(&id)
@@ -451,7 +351,7 @@ pub async fn suspend_session(
     Ok(Json(SessionResponse::from_session(updated_session, &state.db).await?))
 }
 
-pub async fn resume_session(
+pub async fn restore_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -465,11 +365,11 @@ pub async fn resume_session(
     // Check permission for updating sessions in the space
     check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
         .await
-        .map_err(|_| ApiError::Forbidden("Insufficient permissions to resume session".to_string()))?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to restore session".to_string()))?;
 
-    // Check current state - can only resume if paused or suspended
-    if session.state != crate::shared::models::constants::SESSION_STATE_PAUSED && session.state != crate::shared::models::constants::SESSION_STATE_SUSPENDED {
-        return Err(ApiError::BadRequest(format!("Cannot resume session in {} state", session.state)));
+    // Check current state - can only resume if suspended
+    if session.state != crate::shared::models::constants::SESSION_STATE_CLOSED {
+        return Err(ApiError::BadRequest(format!("Cannot restore session in {} state - only suspended sessions can be resumed", session.state)));
     }
 
     // Update session state to idle
@@ -483,7 +383,7 @@ pub async fn resume_session(
     .bind(id.clone())
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to resume session: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restore session: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("Session not found".to_string()));
@@ -498,7 +398,7 @@ pub async fn resume_session(
     // Add task to restart the container
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'resume_session', ?, '{}', 'pending')
+        VALUES (?, 'restore_session', ?, '{}', 'pending')
         "#
     )
     .bind(&id)
