@@ -1,5 +1,5 @@
 use super::agent_manager::AgentManager;
-use super::api::{RaworcClient, Message, MessageRole, SESSION_STATE_IDLE, SESSION_STATE_BUSY};
+use super::api::{RaworcClient, Message, MessageRole, SESSION_STATE_IDLE, SESSION_STATE_BUSY, MESSAGE_ROLE_USER};
 use super::claude::ClaudeClient;
 use super::error::Result;
 use super::guardrails::Guardrails;
@@ -216,9 +216,9 @@ impl MessageHandler {
             .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
             .map(|m| {
                 let role = match m.role {
-                    MessageRole::User => "user",
-                    MessageRole::Agent => "assistant",
-                    _ => "user",
+                    MessageRole::User => MESSAGE_ROLE_USER,
+                    MessageRole::Agent => "assistant", // Claude expects "assistant" not "agent"  
+                    _ => MESSAGE_ROLE_USER,
                 };
                 (role.to_string(), m.content.clone())
             })
@@ -228,7 +228,7 @@ impl MessageHandler {
         
         // Add current message
         if let Some(current) = messages.iter().find(|m| m.id == current_id) {
-            conversation.push(("user".to_string(), current.content.clone()));
+            conversation.push((MESSAGE_ROLE_USER.to_string(), current.content.clone()));
         }
         
         info!("Prepared conversation with {} messages of history", conversation.len() - 1);

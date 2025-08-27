@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-// Session state constants
-pub const SESSION_STATE_IDLE: &str = "idle";
-pub const SESSION_STATE_BUSY: &str = "busy";
+// Import constants from shared module
+#[path = "../shared/models/constants.rs"]
+pub mod constants;
+pub use constants::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]

@@ -157,8 +157,9 @@ impl SessionManager {
         info!("Creating container for session {}", session_id);
         self.docker_manager.create_container(&session_id).await?;
         
-        sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW() WHERE id = ?"#
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#
         )
+        .bind("idle")
         .bind(session_id)
         .execute(&self.pool)
         .await?;

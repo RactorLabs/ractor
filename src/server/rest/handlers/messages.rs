@@ -8,6 +8,7 @@ use sqlx;
 use crate::shared::models::{
     AppState, SessionMessage, CreateMessageRequest, MessageResponse, ListMessagesQuery
 };
+use crate::shared::models::constants::{SESSION_STATE_IDLE, SESSION_STATE_BUSY, SESSION_STATE_CLOSED};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 
@@ -29,9 +30,11 @@ pub async fn create_message(
         tracing::info!("Reactivating {} session {} due to new message", session.state, session_id);
         
         // Update session state to IDLE first
-        sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'closed'"#
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
         )
+        .bind(SESSION_STATE_IDLE)
         .bind(&session_id)
+        .bind(SESSION_STATE_CLOSED)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
@@ -48,17 +51,21 @@ pub async fn create_message(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create resume task: {}", e)))?;
         
         // Now transition to BUSY for message processing
-        sqlx::query(r#"UPDATE sessions SET state = 'busy', last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'idle'"#
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
         )
+        .bind(SESSION_STATE_BUSY)
         .bind(&session_id)
+        .bind(SESSION_STATE_IDLE)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
     } else if session.state == crate::shared::models::constants::SESSION_STATE_IDLE {
         // Update session to BUSY when processing a message
-        sqlx::query(r#"UPDATE sessions SET state = 'busy', last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = 'idle'"#
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
         )
+        .bind(SESSION_STATE_BUSY)
         .bind(&session_id)
+        .bind(SESSION_STATE_IDLE)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
