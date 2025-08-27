@@ -900,7 +900,7 @@ When modifying code:
 
 ## Version
 
-Current version: 0.2.1
+Current version: 0.2.2
 
 ## Notes for Claude
 
