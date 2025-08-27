@@ -7,6 +7,11 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
+// Import constants from shared module
+#[path = "../shared/models/constants.rs"]
+pub mod constants;
+pub use constants::SESSION_STATE_IDLE;
+
 use super::docker_manager::DockerManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -159,7 +164,7 @@ impl SessionManager {
         
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#
         )
-        .bind("idle")
+        .bind(SESSION_STATE_IDLE)
         .bind(session_id)
         .execute(&self.pool)
         .await?;
