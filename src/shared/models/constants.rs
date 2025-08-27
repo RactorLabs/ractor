@@ -6,6 +6,7 @@ pub const SESSION_STATE_IDLE: &str = "idle";
 pub const SESSION_STATE_BUSY: &str = "busy";
 pub const SESSION_STATE_CLOSED: &str = "closed";
 pub const SESSION_STATE_ERROR: &str = "error";
+#[allow(dead_code)]
 pub const SESSION_STATE_DELETED: &str = "deleted";
 
 // Message role constants  
