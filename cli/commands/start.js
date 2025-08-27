@@ -7,7 +7,6 @@ module.exports = (program) => {
     .command('start')
     .description('Start Raworc services using direct Docker container management')
     .argument('[components...]', 'Components to start (server, operator, mysql)', [])
-    .option('-p, --pull', 'Pull latest images from Docker Hub before starting')
     .option('-r, --restart', 'Stop existing containers before starting (restart)')
     .action(async (components, options) => {
       try {
@@ -25,7 +24,7 @@ module.exports = (program) => {
           await docker.checkImages();
         } catch (error) {
           console.error(chalk.red('❌ Docker images not available:'), error.message);
-          console.error(chalk.yellow('💡 Try running with --pull to download from Docker Hub'));
+          console.error(chalk.yellow('💡 Try running: raworc pull'));
           process.exit(1);
         }
 
@@ -56,7 +55,7 @@ module.exports = (program) => {
         // Start services
         const startSpinner = ora('Starting services...').start();
         try {
-          await docker.start(services, options.pull);
+          await docker.start(services, false);
           startSpinner.succeed('Services started successfully');
           
           // Show running services
@@ -87,7 +86,7 @@ module.exports = (program) => {
           console.log(chalk.yellow('💡 Troubleshooting tips:'));
           console.log('  • Check if ports 9000 and 3307 are available');
           console.log('  • Ensure Docker daemon is running');
-          console.log('  • Try pulling latest images: ' + chalk.white('raworc start --pull'));
+          console.log('  • Try pulling latest images: ' + chalk.white('raworc pull'));
           console.log('  • Make sure Docker Hub is accessible');
           
           process.exit(1);

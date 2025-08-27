@@ -112,7 +112,7 @@ Stop fighting infrastructure. Start building agents.
 **For using Raworc in production or testing the system:**
 
 ```bash
-# Install CLI from npm
+# Install CLI from npm (Node.js/npm package from cli/ folder)
 npm install -g @raworc/cli
 
 # Start services (automatically pulls Docker images from Docker Hub)
@@ -126,7 +126,7 @@ raworc api health
 **Key Points:**
 - Uses published Docker images from Docker Hub (`raworc/raworc_server`, etc.)
 - No building required - everything is pre-built
-- Install via npm package manager
+- Install via npm package manager (CLI is Node.js implementation from cli/ folder)
 - Simple, one-command setup
 - No access to build/development commands
 
@@ -139,13 +139,13 @@ raworc api health
 git clone <this-repo>
 cd raworc
 
-# Build images locally
+# Build images locally (using shell scripts from scripts/ folder)
 ./scripts/build.sh
 
-# Start services with local images
+# Start services with local images (using shell scripts from scripts/ folder)
 ./scripts/start.sh
 
-# Link CLI for development
+# Link CLI for development (shell script links the Node.js CLI from cli/ folder)
 ./scripts/link.sh
 raworc session  # Now uses your local build
 ```
@@ -153,7 +153,8 @@ raworc session  # Now uses your local build
 **Key Points:**
 - Builds Docker images locally from source
 - Full access to build, modify, and test changes
-- Uses shell scripts for container management
+- Uses shell scripts (scripts/ folder) for container management
+- CLI is Node.js implementation (cli/ folder) linked via shell scripts
 - Can modify source code and rebuild
 - Publishing capabilities to Docker Hub
 
@@ -170,13 +171,13 @@ raworc session  # Now uses your local build
 ### Development vs End User Usage
 
 **For Development (this repository):**
-- Use `./scripts/*.sh` for local development with locally built images
-- Use linked CLI via `./scripts/link.sh` or `cargo run`
-- Build images locally with `./scripts/build.sh`
+- Use shell scripts (scripts/ folder) for local development with locally built images
+- Use linked CLI (Node.js implementation from cli/ folder) via `./scripts/link.sh`
+- Build images locally with shell scripts: `./scripts/build.sh`
 - All images are built locally (no registry dependency)
 
 **For End Users (published packages):**
-- Install CLI via npm: `npm install -g @raworc/cli`
+- Install CLI (Node.js/npm package) via npm: `npm install -g @raworc/cli`
 - Uses published Docker images from Docker Hub automatically
 - No building required - images are pulled as needed
 - Simple `raworc start` command handles everything
@@ -212,15 +213,15 @@ cargo install --path .
 **Publishing CLI to npm:**
 
 ```bash
-# Publish CLI package (requires npm login)
+# Publish CLI package (Node.js implementation from cli/ folder - requires npm login)
 ./scripts/publish.sh
 ./scripts/publish.sh --tag beta
 ```
 
 **Publishing Workflow:**
-1. Build and test locally with `./scripts/build.sh` and `./scripts/start.sh`
-2. Push Docker images with `./scripts/push.sh`
-3. Publish CLI with `./scripts/publish.sh`
+1. Build and test locally with shell scripts: `./scripts/build.sh` and `./scripts/start.sh`
+2. Push Docker images with shell script: `./scripts/push.sh`
+3. Publish CLI (Node.js package from cli/ folder) with shell script: `./scripts/publish.sh`
 4. End users can then `npm install -g @raworc/cli` and `raworc start`
 
 ### Testing the System (Development)
@@ -228,22 +229,22 @@ cargo install --path .
 To test the system after making changes:
 
 ```bash
-# 1. Link CLI for development (REQUIRED FIRST STEP)
+# 1. Link CLI for development (shell script links Node.js CLI from cli/ folder - REQUIRED FIRST STEP)
 ./scripts/link.sh
 
-# 2. Build Docker images locally
+# 2. Build Docker images locally (using shell script)
 ./scripts/build.sh
 
-# 3. Start services with local images
+# 3. Start services with local images (using shell script)
 ./scripts/start.sh --build
 
 # 4. Run integration tests
 cargo test --test integration
 
-# 5. Check service health (using linked CLI - NEVER node index.js)
+# 5. Check service health (using linked CLI - Node.js implementation)
 raworc api health
 
-# 6. Test CLI functionality
+# 6. Test CLI functionality (Node.js CLI linked via shell script)
 raworc start --restart
 raworc session
 raworc stop --cleanup
@@ -256,10 +257,13 @@ docker logs raworc_operator --tail 50
 ### Testing Published Packages (End User)
 
 ```bash
-# Install CLI
+# Install CLI (Node.js/npm package)
 npm install -g @raworc/cli
 
-# Start services (pulls published images automatically)
+# Pull latest CLI version and Docker images
+raworc pull
+
+# Start services
 raworc start
 
 # Check health
@@ -274,8 +278,9 @@ raworc api health
 raworc [COMMAND]
 
 Commands:
-  start     Start services (pulls published Docker images)
+  start     Start services
   stop      Stop services
+  pull      Pull latest CLI version and Docker images from registries
   reset     Clean up everything: stop services, remove containers, and prune Docker
   cleanup   Clean up all live sessions
   session   Start an interactive session for testing messages
@@ -287,17 +292,18 @@ Commands:
 ### Development Scripts (Contributors)
 
 ```bash
-./scripts/build.sh     # Build Docker images locally
-./scripts/start.sh     # Start services with local images
-./scripts/stop.sh      # Stop services
-./scripts/restart.sh   # Restart services
-./scripts/reset.sh     # Complete cleanup
-./scripts/link.sh      # Link CLI for development
-./scripts/push.sh      # Push images to registry (publishing)
+./scripts/build.sh     # Shell script: Build Docker images locally
+./scripts/start.sh     # Shell script: Start services with local images
+./scripts/stop.sh      # Shell script: Stop services
+./scripts/restart.sh   # Shell script: Restart services
+./scripts/reset.sh     # Shell script: Complete cleanup
+./scripts/link.sh      # Shell script: Link CLI (Node.js from cli/ folder) for development
+./scripts/push.sh      # Shell script: Push images to registry (publishing)
 ```
 
 **Key Commands:**
 - `raworc` - Shows help (default behavior)
+- `raworc pull` - Pull latest CLI version and Docker images
 - `raworc start` - Start orchestration services  
 - `raworc auth` - Show authentication status
 - `raworc auth login` - Authenticate with server
@@ -305,7 +311,7 @@ Commands:
 - `raworc api` - Direct REST API access
 
 **New Workflow:**
-The CLI has been updated with a streamlined interface:
+The CLI (Node.js implementation from cli/ folder) has been updated with a streamlined interface:
 - **Intuitive auth**: `raworc auth` shows status, `raworc auth login --token <token>` to authenticate
 - **Direct messaging**: `raworc session` starts a session where you can type messages directly
 - **Standalone API**: `raworc api <endpoint>` (GET) or `raworc api <endpoint>` works from any terminal with saved auth
@@ -315,13 +321,16 @@ The CLI has been updated with a streamlined interface:
 
 ### Published CLI (End Users)
 
-Install the published CLI for production use:
+Install the published CLI (Node.js/npm package) for production use:
 
 ```bash
 # Install from npm
 npm install -g @raworc/cli
 
-# Start services (automatically pulls published Docker images)
+# Pull latest CLI version and Docker images
+raworc pull
+
+# Start services
 raworc start
 
 # Stop services
@@ -340,7 +349,7 @@ raworc reset --yes
 
 ### Development Scripts (Contributors)
 
-Use shell scripts for development with locally built images:
+Use shell scripts (scripts/ folder) for development with locally built images:
 
 ```bash
 # Build images locally first
@@ -364,14 +373,35 @@ Use shell scripts for development with locally built images:
 # Complete reset
 ./scripts/reset.sh --yes
 
-# Link CLI for development (use local build instead of npm)
+# Link CLI for development (shell script links Node.js CLI from cli/ folder instead of npm)
 ./scripts/link.sh
 ```
 
 **Key Differences:**
-- **Published CLI**: Uses Docker Hub images, no build command, install via npm
-- **Development Scripts**: Uses locally built images, includes build command, run from repo
+- **Published CLI**: Uses Docker Hub images, no build command, install Node.js package via npm
+- **Development Scripts**: Uses locally built images, includes build command, run shell scripts from repo
 
+
+### Pull Command
+
+Use `raworc pull` to update the CLI and Docker images:
+
+```bash
+# Pull both CLI and Docker images (default)
+raworc pull
+
+# Only update the CLI, skip Docker images
+raworc pull --cli-only
+
+# Only pull Docker images, skip CLI update
+raworc pull --images-only
+```
+
+**Pull Command Features:**
+- **CLI Update**: Updates the @raworc/cli npm package to latest version
+- **Docker Images**: Pulls latest Docker images from Docker Hub
+- **Selective Updates**: Use flags to update only CLI or only images
+- **Error Handling**: Continues with available updates if one component fails
 
 ### Authentication
 
@@ -703,6 +733,7 @@ lsof -i :9000
 lsof -i :3307
 
 # For published CLI users:
+raworc pull              # Pull latest versions
 raworc restart --cleanup
 raworc stop --cleanup
 docker system prune -f
@@ -743,6 +774,7 @@ raworc cleanup --yes      # Delete all sessions from API
 raworc stop --cleanup     # Clean up remaining containers
 
 # For published CLI users:
+raworc pull               # Pull latest versions first
 raworc start --restart    # Restart with container cleanup
 raworc reset --yes        # Complete system reset
 
@@ -789,16 +821,16 @@ docker rmi $(docker images -q raworc_space_*)
 ### CLI not found or issues
 ```bash
 # If raworc command is not found in development
-# NEVER use node index.js - always link first
+# NEVER use node index.js directly - always link CLI first using shell script
 ./scripts/link.sh
-raworc --help  # Now this should work
+raworc --help  # Now this should work (uses linked Node.js CLI from cli/ folder)
 
 # If still having issues, check symlink
 which raworc   # Should show /usr/local/bin/raworc
-ls -la /usr/local/bin/raworc  # Should point to your project
+ls -la /usr/local/bin/raworc  # Should point to your project's cli/ folder
 
 # For published CLI users
-npm install -g @raworc/cli
+npm install -g @raworc/cli  # Install Node.js package
 raworc --help
 ```
 
@@ -808,28 +840,29 @@ raworc --help
 
 **❌ NEVER DO THIS:**
 ```bash
-node index.js start
-cd cli && node index.js --help
-node cli/index.js api health
+node index.js start                    # Wrong - direct Node.js execution
+cd cli && node index.js --help         # Wrong - manual CLI execution
+node cli/index.js api health          # Wrong - bypasses linking
 ```
 
 **✅ ALWAYS DO THIS:**
 ```bash
-# First, link the CLI for development
+# First, link the CLI (Node.js implementation from cli/ folder) using shell script
 ./scripts/link.sh
 
-# Then use the raworc command
+# Then use the raworc command (linked Node.js CLI)
 raworc start
 raworc --help 
 raworc api health
 ```
 
 **Why?**
-- The linked `raworc` command uses the correct paths and configuration
-- `node index.js` runs from wrong directory context and may fail
+- The shell script `./scripts/link.sh` properly links the Node.js CLI from cli/ folder
+- Direct `node index.js` execution runs from wrong directory context and may fail
 - Linked command matches production behavior exactly
 - Avoids path resolution and module loading issues
 - Required for proper testing of CLI functionality
+- Shell scripts (scripts/ folder) handle proper setup and linking
 
 ### Project Structure
 
@@ -838,10 +871,11 @@ The codebase is organized as follows:
 ```
 raworc/
 ├── src/           # Rust source code
-│   ├── cli/       # CLI command implementations
 │   ├── api/       # API server code
 │   ├── operator/  # Operator service
 │   └── host/      # Host agent for containers
+├── cli/           # Node.js CLI implementation (npm package)
+├── scripts/       # Shell scripts for development workflow
 ├── migrations/    # Database migrations
 ├── docker/        # Docker configurations
 └── tests/         # Integration tests
@@ -849,10 +883,11 @@ raworc/
 
 ### Key Files to Understand
 
-- `src/main.rs` - CLI entry point
-- `src/api/server.rs` - API server implementation
-- `src/operator/main.rs` - Operator service
-- `src/host/agent.rs` - Container host agent
+- `cli/index.js` - Node.js CLI entry point (published as npm package)
+- `scripts/` - Shell scripts for development workflow (build, start, stop, link, etc.)
+- `src/api/server.rs` - Rust API server implementation
+- `src/operator/main.rs` - Rust Operator service
+- `src/host/agent.rs` - Rust Container host agent
 - `docker-compose.yml` - Service orchestration
 
 ### Code Patterns and Conventions
@@ -875,10 +910,11 @@ When modifying code:
 
 ### Common Development Tasks
 
-- **Add new CLI command**: Modify `src/cli/mod.rs`
-- **Add API endpoint**: Update `src/api/routes.rs`
+- **Add new CLI command**: Modify Node.js CLI in `cli/` folder
+- **Add API endpoint**: Update `src/api/routes.rs` (Rust)
 - **Modify database schema**: Add migration in `migrations/`
-- **Update Docker setup**: Edit `Dockerfile.*` files or shell scripts
+- **Update Docker setup**: Edit `Dockerfile.*` files or shell scripts in `scripts/` folder
+- **Development workflow**: Use shell scripts in `scripts/` folder for build, start, stop operations
 
 ### Important Implementation Details
 
@@ -895,8 +931,8 @@ When modifying code:
 - Check operator logs: `docker logs raworc_operator -f`
 - Database queries: `docker exec raworc_mysql mysql -u raworc -praworc raworc`
 - Session containers: `docker ps -a --filter "name=raworc_session_"`
-- Clean restart: `raworc start --restart` (linked CLI) or `./scripts/restart.sh` (development)
-- **Remember**: Always use linked `raworc` command, never `node index.js`
+- Clean restart: `raworc start --restart` (linked Node.js CLI) or `./scripts/restart.sh` (shell script for development)
+- **Remember**: Always use linked `raworc` command (Node.js CLI), never `node index.js` directly
 
 ## Version
 
@@ -963,13 +999,13 @@ Optional longer description explaining the change.
 - Run `cargo fmt` before committing
 - Run `cargo clippy` and address warnings
 - Test changes in development environment
-- Always use the development scripts for local development:
+- Always use the shell scripts (scripts/ folder) for local development:
   - Use `./scripts/build.sh` instead of `cargo build` or `docker build`
   - Use `./scripts/start.sh` instead of manual `docker run` commands
   - Use `./scripts/restart.sh` instead of manual restart sequences
   - **CRITICAL**: Link CLI with `./scripts/link.sh` then use `raworc` command
-  - **NEVER use `node index.js` or `node cli/index.js`** - always use the linked `raworc` command
-- Published CLI users should use `raworc` commands directly (installed via npm)
+  - **NEVER use `node index.js` or `node cli/index.js`** - always use the linked `raworc` command (Node.js CLI from cli/ folder)
+- Published CLI users should use `raworc` commands directly (Node.js package installed via npm)
 
 ### Branch Naming
 Use descriptive branch names:

@@ -12,6 +12,7 @@ const cleanupCommand = require('./commands/cleanup');
 const sessionCommand = require('./commands/session');
 const authCommand = require('./commands/auth');
 const apiCommand = require('./commands/api');
+const pullCommand = require('./commands/pull');
 
 const program = new Command();
 
@@ -28,6 +29,7 @@ cleanupCommand(program);
 sessionCommand(program);
 authCommand(program);
 apiCommand(program);
+pullCommand(program);
 
 // Default help behavior
 program.action(() => {

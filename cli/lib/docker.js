@@ -231,14 +231,17 @@ class DockerManager {
   // Pull latest images from Docker Hub
   async pull() {
     for (const [component, image] of Object.entries(this.images)) {
-      // Skip mysql (official image) and host (only needed by operator on-demand)
-      if (component !== 'mysql' && component !== 'host') {
+      // Skip mysql (official image) but include host for proactive pulling
+      if (component !== 'mysql') {
         console.log(`📦 Pulling ${image}...`);
         try {
           await this.execDocker(['pull', image]);
           console.log(`✅ Successfully pulled ${image}`);
         } catch (error) {
           console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
+          if (component === 'host') {
+            console.warn(`   The operator will attempt to pull this image when needed.`);
+          }
         }
       }
     }
