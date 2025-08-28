@@ -98,8 +98,8 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     );
 
     // Initialize processed message tracking to prevent reprocessing on restore
-    if let Err(e) = message_handler.initialize_processed_messages().await {
-        warn!("Failed to initialize processed message tracking: {}, proceeding anyway", e);
+    if let Err(e) = message_handler.initialize_processed_tracking().await {
+        warn!("Failed to initialize processed tracking: {}, proceeding anyway", e);
     }
     
     // Using Claude API directly for all processing
@@ -109,18 +109,25 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     
     // No health monitoring needed for on-demand execution
     
-    // Main polling loop
+    // Main polling loop with robust error handling
     loop {
+        info!("Starting polling cycle...");
+        
         match message_handler.poll_and_process().await {
             Ok(count) => {
                 if count > 0 {
                     info!("Processed {} messages", count);
+                } else {
+                    info!("Polling: no new messages to process");
                 }
             }
             Err(e) => {
                 error!("Error processing messages: {}", e);
+                // Continue polling even on errors
             }
         }
+        
+        info!("Waiting {} seconds before next poll...", config.polling_interval.as_secs());
         
         // Wait before next poll
         tokio::time::sleep(config.polling_interval).await;

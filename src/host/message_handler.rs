@@ -13,7 +13,7 @@ pub struct MessageHandler {
     claude_client: Arc<ClaudeClient>,
     guardrails: Arc<Guardrails>,
     agent_manager: Arc<Mutex<AgentManager>>,
-    processed_message_ids: Arc<Mutex<HashSet<String>>>,
+    processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
 }
 
 impl MessageHandler {
@@ -28,123 +28,119 @@ impl MessageHandler {
             claude_client,
             guardrails,
             agent_manager,
-            processed_message_ids: Arc::new(Mutex::new(HashSet::new())),
+            processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
-    /// Initialize processed message IDs by checking existing messages in the session.
-    /// This prevents reprocessing messages when a session is restored.
-    pub async fn initialize_processed_messages(&self) -> Result<()> {
+    /// Find which user messages already have agent responses to avoid reprocessing.
+    /// Simple and reliable approach for both fresh and restored sessions.
+    pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!("Initializing processed message tracking...");
         
-        // Fetch all existing messages
         let all_messages = self.api_client.get_messages(None, None).await?;
         
         if all_messages.is_empty() {
-            info!("No existing messages found - starting fresh session");
+            info!("No existing messages - fresh session");
             return Ok(());
         }
 
-        // Build a set of all message IDs that already have responses
-        let mut messages_with_responses = HashSet::new();
-        let mut last_user_message_id: Option<String> = None;
+        // Find user messages that have corresponding agent responses
+        // Simple approach: if there are any agent messages, assume all previous user messages have responses
+        let mut user_messages_with_responses = HashSet::new();
         
-        // Iterate through messages to find which user messages have agent responses
-        for message in all_messages.iter().rev() {  // Process in chronological order
+        // Collect all user and agent message IDs first
+        let mut user_messages = Vec::new();
+        let mut agent_count = 0;
+        
+        for message in &all_messages {
             match message.role {
                 MessageRole::User => {
-                    last_user_message_id = Some(message.id.clone());
+                    user_messages.push(message.id.clone());
                 },
-                MessageRole::Agent | MessageRole::System => {
-                    // If this is a response to a user message, mark that user message as processed
-                    if let Some(user_msg_id) = &last_user_message_id {
-                        messages_with_responses.insert(user_msg_id.clone());
-                    }
+                MessageRole::Agent => {
+                    agent_count += 1;
+                },
+                MessageRole::System => {
+                    // System messages don't affect counting
                 }
             }
         }
-
-        // Only mark user messages as processed if they already have responses
-        // This allows new user messages after restore to be picked up properly
-        let mut processed_ids = self.processed_message_ids.lock().await;
-        for message in &all_messages {
-            if message.role == MessageRole::User && messages_with_responses.contains(&message.id) {
-                processed_ids.insert(message.id.clone());
-            } else if message.role != MessageRole::User {
-                // Always mark non-user messages (agent/system) as processed
-                processed_ids.insert(message.id.clone());
+        
+        // Mark the first N user messages as having responses (where N = agent_count)
+        for (i, user_msg_id) in user_messages.iter().enumerate() {
+            if i < agent_count {
+                user_messages_with_responses.insert(user_msg_id.clone());
             }
-            // Don't mark user messages without responses as processed - they might need processing
         }
         
-        let processed_count = processed_ids.len();
-        info!("Initialized processed message tracking: {} total messages, {} with responses, {} marked as processed", 
-              all_messages.len(), messages_with_responses.len(), processed_count);
+        info!("Found {} user messages, {} agent responses, marking first {} user messages as processed", 
+              user_messages.len(), agent_count, user_messages_with_responses.len());
+
+        // Mark user messages that have responses as processed
+        let mut processed = self.processed_user_message_ids.lock().await;
+        *processed = user_messages_with_responses;
         
+        info!("Initialized tracking: {} user messages already have responses", processed.len());
         Ok(())
     }
     
     
     pub async fn poll_and_process(&self) -> Result<usize> {
-        // Get recent messages to check for new ones
+        // Get recent messages
         let recent_messages = self.api_client.get_messages(Some(50), None).await?;
         
         if recent_messages.is_empty() {
             return Ok(0);
         }
         
-        // Build a set of user message IDs that have responses
-        let mut messages_with_responses = HashSet::new();
-        let mut last_user_message_id: Option<String> = None;
+        info!("Polling: found {} total messages", recent_messages.len());
         
-        // Iterate through messages to find which user messages have agent responses
-        for message in recent_messages.iter().rev() {  // Process in chronological order
-            match message.role {
-                MessageRole::User => {
-                    last_user_message_id = Some(message.id.clone());
-                },
-                MessageRole::Agent | MessageRole::System => {
-                    // If this is a response to a user message, mark that user message as processed
-                    if let Some(user_msg_id) = &last_user_message_id {
-                        messages_with_responses.insert(user_msg_id.clone());
-                    }
+        // Find user messages that need processing (much simpler approach)
+        let mut unprocessed_user_messages = Vec::new();
+        
+        // Simple logic: check if each user message has an agent message after it
+        for (i, message) in recent_messages.iter().enumerate() {
+            if message.role == MessageRole::User {
+                // Check if the next message is an agent response
+                let has_immediate_response = i + 1 < recent_messages.len() 
+                    && recent_messages[i + 1].role == MessageRole::Agent;
+                
+                info!("User message {}: has_immediate_response={}", 
+                      &message.id[..8], has_immediate_response);
+                
+                // Only process if no immediate agent response and not already processed
+                let processed_ids = self.processed_user_message_ids.lock().await;
+                let already_processed = processed_ids.contains(&message.id);
+                drop(processed_ids);
+                
+                if !already_processed && !has_immediate_response {
+                    unprocessed_user_messages.push(message.clone());
                 }
             }
         }
         
-        // Find unprocessed user messages
-        let mut processed_ids = self.processed_message_ids.lock().await;
-        let mut new_messages = Vec::new();
+        info!("Found {} user messages needing processing", unprocessed_user_messages.len());
         
-        for message in recent_messages.iter() {
-            if !processed_ids.contains(&message.id) {
-                if message.role == MessageRole::User {
-                    // Only consider it new if it doesn't have a response yet
-                    if !messages_with_responses.contains(&message.id) {
-                        new_messages.push(message.clone());
-                    }
-                }
-                processed_ids.insert(message.id.clone());
-            }
-        }
-        
-        if new_messages.is_empty() {
+        if unprocessed_user_messages.is_empty() {
             return Ok(0);
         }
         
-        info!("Found {} new user messages to process", new_messages.len());
+        // Sort by creation time to process in order
+        unprocessed_user_messages.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+        
+        info!("Found {} unprocessed user messages", unprocessed_user_messages.len());
         
         // Update session state to BUSY
         if let Err(e) = self.api_client.update_session_state(SESSION_STATE_BUSY.to_string()).await {
             warn!("Failed to update session state to BUSY: {}", e);
         }
         
-        // Process each new message
-        for message in new_messages.iter() {
+        // Process each message
+        for message in &unprocessed_user_messages {
             if let Err(e) = self.process_message(message).await {
                 error!("Failed to process message {}: {}", message.id, e);
                 
-                // Generate error response so user gets feedback
+                // Generate error response
                 let error_response = format!("Sorry, I encountered an error processing your message: {}", e);
                 if let Err(send_err) = self.api_client.send_message(
                     error_response,
@@ -156,6 +152,10 @@ impl MessageHandler {
                     error!("Failed to send error response: {}", send_err);
                 }
             }
+            
+            // Mark this user message as processed
+            let mut processed_ids = self.processed_user_message_ids.lock().await;
+            processed_ids.insert(message.id.clone());
         }
         
         // Update session state back to IDLE
@@ -163,7 +163,7 @@ impl MessageHandler {
             warn!("Failed to update session state to IDLE: {}", e);
         }
         
-        Ok(new_messages.len())
+        Ok(unprocessed_user_messages.len())
     }
     
     async fn process_message(&self, message: &Message) -> Result<()> {
@@ -172,21 +172,8 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
         
-
-        // Try agent delegation first
-        if let Some(response) = self.try_agent_delegation(&message.content).await? {
-            // Send agent response
-            self.api_client.send_message(
-                response,
-                Some(serde_json::json!({
-                    "type": "agent_response"
-                })),
-            ).await?;
-            return Ok(());
-        }
-        
-        // Fallback to Claude API if no agents available or delegation failed
-        info!("No suitable agent found, using Claude API");
+        // Use Claude API directly (skipping agent delegation to avoid blocking)
+        info!("Using Claude API for message processing");
         
         // Fetch ALL messages from session for complete conversation history
         info!("Fetching complete conversation history for Claude");
