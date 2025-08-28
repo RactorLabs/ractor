@@ -936,7 +936,7 @@ When modifying code:
 
 ## Version
 
-Current version: 0.2.7
+Current version: 0.2.8
 
 ## Notes for Claude
 

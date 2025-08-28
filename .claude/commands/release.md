@@ -21,7 +21,7 @@ Automate the complete release workflow for Raworc project.
 ## Example workflow
 
 ```
-Current version: 0.2.7
+Current version: 0.2.8
 → Stage changes and commit
 → Tag 0.2.7 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
 → Bump to 0.2.8 for next development
