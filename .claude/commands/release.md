@@ -31,3 +31,20 @@ cd cli && npm install && cd ..
 10. **Commit version bump**: `git commit -m "chore: bump version to <next>"`
 11. **Push version bump**: `git push origin main`
 
+## Example workflow
+
+```
+Current version: 0.2.3
+→ Stage changes and commit
+→ Tag 0.2.3 and push (triggers GitHub Actions)
+→ Bump to 0.2.4 for next development
+→ Push version bump
+```
+
+## Files to commit after every version bump
+
+- `CLAUDE.md`: Documentation version reference
+- `Cargo.toml`: Main Rust project version
+- `Cargo.lock` reflects the new version
+- `cli/package.json`: npm CLI package version
+- `cli/package-lock.json` is updated (if present)
