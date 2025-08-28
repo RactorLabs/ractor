@@ -5,6 +5,17 @@ title: Changelog
 
 # Changelog
 
+## v0.2.9
+
+- **Enhanced CLI Reset**: Consolidated comprehensive reset functionality from shell script into CLI
+- **8-Step Cleanup Process**: Added systematic Docker cleanup with progress indicators
+- **Image Removal**: CLI reset now removes all Raworc images including space images
+- **Volume Management**: Comprehensive Docker volume cleanup with graceful fallbacks
+- **Session Remix**: Added remix functionality to create new sessions from existing ones
+- **Documentation Overhaul**: Updated README, development guides, and release workflows
+- **Simplified Workflow**: Removed redundant shell scripts in favor of unified CLI approach
+- **Improved Error Handling**: Better error recovery in reset operations with detailed logging
+
 ## v0.2.8
 
 - **Critical Fix**: Resolved message loop reliability issues preventing second messages from processing

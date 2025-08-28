@@ -8,7 +8,7 @@
   Deploy AI agents from any framework in containerized environments with full computer access.
   
   [![Website](https://img.shields.io/badge/Website-raworc.com-blue?style=for-the-badge)](https://raworc.com)
-  [![Version](https://img.shields.io/badge/Version-0.2.8-green?style=for-the-badge)](https://github.com/SivaRagavan/raworc/releases)
+  [![Version](https://img.shields.io/badge/Version-0.2.9-green?style=for-the-badge)](https://github.com/SivaRagavan/raworc/releases)
   [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 </div>
 

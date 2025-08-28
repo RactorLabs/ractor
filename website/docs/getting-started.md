@@ -116,3 +116,21 @@ raworc session --restore {session-id}
 - ✅ **Persistent storage** - All files and state preserved between restarts
 - ✅ **Reliable message loop** - Second and subsequent messages process correctly
 - ✅ **Fast restoration** - Sessions resume quickly with minimal overhead
+
+## Session Remix
+
+Create new sessions based on existing ones to branch your workflow:
+
+```bash
+# Create remix from existing session
+raworc session --remix {source-session-id}
+
+# Remix preserves all files and state from the source session
+# but creates an independent new session for further development
+```
+
+**Use Cases:**
+- 🔄 **Experiment branching** - Try different approaches from the same starting point
+- 📋 **Template sessions** - Create base sessions and remix them for new projects
+- 🧪 **A/B testing** - Compare different agent configurations from same baseline
+- 🎯 **Checkpoint workflows** - Save progress and create multiple paths forward

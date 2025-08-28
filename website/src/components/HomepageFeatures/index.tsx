@@ -51,12 +51,12 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: 'Reliable Session Persistence',
+    title: 'Flexible Session Management',
     icon: '💾',
     description: (
       <>
         <strong>Close, save, and restore</strong> complex workflows with enterprise-grade reliability.
-        <strong>No message reprocessing</strong> - restored sessions continue cleanly from where they left off.
+        <strong>Remix sessions</strong> to branch workflows and experiment with different approaches.
       </>
     ),
   },
