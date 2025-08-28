@@ -51,12 +51,12 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: 'Session Persistence',
+    title: 'Reliable Session Persistence',
     icon: '💾',
     description: (
       <>
-        <strong>Pause, save, and resume</strong> complex workflows. Never lose context or start over.
-        Perfect for long-running tasks and iterative development.
+        <strong>Close, save, and restore</strong> complex workflows with enterprise-grade reliability.
+        <strong>No message reprocessing</strong> - restored sessions continue cleanly from where they left off.
       </>
     ),
   },

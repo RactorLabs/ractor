@@ -157,15 +157,33 @@ impl SessionManager {
     }
 
     pub async fn handle_create_session(&self, task: SessionTask) -> Result<()> {
-        let session_id = task.session_id;
+        let session_id = task.session_id.clone();
         
-        info!("Creating container for session {}", session_id);
-        self.docker_manager.create_container(&session_id).await?;
-        
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#
+        // Check if this is a remix session (has parent_session_id)
+        let session = sqlx::query_as::<_, (String, Option<String>)>(
+            "SELECT id, parent_session_id FROM sessions WHERE id = ?"
         )
+        .bind(&session_id)
+        .fetch_one(&self.pool)
+        .await?;
+        
+        let parent_session_id = session.1;
+        
+        if let Some(parent_id) = parent_session_id {
+            info!("Creating remix session {} from parent {}", session_id, parent_id);
+            
+            // For remix sessions, create container with volume copy from parent
+            self.docker_manager.create_container_with_volume_copy(&session_id, &parent_id).await?;
+        } else {
+            info!("Creating new session {}", session_id);
+            
+            // For regular sessions, create container normally
+            self.docker_manager.create_container(&session_id).await?;
+        }
+        
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#)
         .bind(SESSION_STATE_IDLE)
-        .bind(session_id)
+        .bind(&session_id)
         .execute(&self.pool)
         .await?;
         

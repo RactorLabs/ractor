@@ -5,6 +5,16 @@ title: Changelog
 
 # Changelog
 
+## v0.2.8
+
+- **Critical Fix**: Resolved message loop reliability issues preventing second messages from processing
+- **Session Restore**: Enhanced restore functionality with proper message tracking
+- **Agent Delegation**: Fixed hanging agent execution that blocked message processing
+- **Polling Improvements**: Simplified message detection logic for better reliability
+- **CLI Constants**: Added proper state and role constants for consistent behavior
+- **Error Recovery**: Improved polling loop robustness with continued operation on errors
+- **Debug Cleanup**: Removed temporary debug logging for production readiness
+
 ## v0.2.7
 
 - Fixed session restore functionality to prevent message reprocessing

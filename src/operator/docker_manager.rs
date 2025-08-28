@@ -1,7 +1,8 @@
 use anyhow::Result;
 use bollard::{
-    container::{Config, CreateContainerOptions, RemoveContainerOptions},
+    container::{Config, CreateContainerOptions, RemoveContainerOptions, LogsOptions},
     exec::{CreateExecOptions, StartExecResults},
+    models::{HostConfig, Mount, MountTypeEnum},
     Docker,
 };
 use futures::StreamExt;
@@ -216,6 +217,107 @@ echo 'Session structure initialized'
         
         Ok(token)
     }
+
+    pub async fn create_container_with_volume_copy(&self, session_id: &str, parent_session_id: &str) -> Result<String> {
+        info!("Creating remix session {} with volume copy from {}", session_id, parent_session_id);
+        
+        // First create the container normally (this creates the empty target volume)
+        let container_name = self.create_container(session_id).await?;
+        
+        // Then copy data from parent volume to new volume using Docker command
+        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
+        let new_volume = format!("raworc_session_data_{}", session_id);
+        
+        info!("Copying volume data from {} to {}", parent_volume, new_volume);
+        
+        // Use bollard Docker API to create copy container
+        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        
+        let config = Config {
+            image: Some("raworc_host:0.2.9".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Copy completed'".to_string()
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(parent_volume.clone()),
+                        target: Some("/source".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    },
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(new_volume.clone()),
+                        target: Some("/dest".to_string()),
+                        read_only: Some(false),
+                        ..Default::default()
+                    }
+                ]),
+                network_mode: Some("raworc_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        
+        // Create copy container
+        self.docker.create_container(
+            Some(CreateContainerOptions {
+                name: copy_container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        ).await?;
+        
+        // Start container
+        self.docker.start_container::<String>(&copy_container_name, None).await?;
+        
+        // Wait for completion
+        let mut wait_stream = self.docker.wait_container::<String>(&copy_container_name, None);
+        while let Some(wait_result) = wait_stream.next().await {
+            let exit_result = wait_result?;
+            if exit_result.status_code == 0 {
+                info!("Volume copy completed successfully");
+            } else {
+                warn!("Volume copy container exited with code {}", exit_result.status_code);
+            }
+            break;
+        }
+        
+        // Get logs from copy container for debugging
+        let logs = self.docker.logs::<String>(
+            &copy_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            })
+        );
+        
+        let log_output = logs.map(|log| {
+            match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                Err(_) => String::new(),
+            }
+        }).collect::<Vec<_>>().await.join("");
+        
+        info!("Volume copy logs: {}", log_output.trim());
+        
+        // Clean up copy container
+        let _ = self.docker.remove_container(
+            &copy_container_name,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        ).await;
+        
+        Ok(container_name)
+    }
+
 
     pub async fn create_container(&self, session_id: &str) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");

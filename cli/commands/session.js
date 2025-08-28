@@ -17,11 +17,13 @@ module.exports = (program) => {
     .description('Start an interactive AI agent session')
     .option('-s, --space <space>', 'Space name for the session', 'default')
     .option('--restore <session-id>', 'Restore an existing session by ID')
+    .option('--remix <session-id>', 'Create a new session remixing an existing session')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                    # Start a new session\n' +
       '  $ raworc session --space production # Start session in production space\n' +
-      '  $ raworc session --restore abc123   # Restore and continue existing session\n')
+      '  $ raworc session --restore abc123   # Restore and continue existing session\n' +
+      '  $ raworc session --remix abc123     # Create new session based on existing one\n')
     .action(async (options) => {
       await sessionCommand(options);
     });
@@ -37,6 +39,15 @@ async function sessionCommand(options) {
   }
 
   console.log(chalk.blue('🤖 Starting Raworc AI Session'));
+  if (options.remix) {
+    console.log(chalk.gray('Mode:'), 'Remix');
+    console.log(chalk.gray('Source:'), options.remix);
+  } else if (options.restore) {
+    console.log(chalk.gray('Mode:'), 'Restore');
+    console.log(chalk.gray('Session:'), options.restore);
+  } else {
+    console.log(chalk.gray('Mode:'), 'New Session');
+  }
   console.log(chalk.gray('Space:'), options.space);
   console.log(chalk.gray('User:'), authData.user?.username || 'Unknown');
   console.log();
@@ -44,8 +55,39 @@ async function sessionCommand(options) {
   let sessionId = null;
   
   try {
-    // Check if we're restoring an existing session
-    if (options.restore) {
+    // Check if we're remixing an existing session
+    if (options.remix) {
+      const sourceSessionId = options.remix;
+      const spinner = ora('Remixing session...').start();
+      
+      // Check if source session exists
+      const sourceSessionResponse = await api.get(`/sessions/${sourceSessionId}`);
+      
+      if (!sourceSessionResponse.success) {
+        spinner.fail('Source session not found');
+        console.error(chalk.red('Error:'), sourceSessionResponse.error || 'Source session does not exist');
+        process.exit(1);
+      }
+      
+      // Create remix session
+      const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, {
+        new_session_metadata: {
+          remixed_from: sourceSessionId,
+          remix_timestamp: new Date().toISOString()
+        }
+      });
+      
+      if (!remixResponse.success) {
+        spinner.fail('Failed to remix session');
+        console.error(chalk.red('Error:'), remixResponse.error);
+        process.exit(1);
+      }
+      
+      sessionId = remixResponse.data.id;
+      spinner.succeed(`Session remixed: ${sessionId}`);
+      
+    } else if (options.restore) {
+      // Check if we're restoring an existing session
       sessionId = options.restore;
       const spinner = ora('Restoring session...').start();
       

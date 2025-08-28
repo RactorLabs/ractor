@@ -167,7 +167,7 @@ pub async fn create_session(
 pub async fn remix_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Extension(_auth): Extension<AuthContext>,
+    Extension(auth): Extension<AuthContext>,
     Json(req): Json<RemixSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check if parent session exists
@@ -179,6 +179,27 @@ pub async fn remix_session(
     let session = Session::remix(&state.db, &id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e)))?;
+
+    // Get the principal name for task creation
+    let created_by = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+
+    // Add task to queue for session manager to create container (same as create_session)
+    sqlx::query(r#"
+        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        VALUES (?, 'create_session', ?, ?, 'pending')
+        "#
+    )
+    .bind(&session.id)
+    .bind(created_by)
+    .bind(serde_json::json!({}))
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
+    
+    tracing::info!("Created session task for remixed session {}", session.id);
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }

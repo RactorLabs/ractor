@@ -16,6 +16,8 @@
 
 When working with this codebase, understand that Raworc is a Universal AI Agent Runtime that deploys AI agents from any framework in containerized environments. It supports Python, Node.js, and Rust agents with full computer access.
 
+**For End Users**: Raworc is available as a published npm package (`@raworc/cli`) that provides a simple installation experience with pre-built Docker images from Docker Hub.
+
 **Repository Status**: This repository is private and intentionally not licensed. Do not add or suggest adding license files.
 
 **Related Repository**: The `raworc-community` repository is for consumers of the Docker containers published from this repo. Developers will use the `raworc` CLI on the community repo and use the product without the source code - only the binaries.
@@ -27,7 +29,7 @@ When working with this codebase, understand that Raworc is a Universal AI Agent 
 - **Language Support**: Python, Node.js, and Rust runtime environments
 - **Full Computer Access**: Filesystem, web browsing, system tools, and code execution
 - **Multi-Agent Support**: Multiple agents can work together in shared environments
-- **Session Persistence**: Pause, save state, and resume complex workflows
+- **Session Persistence**: Close, save state, and restore complex workflows
 - **Secure by Design**: JWT auth, role-based access, encrypted secrets, space isolation
 - **No Lock-in**: Works with any AI provider or framework
 
@@ -88,7 +90,7 @@ Stop fighting infrastructure. Start building agents.
 
 - **Prototype Fast**: Use any AI framework without setup headaches
 - **Experiment Safe**: Isolated containers for safe testing
-- **Save Progress**: Pause and resume long-running workflows  
+- **Save Progress**: Close and restore long-running workflows  
 - **Scale Easy**: Go from prototype to production without rewrites
 - **Work Together**: Share workspaces with your team
 - **Stay Flexible**: Switch frameworks and providers anytime
@@ -99,7 +101,7 @@ Stop fighting infrastructure. Start building agents.
 - **Multi-Agent Support**: Multiple agents work together in shared containers
 - **Isolated Sessions**: Each session runs in a clean, secure container
 - **Full Capabilities**: File I/O, web scraping, code generation, compilation, system admin
-- **Session Persistence**: Pause and resume complex workflows
+- **Session Persistence**: Close and restore complex workflows
 - **Space Organization**: Separate projects by team, environment, or use case  
 - **Secret Management**: Secure API keys and config per space
 - **Resource Controls**: Set CPU, memory, storage, and network limits
@@ -112,13 +114,14 @@ Stop fighting infrastructure. Start building agents.
 **For using Raworc in production or testing the system:**
 
 ```bash
-# Install CLI from npm (Node.js/npm package from cli/ folder)
+# Install CLI from npm 
 npm install -g @raworc/cli
 
 # Start services (automatically pulls Docker images from Docker Hub)
 raworc start
 
-# Use the system
+# Authenticate and use the system
+raworc auth login --user admin --pass admin
 raworc session
 raworc api health
 ```
@@ -499,11 +502,11 @@ raworc api sessions --method POST --body '{"space":"default"}'
 # List all agent sessions  
 raworc api sessions
 
-# Pause agent session (saves resources)
-raworc api sessions/{id}/pause
+# Close agent session (saves resources)
+raworc api sessions/{id}/close
 
-# Resume agent session
-raworc api sessions/{id}/resume
+# Restore agent session
+raworc api sessions/{id}/restore
 
 # Terminate agent session
 raworc api sessions/{id}
@@ -536,8 +539,8 @@ The agent will receive your message, process it using AI capabilities (code gene
 
 Sessions support the following operations:
 - **Create**: Creates new session and spawns container
-- **Pause**: Pauses session and stops container to save resources
-- **Resume**: Resumes paused session and restarts container
+- **Close**: Closes session and stops container to save resources
+- **Restore**: Restores closed session and restarts container
 - **Delete**: Soft deletes session and destroys container
 
 ### Space Management
@@ -1030,6 +1033,6 @@ type/brief-description
 ```
 
 Examples:
-- `feat/session-pause-resume`
+- `feat/session-close-restore`
 - `fix/container-cleanup-race`
 - `docs/api-reference-update`

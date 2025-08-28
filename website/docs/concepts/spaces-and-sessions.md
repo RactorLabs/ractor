@@ -86,7 +86,7 @@ interface Session {
 Sessions follow a validated state machine with controlled transitions:
 
 ```
-init → idle → busy → paused → suspended → error
+init → idle → busy → closed → errored
   ↓      ↓      ↓       ↓         ↓
   ✓      ✓      ✓       ✓         ✓
   └─── delete (soft delete with cleanup)
@@ -97,8 +97,8 @@ init → idle → busy → paused → suspended → error
 - **`init`** - Container being created and initialized
 - **`idle`** - Ready to receive and process messages
 - **`busy`** - Processing messages and executing tasks
-- **`paused`** - Container stopped, volume preserved (fast restart)
-- **`suspended`** - Container destroyed, volume preserved (slower restart)
+- **`closed`** - Container stopped, volume preserved (can be restored)
+- **`errored`** - Container failed, requires intervention
 - **`error`** - Error state requiring manual intervention
 
 #### State Transitions
@@ -108,10 +108,10 @@ init → idle → busy → paused → suspended → error
 | `init` | `idle` | Container ready | Agent polling starts |
 | `idle` | `busy` | Message received | Agent processing |
 | `busy` | `idle` | Task completed | Ready for next message |
-| `idle` | `paused` | Manual pause | Container stopped |
-| `paused` | `idle` | Resume request | Container restarted |
-| `idle` | `suspended` | Idle timeout | Container destroyed |
-| `suspended` | `idle` | Activity request | Container recreated |
+| `idle` | `closed` | Manual close | Container stopped |
+| `closed` | `idle` | Restore request | Container restarted |
+| `idle` | `errored` | Error condition | Container marked failed |
+| `errored` | `idle` | Manual recovery | Container recreated |
 | `*` | `error` | System error | Manual intervention needed |
 
 ## Session Architecture
@@ -137,7 +137,7 @@ Sessions use persistent Docker volumes for data that survives container lifecycl
 
 - **Volume Name**: `raworc_session_data_{session-id}`
 - **Mount Point**: `/session/` (workspace, state, logs)
-- **Persistence**: Survives pause/resume/suspend operations
+- **Persistence**: Survives close/restore operations
 - **Cleanup**: Removed only when session is deleted
 
 ### Resource Management
@@ -179,27 +179,28 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 5. Response stored with `agent` role
 6. Session returns to `idle` state
 
-### Pause Session
+### Close Session
 ```bash
-raworc api sessions/{session-id}/pause -m post
+raworc api sessions/{session-id}/close -m post
 ```
 
 **Flow:**
-1. Session state transitions to `paused`
-2. Container stopped but kept for fast restart
-3. Persistent volume remains mounted
-4. Resources freed while preserving all state
+1. Session state transitions to `closed`
+2. Container stopped and removed to free resources
+3. Persistent volume preserved with all session data
+4. Session can be restored later with full state
 
-### Resume Session
+### Restore Session
 ```bash
-raworc api sessions/{session-id}/resume -m post
+raworc api sessions/{session-id}/restore -m post
 ```
 
 **Flow:**
-1. Container restarted from existing image
+1. New container created from latest space image
 2. Persistent volume remounted with preserved state
-3. Host agent resumes polling
-4. Session returns to `idle` state (~1-2 seconds)
+3. Host agent initializes and resumes message polling
+4. **No reprocessing** - Only new messages after restore are handled
+5. Session returns to `idle` state (~3-5 seconds)
 
 ### Delete Session
 ```bash
@@ -290,12 +291,12 @@ interface SpaceBuild {
 Sessions start instantly because:
 - **Pre-Compilation**: Agents built during space creation, not runtime
 - **Immutable Images**: `raworc_space_{name}:{build-id}` ready for deployment
-- **Container Reuse**: Pause/resume for sub-second restarts
+- **Container Recreation**: Close/restore with quick startup
 - **Persistent Volumes**: Data survives container lifecycle
 
 ### Resource Efficiency
 
-- **Pause Unused Sessions**: Automatic container stopping saves resources
+- **Close Unused Sessions**: Automatic container stopping saves resources
 - **Persistent Volumes**: Data preservation without container overhead
 - **Shared Base Images**: Common dependencies cached across sessions
 - **Connection Pooling**: Efficient database connections from API server

@@ -5,7 +5,7 @@ title: Getting Started
 
 # Getting Started with Raworc
 
-Get started with the Universal AI Agent Runtime in just a few commands. Raworc provides the simplest developer experience for deploying AI agents.
+Get started with the Universal AI Agent Runtime in just a few commands. Raworc provides the simplest developer experience for deploying AI agents with enterprise-grade reliability.
 
 ## Prerequisites
 
@@ -95,3 +95,24 @@ For complete CLI usage, advanced features, and detailed commands, see the **[CLI
 - **📚 Documentation**: [raworc.com/docs](https://raworc.com/docs)
 - **🌐 Website**: [raworc.com](https://raworc.com)
 - **🐦 Community**: Follow us on [X/Twitter](https://x.com/raworc)
+
+## Session Restore
+
+Raworc supports **reliable session persistence** - close sessions and restore them later with full state preservation:
+
+```bash
+# Close session (preserves state)
+raworc api sessions/{session-id}/close
+
+# Restore session later  
+raworc api sessions/{session-id}/restore
+
+# Continue with new messages
+raworc session --restore {session-id}
+```
+
+**Key Features:**
+- ✅ **No message reprocessing** - Restored sessions only handle new messages
+- ✅ **Persistent storage** - All files and state preserved between restarts
+- ✅ **Reliable message loop** - Second and subsequent messages process correctly
+- ✅ **Fast restoration** - Sessions resume quickly with minimal overhead
