@@ -8,7 +8,7 @@ Automate the complete release workflow for Raworc project.
 2. **Get current version**: Read version from `Cargo.toml`
 3. **Commit changes**: Create commit with descriptive message
 4. **Push to main**: `git push origin main`
-5. **Tag release**: Tag current commit with project version
+5. **Tag release**: Tag current commit with project version (without "v" prefix)
 6. **Push tag**: `git push origin <version>` (triggers GitHub Actions)
 
 7. **Bump version**: Increment patch version in all files (see detailed list below)
@@ -23,7 +23,7 @@ Automate the complete release workflow for Raworc project.
 ```
 Current version: 0.2.7
 → Stage changes and commit
-→ Tag 0.2.7 and push (triggers GitHub Actions)
+→ Tag 0.2.7 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
 → Bump to 0.2.8 for next development
 → Push version bump
 ```
