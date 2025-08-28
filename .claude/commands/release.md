@@ -16,6 +16,7 @@ Automate the complete release workflow for Raworc project.
 9. **Stage all changes**: `git add .`
 10. **Commit version bump**: `git commit -m "chore: bump version to <next>"`
 11. **Push version bump**: `git push origin main`
+12. **Update website**: Deploy website with latest API docs, CLI changes, and version updates
 
 ## Example workflow
 
@@ -81,3 +82,28 @@ git commit -m "chore: bump version to 0.2.8"
 - `Cargo.lock` - Updated by `cargo build --release`
 - `cli/package-lock.json` - Updated by `npm install` in cli/ folder
 - `website/package-lock.json` - Updated by `npm install` in website/ folder
+
+## Post-Release Website Update
+
+After completing the release, update the website to reflect all changes:
+
+```bash
+# Build and deploy website with latest changes
+cd website
+npm run build
+npm run deploy  # or your deployment method
+
+# Verify website shows:
+# - Updated API documentation with new version
+# - Latest changelog entries
+# - Current CLI commands and examples
+# - Updated version references throughout
+```
+
+**Website Update Checklist:**
+- [ ] API documentation reflects new version in examples
+- [ ] Changelog shows latest release with feature descriptions
+- [ ] CLI usage examples are current and accurate
+- [ ] All version references match released version
+- [ ] New features are documented with examples
+- [ ] Troubleshooting guides are up to date
