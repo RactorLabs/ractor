@@ -109,16 +109,12 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     
     // No health monitoring needed for on-demand execution
     
-    // Main polling loop with robust error handling
+    // Main polling loop
     loop {
-        info!("Starting polling cycle...");
-        
         match message_handler.poll_and_process().await {
             Ok(count) => {
                 if count > 0 {
                     info!("Processed {} messages", count);
-                } else {
-                    info!("Polling: no new messages to process");
                 }
             }
             Err(e) => {
@@ -126,8 +122,6 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
                 // Continue polling even on errors
             }
         }
-        
-        info!("Waiting {} seconds before next poll...", config.polling_interval.as_secs());
         
         // Wait before next poll
         tokio::time::sleep(config.polling_interval).await;

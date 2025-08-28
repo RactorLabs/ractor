@@ -93,7 +93,6 @@ impl MessageHandler {
             return Ok(0);
         }
         
-        info!("Polling: found {} total messages", recent_messages.len());
         
         // Find user messages that need processing (much simpler approach)
         let mut unprocessed_user_messages = Vec::new();
@@ -105,8 +104,6 @@ impl MessageHandler {
                 let has_immediate_response = i + 1 < recent_messages.len() 
                     && recent_messages[i + 1].role == MessageRole::Agent;
                 
-                info!("User message {}: has_immediate_response={}", 
-                      &message.id[..8], has_immediate_response);
                 
                 // Only process if no immediate agent response and not already processed
                 let processed_ids = self.processed_user_message_ids.lock().await;
@@ -119,7 +116,6 @@ impl MessageHandler {
             }
         }
         
-        info!("Found {} user messages needing processing", unprocessed_user_messages.len());
         
         if unprocessed_user_messages.is_empty() {
             return Ok(0);
@@ -128,7 +124,6 @@ impl MessageHandler {
         // Sort by creation time to process in order
         unprocessed_user_messages.sort_by(|a, b| a.created_at.cmp(&b.created_at));
         
-        info!("Found {} unprocessed user messages", unprocessed_user_messages.len());
         
         // Update session state to BUSY
         if let Err(e) = self.api_client.update_session_state(SESSION_STATE_BUSY.to_string()).await {
