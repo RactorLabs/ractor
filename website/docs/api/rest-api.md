@@ -938,26 +938,15 @@ Update session state.
 **Request Body**:
 ```json
 {
-  "state": "PAUSED"
+  "state": "closed"
 }
 ```
 
 **Response**: `200 OK`
 
-### POST /sessions/\{id\}/pause
+### POST /sessions/\{id\}/close
 
-Pause a session (saves resources).
-
-**Authentication**: Required
-
-**Parameters**:
-- `id` (path) - Session ID
-
-**Response**: `200 OK`
-
-### POST /sessions/\{id\}/suspend
-
-Suspend a session.
+Close a session (saves resources by stopping the container while preserving state).
 
 **Authentication**: Required
 
@@ -966,9 +955,9 @@ Suspend a session.
 
 **Response**: `200 OK`
 
-### POST /sessions/\{id\}/resume
+### POST /sessions/\{id\}/restore
 
-Resume a paused session.
+Restore a closed session (restarts the container with preserved state).
 
 **Authentication**: Required
 

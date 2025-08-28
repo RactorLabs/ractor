@@ -51,6 +51,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/cli-usage',
         'guides/bring-your-own-agent',
+        'guides/session-playground',
       ],
     },
     {

@@ -184,11 +184,11 @@ raworc api sessions/{session-id}/messages
 # Get latest messages (limit to last 10)
 raworc api "sessions/{session-id}/messages?limit=10"
 
-# Pause session (saves resources)
-raworc api sessions/{session-id}/pause -m post
+# Close session (saves resources)
+raworc api sessions/{session-id}/close -m post
 
-# Resume session
-raworc api sessions/{session-id}/resume -m post
+# Restore session
+raworc api sessions/{session-id}/restore -m post
 
 # Terminate session
 raworc api sessions/{session-id} -m delete
@@ -273,7 +273,7 @@ Common error responses and solutions:
 ### Session Management
 - Sessions persist until explicitly deleted
 - Interactive sessions auto-cleanup on exit (`/quit`)
-- Use pause/resume for long-running sessions to save resources
+- Use close/restore for long-running sessions to save resources
 
 ### Performance Tips
 - Use `raworc start --pull` to ensure latest images

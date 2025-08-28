@@ -213,6 +213,45 @@ raworc api sessions/{session-id} -m delete
 3. Session marked as soft-deleted in database
 4. All session data and logs permanently removed
 
+## Session Restore
+
+Raworc supports **reliable session persistence** - close sessions to save resources and restore them later with full state preservation:
+
+```bash
+# Close session (preserves state)
+raworc api sessions/{session-id}/close -m post
+
+# Restore session later  
+raworc api sessions/{session-id}/restore -m post
+
+# Continue with new messages
+raworc session --restore {session-id}
+```
+
+**Key Features:**
+- ✅ **No message reprocessing** - Restored sessions only handle new messages
+- ✅ **Persistent storage** - All files and state preserved between restarts
+- ✅ **Reliable message loop** - Second and subsequent messages process correctly
+- ✅ **Fast restoration** - Sessions resume quickly with minimal overhead
+
+## Session Remix
+
+Create new sessions based on existing ones to branch your workflow:
+
+```bash
+# Create remix from existing session
+raworc session --remix {source-session-id}
+
+# Remix preserves all files and state from the source session
+# but creates an independent new session for further development
+```
+
+**Use Cases:**
+- 🔄 **Experiment branching** - Try different approaches from the same starting point
+- 📋 **Template sessions** - Create base sessions and remix them for new projects
+- 🧪 **A/B testing** - Compare different agent configurations from same baseline
+- 🎯 **Checkpoint workflows** - Save progress and create multiple paths forward
+
 ## Session Forking and Data Lineage
 
 Sessions support creating child sessions from parent sessions:
@@ -330,6 +369,7 @@ Sessions start instantly because:
 
 ## Next Steps
 
+- [Session Playground](/docs/guides/session-playground) - Interactive examples and advanced session features
 - [Architecture Overview](/docs/concepts/architecture) - Complete system architecture
 - [CLI Usage](/docs/guides/cli-usage) - Complete CLI usage guide
 - [API Reference](/docs/api/overview) - CLI and API for spaces and sessions

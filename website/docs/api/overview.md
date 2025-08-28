@@ -134,9 +134,8 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/sessions/{id}`](./rest-api#get-sessionsid) | GET | Get specific session |
 | [`/sessions/{id}`](./rest-api#put-sessionsid) | PUT | Update session details |
 | [`/sessions/{id}/state`](./rest-api#put-sessionsidstate) | PUT | Update session state |
-| [`/sessions/{id}/pause`](./rest-api#post-sessionsidpause) | POST | Pause session |
-| [`/sessions/{id}/suspend`](./rest-api#post-sessionsidsuspend) | POST | Suspend session |
-| [`/sessions/{id}/resume`](./rest-api#post-sessionsidresume) | POST | Resume session |
+| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close session |
+| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore session |
 | [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork session |
 | [`/sessions/{id}`](./rest-api#delete-sessionsid) | DELETE | Delete session |
 

@@ -177,7 +177,7 @@ Raworc:               [Runtime] → [Any Framework] → [Any Agent]
 
 **Session Persistence**:
 - **Enterprise Platforms**: Limited session state management
-- **Raworc**: Full pause/resume/suspend with data lineage
+- **Raworc**: Full close/restore with data lineage
 
 **Multi-Agent Coordination**:
 - **Enterprise Platforms**: Platform-specific orchestration
@@ -202,7 +202,7 @@ Raworc:     [Runtime] → [Any Framework] → [Any Agent]
 ```
 
 **Agent-Specific Features:**
-- **Session Persistence**: Pause/resume long-running workflows
+- **Session Persistence**: Close/restore long-running workflows
 - **Multi-Agent Coordination**: LLM-powered intelligent delegation
 - **State Management**: Data lineage and parent-child session relationships
 - **Computer-Use Support**: File systems, web browsing, code execution

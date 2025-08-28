@@ -27,7 +27,7 @@ Rust-based REST API server that handles all platform operations:
 
 ### 3. Operator
 Container lifecycle controller that manages agent execution:
-- **Session Orchestration** - Create, pause, resume, and destroy agent containers
+- **Session Orchestration** - Create, close, restore, and destroy agent containers
 - **Space Building** - Compile agents into immutable deployment images
 - **Resource Control** - CPU, memory, and storage limits per session
 - **State Management** - Track session state transitions and cleanup
@@ -43,7 +43,7 @@ Persistent storage for all platform state:
 ### 5. Agent Containers
 Isolated execution environments where AI agents run:
 - **Containerized Sessions** - Dedicated container per agent session
-- **Persistent Storage** - Data survives container pause/resume cycles
+- **Persistent Storage** - Data survives container close/restore cycles
 - **Computer-Use** - File system, web browser, and system-level access
 - **Multi-Agent** - Multiple agents can collaborate within sessions
 
@@ -74,8 +74,8 @@ Framework-agnostic infrastructure for any agent:
 
 ### Session Management
 Professional workflow control for complex agent tasks:
-- **State Machine** - `init → idle → busy → paused → suspended → error`
-- **Pause/Resume** - Stop and restart workflows without losing context
+- **State Machine** - `init → idle → busy → closed → error`
+- **Close/Restore** - Stop and restart workflows without losing context
 - **Session Forking** - Create child sessions from parent sessions
 - **Data Lineage** - Track relationships between related sessions
 
@@ -99,13 +99,13 @@ Production-ready security and access control:
 
 ### Session Lifecycle
 ```
-Create → Active → Pause → Resume → Delete
+Create → Active → Close → Restore → Delete
 ```
 
 **Create**: Spawn container with pre-built agents and persistent volume
 **Active**: Agent processes messages and performs computer-use tasks
-**Pause**: Stop container to save resources while preserving state
-**Resume**: Restart container from previous state with full context
+**Close**: Stop container to save resources while preserving state
+**Restore**: Restart container from previous state with full context
 **Delete**: Clean up container and session data
 
 ### Message Flow
@@ -133,7 +133,7 @@ Messages flow securely through the API server to isolated agent containers, wher
 ## Scaling and Performance
 
 ### Resource Efficiency
-- **Pause/Resume** - Sessions only consume resources when active
+- **Close/Restore** - Sessions only consume resources when active
 - **Pre-Compilation** - Agents built once, deployed instantly
 - **Container Reuse** - Efficient resource utilization strategies
 - **Connection Pooling** - Optimized database connections
@@ -163,7 +163,7 @@ Raworc provides enterprise-grade features for production AI agent operations:
 ### Scalability
 - Stateless API server design enables horizontal scaling
 - Container-based architecture supports multi-host deployment
-- Efficient resource utilization with pause/resume capabilities
+- Efficient resource utilization with close/restore capabilities
 - Space isolation enables secure multi-tenant deployments
 
 ## Next Steps

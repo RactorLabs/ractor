@@ -46,7 +46,7 @@ module.exports = (program) => {
       try {
         console.log(chalk.blue('🧹 Raworc Reset - Complete Cleanup'));
         console.log();
-        
+
         if (options.servicesOnly) {
           console.log(chalk.blue('Services-only mode: Will stop services but skip Docker cleanup'));
         } else {
@@ -57,7 +57,7 @@ module.exports = (program) => {
         console.log(chalk.yellow('⚠️  This will:'));
         console.log(chalk.yellow('  - Stop all Raworc services'));
         console.log(chalk.yellow('  - Remove ALL Raworc containers (session, server, operator, mysql)'));
-        
+
         if (!options.servicesOnly) {
           console.log(chalk.yellow('  - Remove ALL Raworc images (including space images)'));
           console.log(chalk.yellow('  - Remove ALL Docker volumes'));
@@ -75,7 +75,7 @@ module.exports = (program) => {
           const answer = await new Promise(resolve => {
             rl.question(chalk.yellow('This is a destructive operation. Continue? [y/N]: '), resolve);
           });
-          
+
           rl.close();
 
           if (!answer.match(/^[Yy]$/)) {
@@ -90,10 +90,10 @@ module.exports = (program) => {
         // Step 1: Stop all running containers first
         console.log();
         const stopSpinner = ora('[1/8] Stopping Raworc services...').start();
-        
+
         try {
           const runningResult = await execDocker(['ps', '-q', '--filter', 'name=raworc_'], { silent: true });
-          
+
           if (runningResult.stdout.trim()) {
             const runningIds = runningResult.stdout.trim().split('\n').filter(id => id);
             if (runningIds.length > 0) {
@@ -112,13 +112,13 @@ module.exports = (program) => {
         // Step 2: Remove ALL raworc containers (running and stopped)
         console.log();
         const removeSpinner = ora('[2/8] Removing ALL raworc containers...').start();
-        
+
         try {
           const result = await execDocker(['ps', '-a', '-q', '--filter', 'name=raworc'], { silent: true });
-          
+
           if (result.stdout.trim()) {
             const containerIds = result.stdout.trim().split('\n').filter(id => id);
-            
+
             if (containerIds.length > 0) {
               await execDocker(['rm', '-f', ...containerIds], { silent: true });
               removeSpinner.succeed(`Removed ${containerIds.length} containers`);
@@ -141,13 +141,13 @@ module.exports = (program) => {
         // Step 3: Remove ALL raworc images (including space images)
         console.log();
         const imageSpinner = ora('[3/8] Removing ALL raworc images...').start();
-        
+
         try {
-          const imageResult = await execDocker(['images', '-q', '--filter', 'reference=raworc*'], { silent: true });
-          
+          const imageResult = await execDocker(['images', '-q', '--filter', 'reference=raworc*', '--filter', 'reference=*/raworc*'], { silent: true });
+
           if (imageResult.stdout.trim()) {
             const imageIds = imageResult.stdout.trim().split('\n').filter(id => id);
-            
+
             if (imageIds.length > 0) {
               await execDocker(['rmi', '-f', ...imageIds], { silent: true });
               imageSpinner.succeed(`Removed ${imageIds.length} images`);
@@ -176,11 +176,11 @@ module.exports = (program) => {
         const volumeSpinner = ora('[5/8] Removing ALL Docker volumes...').start();
         try {
           const volumeResult = await execDocker(['volume', 'ls', '-q'], { silent: true });
-          
+
           if (volumeResult.stdout.trim()) {
             const volumeNames = volumeResult.stdout.trim().split('\n').filter(name => name);
             let removedCount = 0;
-            
+
             if (volumeNames.length > 0) {
               // Try to remove all volumes at once first
               try {
@@ -197,7 +197,7 @@ module.exports = (program) => {
                   }
                 }
               }
-              
+
               volumeSpinner.succeed(`Removed ${removedCount} of ${volumeNames.length} volumes`);
             } else {
               volumeSpinner.succeed('No volumes found');

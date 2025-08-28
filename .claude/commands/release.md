@@ -4,7 +4,7 @@ Automate the complete release workflow for Raworc project.
 
 ## What this command does
 
-1. **Update documentation**: Update README, website, and CLAUDE.md with recent changes
+1. **Update documentation**: Update README (for developers), website (for end users), and CLAUDE.md (for yourself), if there are any changes to make
 2. **Update changelog**: Add new version entry with all improvements from recent commits
 3. **Stage documentation changes**: `git add .`
 4. **Commit documentation**: Create commit for documentation updates
@@ -27,6 +27,7 @@ Automate the complete release workflow for Raworc project.
 **CRITICAL: Update all documentation before each release to reflect recent changes:**
 
 ### **Review Recent Commits**
+
 ```bash
 # Review commits since last release to understand what changed
 git log --oneline <last-version>..HEAD
@@ -35,6 +36,7 @@ git log --oneline <last-version>..HEAD
 ```
 
 ### **Update Documentation Files**
+
 1. **README.md**: Update with recent features, fixes, and improvements
 2. **website/docs/changelog.md**: Add comprehensive new version entry
 3. **website/docs/getting-started.md**: Update with new features and workflows
@@ -43,27 +45,21 @@ git log --oneline <last-version>..HEAD
 6. **CLAUDE.md**: Update internal documentation with development changes
 
 ### **Key Areas to Update**
+
 - **New features** from recent commits
 - **Bug fixes** and reliability improvements  
 - **CLI enhancements** and new commands
 - **Session management** improvements
 - **API changes** and new endpoints
-- **Performance improvements**
 - **Breaking changes** and migration notes
-
-### **Terminology Consistency**
-- Use **"close/restore"** not "pause/resume" or "suspend"
-- Use **current API endpoints** and correct command syntax
-- Ensure **version references** are consistent across all files
-- Update **feature descriptions** to match current capabilities
 
 ## Example workflow
 
 ```
-Current version: 0.2.9
+Current version: 0.2.10
 → Stage changes and commit
-→ Tag 0.2.7 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
-→ Bump to 0.2.8 for next development
+→ Tag 0.2.10 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
+→ Bump to 0.2.11 for next development
 → Push version bump
 ```
 
@@ -73,12 +69,12 @@ Current version: 0.2.9
 
 ```bash
 # 1. Update version in all files:
-#    - Cargo.toml: version = "0.2.8"
-#    - cli/package.json: "version": "0.2.8"  
-#    - website/package.json: "version": "0.2.8"
-#    - CLAUDE.md: Current version: 0.2.9
-#    - src/server/rest/routes.rs: "version": "0.2.8" (API response)
-#    - website/docs/api/rest-api.md: "version": "0.2.8" (documentation)
+#    - Cargo.toml: version = "0.2.10"
+#    - cli/package.json: "version": "0.2.10"  
+#    - website/package.json: "version": "0.2.10"
+#    - CLAUDE.md: Current version: 0.2.10
+#    - src/server/rest/routes.rs: "version": "0.2.10" (API response)
+#    - website/docs/api/rest-api.md: "version": "0.2.10" (documentation)
 #    - website/docs/changelog.md: Add new version entry with changes
 #    - .claude/commands/release.md: Update version examples
 
@@ -95,10 +91,11 @@ git add Cargo.toml cli/package.json website/package.json CLAUDE.md \
         src/server/rest/routes.rs website/docs/api/rest-api.md \
         website/docs/changelog.md .claude/commands/release.md \
         Cargo.lock cli/package-lock.json website/package-lock.json
-git commit -m "chore: bump version to 0.2.8"
+git commit -m "chore: bump version to 0.2.10"
 ```
 
 **Why this is required:**
+
 - **Rust validation**: `cargo build` ensures new version doesn't break compilation
 - **Node.js validation**: `npm install` ensures package.json changes are valid
 - **Lock file updates**: `Cargo.lock` and `package-lock.json` must reflect version changes
@@ -108,6 +105,7 @@ git commit -m "chore: bump version to 0.2.8"
 ### Files that must be updated and committed with version bumps
 
 **Version References (manual updates):**
+
 - `Cargo.toml` - Main Rust project version
 - `cli/package.json` - CLI npm package version
 - `website/package.json` - Website package version
@@ -118,31 +116,7 @@ git commit -m "chore: bump version to 0.2.8"
 - `.claude/commands/release.md` - Release workflow examples
 
 **Lock Files (auto-updated):**
+
 - `Cargo.lock` - Updated by `cargo build --release`
 - `cli/package-lock.json` - Updated by `npm install` in cli/ folder
 - `website/package-lock.json` - Updated by `npm install` in website/ folder
-
-## Post-Release Website Update
-
-After completing the release, update the website to reflect all changes:
-
-```bash
-# Build and deploy website with latest changes
-cd website
-npm run build
-npm run deploy  # or your deployment method
-
-# Verify website shows:
-# - Updated API documentation with new version
-# - Latest changelog entries
-# - Current CLI commands and examples
-# - Updated version references throughout
-```
-
-**Website Update Checklist:**
-- [ ] API documentation reflects new version in examples
-- [ ] Changelog shows latest release with feature descriptions
-- [ ] CLI usage examples are current and accurate
-- [ ] All version references match released version
-- [ ] New features are documented with examples
-- [ ] Troubleshooting guides are up to date

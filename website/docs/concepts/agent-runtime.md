@@ -21,7 +21,7 @@ Agent runtimes support dynamic scaling to adapt to workload demands, optimize re
 
 **Tool Integration**: Extensive connectivity enabling agents to access external data sources like databases, APIs, and enterprise systems, as well as perform actions such as file operations and web browsing.
 
-**Session Management**: Persistent state management with pause/resume capabilities for long-running workflows and complex multi-step operations.
+**Session Management**: Persistent state management with close/restore capabilities for long-running workflows and complex multi-step operations.
 
 **Enterprise Operations**: Production-ready features including RBAC, audit trails, secrets management, and compliance capabilities.
 
@@ -64,8 +64,8 @@ This separation enables:
 - **Dependency Management**: Automatic build-time compilation and caching
 
 ### 2. Session Lifecycle Orchestration
-- **State Machine**: `init → idle → busy → paused → suspended → error`
-- **Persistence**: Data survives container pause/resume cycles
+- **State Machine**: `init → idle → busy → closed → error`
+- **Persistence**: Data survives container close/restore cycles
 - **Session Forking**: Create child sessions from parent sessions
 - **Data Lineage**: Complete workflow history and relationships
 
@@ -90,7 +90,7 @@ This separation enables:
 ## Runtime Architecture Benefits
 
 ### Operational Advantages
-- **Session Persistence**: Pause complex workflows, resume later
+- **Session Persistence**: Close complex workflows, restore later
 - **Resource Efficiency**: Containers only consume resources when active
 - **Fault Tolerance**: Agents survive infrastructure changes
 - **Scalability**: Handle multiple concurrent agent sessions
@@ -188,12 +188,12 @@ raworc api sessions -m post -b '{"space":"my-team"}'
 
 **Current Pain Points:**
 - Agents lose context when processes restart
-- No way to pause long-running workflows
+- No way to close long-running workflows
 - Manual tracking of multi-step operations
 - Lost work when systems crash
 
 **Runtime Benefits:**
-- **Pause/Resume**: Stop agents mid-workflow, resume exactly where left off
+- **Close/Restore**: Stop agents mid-workflow, restore exactly where left off
 - **Session Forking**: Create experimental branches from existing sessions
 - **Data Lineage**: Track parent-child session relationships
 - **Persistent Storage**: Work survives container restarts
@@ -235,7 +235,7 @@ writer = Agent(role="writer")
 #### Green Flags (You Need Runtime):
 - Moving agents from prototype to production
 - Managing multiple agents or agent types
-- Need to pause/resume long-running workflows  
+- Need to close/restore long-running workflows  
 - Security and compliance requirements
 - Team collaboration on agent projects
 - Scaling beyond single-machine deployments

@@ -939,7 +939,7 @@ When modifying code:
 
 ## Version
 
-Current version: 0.2.9
+Current version: 0.2.10
 
 ## Notes for Claude
 
