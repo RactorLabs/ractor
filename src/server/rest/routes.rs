@@ -96,7 +96,7 @@ async fn health() -> StatusCode {
 
 async fn version() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
-        "version": "0.1.1",
+        "version": "0.2.7",
         "api": "v0"
     }))
 }

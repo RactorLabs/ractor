@@ -3,6 +3,13 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const { 
+  SESSION_STATE_IDLE, 
+  SESSION_STATE_BUSY, 
+  SESSION_STATE_CLOSED,
+  MESSAGE_ROLE_USER,
+  MESSAGE_ROLE_AGENT
+} = require('../lib/constants');
 
 module.exports = (program) => {
   program
@@ -57,8 +64,8 @@ async function sessionCommand(options) {
       console.log(chalk.gray('Session state:'), session.state);
       console.log(chalk.gray('Space:'), session.space || session.space_name || 'default');
       
-      // If session is paused, closed, or idle, restore it
-      if (session.state === 'paused' || session.state === 'closed' || session.state === 'idle') {
+      // If session is closed or idle, restore it
+      if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
         const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
         
         if (!restoreResponse.success) {
@@ -69,28 +76,31 @@ async function sessionCommand(options) {
         
         spinner.succeed(`Session restored: ${sessionId}`);
         
-        // Wait for session to become running
+        // Brief delay to allow container initialization
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Wait for session to become idle (ready for messages)
         let attempts = 0;
-        while (attempts < 30) { // Wait up to 30 seconds
+        while (attempts < 15) { // Wait up to 15 seconds
           await new Promise(resolve => setTimeout(resolve, 1000));
           const statusCheck = await api.get(`/sessions/${sessionId}`);
-          if (statusCheck.success && statusCheck.data.state === 'running') {
+          if (statusCheck.success && (statusCheck.data.state === SESSION_STATE_IDLE || statusCheck.data.state === SESSION_STATE_BUSY)) {
             break;
           }
           attempts++;
         }
         
-      } else if (session.state === 'running') {
-        spinner.succeed(`Session already running: ${sessionId}`);
-      } else if (session.state === 'busy') {
+      } else if (session.state === SESSION_STATE_IDLE) {
+        spinner.succeed(`Session already ready: ${sessionId}`);
+      } else if (session.state === SESSION_STATE_BUSY) {
         spinner.succeed(`Session is being restored: ${sessionId}`);
         
-        // Wait for session to become running
+        // Wait for session to become idle (ready for messages)
         let attempts = 0;
-        while (attempts < 30) { // Wait up to 30 seconds
+        while (attempts < 15) { // Wait up to 15 seconds
           await new Promise(resolve => setTimeout(resolve, 1000));
           const statusCheck = await api.get(`/sessions/${sessionId}`);
-          if (statusCheck.success && statusCheck.data.state === 'running') {
+          if (statusCheck.success && (statusCheck.data.state === SESSION_STATE_IDLE || statusCheck.data.state === SESSION_STATE_BUSY)) {
             break;
           }
           attempts++;
@@ -112,9 +122,9 @@ async function sessionCommand(options) {
           // Show last few messages for context
           const recentMessages = messages.slice(-5);
           recentMessages.forEach(msg => {
-            if (msg.role === 'user') {
+            if (msg.role === MESSAGE_ROLE_USER) {
               console.log(chalk.gray('You:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
-            } else if (msg.role === 'agent') {
+            } else if (msg.role === MESSAGE_ROLE_AGENT) {
               console.log(chalk.cyan('Agent:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
             }
           });
@@ -200,7 +210,7 @@ async function waitForAgentResponse(sessionId, userMessageTime, timeoutMs = 6000
           // Look for the newest agent message
           for (let i = messages.length - 1; i >= 0; i--) {
             const message = messages[i];
-            if (message.role === 'agent') {
+            if (message.role === MESSAGE_ROLE_AGENT) {
               return message;
             }
           }
@@ -259,7 +269,7 @@ async function chatLoop(sessionId) {
       // Send message to agent
       const userMessageTime = Date.now();
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
-        role: 'user',
+        role: MESSAGE_ROLE_USER,
         content: message
       });
       

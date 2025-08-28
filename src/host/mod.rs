@@ -96,6 +96,11 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
         guardrails.clone(),
         agent_manager.clone(),
     );
+
+    // Initialize processed message tracking to prevent reprocessing on restore
+    if let Err(e) = message_handler.initialize_processed_messages().await {
+        warn!("Failed to initialize processed message tracking: {}, proceeding anyway", e);
+    }
     
     // Using Claude API directly for all processing
     info!("Claude API client ready for message processing");

@@ -20,10 +20,9 @@ impl MessageHandler {
     pub fn new(
         api_client: Arc<RaworcClient>,
         claude_client: Arc<ClaudeClient>,
-            guardrails: Arc<Guardrails>,
+        guardrails: Arc<Guardrails>,
         agent_manager: Arc<Mutex<AgentManager>>,
     ) -> Self {
-
         Self {
             api_client,
             claude_client,
@@ -31,6 +30,58 @@ impl MessageHandler {
             agent_manager,
             processed_message_ids: Arc::new(Mutex::new(HashSet::new())),
         }
+    }
+
+    /// Initialize processed message IDs by checking existing messages in the session.
+    /// This prevents reprocessing messages when a session is restored.
+    pub async fn initialize_processed_messages(&self) -> Result<()> {
+        info!("Initializing processed message tracking...");
+        
+        // Fetch all existing messages
+        let all_messages = self.api_client.get_messages(None, None).await?;
+        
+        if all_messages.is_empty() {
+            info!("No existing messages found - starting fresh session");
+            return Ok(());
+        }
+
+        // Build a set of all message IDs that already have responses
+        let mut messages_with_responses = HashSet::new();
+        let mut last_user_message_id: Option<String> = None;
+        
+        // Iterate through messages to find which user messages have agent responses
+        for message in all_messages.iter().rev() {  // Process in chronological order
+            match message.role {
+                MessageRole::User => {
+                    last_user_message_id = Some(message.id.clone());
+                },
+                MessageRole::Agent | MessageRole::System => {
+                    // If this is a response to a user message, mark that user message as processed
+                    if let Some(user_msg_id) = &last_user_message_id {
+                        messages_with_responses.insert(user_msg_id.clone());
+                    }
+                }
+            }
+        }
+
+        // Only mark user messages as processed if they already have responses
+        // This allows new user messages after restore to be picked up properly
+        let mut processed_ids = self.processed_message_ids.lock().await;
+        for message in &all_messages {
+            if message.role == MessageRole::User && messages_with_responses.contains(&message.id) {
+                processed_ids.insert(message.id.clone());
+            } else if message.role != MessageRole::User {
+                // Always mark non-user messages (agent/system) as processed
+                processed_ids.insert(message.id.clone());
+            }
+            // Don't mark user messages without responses as processed - they might need processing
+        }
+        
+        let processed_count = processed_ids.len();
+        info!("Initialized processed message tracking: {} total messages, {} with responses, {} marked as processed", 
+              all_messages.len(), messages_with_responses.len(), processed_count);
+        
+        Ok(())
     }
     
     
