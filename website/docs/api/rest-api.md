@@ -35,7 +35,7 @@ Get API version and build information.
 **Response**: `200 OK`
 ```json
 {
-  "version": "0.2.9",
+  "version": "0.3.0",
   "api": "v0"
 }
 ```

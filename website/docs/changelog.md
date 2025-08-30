@@ -5,6 +5,12 @@ title: Changelog
 
 # Changelog
 
+## v0.2.10
+
+- **Documentation Reorganization**: Restructured session documentation for better clarity
+- **Terminology Updates**: Improved consistency in session management documentation
+- **Developer Experience**: Enhanced internal documentation and workflow clarity
+
 ## v0.2.9
 
 - **Enhanced CLI Reset**: Consolidated comprehensive reset functionality from shell script into CLI
