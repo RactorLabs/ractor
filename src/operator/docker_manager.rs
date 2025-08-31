@@ -163,41 +163,6 @@ echo 'Session directories created'
         Ok(())
     }
     
-    async fn generate_operator_token(&self) -> Result<String> {
-        // Generate a JWT token with operator role
-        use jsonwebtoken::{encode, EncodingKey, Header};
-        use serde::{Deserialize, Serialize};
-        use chrono::{Duration, Utc};
-        
-        #[derive(Debug, Serialize, Deserialize)]
-        struct Claims {
-            sub: String,
-            sub_type: String,
-            exp: usize,
-            iat: usize,
-            iss: String,
-        }
-        
-        let now = Utc::now();
-        let claims = Claims {
-            sub: "operator".to_string(),
-            sub_type: "ServiceAccount".to_string(),
-            exp: (now + Duration::days(365)).timestamp() as usize,
-            iat: now.timestamp() as usize,
-            iss: "raworc-operator".to_string(),
-        };
-        
-        let secret = std::env::var("JWT_SECRET")
-            .unwrap_or_else(|_| "development-secret-key".to_string());
-        
-        let token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_ref()),
-        )?;
-        
-        Ok(token)
-    }
 
     pub async fn create_container_with_volume_copy(&self, session_id: &str, parent_session_id: &str) -> Result<String> {
         info!("Creating remix session {} with volume copy from {}", session_id, parent_session_id);
@@ -674,8 +639,14 @@ echo 'Session directories created'
         labels.insert("raworc.managed".to_string(), "true".to_string());
         labels.insert("raworc.volume".to_string(), session_volume.clone());
         
-        // Generate operator token
-        let operator_token = self.generate_operator_token().await?;
+        // Get user token from secrets (added automatically by session manager)
+        let user_token = secrets.as_ref()
+            .and_then(|s| s.get("RAWORC_TOKEN"))
+            .cloned()
+            .unwrap_or_else(|| {
+                warn!("No RAWORC_TOKEN found in secrets, Host authentication may fail");
+                "missing-token".to_string()
+            });
 
         // Configure volume mounts
         let mounts = vec![
@@ -692,15 +663,24 @@ echo 'Session directories created'
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
             format!("RAWORC_SESSION_ID={}", session_id),
-            format!("RAWORC_API_KEY={}", operator_token),
+            format!("RAWORC_API_KEY={}", user_token),
             format!("RAWORC_SESSION_DIR=/session"),
         ];
         
-        // Add secrets as environment variables
+        // Add principal information as environment variables
         if let Some(secrets_map) = &secrets {
+            // Extract principal info from RAWORC_TOKEN if available
+            if let Some(token) = secrets_map.get("RAWORC_TOKEN") {
+                // Set environment variables for Host principal logging
+                env.push(format!("RAWORC_PRINCIPAL={}", secrets_map.get("RAWORC_PRINCIPAL").unwrap_or(&"unknown".to_string())));
+                env.push(format!("RAWORC_PRINCIPAL_TYPE={}", secrets_map.get("RAWORC_PRINCIPAL_TYPE").unwrap_or(&"unknown".to_string())));
+            }
+            
             for (key, value) in secrets_map {
                 env.push(format!("{}={}", key, value));
-                info!("Adding secret {} as environment variable for session {}", key, session_id);
+                if key != "RAWORC_TOKEN" && key != "RAWORC_PRINCIPAL" && key != "RAWORC_PRINCIPAL_TYPE" {
+                    info!("Adding secret {} as environment variable for session {}", key, session_id);
+                }
             }
         }
 
@@ -712,7 +692,7 @@ echo 'Session directories created'
             "--session-id".to_string(),
             session_id.to_string(),
             "--api-key".to_string(),
-            operator_token.clone(),
+            user_token.clone(),
         ];
 
         let config = Config {

@@ -160,7 +160,7 @@ impl SessionManager {
         let session_id = task.session_id.clone();
         
         // Parse the payload to get session creation parameters
-        let secrets = task.payload.get("secrets")
+        let mut secrets = task.payload.get("secrets")
             .and_then(|v| v.as_object())
             .map(|obj| {
                 obj.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
@@ -175,9 +175,30 @@ impl SessionManager {
         let setup = task.payload.get("setup")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+
+        // Extract user token and principal info, add to secrets automatically
+        if let Some(user_token) = task.payload.get("user_token").and_then(|v| v.as_str()) {
+            secrets.insert("RAWORC_TOKEN".to_string(), user_token.to_string());
+        }
         
-        info!("Creating session {} with {} secrets, instructions: {}, setup: {}", 
-              session_id, secrets.len(), instructions.is_some(), setup.is_some());
+        // Add principal information to secrets for Host logging
+        if let Some(principal) = task.payload.get("principal").and_then(|v| v.as_str()) {
+            secrets.insert("RAWORC_PRINCIPAL".to_string(), principal.to_string());
+        }
+        if let Some(principal_type) = task.payload.get("principal_type").and_then(|v| v.as_str()) {
+            secrets.insert("RAWORC_PRINCIPAL_TYPE".to_string(), principal_type.to_string());
+        }
+
+        // Extract principal information for logging
+        let principal = task.payload.get("principal")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let principal_type = task.payload.get("principal_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        
+        info!("Creating session {} for principal {} ({}) with {} secrets, instructions: {}, setup: {}", 
+              session_id, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some());
         
         // Check if this is a remix session from task payload
         let is_remix = task.payload.get("remix")

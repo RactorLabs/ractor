@@ -13,6 +13,7 @@ use tracing::info;
 #[derive(Clone)]
 pub struct AuthContext {
     pub principal: AuthPrincipal,
+    pub token: String,
 }
 
 pub async fn auth_middleware(
@@ -61,6 +62,7 @@ pub async fn auth_middleware(
     // Store auth context in request extensions
     let auth_context = AuthContext {
         principal: principal.clone(),
+        token: token.to_string(),
     };
     request.extensions_mut().insert(auth_context);
 

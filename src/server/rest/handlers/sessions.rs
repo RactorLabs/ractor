@@ -153,7 +153,8 @@ pub async fn create_session(
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
             crate::shared::rbac::AuthPrincipal::ServiceAccount(_) => "ServiceAccount",
-        }
+        },
+        "user_token": auth.token
     });
 
     sqlx::query(r#"
