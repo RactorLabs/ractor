@@ -19,7 +19,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     
     // Protected routes
     let protected_routes = Router::new()
-        .route("/auth/me", get(auth::me))
+        .route("/auth", get(auth::me))
+        .route("/auth/token", post(auth::create_token))
         // Service account endpoints
         .route("/service-accounts", get(handlers::service_accounts::list_service_accounts))
         .route("/service-accounts", post(handlers::service_accounts::create_service_account))
