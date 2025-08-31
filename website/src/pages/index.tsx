@@ -214,7 +214,7 @@ export default function Home(): ReactNode {
               <Heading as="h2">Remote Computer Use Agents</Heading>
               <p style={{"fontSize": "1.2rem", "marginBottom": "2rem"}}>
                 Raworc offers <strong>Computer use agents with dedicated computers for each session</strong>. 
-                Intelligent agents that use computers like humans do - browsing, managing files, running software 
+                Intelligent Host that uses computers like humans do - browsing, managing files, running software 
                 through <strong>natural language commands</strong>.
               </p>
               <Link
@@ -236,7 +236,7 @@ export default function Home(): ReactNode {
                 <h3>🚀 Instant Computer Use Agents</h3>
                 <p>
                   <strong>Get Computer use agents with dedicated computers</strong> in seconds. 
-                  No setup required - intelligent agents ready to automate any manual work with full computer access.
+                  No setup required - intelligent Host ready to automate any manual work with full computer access.
                 </p>
               </div>
               <div className={styles.developmentCard}>

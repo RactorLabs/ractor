@@ -5,7 +5,7 @@ title: Computer Use Landscape
 
 # Computer Use Landscape
 
-The computer use market is emerging with several platforms offering different approaches to automating computer-based tasks. True computer use platforms provide agents that can control computers like humans do - using visual interfaces, running software, and performing complex multi-step workflows.
+The computer use market is emerging with several platforms offering different approaches to automating computer-based tasks. True computer use platforms provide Host that can control computers like humans do - using visual interfaces, running software, and performing complex multi-step workflows.
 
 ## True Computer Use Platforms
 

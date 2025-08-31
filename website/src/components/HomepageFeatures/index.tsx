@@ -25,7 +25,7 @@ const FeatureList: FeatureItem[] = [
     icon: '🚀',
     description: (
       <>
-        <strong>Intelligent agents with dedicated computers</strong> - web browsing, file management, software installation, and system operations.
+        <strong>Intelligent Host with dedicated computers</strong> - web browsing, file management, software installation, and system operations.
         Full access to terminals, browsers, IDEs, and any software through conversational interfaces.
       </>
     ),

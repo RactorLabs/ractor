@@ -79,14 +79,14 @@ Raworc uses a control plane and worker nodes pattern for session orchestration:
 - **CLI**: Interface for managing computer sessions and automation tasks
 - **API Server**: Session management and automation orchestration
 - **Operator**: Controller that manages session containers and computer environments
-- **Session Computers**: Isolated computer environments with built-in Computer Use agents
+- **Session Computers**: Isolated computer environments with built-in Host
 - **Database**: Persistent storage for session state and configuration
 
 ## Why Raworc
 
 Stop doing manual work. Start automating.
 
-- **Instant Automation**: Get a remote computer with built-in Computer Use agent in seconds
+- **Instant Automation**: Get a remote computer with built-in Host in seconds
 - **Safe Automation**: Isolated computer environments for safe automation testing
 - **Never Lose Progress**: Close and restore long-running automation workflows  
 - **Scale Automation**: Go from single tasks to enterprise automation without rewrites
@@ -95,7 +95,7 @@ Stop doing manual work. Start automating.
 
 ## Key Capabilities
 
-- **Complete Computer Access**: Built-in agents can manage files, browse web, run software, and use any system tools
+- **Complete Computer Access**: Built-in Host can manage files, browse web, run software, and use any system tools
 - **Session-Based Computers**: Each session provides an isolated computer environment for automation tasks
 - **Clean Computer Environments**: Each session starts with a fresh, secure remote computer
 - **Full Computer Capabilities**: File I/O, web automation, software installation, system administration
