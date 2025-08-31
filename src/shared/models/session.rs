@@ -33,6 +33,12 @@ pub struct CreateSessionRequest {
 pub struct RemixSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+    #[serde(default = "default_true")]
+    pub data: bool,
+    #[serde(default = "default_true")]
+    pub code: bool,
+    #[serde(default = "default_true")]
+    pub secrets: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +62,10 @@ pub struct UpdateSessionRequest {
 
 fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
+}
+
+fn default_true() -> bool {
+    true
 }
 
 

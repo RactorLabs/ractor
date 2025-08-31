@@ -17,7 +17,9 @@ module.exports = (program) => {
     .description('Start an interactive AI agent session')
     .option('--restore <session-id>', 'Restore an existing session by ID')
     .option('--remix <session-id>', 'Create a new session remixing an existing session')
-    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs)')
+    .option('--data <boolean>', 'Include data files in remix (default: true)')
+    .option('--code <boolean>', 'Include code files in remix (default: true)')
+    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs) or "false" to exclude in remix')
     .option('--instructions <file>', 'Path to instructions file')
     .option('--setup <file>', 'Path to setup script file')
     .addHelpText('after', '\n' +
@@ -25,6 +27,8 @@ module.exports = (program) => {
       '  $ raworc session                           # Start a new session\n' +
       '  $ raworc session --restore abc123         # Restore and continue existing session\n' +
       '  $ raworc session --remix abc123           # Create new session based on existing one\n' +
+      '  $ raworc session --remix abc123 --data false # Remix without copying data files\n' +
+      '  $ raworc session --remix abc123 --secrets false # Remix without copying secrets\n' +
       '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
       '  $ raworc session --instructions ./inst.md # Create session with instructions\n' +
       '  $ raworc session --setup ./setup.sh       # Create session with setup script\n')
@@ -46,6 +50,21 @@ async function sessionCommand(options) {
   if (options.remix) {
     console.log(chalk.gray('Mode:'), 'Remix');
     console.log(chalk.gray('Source:'), options.remix);
+    
+    // Show remix parameters if specified
+    if (options.data !== undefined) {
+      console.log(chalk.gray('Copy Data:'), options.data === 'true' || options.data === true ? 'Yes' : 'No');
+    }
+    if (options.code !== undefined) {
+      console.log(chalk.gray('Copy Code:'), options.code === 'true' || options.code === true ? 'Yes' : 'No');
+    }
+    if (options.secrets !== undefined) {
+      if (options.secrets === 'false') {
+        console.log(chalk.gray('Copy Secrets:'), 'No');
+      } else {
+        console.log(chalk.gray('Copy Secrets:'), options.secrets === 'true' || options.secrets === true ? 'Yes' : 'No');
+      }
+    }
   } else if (options.restore) {
     console.log(chalk.gray('Mode:'), 'Restore');
     console.log(chalk.gray('Session:'), options.restore);
@@ -83,13 +102,34 @@ async function sessionCommand(options) {
         process.exit(1);
       }
       
-      // Create remix session
-      const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, {
-        new_session_metadata: {
+      // Prepare remix payload with selective parameters
+      const remixPayload = {
+        metadata: {
           remixed_from: sourceSessionId,
           remix_timestamp: new Date().toISOString()
         }
-      });
+      };
+      
+      // Parse selective copy parameters
+      if (options.data !== undefined) {
+        remixPayload.data = options.data === 'true' || options.data === true;
+      }
+      
+      if (options.code !== undefined) {
+        remixPayload.code = options.code === 'true' || options.code === true;
+      }
+      
+      if (options.secrets !== undefined) {
+        if (options.secrets === 'false') {
+          remixPayload.secrets = false;
+        } else {
+          // For remix, secrets parameter controls copying, not providing new secrets
+          remixPayload.secrets = options.secrets === 'true' || options.secrets === true;
+        }
+      }
+      
+      // Create remix session
+      const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
       
       if (!remixResponse.success) {
         spinner.fail('Failed to remix session');

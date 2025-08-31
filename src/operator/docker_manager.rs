@@ -9,6 +9,7 @@ use futures::StreamExt;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 pub struct DockerManager {
     docker: Docker,
@@ -307,6 +308,345 @@ echo 'Session directories created'
         Ok(container_name)
     }
 
+    pub async fn create_container_with_selective_copy(
+        &self, 
+        session_id: &str, 
+        parent_session_id: &str,
+        copy_data: bool,
+        copy_code: bool,
+        copy_secrets: bool
+    ) -> Result<String> {
+        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {})", 
+              session_id, parent_session_id, copy_data, copy_code, copy_secrets);
+        
+        // First create the session volume (without starting container)
+        let session_volume = self.create_session_volume(session_id).await?;
+        
+        // Then copy specific directories from parent volume to new volume
+        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
+        let new_volume = format!("raworc_session_data_{}", session_id);
+        
+        info!("Copying selective data from {} to {}", parent_volume, new_volume);
+        
+        // Build copy commands based on what should be copied
+        let mut copy_commands = Vec::new();
+        
+        // Always create base directory structure with proper ownership
+        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets && sudo chown -R host:host /dest".to_string());
+        
+        if copy_data {
+            copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
+        }
+        
+        if copy_code {
+            copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
+        }
+        
+        if copy_secrets {
+            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        }
+        
+        // Always copy README.md from root if it exists
+        copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());
+        
+        copy_commands.push("echo 'Selective copy completed'".to_string());
+        
+        let copy_command = copy_commands.join(" && ");
+        
+        // Use bollard Docker API to create copy container
+        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        
+        let config = Config {
+            image: Some(self.host_image.clone()),
+            user: Some("host".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                copy_command
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(parent_volume.clone()),
+                        target: Some("/source".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    },
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(new_volume.clone()),
+                        target: Some("/dest".to_string()),
+                        read_only: Some(false),
+                        ..Default::default()
+                    }
+                ]),
+                network_mode: Some("raworc_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        
+        // Create copy container
+        self.docker.create_container(
+            Some(CreateContainerOptions {
+                name: copy_container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        ).await?;
+        
+        // Start container
+        self.docker.start_container::<String>(&copy_container_name, None).await?;
+        
+        // Wait for completion
+        let mut wait_stream = self.docker.wait_container::<String>(&copy_container_name, None);
+        while let Some(wait_result) = wait_stream.next().await {
+            let exit_result = wait_result?;
+            if exit_result.status_code == 0 {
+                info!("Selective volume copy completed successfully");
+            } else {
+                warn!("Selective volume copy container exited with code {}", exit_result.status_code);
+            }
+            break;
+        }
+        
+        // Get logs from copy container for debugging
+        let logs = self.docker.logs::<String>(
+            &copy_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            })
+        );
+        
+        let log_output = logs.map(|log| {
+            match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                Err(_) => String::new(),
+            }
+        }).collect::<Vec<_>>().await.join("");
+        
+        info!("Selective copy logs: {}", log_output.trim());
+        
+        // Parse secrets from copy output if secrets were copied
+        let secrets = if copy_secrets {
+            let mut secrets_map = std::collections::HashMap::new();
+            
+            // Parse SECRET:key=value lines from the copy output
+            for line in log_output.lines() {
+                if line.starts_with("SECRET:") {
+                    if let Some(secret_part) = line.strip_prefix("SECRET:") {
+                        if let Some((key, value)) = secret_part.split_once('=') {
+                            secrets_map.insert(key.to_string(), value.to_string());
+                            info!("Parsed secret from copy output: {}", key);
+                        }
+                    }
+                }
+            }
+            
+            info!("Successfully parsed {} secrets from copy output", secrets_map.len());
+            secrets_map
+        } else {
+            std::collections::HashMap::new()
+        };
+        
+        // Clean up copy container
+        let _ = self.docker.remove_container(
+            &copy_container_name,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        ).await;
+        
+        // Read instructions and setup if code was copied
+        let instructions = if copy_code {
+            self.read_file_from_volume(&new_volume, "code/instructions.md").await.ok()
+        } else {
+            None
+        };
+        
+        let setup = if copy_code {
+            self.read_file_from_volume(&new_volume, "code/setup.sh").await.ok()
+        } else {
+            None
+        };
+        
+        info!("Creating container with {} secrets from copied volume", secrets.len());
+        
+        // Now create and start the container with the copied secrets as environment variables
+        let container_name = self.create_container_internal(session_id, Some(secrets), instructions, setup).await?;
+        
+        Ok(container_name)
+    }
+
+    // Helper method to read secrets from a volume
+    async fn read_secrets_from_volume(&self, volume_name: &str) -> Result<std::collections::HashMap<String, String>> {
+        let mut secrets = std::collections::HashMap::new();
+        
+        // Create a temporary container to read secrets from the volume
+        let read_container_name = format!("raworc_read_secrets_{}", Uuid::new_v4().to_string()[..8].to_string());
+        
+        let config = Config {
+            image: Some(self.host_image.clone()),
+            user: Some("host".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                "if [ -d /volume/secrets ]; then find /volume/secrets -type f -exec basename {} \\; 2>/dev/null || true; fi".to_string()
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(volume_name.to_string()),
+                        target: Some("/volume".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    }
+                ]),
+                network_mode: Some("raworc_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        
+        // Create and start container
+        self.docker.create_container(
+            Some(CreateContainerOptions {
+                name: read_container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        ).await?;
+        
+        self.docker.start_container::<String>(&read_container_name, None).await?;
+        
+        // Wait for completion
+        let mut wait_stream = self.docker.wait_container::<String>(&read_container_name, None);
+        while let Some(wait_result) = wait_stream.next().await {
+            let _exit_result = wait_result?;
+            break;
+        }
+        
+        // Get output (list of secret file names)
+        let logs = self.docker.logs::<String>(
+            &read_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: false,
+                ..Default::default()
+            })
+        );
+        
+        let secret_files = logs.map(|log| {
+            match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).trim().to_string(),
+                Err(_) => String::new(),
+            }
+        }).collect::<Vec<_>>().await.join("").lines().map(|s| s.to_string()).collect::<Vec<_>>();
+        
+        // Clean up the read container
+        let _ = self.docker.remove_container(
+            &read_container_name,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        ).await;
+        
+        // Now read each secret file content
+        for secret_file in secret_files {
+            if !secret_file.is_empty() {
+                if let Ok(value) = self.read_file_from_volume(volume_name, &format!("secrets/{}", secret_file)).await {
+                    secrets.insert(secret_file, value);
+                }
+            }
+        }
+        
+        Ok(secrets)
+    }
+    
+    // Helper method to read a file from a volume
+    async fn read_file_from_volume(&self, volume_name: &str, file_path: &str) -> Result<String> {
+        let read_container_name = format!("raworc_read_file_{}", Uuid::new_v4().to_string()[..8].to_string());
+        
+        let config = Config {
+            image: Some(self.host_image.clone()),
+            user: Some("host".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                format!("if [ -f /volume/{} ]; then cat /volume/{}; fi", file_path, file_path)
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(volume_name.to_string()),
+                        target: Some("/volume".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    }
+                ]),
+                network_mode: Some("raworc_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        
+        // Create and start container
+        self.docker.create_container(
+            Some(CreateContainerOptions {
+                name: read_container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        ).await?;
+        
+        self.docker.start_container::<String>(&read_container_name, None).await?;
+        
+        // Wait for completion
+        let mut wait_stream = self.docker.wait_container::<String>(&read_container_name, None);
+        while let Some(wait_result) = wait_stream.next().await {
+            let _exit_result = wait_result?;
+            break;
+        }
+        
+        // Get file content
+        let logs = self.docker.logs::<String>(
+            &read_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: false,
+                ..Default::default()
+            })
+        );
+        
+        let content = logs.map(|log| {
+            match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                Err(_) => String::new(),
+            }
+        }).collect::<Vec<_>>().await.join("");
+        
+        // Clean up the read container
+        let _ = self.docker.remove_container(
+            &read_container_name,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        ).await;
+        
+        if content.trim().is_empty() {
+            Err(anyhow::anyhow!("File {} not found or empty", file_path))
+        } else {
+            Ok(content.trim().to_string())
+        }
+    }
 
     pub async fn create_container_with_params(
         &self, 

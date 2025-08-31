@@ -189,6 +189,11 @@ pub async fn remix_session(
         return Err(ApiError::Forbidden("Can only remix your own sessions".to_string()));
     }
 
+    // Store the remix options before moving req into Session::remix
+    let copy_data = req.data;
+    let copy_code = req.code;
+    let copy_secrets = req.secrets;
+    
     let session = Session::remix(&state.db, &id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e)))?;
@@ -199,7 +204,15 @@ pub async fn remix_session(
         crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
     };
 
-    // Add task to queue for session manager to create container (same as create_session)
+    // Add task to queue for session manager to create container with remix options
+    let task_payload = serde_json::json!({
+        "remix": true,
+        "parent_session_id": parent.id,
+        "copy_data": copy_data,
+        "copy_code": copy_code,
+        "copy_secrets": copy_secrets
+    });
+    
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
@@ -207,7 +220,7 @@ pub async fn remix_session(
     )
     .bind(&session.id)
     .bind(created_by)
-    .bind(serde_json::json!({}))
+    .bind(task_payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;

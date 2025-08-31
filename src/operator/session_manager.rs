@@ -179,21 +179,37 @@ impl SessionManager {
         info!("Creating session {} with {} secrets, instructions: {}, setup: {}", 
               session_id, secrets.len(), instructions.is_some(), setup.is_some());
         
-        // Check if this is a remix session (has parent_session_id)
-        let session = sqlx::query_as::<_, (String, Option<String>)>(
-            "SELECT id, parent_session_id FROM sessions WHERE id = ?"
-        )
-        .bind(&session_id)
-        .fetch_one(&self.pool)
-        .await?;
+        // Check if this is a remix session from task payload
+        let is_remix = task.payload.get("remix")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         
-        let parent_session_id = session.1;
-        
-        if let Some(parent_id) = parent_session_id {
-            info!("Creating remix session {} from parent {}", session_id, parent_id);
+        if is_remix {
+            let parent_session_id = task.payload.get("parent_session_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_id for remix"))?;
+                
+            let copy_data = task.payload.get("copy_data")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let copy_code = task.payload.get("copy_code")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let copy_secrets = task.payload.get("copy_secrets")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
             
-            // For remix sessions, create container with volume copy from parent
-            self.docker_manager.create_container_with_volume_copy(&session_id, &parent_id).await?;
+            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {})", 
+                  session_id, parent_session_id, copy_data, copy_code, copy_secrets);
+            
+            // For remix sessions, create container with selective volume copy from parent
+            self.docker_manager.create_container_with_selective_copy(
+                &session_id, 
+                parent_session_id, 
+                copy_data, 
+                copy_code, 
+                copy_secrets
+            ).await?;
         } else {
             info!("Creating new session {}", session_id);
             
