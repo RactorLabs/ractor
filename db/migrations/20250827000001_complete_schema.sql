@@ -96,6 +96,15 @@ VALUES (
     true
 );
 
+-- Operator service account for host agents
+INSERT IGNORE INTO service_accounts (name, password_hash, description, active) 
+VALUES (
+    'operator',
+    '$2b$12$xJxdkbovt0jOPDz54RrAeufRUuWRCEJRhClksgUmN9uKKUbG.I8Ly',
+    'Operator account for host agents',
+    true
+);
+
 -- Default roles
 INSERT IGNORE INTO roles (name, description, rules) VALUES
 (
@@ -110,10 +119,16 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
     )
 );
 
--- Admin role binding
+-- Role bindings
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
-VALUES (
+VALUES 
+(
     'admin',
     'ServiceAccount',
+    'admin'
+),
+(
+    'operator',
+    'ServiceAccount', 
     'admin'
 );

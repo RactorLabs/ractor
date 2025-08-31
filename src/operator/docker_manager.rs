@@ -701,7 +701,7 @@ echo 'Session directories created'
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
             format!("RAWORC_SESSION_ID={}", session_id),
-            format!("RAWORC_API_TOKEN={}", operator_token),
+            format!("RAWORC_API_KEY={}", operator_token),
             format!("RAWORC_SESSION_DIR=/session"),
         ];
         
