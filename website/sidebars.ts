@@ -31,13 +31,13 @@ const sidebars: SidebarsConfig = {
       link: {
         type: 'generated-index',
         title: 'Core Concepts',
-        description: 'Understand Raworc architecture and the agent runtime concept',
+        description: 'Understand Computer use agents and automation capabilities',
       },
       items: [
-        'concepts/agent-runtime',
-        'concepts/architecture',
-        'concepts/spaces-and-sessions',
-        'concepts/agent-runtime-landscape',
+        'concepts/computer-use-agents',
+        'concepts/sessions',
+        'concepts/computer-use-landscape',
+        'concepts/rbac-system',
       ],
     },
     {
@@ -46,11 +46,11 @@ const sidebars: SidebarsConfig = {
       link: {
         type: 'generated-index',
         title: 'User Guides',
-        description: 'Learn how to use Raworc CLI and deploy your own agents',
+        description: 'Learn how to use Raworc CLI and automate manual work',
       },
       items: [
         'guides/cli-usage',
-        'guides/bring-your-own-agent',
+        'guides/dev-mode',
         'guides/session-playground',
       ],
     },

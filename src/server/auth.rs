@@ -27,7 +27,6 @@ pub fn create_service_account_jwt(
     let claims = RbacClaims {
         sub: service_account.user.clone(),
         sub_type: SubjectType::ServiceAccount,
-        space: None, // Service accounts are global now
         exp: exp.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
         iss: "raworc-rbac".to_string(),
@@ -68,7 +67,6 @@ pub async fn check_permission(
         .get_role_bindings_for_subject(
             principal.name(),
             principal.subject_type(),
-            None,
         )
         .await?;
 
@@ -81,10 +79,9 @@ pub async fn check_permission(
 
     for binding in &role_bindings {
         tracing::info!(
-            "Role binding: principal={} role={} space={:?}",
+            "Role binding: principal={} role={}",
             binding.principal,
-            binding.role_name,
-            binding.space
+            binding.role_name
         );
     }
 

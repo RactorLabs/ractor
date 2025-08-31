@@ -5,7 +5,7 @@ title: Getting Started
 
 # Getting Started with Raworc
 
-Get started with the Universal AI Agent Runtime in just a few commands. Raworc provides the simplest developer experience for deploying AI agents with enterprise-grade reliability.
+Get started with the Remote Agentic Work Orchestrator in just a few commands. Raworc provides dedicated remote computers for AI agents to automate any manual work with enterprise-grade reliability.
 
 ## Prerequisites
 
@@ -197,32 +197,32 @@ raworc reset --yes
 
 ## Common Use Cases
 
-### Development Environment
+### Web Automation
 
 ```bash
-# Create a coding assistant session
+# Create a web automation agent
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
-  --instructions "You are a senior developer. Help with code review, debugging, and best practices."
+  --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites."
 ```
 
-### Data Analysis
+### Document Processing
 
 ```bash
-# Create a data science session
+# Create a document processing agent
 raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db-url"}' \
-  --instructions "You are a data scientist. Help with analysis, visualization, and insights." \
-  --setup "pip install pandas numpy matplotlib seaborn jupyter"
+  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+  --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
+  --setup "pip install pandas openpyxl python-docx"
 ```
 
 ### System Administration
 
 ```bash
-# Create a sysadmin assistant
+# Create a system automation agent
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
-  --instructions "You are a system administrator. Help with DevOps, monitoring, and infrastructure."
+  --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems."
 ```
 
 ## Next Steps
@@ -232,7 +232,6 @@ Now that you have Raworc running:
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all CLI commands and features
 - **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture and lifecycle
 - **[API Reference](/docs/api/rest-api)** - Complete REST API documentation
-- **[Architecture Overview](/docs/concepts/architecture)** - System architecture and design
 
 ## Support
 

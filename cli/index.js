@@ -18,7 +18,7 @@ const program = new Command();
 
 program
   .name('raworc')
-  .description('Universal AI Agent Runtime - CLI for managing AI agents')
+  .description('Remote Agentic Work Orchestrator - CLI for Computer use agents')
   .version(pkg.version);
 
 // Configure commands

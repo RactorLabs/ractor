@@ -80,7 +80,6 @@ Get information about the authenticated user.
 ```json
 {
   "user": "admin",
-  "namespace": null,
   "type": "ServiceAccount"
 }
 ```
@@ -166,7 +165,6 @@ Update a service account.
 **Request Body**:
 ```json
 {
-  "space": "production",
   "description": "Updated description",
   "active": true
 }
@@ -230,16 +228,11 @@ List all RBAC roles with their permission rules.
   },
   {
     "name": "operator", 
-    "description": "Session and secret management permissions",
+    "description": "Session management permissions",
     "rules": [
       {
-        "resources": ["sessions", "agents", "secrets"],
+        "resources": ["sessions", "session_messages", "session_tasks"],
         "verbs": ["create", "read", "update", "delete", "list"],
-        "scope": "space"
-      },
-      {
-        "resources": ["spaces"],
-        "verbs": ["read", "list"], 
         "scope": "global"
       }
     ],
@@ -247,17 +240,12 @@ List all RBAC roles with their permission rules.
   },
   {
     "name": "developer",
-    "description": "Development access without secret modification",
+    "description": "Development access for sessions",
     "rules": [
       {
-        "resources": ["sessions", "agents"],
+        "resources": ["sessions", "session_messages"],
         "verbs": ["create", "read", "update", "list"],
-        "scope": "space"
-      },
-      {
-        "resources": ["secrets"],
-        "verbs": ["read", "list"],
-        "scope": "space"
+        "scope": "global"
       }
     ],
     "created_at": "2024-01-01T00:00:00Z"
@@ -347,8 +335,7 @@ Create a new role binding.
 ```json
 {
   "subject": "api-user",
-  "role_ref": "developer",
-  "space": "staging"
+  "role_ref": "developer"
 }
 ```
 

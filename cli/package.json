@@ -1,7 +1,7 @@
 {
   "name": "@raworc/cli",
   "version": "0.3.0",
-  "description": "Raworc CLI - Universal AI Agent Runtime",
+  "description": "Raworc CLI - Computer use agents with dedicated computers to automate manual work",
   "main": "index.js",
   "bin": {
     "raworc": "./index.js"
@@ -10,11 +10,11 @@
     "start": "node index.js"
   },
   "keywords": [
-    "ai",
+    "computer-use",
+    "automation",
     "agents",
-    "runtime",
-    "containers",
-    "docker"
+    "remote-work",
+    "manual-work"
   ],
   "author": "Raworc Team",
   "license": "UNLICENSED",

@@ -188,43 +188,4 @@ impl RaworcClient {
             }
         }
     }
-
-    
-    /// Get space agents
-    pub async fn get_space_agents(&self) -> Result<Vec<serde_json::Value>> {
-        // Extract space from environment or use default
-        let space = std::env::var("RAWORC_SPACE_ID").unwrap_or_else(|_| "default".to_string());
-        
-        let url = format!(
-            "{}/api/v0/spaces/{}/agents",
-            self.config.api_url,
-            space
-        );
-        
-        debug!("Fetching space agents from: {}", url);
-        
-        let response = self.client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .send()
-            .await?;
-        
-        match response.status() {
-            StatusCode::OK => {
-                let agents = response.json::<Vec<serde_json::Value>>().await?;
-                debug!("Fetched {} agents", agents.len());
-                Ok(agents)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => {
-                Ok(vec![]) // No agents configured
-            }
-            status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!("Failed to fetch agents ({}): {}", status, error_text)))
-            }
-        }
-    }
 }

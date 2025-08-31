@@ -328,6 +328,5 @@ You: /quit
 ## Next Steps
 
 - [CLI Usage](/docs/guides/cli-usage) - Complete CLI usage guide
-- [Architecture Overview](/docs/concepts/architecture) - Complete system architecture
 - [API Reference](/docs/api/rest-api) - Complete REST API documentation
 - [Troubleshooting](/docs/guides/troubleshooting) - Common issues and solutions

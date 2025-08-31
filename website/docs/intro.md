@@ -10,11 +10,11 @@ slug: /
   <img src="/img/logo.png" alt="Raworc Logo" width="200"/>
 </div>
 
-**Raworc** is a universal AI agent runtime that enables you to deploy any agent from any framework in containerized sessions with enterprise-grade operations and zero vendor lock-in. Whether you're using LangChain, CrewAI, AutoGen, or custom implementations, Raworc provides the production infrastructure to accelerate from development to deployment.
+**Raworc** is a Remote Agentic Work Orchestrator that provides Computer use agents with dedicated computers for each session. Intelligent agents that use computers like humans do - browsing the web, managing files, running software, and performing any computer-based task through natural language interfaces.
 
 :::tip Get Started in 60 Seconds
 
-Deploy AI agents with the **simplest developer experience** in the industry. Just install via npm and start building.
+Get **Computer use agents with dedicated computers** - the simplest setup in the industry. Just install via npm and start automating manual work.
 
 [Get Started →](/docs/getting-started)
 
@@ -22,34 +22,49 @@ Deploy AI agents with the **simplest developer experience** in the industry. Jus
 
 ## What is Raworc?
 
-Raworc is the **Universal AI Agent Runtime** that solves the deployment gap between AI framework capabilities and production requirements. Instead of spending time fighting infrastructure, developers can focus on building agents while Raworc handles containerized execution, session management, and enterprise operations.
+Raworc is a **Remote Agentic Work Orchestrator** that provides Computer use agents with dedicated computers to automate manual work. Instead of doing repetitive tasks manually, get intelligent agents that use computers like humans do to handle any computer-based work through natural language instructions.
 
 ### Key Features
 
-- 🚀 **BYOA (Bring Your Own Agents)** - Framework-agnostic runtime supporting any agent from any GitHub repository
-- 📦 **Containerized Sessions** - Each session runs in its own dedicated container environment with complete isolation
-- 🖥️ **Computer-use Capabilities** - Agents have full access to filesystem operations, web browsers, and system-level tools
-- 🤝 **Multi-Agent Orchestration** - LLM-powered delegation with intelligent routing and context passing
-- 🔐 **Enterprise-Grade Security** - JWT + RBAC with space-scoped permissions and encrypted secrets
-- 🏗️ **Universal Agent Runtime** - Infrastructure-as-a-Service for AI agents with professional deployment and monitoring
+- 🖥️ **Computer Use Agents** - Intelligent agents that control computers like humans do for any automation task
+- 🎯 **Dedicated Computers** - Each session provides a dedicated computer with full OS access for the CUA
+- 🗣️ **Natural Language Control** - Describe any manual work and the CUA executes it automatically
+- 💾 **Persistent Sessions** - Close and restore long-running automation workflows without losing progress
+- 🔐 **Secure Automation** - Enterprise-grade security with session isolation and encrypted secrets
+- ⚡ **Instant Setup** - Get automation-ready CUA with dedicated computer in seconds
 
 ## How Raworc Works
 
-Raworc provides the missing infrastructure layer between AI frameworks and production deployment:
+Raworc provides Computer use agents with dedicated computers to automate any manual work:
 
-1. **Deploy Any Agent** - BYOA support for LangChain, CrewAI, AutoGen, or custom implementations
-2. **Containerized Sessions** - Each agent runs in isolated containers with persistent state
-3. **Enterprise Operations** - Built-in RBAC, secrets management, and monitoring
-4. **Production Ready** - REST API and enterprise-grade security
+1. **Get CUA with Computer** - Each session provides a Computer Use Agent with dedicated computer
+2. **Describe Manual Work** - Tell the CUA what you want automated in natural language
+3. **CUA Executes Tasks** - Agent uses the computer like a human to complete the work
+4. **Results Delivered** - Automated workflows with files, reports, and completed tasks
+
+## What You Can Automate
+
+**Popular Use Cases:**
+- 🤖 **Build Agentic AI Products** - Develop agents using LangGraph, CrewAI, AutoGen
+- ⚡ **Supercharge Make/n8n Workflows** - Extend automation platforms with computer use
+- 📊 **Generate Stunning Reports** - Create professional reports with data analysis
+- 🎨 **Create Great Presentations** - Build compelling slide decks automatically
+- 🌐 **Operate Remote Browsers** - Control browsers for testing and automation
+- 🔍 **Research Any Topic** - Deep web research and information gathering
+- 📈 **Conduct Market Research** - Competitor analysis and market intelligence
+- 💻 **Write Better Code** - AI-powered development and code review
+- 🧪 **Perform Quality Assurance Testing** - Automated testing workflows
+- 📱 **Generate Content for Social Media** - Create posts and manage content
+- 💰 **Handle Financial Operations** - Process invoices and financial data
+- 📝 **Fill Out Boring Forms** - Automate repetitive form filling and data entry
 
 ## Quick Links
 
-- [Get Started](/docs/getting-started) - Deploy your first agent in 60 seconds
-- [Agent Runtime](/docs/concepts/agent-runtime) - Understand what agent runtimes are and why you need one
-- [Raworc Architecture](/docs/concepts/architecture) - Technical system design and components
-- [Spaces and Sessions](/docs/concepts/spaces-and-sessions) - Core data models and workflow management
+- [Get Started](/docs/getting-started) - Get your first Computer Use Agent in 60 seconds
+- [Computer Use Agents](/docs/concepts/computer-use-agents) - Understand CUA capabilities and automation potential
+- [Sessions](/docs/concepts/sessions) - Core data models and workflow management
 - [REST API Usage](/docs/guides/rest-api-guide) - Complete REST API usage guide
-- [Bring Your Own Agent](/docs/guides/bring-your-own-agent) - Deploy custom agents
+- [Dev Mode](/docs/guides/dev-mode) - Enable Coding Agent to develop scripts, APIs, tools, and agents
 
 ## Getting Help
 

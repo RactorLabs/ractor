@@ -16,8 +16,6 @@ use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
 #[derive(Debug, Deserialize)]
 pub struct CreateRoleRequest {
     pub name: String,
-    // #[serde(default)]
-    // pub space: Option<String>, // Roles are global now
     pub rules: Vec<RuleRequest>,
     #[serde(default)]
     pub description: Option<String>,
@@ -36,7 +34,6 @@ pub struct RuleRequest {
 pub struct RoleResponse {
     pub id: String,
     pub name: String,
-    // pub space: Option<String>, // Roles are global now
     pub rules: Vec<RuleResponse>,
     pub description: Option<String>,
     pub created_at: String,
@@ -56,7 +53,6 @@ impl From<Role> for RoleResponse {
         Self {
             id: role.id.map(|id| id.to_string()).unwrap_or_default(),
             name: role.name,
-            // space: None, // Roles are global now - field removed from struct
             rules: role.rules.into_iter().map(|r| RuleResponse {
                 api_groups: r.api_groups,
                 resources: r.resources,
@@ -74,7 +70,7 @@ pub async fn list_roles(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<RoleResponse>>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_LIST, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_LIST)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -92,7 +88,7 @@ pub async fn get_role(
     Path(id): Path<String>,
 ) -> ApiResult<Json<RoleResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_GET, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_GET)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -117,7 +113,7 @@ pub async fn create_role(
     Json(req): Json<CreateRoleRequest>,
 ) -> ApiResult<Json<RoleResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_CREATE, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_CREATE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -131,7 +127,6 @@ pub async fn create_role(
     let role = Role {
         id: None,
         name: req.name,
-        // space: req.space, // Roles are global now
         rules: req.rules.into_iter().map(|r| Rule {
             api_groups: r.api_groups,
             resources: r.resources,
@@ -152,7 +147,7 @@ pub async fn delete_role(
     Path(id): Path<String>,
 ) -> ApiResult<()> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_DELETE, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_DELETE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),

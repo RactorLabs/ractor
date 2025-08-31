@@ -1,6 +1,6 @@
 # @raworc/cli
 
-Universal AI Agent Runtime - CLI for managing AI agents in containerized environments.
+Remote Agentic Work Orchestrator - CLI for Computer use agents with dedicated computers to automate manual work.
 
 ## Getting Started
 

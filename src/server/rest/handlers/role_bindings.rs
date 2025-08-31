@@ -18,8 +18,6 @@ pub struct CreateRoleBindingRequest {
     pub role_name: String,
     pub principal: String,
     pub principal_type: SubjectType,
-    #[serde(default)]
-    pub space: Option<String>, // NULL = global, String = specific organization
 }
 
 
@@ -29,7 +27,6 @@ pub struct RoleBindingResponse {
     pub role_name: String,
     pub principal: String,
     pub principal_type: SubjectType,
-    pub space: Option<String>, // NULL = global access, String = specific organization
     pub created_at: String,
 }
 
@@ -41,7 +38,6 @@ impl From<RoleBinding> for RoleBindingResponse {
             role_name: rb.role_name,
             principal: rb.principal,
             principal_type: rb.principal_type,
-            space: rb.space,
             created_at: rb.created_at,
         }
     }
@@ -52,7 +48,7 @@ pub async fn list_role_bindings(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<RoleBindingResponse>>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_LIST, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_LIST)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -70,20 +66,24 @@ pub async fn get_role_binding(
     Path(id): Path<String>,
 ) -> ApiResult<Json<RoleBindingResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_GET, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_GET)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
     // Try to parse as UUID first, otherwise treat as name
-    let binding = if let Ok(uuid) = uuid::Uuid::parse_str(&id) {
-        state.get_all_role_bindings().await?
-            .into_iter()
-            .find(|rb| rb.id == Some(uuid))
-    } else {
-        state.get_role_binding(&id, None).await?
-    };
+    // For GET by ID, we need to search through all bindings since we only have compound keys
+    let binding = state.get_all_role_bindings().await?
+        .into_iter()
+        .find(|rb| {
+            if let Ok(uuid) = uuid::Uuid::parse_str(&id) {
+                rb.id == Some(uuid)
+            } else {
+                // Try matching as "role_name:principal" format
+                format!("{}:{}", rb.role_name, rb.principal) == id
+            }
+        });
     
     let binding = binding.ok_or(ApiError::NotFound("Role binding not found".to_string()))?;
     Ok(Json(binding.into()))
@@ -94,9 +94,8 @@ pub async fn create_role_binding(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateRoleBindingRequest>,
 ) -> ApiResult<Json<RoleBindingResponse>> {
-    // Check permission - need extra permissions for global bindings
-    let target_space = req.space.as_deref();
-    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_CREATE, target_space)
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_CREATE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -107,7 +106,6 @@ pub async fn create_role_binding(
         role_name: req.role_name,
         principal: req.principal,
         principal_type: req.principal_type,
-        space: req.space,
         created_at: Utc::now().to_rfc3339(),
     };
     
@@ -121,23 +119,31 @@ pub async fn delete_role_binding(
     Path(id): Path<String>,
 ) -> ApiResult<()> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_DELETE, None)
+    check_api_permission(&auth, &state, &permissions::ROLE_BINDING_DELETE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
-    let deleted = if uuid::Uuid::parse_str(&id).is_ok() {
-        // For UUID, we need to find the binding first
-        if let Some(binding) = state.get_all_role_bindings().await?
-            .into_iter()
-            .find(|rb| rb.id == Some(uuid::Uuid::parse_str(&id).unwrap())) {
-            state.delete_role_binding(&binding.role_name, binding.space.as_deref()).await?
+    // Parse the id as "role_name:principal" format
+    let parts: Vec<&str> = id.split(':').collect();
+    let deleted = if parts.len() == 2 {
+        let role_name = parts[0];
+        let principal = parts[1];
+        state.delete_role_binding(role_name, principal).await?
+    } else {
+        // Try to find by UUID if it's in the old format
+        if let Ok(uuid) = uuid::Uuid::parse_str(&id) {
+            if let Some(binding) = state.get_all_role_bindings().await?
+                .into_iter()
+                .find(|rb| rb.id == Some(uuid)) {
+                state.delete_role_binding(&binding.role_name, &binding.principal).await?
+            } else {
+                false
+            }
         } else {
             false
         }
-    } else {
-        state.delete_role_binding(&id, None).await?
     };
     
     if !deleted {

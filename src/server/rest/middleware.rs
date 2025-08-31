@@ -76,7 +76,6 @@ pub async fn auth_middleware(
         method = %method,
         path = %uri.path(),
         user = %user,
-        space = ?claims.space,
         "API request"
     );
 

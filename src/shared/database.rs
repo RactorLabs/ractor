@@ -11,19 +11,17 @@ impl AppState {
     pub async fn create_service_account(
         &self,
         user: &str,
-        space: Option<String>,
         pass_hash: &str,
         description: Option<String>,
     ) -> Result<ServiceAccount, DatabaseError> {
         let created_at = Utc::now().to_rfc3339();
         
         query(r#"
-            INSERT INTO service_accounts (name, space, password_hash, description)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO service_accounts (name, password_hash, description)
+            VALUES (?, ?, ?)
             "#
         )
         .bind(user)
-        .bind(space)
         .bind(pass_hash)
         .bind(&description)
         .execute(&*self.db)
@@ -142,49 +140,11 @@ impl AppState {
     pub async fn update_service_account(
         &self,
         name: &str,
-        space: Option<String>,
         description: Option<String>,
         active: Option<bool>,
     ) -> Result<bool, DatabaseError> {
         // Build dynamic update query based on provided fields
-        let result = if let (Some(ns), Some(desc), Some(act)) = (&space, &description, &active) {
-            query(r#"
-                UPDATE service_accounts
-                SET space = ?, description = ?, active = ?, updated_at = NOW()
-                WHERE name = ?
-                "#
-            )
-            .bind(ns)
-            .bind(desc)
-            .bind(act)
-            .bind(name)
-            .execute(&*self.db)
-            .await?
-        } else if let (Some(ns), Some(desc)) = (&space, &description) {
-            query(r#"
-                UPDATE service_accounts
-                SET space = ?, description = ?, updated_at = NOW()
-                WHERE name = ?
-                "#
-            )
-            .bind(ns)
-            .bind(desc)
-            .bind(name)
-            .execute(&*self.db)
-            .await?
-        } else if let (Some(ns), Some(act)) = (&space, &active) {
-            query(r#"
-                UPDATE service_accounts
-                SET space = ?, active = ?, updated_at = NOW()
-                WHERE name = ?
-                "#
-            )
-            .bind(ns)
-            .bind(act)
-            .bind(name)
-            .execute(&*self.db)
-            .await?
-        } else if let (Some(desc), Some(act)) = (&description, &active) {
+        let result = if let (Some(desc), Some(act)) = (&description, &active) {
             query(r#"
                 UPDATE service_accounts
                 SET description = ?, active = ?, updated_at = NOW()
@@ -193,17 +153,6 @@ impl AppState {
             )
             .bind(desc)
             .bind(act)
-            .bind(name)
-            .execute(&*self.db)
-            .await?
-        } else if let Some(ns) = space {
-            query(r#"
-                UPDATE service_accounts
-                SET space = ?, updated_at = NOW()
-                WHERE name = ?
-                "#
-            )
-            .bind(ns)
             .bind(name)
             .execute(&*self.db)
             .await?
@@ -344,18 +293,14 @@ impl AppState {
             SubjectType::Subject => "User",
         };
         
-        // Use '*' for global space (NULL -> '*')
-        let space = role_binding.space.as_deref().unwrap_or("*");
-        
         query(r#"
-            INSERT INTO role_bindings (role_name, principal, principal_type, space_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO role_bindings (role_name, principal, principal_type)
+            VALUES (?, ?, ?)
             "#
         )
         .bind(&role_binding.role_name)
         .bind(&role_binding.principal)
         .bind(principal_type_str)
-        .bind(space)
         .execute(&*self.db)
         .await?;
 
@@ -368,18 +313,17 @@ impl AppState {
     pub async fn get_role_binding(
         &self,
         role_name: &str,
-        space: Option<&str>,
+        principal: &str,
     ) -> Result<Option<RoleBinding>, DatabaseError> {
-        let ws = space.unwrap_or("*");
         let row = query(r#"
-            SELECT role_name, principal, principal_type, space_id, created_at
+            SELECT role_name, principal, principal_type, created_at
             FROM role_bindings
-            WHERE role_name = ? AND space_id = ?
+            WHERE role_name = ? AND principal = ?
             LIMIT 1
             "#
         )
         .bind(role_name)
-        .bind(ws)
+        .bind(principal)
         .fetch_optional(&*self.db)
         .await?;
 
@@ -390,13 +334,11 @@ impl AppState {
                 _ => SubjectType::Subject,
             };
             
-            let space_str: String = r.get("space_id");
             RoleBinding {
                 id: None,
                 role_name: r.get("role_name"),
                 principal: r.get("principal"),
                 principal_type,
-                space: if space_str == "*" { None } else { Some(space_str) },
                 created_at: r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
             }
         }))
@@ -404,7 +346,7 @@ impl AppState {
 
     pub async fn get_all_role_bindings(&self) -> Result<Vec<RoleBinding>, DatabaseError> {
         let rows = query(r#"
-            SELECT role_name, principal, principal_type, space_id, created_at
+            SELECT role_name, principal, principal_type, created_at
             FROM role_bindings
             ORDER BY created_at DESC
             "#
@@ -419,13 +361,11 @@ impl AppState {
                 _ => SubjectType::Subject,
             };
             
-            let space_str: String = r.get("space_id");
             RoleBinding {
                 id: None,
                 role_name: r.get("role_name"),
                 principal: r.get("principal"),
                 principal_type,
-                space: if space_str == "*" { None } else { Some(space_str) },
                 created_at: r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
             }
         }).collect())
@@ -436,40 +376,23 @@ impl AppState {
         &self,
         subject_name: &str,
         subject_type: SubjectType,
-        space: Option<&str>,
     ) -> Result<Vec<RoleBinding>, DatabaseError> {
         let principal_type_str = match subject_type {
             SubjectType::Subject => "User",
             SubjectType::ServiceAccount => "ServiceAccount",
         };
         
-        let rows = if let Some(ns) = space {
-            query(r#"
-                SELECT role_name, principal, principal_type, space_id, created_at
-                FROM role_bindings
-                WHERE principal = ?
-                AND principal_type = ?
-                AND (space_id = ? OR space_id = '*')
-                "#
-            )
-            .bind(subject_name)
-            .bind(principal_type_str)
-            .bind(ns)
-            .fetch_all(&*self.db)
-            .await?
-        } else {
-            query(r#"
-                SELECT role_name, principal, principal_type, space_id, created_at
-                FROM role_bindings
-                WHERE principal = ?
-                AND principal_type = ?
-                "#
-            )
-            .bind(subject_name)
-            .bind(principal_type_str)
-            .fetch_all(&*self.db)
-            .await?
-        };
+        let rows = query(r#"
+            SELECT role_name, principal, principal_type, created_at
+            FROM role_bindings
+            WHERE principal = ?
+            AND principal_type = ?
+            "#
+        )
+        .bind(subject_name)
+        .bind(principal_type_str)
+        .fetch_all(&*self.db)
+        .await?;
 
         Ok(rows.into_iter().map(|r| {
             let principal_type_str: String = r.get("principal_type");
@@ -478,13 +401,11 @@ impl AppState {
                 _ => SubjectType::Subject,
             };
             
-            let space_str: String = r.get("space_id");
             RoleBinding {
                 id: None,
                 role_name: r.get("role_name"),
                 principal: r.get("principal"),
                 principal_type,
-                space: if space_str == "*" { None } else { Some(space_str) },
                 created_at: r.get::<chrono::DateTime<chrono::Utc>, _>("created_at").to_rfc3339(),
             }
         }).collect())
@@ -492,17 +413,16 @@ impl AppState {
 
     pub async fn delete_role_binding(
         &self,
-        name: &str,
-        space: Option<&str>,
+        role_name: &str,
+        principal: &str,
     ) -> Result<bool, DatabaseError> {
-        let ws = space.unwrap_or("*");
         let result = query(r#"
             DELETE FROM role_bindings
-            WHERE role_name = ? AND space_id = ?
+            WHERE role_name = ? AND principal = ?
             "#
         )
-        .bind(name)
-        .bind(ws)
+        .bind(role_name)
+        .bind(principal)
         .execute(&*self.db)
         .await?;
 

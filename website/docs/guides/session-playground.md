@@ -12,15 +12,12 @@ Master the full power of Raworc sessions with interactive examples and advanced 
 The simplest way to work with sessions is through the interactive CLI:
 
 ```bash
-# Start a new interactive session
-raworc session
-
-# Start in a specific space
-raworc session --space production
+# Start a new interactive session (requires ANTHROPIC_API_KEY)
+raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 ```
 
 In the interactive session interface:
-- Type messages directly to interact with AI agents
+- Type messages directly to control the computer and automate tasks
 - Use `/status` to show session information
 - Use `/quit` or `/q` to exit the session
 
@@ -48,7 +45,7 @@ raworc session --restore {session-id}
 
 ### Restore Features
 
-**✅ State Preservation**: All files, workspace content, and agent state are preserved
+**✅ State Preservation**: All files, data, and computer state are preserved
 **✅ No Reprocessing**: Previous messages are not reprocessed - only new messages after restore
 **✅ Fast Recovery**: Sessions restore in 3-5 seconds with full context
 **✅ Resource Efficiency**: Closed sessions don't consume CPU or memory
@@ -85,7 +82,7 @@ raworc session --remix {source-session-id}
 
 # The new session starts with:
 # - All files from the source session
-# - Complete workspace state
+# - Complete computer state
 # - Independent message history
 ```
 
@@ -161,9 +158,6 @@ raworc session --remix checkpoint-1
 # List all sessions
 raworc api sessions
 
-# List sessions in specific space
-raworc api "sessions?space=production"
-
 # List active sessions only
 raworc api "sessions?state=idle"
 ```
@@ -190,8 +184,8 @@ watch -n 2 'raworc api sessions/{session-id} | grep state'
 ### Bulk Session Operations
 
 ```bash
-# Close all idle sessions in a space
-for id in $(raworc api "sessions?space=dev&state=idle" | jq -r '.[].id'); do
+# Close all idle sessions
+for id in $(raworc api "sessions?state=idle" | jq -r '.[].id'); do
   raworc api sessions/$id/close -m post
 done
 
@@ -257,7 +251,7 @@ For debugging or advanced operations:
 docker ps -a --filter "name=raworc_session_"
 
 # Access session filesystem
-docker exec raworc_session_{id} ls -la /session/workspace/
+docker exec raworc_session_{id} ls -la /session/code/
 
 # View agent logs
 docker exec raworc_session_{id} ls /session/logs/
@@ -278,20 +272,16 @@ docker exec raworc_session_{id} cat /session/logs/agent_*.log
 - **Name sessions clearly** with metadata for easy identification
 
 ### Performance Tips
-- **Pre-build spaces** before creating sessions for instant startup
-- **Close sessions** when not actively using them
-- **Use session forking** instead of recreating similar setups
-- **Monitor resource usage** to optimize allocation
+- **Close sessions** when not actively using them to save resources
+- **Use session remix** instead of recreating similar automation setups
+- **Monitor resource usage** to optimize computer allocation
 
 ## Troubleshooting Sessions
 
 ### Session Won't Start
 ```bash
-# Check space build status
-raworc api spaces/{space}/build/latest
-
-# Verify space has required secrets
-raworc api spaces/{space}/secrets
+# Check that ANTHROPIC_API_KEY was provided
+raworc api sessions/{id}
 
 # Check operator logs
 docker logs raworc_operator --tail 50
@@ -325,6 +315,6 @@ raworc api sessions/{id}/restore -m post
 ## Next Steps
 
 - [CLI Usage Guide](/docs/guides/cli-usage) - Complete CLI command reference
-- [Spaces and Sessions](/docs/concepts/spaces-and-sessions) - Technical architecture details
+- [Sessions](/docs/concepts/sessions) - Technical architecture details
 - [API Reference](/docs/api/rest-api) - Full REST API documentation
 - [Troubleshooting](/docs/guides/troubleshooting) - Common issues and solutions

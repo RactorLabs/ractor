@@ -6,7 +6,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 
 const config: Config = {
   title: 'Raworc',
-  tagline: 'Universal AI Agent Runtime',
+  tagline: 'Remote Agentic Work Orchestrator',
   favicon: 'img/favicon.ico',
 
   future: {

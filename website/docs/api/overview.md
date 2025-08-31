@@ -90,76 +90,39 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/role-bindings/{id}`](./rest-api#get-role-bindingsid) | GET | Get specific role binding |
 | [`/role-bindings/{id}`](./rest-api#delete-role-bindingsid) | DELETE | Delete role binding |
 
-### Spaces
+### Secrets
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/spaces`](./rest-api#get-spaces) | GET | List all spaces |
-| [`/spaces`](./rest-api#post-spaces) | POST | Create new space |
-| [`/spaces/{name}`](./rest-api#get-spacesname) | GET | Get specific space |
-| [`/spaces/{name}`](./rest-api#put-spacesname) | PUT | Update space |
-| [`/spaces/{name}`](./rest-api#delete-spacesname) | DELETE | Delete space |
+| [`/secrets`](./rest-api#get-secrets) | GET | List secrets |
+| [`/secrets`](./rest-api#post-secrets) | POST | Create new secret |
+| [`/secrets/{key}`](./rest-api#get-secretskey) | GET | Get specific secret |
+| [`/secrets/{key}`](./rest-api#put-secretskey) | PUT | Update secret |
+| [`/secrets/{key}`](./rest-api#delete-secretskey) | DELETE | Delete secret |
 
-### Space Secrets
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/spaces/{name}/secrets`](./rest-api#get-spacesnamesecrets) | GET | List space secrets |
-| [`/spaces/{name}/secrets`](./rest-api#post-spacesnamesecrets) | POST | Create new secret |
-| [`/spaces/{name}/secrets/{key}`](./rest-api#get-spacesnamesecretskey) | GET | Get specific secret |
-| [`/spaces/{name}/secrets/{key}`](./rest-api#put-spacesnamesecretskey) | PUT | Update secret |
-| [`/spaces/{name}/secrets/{key}`](./rest-api#delete-spacesnamesecretskey) | DELETE | Delete secret |
-
-### Space Agents
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/spaces/{name}/agents`](./rest-api#get-spacesnameagents) | GET | List space agents |
-| [`/spaces/{name}/agents`](./rest-api#post-spacesnameagents) | POST | Create new agent |
-
-### Space Builds
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/spaces/{name}/build`](./rest-api#post-spacesnamebuild) | POST | Trigger space build |
-| [`/spaces/{name}/build/latest`](./rest-api#get-spacesnamebuildlatest) | GET | Get latest build status |
-| [`/spaces/{name}/build/{build_id}`](./rest-api#get-spacesnamebuildbuild_id) | GET | Get specific build status |
-
-### Sessions
+### Computer Sessions
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions`](./rest-api#get-sessions) | GET | List sessions |
-| [`/sessions`](./rest-api#post-sessions) | POST | Create new session |
+| [`/sessions`](./rest-api#get-sessions) | GET | List computer sessions |
+| [`/sessions`](./rest-api#post-sessions) | POST | Create new computer session |
 | [`/sessions/{id}`](./rest-api#get-sessionsid) | GET | Get specific session |
 | [`/sessions/{id}`](./rest-api#put-sessionsid) | PUT | Update session details |
 | [`/sessions/{id}/state`](./rest-api#put-sessionsidstate) | PUT | Update session state |
-| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close session |
-| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore session |
-| [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork session |
+| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close computer session |
+| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore computer session |
+| [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork computer session |
 | [`/sessions/{id}`](./rest-api#delete-sessionsid) | DELETE | Delete session |
 
-### Session Messages
+### Task Communication
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions/{id}/messages`](./rest-api#get-sessionsidmessages) | GET | List session messages |
-| [`/sessions/{id}/messages`](./rest-api#post-sessionsidmessages) | POST | Send message to session |
+| [`/sessions/{id}/messages`](./rest-api#get-sessionsidmessages) | GET | List task messages |
+| [`/sessions/{id}/messages`](./rest-api#post-sessionsidmessages) | POST | Send task to Computer Use agent |
 | [`/sessions/{id}/messages/count`](./rest-api#get-sessionsidmessagescount) | GET | Get message count |
 | [`/sessions/{id}/messages`](./rest-api#delete-sessionsidmessages) | DELETE | Clear all messages |
 
-### Agents
-
-| Endpoint | Method | Description |
-|----------|--------|--------------|
-| [`/spaces/{name}/agents/{agent_name}`](./rest-api#get-spacesnameagentsagent_name) | GET | Get specific agent |
-| [`/spaces/{name}/agents/{agent_name}`](./rest-api#put-spacesnameagentsagent_name) | PUT | Update agent |
-| [`/spaces/{name}/agents/{agent_name}`](./rest-api#delete-spacesnameagentsagent_name) | DELETE | Delete agent |
-| [`/spaces/{name}/agents/{agent_name}/status`](./rest-api#patch-spacesnameagentsagent_namestatus) | PATCH | Update agent status |
-| [`/spaces/{name}/agents/{agent_name}/deploy`](./rest-api#post-spacesnameagentsagent_namedeploy) | POST | Deploy agent |
-| [`/spaces/{name}/agents/{agent_name}/stop`](./rest-api#post-spacesnameagentsagent_namestop) | POST | Stop agent |
-| [`/spaces/{name}/agents/running`](./rest-api#get-spacesnameagentsrunning) | GET | List running agents |
-| [`/spaces/{name}/agents/{agent_name}/logs`](./rest-api#get-spacesnameagentsagent_namelogs) | GET | Get agent logs |
 
 ## Request Format
 

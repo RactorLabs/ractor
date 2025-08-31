@@ -11,62 +11,62 @@ type FeatureItem = {
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Simplest Developer Experience',
+    title: 'Instant Remote Computers',
     icon: '⚡',
     description: (
       <>
-        <strong>Deploy like serverless functions</strong> - just <code>npm install -g @raworc/cli</code> and start building.
-        No infrastructure knowledge needed, no DevOps complexity, no vendor lock-in.
+        <strong>Get Computer use agents with dedicated computers</strong> - just <code>npm install -g @raworc/cli</code> and start automating.
+        No setup needed, full computer access, completely isolated environments.
       </>
     ),
   },
   {
-    title: 'Any Framework, Any Language',
+    title: 'Computer Use Agents',
     icon: '🚀',
     description: (
       <>
-        <strong>Framework-agnostic</strong> runtime supporting Python, Node.js, and Rust.
-        Deploy LangChain, CrewAI, AutoGen, LangGraph, or custom agents with just a <code>raworc.json</code> manifest.
+        <strong>Intelligent agents with dedicated computers</strong> - web browsing, file management, software installation, and system operations.
+        Full access to terminals, browsers, IDEs, and any software through conversational interfaces.
       </>
     ),
   },
   {
-    title: 'Production Ready from Day One',
+    title: 'Automate Any Manual Work',
     icon: '🏗️',
     description: (
       <>
-        <strong>Enterprise features built-in</strong> - JWT auth, RBAC, encrypted secrets, session persistence.
-        Scale from prototype to production without rebuilding infrastructure.
+        <strong>Enterprise-grade automation</strong> - from data entry to system administration, agents can automate any task.
+        Scale manual work automation from single tasks to complex multi-step workflows.
       </>
     ),
   },
   {
-    title: 'Full Computer Access',
+    title: 'Dedicated Remote Computers',
     icon: '🖥️',
     description: (
       <>
-        Agents have access to <strong>filesystem operations</strong>, <strong>web browsing</strong>, and <strong>system tools</strong>.
-        Secure containerized environments enable computer-use tasks safely.
+        Each session provides <strong>a Computer use agent with dedicated computer</strong> and full OS access.
+        Perfect for automation tasks that require dedicated computing environments and intelligent execution.
       </>
     ),
   },
   {
-    title: 'Flexible Session Management',
+    title: 'Persistent Work Sessions',
     icon: '💾',
     description: (
       <>
-        <strong>Close, save, and restore</strong> complex workflows with enterprise-grade reliability.
-        <strong>Remix sessions</strong> to branch workflows and experiment with different approaches.
+        <strong>Never lose work progress</strong> - pause long-running automation tasks and resume them later.
+        <strong>Session remix</strong> to branch automation workflows and try different approaches.
       </>
     ),
   },
   {
-    title: 'Zero Infrastructure Overhead',
+    title: 'Natural Language Interface',
     icon: '🎯',
     description: (
       <>
-        <strong>Focus on agent logic</strong>, not DevOps. Professional deployment, monitoring, and operations 
-        without the complexity. <strong>Deploy and go</strong>.
+        <strong>Describe what you want automated</strong> in plain English. No coding required - 
+        agents understand instructions and execute complex multi-step workflows.
       </>
     ),
   },

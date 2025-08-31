@@ -3,27 +3,27 @@
   
   # Raworc
   
-  **Universal AI Agent Runtime**
+  **Remote Agentic Work Orchestrator**
   
-  Deploy AI agents from any framework in containerized environments with full computer access.
+  Computer use agents with dedicated computers to automate manual work. Intelligent agents that use computers like humans do to perform any task.
   
   [![Website](https://img.shields.io/badge/Website-raworc.com-blue?style=for-the-badge)](https://raworc.com)
-  [![Version](https://img.shields.io/badge/Version-0.2.9-green?style=for-the-badge)](https://github.com/SivaRagavan/raworc/releases)
+  [![Version](https://img.shields.io/badge/Version-0.3.0-green?style=for-the-badge)](https://github.com/SivaRagavan/raworc/releases)
   [![License](https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge)](LICENSE)
 </div>
 
 ## What is Raworc?
 
-Raworc is a **Universal AI Agent Runtime** that lets you deploy AI agents from any framework (LangChain, CrewAI, AutoGen, custom implementations) in secure, containerized environments with full computer access.
+Raworc is a **Remote Agentic Work Orchestrator** that provides Computer use agents with dedicated computers for each session. Intelligent agents that use computers like humans do - with natural language interfaces, full software access, and the ability to perform any computer-based task.
 
 ### Key Features
 
-- 🚀 **Framework Agnostic** - Works with LangChain, CrewAI, AutoGen, LangGraph, or custom agents
-- 🏗️ **Multi-Language** - Deploy Python, Node.js, and Rust agents  
-- 💻 **Full Computer Access** - Filesystem, web browsing, code execution, system tools
-- 🔄 **Session Persistence** - Close, save state, and restore complex workflows
-- 🏢 **Production Ready** - RBAC, audit trails, space isolation, secret management
-- 🐳 **Kubernetes-Style** - Control plane architecture for reliable orchestration
+- 🖥️ **Computer Use Agents** - Each session provides Computer use agents with dedicated computers
+- 🗣️ **Natural Language Control** - Control computers through conversation, no APIs or SDKs required  
+- 🔧 **Complete Automation** - Web browsing, file operations, software installation, system administration
+- 🔄 **Persistent Sessions** - Close, save state, and restore long-running automation workflows
+- 🏢 **Enterprise Ready** - RBAC, audit trails, session isolation, encrypted secret management
+- 🐳 **Scalable Infrastructure** - Deploy multiple Computer use agents with dedicated computers for reliable automation orchestration
 
 ## Development Setup
 
@@ -41,14 +41,15 @@ cd raworc
 ./scripts/build.sh
 ./scripts/start.sh
 
-# Test changes
+# Test changes (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 raworc auth login --user admin --pass admin
 raworc session
 ```
 
 ## Architecture
 
-Raworc uses a **Kubernetes-inspired control plane** pattern for AI agent orchestration:
+Raworc uses a **Kubernetes-inspired control plane** pattern for Computer use agent orchestration:
 
 ```
 ┌────────────┐      ┌─────────────────────────────────┐
@@ -65,15 +66,22 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for AI agent orchest
                                    │
                                    ▼
                     ┌─────────────────────────────────┐
-                    │          Agent Nodes            │
+                    │    Computer Use Agents          │
                     │ ┌─────────────┐ ┌─────────────┐ │
-                    │ │ AI Agent    │ │ AI Agent    │ │
-                    │ │ Container   │ │ Container   │ │
+                    │ │   Agent +   │ │   Agent +   │ │
+                    │ │  Computer   │ │  Computer   │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
 ```
 
-## Recent Major Updates (v0.2.x)
+## Major Updates
+
+### 🏗️ **Remote Computer Use Focus (v0.3.0)**
+- **Computer use agents with dedicated computers** - Each session provides Computer use agents with dedicated computers
+- **Manual work automation** - Computer use agents automate tasks using natural computer interfaces  
+- **Direct Claude integration** - Claude API support for computer-use capabilities
+- **Required API key** - ANTHROPIC_API_KEY validation ensures automation sessions work immediately
+- **Session-based workflow** - Simplified direct computer access with intelligent automation
 
 ### 🔄 **Session Persistence & Restore (v0.2.7-0.2.8)**
 - **Session close/restore** - Close sessions and restore with full state preservation
@@ -86,18 +94,6 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for AI agent orchest
 - **Streamlined auth** - Simple authentication: `raworc auth login --token <token>`
 - **Interactive sessions** - Direct messaging: `raworc session`
 - **API access** - Direct REST calls: `raworc api <endpoint>`
-
-### 🏗️ **Production Infrastructure (v0.2.3-0.2.4)**
-- **Automated releases** - Complete GitHub Actions workflow with Docker Hub publishing
-- **Space management** - Multi-tenant environments with secret isolation  
-- **RBAC system** - Role-based permissions and audit trails
-- **Build system** - Comprehensive Docker image management and npm publishing
-
-### 🔧 **Core Improvements (v0.2.0-0.2.2)**
-- **Container lifecycle** - Reliable session container management with volume persistence
-- **Database consolidation** - Streamlined migrations and schema management  
-- **Operator service** - Kubernetes-style container orchestration
-- **Shared constants** - Consistent state management across all services
 
 ## Development
 
@@ -127,8 +123,8 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for AI agent orchest
 raworc/
 ├── src/           # Rust backend services
 │   ├── server/    # API server  
-│   ├── operator/  # Container orchestration
-│   └── host/      # Session agent runtime
+│   ├── operator/  # Session orchestration
+│   └── host/      # Session runtime with Claude integration
 ├── cli/           # Node.js CLI (@raworc/cli)
 ├── scripts/       # Development automation
 ├── website/       # Documentation site (Docusaurus)
@@ -139,7 +135,8 @@ raworc/
 ### Testing
 
 ```bash
-# Full integration test
+# Full integration test (requires ANTHROPIC_API_KEY)
+export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 ./scripts/build.sh
 ./scripts/start.sh
 raworc auth login --user admin --pass admin

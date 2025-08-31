@@ -14,7 +14,6 @@ use crate::server::rest::error::{ApiError, ApiResult};
 pub struct LoginRequest {
     pub user: String,
     pub pass: String,
-    // space field removed - was unused
 }
 
 
@@ -72,14 +71,13 @@ pub async fn me(
 ) -> ApiResult<Json<serde_json::Value>> {
     use crate::shared::rbac::AuthPrincipal;
     
-    let (user, namespace, principal_type) = match &auth.principal {
-        AuthPrincipal::Subject(s) => (&s.name, None::<String>, "Subject"),
-        AuthPrincipal::ServiceAccount(sa) => (&sa.user, None::<String>, "ServiceAccount"),
+    let (user, principal_type) = match &auth.principal {
+        AuthPrincipal::Subject(s) => (&s.name, "Subject"),
+        AuthPrincipal::ServiceAccount(sa) => (&sa.user, "ServiceAccount"),
     };
     
     Ok(Json(serde_json::json!({
         "user": user,
-        "namespace": namespace,
         "type": principal_type
     })))
 }

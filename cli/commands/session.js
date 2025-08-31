@@ -235,7 +235,7 @@ async function sessionCommand(options) {
         console.error(chalk.red('Error:'), 'ANTHROPIC_API_KEY is required for new sessions');
         console.log();
         console.log(chalk.yellow('💡 Get your API key from: https://console.anthropic.com'));
-        console.log(chalk.yellow('💡 Usage:'), 'raworc session --secrets \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\');
+        console.log(chalk.yellow('💡 Usage:'), 'raworc session --secrets \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\'');
         process.exit(1);
       }
       

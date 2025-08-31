@@ -4,7 +4,7 @@ use uuid::Uuid;
 // RBAC Subject - External user identifier
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subject {
-    pub name: String, // External subject identifier (e.g., "user@example.com", "system:serviceaccount:namespace:name")
+    pub name: String, // External subject identifier (e.g., "user@example.com", "system:serviceaccount:name")
 }
 
 // Service Account - Global account with credentials (can work across organizations)
@@ -65,7 +65,6 @@ pub struct RoleBinding {
     pub role_name: String,
     pub principal: String,
     pub principal_type: SubjectType,
-    pub space: Option<String>, // NULL = global access, String = specific organization
     pub created_at: String,
 }
 
@@ -106,7 +105,6 @@ impl AuthPrincipal {
 pub struct RbacClaims {
     pub sub: String,               // Subject name
     pub sub_type: SubjectType,     // Subject type
-    pub space: Option<String>, // For service accounts
     pub exp: usize,                // Expiration time
     pub iat: usize,                // Issued at
     pub iss: String,               // Issuer
@@ -127,7 +125,6 @@ pub struct PermissionContext {
     pub api_group: String,
     pub resource: String,
     pub verb: String,
-    pub space: Option<String>,
 }
 
 // RBAC Authorization service

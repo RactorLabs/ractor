@@ -3,7 +3,7 @@
   
   # Raworc Project Documentation for Claude
   
-  **Universal AI Agent Runtime**
+  **Remote Agentic Work Orchestrator**
   
   *AI assistant instructions for understanding and working with the Raworc codebase*
   
@@ -14,32 +14,30 @@
 
 ## Project Overview for Claude
 
-When working with this codebase, understand that Raworc is a Universal AI Agent Runtime that deploys AI agents from any framework in containerized environments. It supports Python, Node.js, and Rust agents with full computer access.
+When working with this codebase, understand that Raworc is a Remote Agentic Work Orchestrator that provides Computer use agents with dedicated computers to automate manual work. Each session gives you Computer use agents with dedicated computers that use computers like humans do - through natural language control and full system access.
 
 **For End Users**: Raworc is available as a published npm package (`@raworc/cli`) that provides a simple installation experience with pre-built Docker images from Docker Hub.
 
 **Repository Status**: This repository is private and intentionally not licensed. Do not add or suggest adding license files.
 
-**Related Repository**: The `raworc-community` repository is for consumers of the Docker containers published from this repo. Developers will use the `raworc` CLI on the community repo and use the product without the source code - only the binaries.
-
 **CLI Usage**: The `raworc` CLI is now published as an npm package (`@raworc/cli`) for public use. This simplifies the developer experience by providing a single installation command.
 
 **What makes Raworc unique:**
-- **Framework-Agnostic**: Deploy agents from any framework (LangChain, CrewAI, AutoGen, LangGraph, custom implementations)
-- **Language Support**: Python, Node.js, and Rust runtime environments
-- **Full Computer Access**: Filesystem, web browsing, system tools, and code execution
-- **Multi-Agent Support**: Multiple agents can work together in shared environments
-- **Session Persistence**: Close, save state, and restore complex workflows
-- **Secure by Design**: JWT auth, role-based access, encrypted secrets, space isolation
-- **No Lock-in**: Works with any AI provider or framework
+- **Computer Use Agents**: Intelligent agents with dedicated computers ready to automate manual work
+- **Natural Language Control**: Control computers through conversation without APIs or complex integrations
+- **Full Computer Access**: Filesystem, web browsing, system tools, software installation, and code execution
+- **Session-Based Automation**: Each session provides Computer use agents with dedicated computers for automation tasks
+- **Session Persistence**: Close, save state, and restore long-running automation workflows
+- **Secure by Design**: JWT auth, role-based access, session isolation
 
-## Supported Frameworks
+## What You Can Automate
 
-- **LangChain**: Full support for LangChain agents and chains
-- **CrewAI**: Multi-agent orchestration and collaboration
-- **AutoGen**: Conversational AI agent framework
-- **LangGraph**: State machine-based agent workflows
-- **Custom Implementations**: Build agents with any Python, Node.js, or Rust libraries
+- **Web Automation**: Browser tasks, form filling, data extraction, website navigation
+- **Document Processing**: File manipulation, report generation, spreadsheet management, data transformation
+- **System Administration**: Server management, application deployment, monitoring, DevOps tasks
+- **Development Tasks**: Code generation, testing, debugging, deployment automation
+- **Data Analysis**: Dataset processing, visualization, statistical analysis, insights generation
+- **Custom Workflows**: Any manual computer-based work that can be described in natural language
 
 ## Tech Stack
 
@@ -51,7 +49,7 @@ When working with this codebase, understand that Raworc is a Universal AI Agent 
 
 ## Architecture
 
-Like Kubernetes, Raworc uses a control plane and worker nodes pattern for AI agent orchestration:
+Raworc uses a control plane and worker nodes pattern for session orchestration:
 
 ```
 ┌────────────┐      ┌─────────────────────────────────┐
@@ -68,44 +66,43 @@ Like Kubernetes, Raworc uses a control plane and worker nodes pattern for AI age
                                    │
                                    ▼
                     ┌─────────────────────────────────┐
-                    │          Agent Nodes            │
+                    │       Session Computers         │
                     │ ┌─────────────┐ ┌─────────────┐ │
-                    │ │ AI Agent    │ │ AI Agent    │ │
-                    │ │ Container   │ │ Container   │ │
+                    │ │ Computer    │ │ Computer    │ │
+                    │ │ + Agent     │ │ + Agent     │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
 ```
 
 ### Components
 
-- **CLI**: kubectl-like interface for managing AI agent deployments
-- **API Server**: Kubernetes-style API server for agent session management
-- **Operator**: Controller that watches desired state and manages agent containers
-- **Agent Containers**: Isolated compute environments where AI agents execute tasks
-- **Database**: etcd-like persistent storage for session state and configuration
+- **CLI**: Interface for managing computer sessions and automation tasks
+- **API Server**: Session management and automation orchestration
+- **Operator**: Controller that manages session containers and computer environments
+- **Session Computers**: Isolated computer environments with built-in Computer Use agents
+- **Database**: Persistent storage for session state and configuration
 
 ## Why Raworc
 
-Stop fighting infrastructure. Start building agents.
+Stop doing manual work. Start automating.
 
-- **Prototype Fast**: Use any AI framework without setup headaches
-- **Experiment Safe**: Isolated containers for safe testing
-- **Save Progress**: Close and restore long-running workflows  
-- **Scale Easy**: Go from prototype to production without rewrites
-- **Work Together**: Share workspaces with your team
-- **Stay Flexible**: Switch frameworks and providers anytime
+- **Instant Automation**: Get a remote computer with built-in Computer Use agent in seconds
+- **Safe Automation**: Isolated computer environments for safe automation testing
+- **Never Lose Progress**: Close and restore long-running automation workflows  
+- **Scale Automation**: Go from single tasks to enterprise automation without rewrites
+- **Team Automation**: Share automation sessions with proper access controls
+- **Flexible Automation**: Automate any computer-based task through natural language
 
-## Features
+## Key Capabilities
 
-- **Computer Access**: Agents can manage files, browse web, run code, and use system tools
-- **Multi-Agent Support**: Multiple agents work together in shared containers
-- **Isolated Sessions**: Each session runs in a clean, secure container
-- **Full Capabilities**: File I/O, web scraping, code generation, compilation, system admin
-- **Session Persistence**: Close and restore complex workflows
-- **Space Organization**: Separate projects by team, environment, or use case  
-- **Secret Management**: Secure API keys and config per space
-- **Resource Controls**: Set CPU, memory, storage, and network limits
-- **Production Ready**: RBAC, audit trails, and space isolation
+- **Complete Computer Access**: Built-in agents can manage files, browse web, run software, and use any system tools
+- **Session-Based Computers**: Each session provides an isolated computer environment for automation tasks
+- **Clean Computer Environments**: Each session starts with a fresh, secure remote computer
+- **Full Computer Capabilities**: File I/O, web automation, software installation, system administration
+- **Session Persistence**: Close and restore complex automation workflows
+- **Natural Language Control**: Control computers through conversation without APIs or SDKs
+- **Resource Controls**: Set CPU, memory, storage, and network limits per computer session
+- **Production Ready**: RBAC, audit trails, and session isolation for enterprise automation
 
 ## Two Ways to Use Raworc
 
@@ -431,38 +428,34 @@ raworc auth login --server https://raworc.example.com --token sk-ant-api03-your-
 
 All login commands are non-interactive and suitable for scripting.
 
-### AI Agent Session Management
+### Computer Session Management
 
-Use `raworc session` for interactive messaging with AI agents:
+Use `raworc session` for interactive automation with your remote computer:
 
 ```bash
-# Start session in default space
+# Start a new computer session
 raworc session
 
-# Start session in specific space  
-raworc session --space production
-
 # In session interface:
-You: Hello, how are you?
+You: Hello, can you help me automate some tasks?
 ⠋ Waiting for agent response...
-Agent: Hello! I'm doing well, thank you for asking...
+Agent: Hello! I'm ready to help automate your work. I have full access to this computer and can help with file management, web tasks, development work, and more. What would you like to automate?
 
-You: What can you help me with?
+You: Please create a Python script to process CSV files in the current directory
 ⠋ Waiting for agent response...
-Agent: I can help you with various tasks like coding, analysis, and more!
+Agent: I'll create a Python script to process CSV files. Let me check what's in the current directory and create an appropriate script for you...
 
 You: /quit
 👋 Ending session...
 ```
 
-**Chat Interface:**
-- **Synchronous flow**: Send message → wait for response → send next message
-- **Clean prompts**: Simple "You:" prompt for all input
-- **Response waiting**: Shows spinner while waiting for agent response (60s timeout)
-- **Turn-based**: Cannot send next message until agent responds
-- **Clean format**: "You:" for input, "Agent:" for responses
-- **Session cleanup**: Sessions are automatically deleted when you quit (via /quit, /q, or /exit)
-- **Commands**: /status (show info), /quit (end session)
+**Session Interface:**
+- **Conversational Control**: Send natural language requests to control the computer
+- **Clean Interface**: Simple "You:" prompt for requests, "Agent:" for computer responses
+- **Real-time Feedback**: Shows spinner while the agent works on your computer (60s timeout)
+- **Turn-based**: Send request → agent performs work → send next request
+- **Session Cleanup**: Computer sessions are automatically cleaned up when you quit (via /quit, /q, or /exit)
+- **Session Commands**: /status (show session info), /quit (end session)
 
 ### API Command
 
@@ -471,16 +464,13 @@ Use `raworc api` for direct REST API access with saved authentication:
 ```bash
 # GET requests
 raworc api health                  # Check server health
-raworc api sessions                # List sessions
-raworc api spaces              # List spaces
+raworc api sessions                # List computer sessions
 
 # POST requests with JSON body
-raworc api sessions --method POST --body '{"space":"default"}'
-raworc api spaces/default/secrets --method POST --body '{"key_name":"API_KEY","value":"secret"}'
+raworc api sessions --method POST # Create new computer session
 
 # Other HTTP methods
-raworc api spaces/staging --method PUT --body '{"description":"Updated space"}'
-raworc api sessions/session-123 --method DELETE
+raworc api sessions/session-123 --method DELETE # Delete computer session
 
 # Show response headers and pretty print JSON
 raworc api sessions --headers --pretty
@@ -493,190 +483,55 @@ raworc api sessions --headers --pretty
 - **All methods**: GET (default), POST, PUT, DELETE, PATCH supported via --method flag
 - **Uses saved auth**: Automatically uses token from `raworc auth login`
 
-### Agent Session Operations
+### Computer Session Operations
 
 ```bash
-# Create new AI agent session
-raworc api sessions --method POST --body '{"space":"default"}'
+# Create new computer session
+raworc api sessions --method POST
 
-# List all agent sessions  
+# List all computer sessions  
 raworc api sessions
 
-# Close agent session (saves resources)
+# Close computer session (saves resources)
 raworc api sessions/{id}/close
 
-# Restore agent session
+# Restore computer session
 raworc api sessions/{id}/restore
 
-# Terminate agent session
-raworc api sessions/{id}
+# Terminate computer session
+raworc api sessions/{id} --method DELETE
 ```
 
-### Sending Messages to Agents
+### Automating Work with Sessions
 
 **Interactive Method (Recommended):**
 ```bash
-# Start session and send messages directly
-raworc session --space default
-# Then just type: Hello, generate a Python script to calculate fibonacci numbers
+# Start computer session and give automation requests
+raworc session
+# Then just type: Please generate a Python script to calculate fibonacci numbers and save it to fib.py
 ```
 
 **API Method:**
 ```bash
-# Send a message to the agent in a session
-raworc api sessions/{session-id}/messages --method POST --body '{"content":"Generate a Python script to calculate fibonacci numbers"}'
+# Send automation request to computer session
+raworc api sessions/{session-id}/messages --method POST --body '{"content":"Generate a Python script to calculate fibonacci numbers and save it to fib.py"}'
 
-# Check for agent responses
+# Check computer responses
 raworc api sessions/{session-id}/messages
 
-# View latest messages (limit to last 10)
+# View recent messages (limit to last 10)
 raworc api sessions/{session-id}/messages?limit=10
 ```
 
-The agent will receive your message, process it using AI capabilities (code generation, file operations, web browsing), and respond with results. In the interactive session interface, agent responses appear automatically in real-time as "Assistant:" messages. Messages are persistent and viewable through the API.
+The computer agent will receive your request, perform the work using full computer access (file operations, web browsing, software installation), and respond with results. In the interactive session interface, computer responses appear automatically in real-time. All interactions are persistent and viewable through the API.
 
 ### Session Operations via API
 
-Sessions support the following operations:
-- **Create**: Creates new session and spawns container
-- **Close**: Closes session and stops container to save resources
-- **Restore**: Restores closed session and restarts container
-- **Delete**: Soft deletes session and destroys container
-
-### Space Management
-
-```bash
-# List spaces
-raworc api spaces
-
-# Get specific space  
-raworc api spaces/default
-
-# Create space (admin only)
-raworc api spaces --method POST --body '{"name":"staging","description":"Staging space","settings":{"environment":"staging"}}'
-
-# Update space (admin only)
-raworc api spaces/staging --method PUT --body '{"name":"updated-staging","description":"Updated staging space"}'
-
-# Delete space (admin only, cannot delete 'default')
-raworc api spaces/staging --method DELETE
-```
-
-### Space Secrets Management
-
-```bash
-# List secrets (metadata only)
-raworc api spaces/default/secrets
-
-# List secrets with values (requires read-values permission)
-raworc api spaces/default/secrets?show_values=true
-
-# Get specific secret
-raworc api spaces/default/secrets/ANTHROPIC_API_KEY
-
-# Get secret with value
-raworc api spaces/default/secrets/ANTHROPIC_API_KEY?show_values=true
-
-# Create new secret
-raworc api spaces/default/secrets --method POST --body '{"key_name":"API_KEY","value":"secret-value","description":"API key"}'
-
-# Update secret value
-raworc api spaces/default/secrets/API_KEY --method PUT --body '{"value":"new-secret-value"}'
-
-# Update secret description
-raworc api spaces/default/secrets/API_KEY --method PUT --body '{"description":"Updated description"}'
-
-# Delete secret
-raworc api spaces/default/secrets/API_KEY --method DELETE
-```
-
-### Agent Management
-
-Raworc supports deploying specialized AI agents that are compiled during space builds and executed in session containers. Agents are built from GitHub repositories using a simple manifest file (`raworc.json`). No Raworc dependencies required - just implement a function!
-
-```bash
-# List agents in space
-raworc api spaces/default/agents
-
-# Create agent (triggers automatic space rebuild)
-raworc api spaces/default/agents --method POST --body '{
-  "name": "data-analyzer",
-  "description": "Data analysis specialist", 
-  "purpose": "analyze data, create visualizations, statistical analysis",
-  "source_repo": "Raworc/raworc-agent-python-demo",
-  "source_branch": "main"
-}'
-
-# Manually trigger space build after adding agents
-raworc api spaces/default/build --method POST
-
-# Check agent deployment in sessions  
-raworc api sessions --method POST --body '{"space": "default"}'  # Uses pre-built agents
-
-# Check agent logs in session containers
-# (Logs are captured in /session/logs/{agent}_{timestamp}_{stdout|stderr}.log)
-```
-
-#### Creating Agents
-
-**Agent Repository Structure:**
-```
-my-agent/
-├── raworc.json         # Manifest (required)
-├── requirements.txt    # Dependencies (Python)
-├── package.json        # Dependencies (Node.js)
-├── Cargo.toml         # Dependencies (Rust)
-└── main.py            # Your agent code
-```
-
-**raworc.json Manifest:**
-```json
-{
-  "runtime": "python3",
-  "handler": "main.process_message",
-  "build_command": "pip install additional-package"
-}
-```
-
-**Key Features:**
-- **Auto-detection**: Raworc automatically detects Python, Node.js, or Rust projects
-- **Automatic Building**: `pip install`, `npm install`, `cargo build` run automatically
-- **Optional build_command**: For additional setup steps only
-- **Pre-compilation**: All building happens at space build time, not runtime
-- **Fast Execution**: Session containers use pre-built agents for instant startup
-
-**Agent Code (Zero Raworc Dependencies):**
-```python
-def process_message(message: str, context: dict) -> str:
-    # Use any framework: Langchain, CrewAI, custom logic
-    return "Your agent response here"
-```
-
-**Supported Runtimes:**
-- **Python**: Auto-creates virtual environment, installs requirements.txt
-- **Node.js**: Auto-runs npm install for package.json
-- **Rust**: Auto-runs cargo build --release for Cargo.toml
-
-**Demo Repositories:**
-- **Python**: https://github.com/Raworc/raworc-agent-python-demo
-- **Node.js**: https://github.com/Raworc/raworc-agent-js-demo  
-- **Rust**: https://github.com/Raworc/raworc-agent-rust-demo
-
-#### Agent Logging
-
-Agent execution logs are captured with unique timestamps:
-
-```bash
-# View agent logs in session containers
-docker exec raworc_session_{session_id} ls -la /session/logs/
-
-# Example log files:
-# file-agent_20250820_143052_123_stdout.log
-# file-agent_20250820_143052_123_stderr.log
-
-# View specific execution logs
-docker exec raworc_session_{session_id} cat /session/logs/file-agent_20250820_143052_123_stdout.log
-```
+Computer sessions support the following operations:
+- **Create**: Creates new session and spawns computer container
+- **Close**: Closes session and stops computer to save resources
+- **Restore**: Restores closed session and restarts computer
+- **Delete**: Deletes session and destroys computer container
 
 ### Authentication
 
@@ -691,40 +546,27 @@ raworc api auth/login --method POST --body '{"user":"operator","pass":"admin"}'
 raworc api auth/me
 ```
 
-### Common Use Cases
+### Common Automation Use Cases
 
-#### Setting Up Environment Secrets
+#### Automating Development Tasks
 ```bash
-# Set up API keys for default space
-raworc api spaces/default/secrets --method POST --body '{"key_name":"ANTHROPIC_API_KEY","value":"sk-ant-api03-xxx","description":"Claude API key"}'
-raworc api spaces/default/secrets --method POST --body '{"key_name":"OPENAI_API_KEY","value":"sk-xxx","description":"OpenAI API key"}'
-raworc api spaces/default/secrets --method POST --body '{"key_name":"DATABASE_URL","value":"mysql://user:pass@host/db","description":"Database connection"}'
+# Start a computer session for development automation
+raworc session
+# Then: "Please set up a new Python project with virtual environment, install pandas and requests, and create a basic data processing script"
 ```
 
-#### Multi-Environment Setup
+#### Web Automation and Data Processing
 ```bash
-# Create staging space (admin only)
-raworc api spaces --method POST --body '{"name":"staging","description":"Testing environment","settings":{"environment":"staging"}}'
-
-# Set staging-specific secrets
-raworc api spaces/staging/secrets --method POST --body '{"key_name":"API_KEY","value":"staging-key","description":"Staging API key"}'
-raworc api spaces/staging/secrets --method POST --body '{"key_name":"DATABASE_URL","value":"mysql://test:test@staging-db/app"}'
-
-# Set production secrets
-raworc api spaces/production/secrets --method POST --body '{"key_name":"API_KEY","value":"prod-key","description":"Production API key"}'
-raworc api spaces/production/secrets --method POST --body '{"key_name":"DATABASE_URL","value":"mysql://prod:xxx@prod-db/app"}'
+# Start session for web automation
+raworc session
+# Then: "Please visit example.com, extract all the product links, and save them to a CSV file"
 ```
 
-#### Secret Rotation
+#### System Administration and DevOps
 ```bash
-# Check current secret
-raworc api spaces/default/secrets/API_KEY?show_values=true
-
-# Update with new rotated key
-raworc api spaces/default/secrets/API_KEY --method PUT --body '{"value":"new-rotated-key"}'
-
-# Verify update
-raworc api spaces/default/secrets/API_KEY
+# Start session for system administration
+raworc session  
+# Then: "Please check system resources, update the server packages, and generate a system health report"
 ```
 
 ## Troubleshooting
@@ -767,7 +609,7 @@ cargo clean
 # Published CLI users don't build - images are pre-built
 ```
 
-### Session container issues
+### Computer session issues
 ```bash
 # List all session containers
 docker ps -a --filter "name=raworc_session_"
@@ -792,33 +634,8 @@ docker rm -f raworc_session_{session-id}
 # Check session container logs (both)
 docker logs raworc_session_{session-id} --tail 50
 
-# Check agent logs inside session (both)
+# Check computer session logs inside container
 docker exec raworc_session_{session-id} ls -la /session/logs/
-docker exec raworc_session_{session-id} cat /session/logs/{agent}_{timestamp}_stderr.log
-```
-
-### Space build issues
-```bash
-# Check space build status
-raworc api spaces/default/build/latest
-
-# View build logs
-docker logs raworc_operator --tail 100
-
-# Rebuild space
-raworc api spaces/default/build --method POST
-
-# Check operator is running
-docker ps --filter "name=raworc_operator"
-
-# Debug build failures
-docker logs raworc_operator | grep -A 10 -B 10 "ERROR"
-
-# Check available space images
-docker images | grep raworc_space_
-
-# Remove broken space images
-docker rmi $(docker images -q raworc_space_*)
 ```
 
 ### CLI not found or issues

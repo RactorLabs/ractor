@@ -72,7 +72,7 @@ function HomepageHeader() {
         </Heading>
         <p className="hero__subtitle">{siteConfig.tagline}</p>
         <p className={styles.heroDescription}>
-          The simplest way to deploy AI agents. Deploy any agent from any framework with the easiest developer experience in the industry.
+          Remote Agentic Work Orchestrator - Computer use agents with dedicated computers for each session. Intelligent agents that use computers like humans do to automate any manual work.
         </p>
         
         <div className={styles.npmInstall}>
@@ -122,28 +122,88 @@ export default function Home(): ReactNode {
           <div className="container">
             <div className={styles.useCasesGrid}>
               <div className={styles.useCaseCard}>
-                <h3>LangChain Agents</h3>
-                <p>Deploy LangChain RAG agents, chains, and tools with automatic dependency management and session persistence.</p>
+                <h3>Web Automation</h3>
+                <p>Automate browser tasks, form filling, data extraction, and web workflows with natural language commands.</p>
               </div>
               <div className={styles.useCaseCard}>
-                <h3>CrewAI Teams</h3>
-                <p>Run collaborative CrewAI multi-agent teams with intelligent delegation and shared workspace coordination.</p>
+                <h3>Document Processing</h3>
+                <p>Process files, generate reports, manipulate spreadsheets, and handle document workflows automatically.</p>
               </div>
               <div className={styles.useCaseCard}>
-                <h3>AutoGen Conversations</h3>
-                <p>Execute Microsoft AutoGen conversational workflows with persistent state and context management.</p>
+                <h3>System Administration</h3>
+                <p>Manage servers, deploy applications, monitor systems, and perform DevOps tasks through conversational interfaces.</p>
               </div>
               <div className={styles.useCaseCard}>
-                <h3>LangGraph Workflows</h3>
-                <p>Deploy complex LangGraph state machines with pause/resume capabilities and data lineage tracking.</p>
+                <h3>Data Analysis</h3>
+                <p>Analyze datasets, create visualizations, run statistical models, and generate insights with full computer access.</p>
               </div>
               <div className={styles.useCaseCard}>
-                <h3>BYOA (Bring Your Own Agent)</h3>
-                <p>Bring any custom agent implementation - Python, Node.js, or Rust - with zero runtime dependencies.</p>
+                <h3>Software Development</h3>
+                <p>Code generation, testing, debugging, and deployment with access to IDEs, terminals, and development tools.</p>
               </div>
               <div className={styles.useCaseCard}>
-                <h3>Runtime Flexibility</h3>
-                <p>Mix frameworks within sessions, migrate between agents, and avoid vendor lock-in with universal runtime.</p>
+                <h3>Custom Workflows</h3>
+                <p>Build specialized agents for any manual work - from CRM management to content creation and beyond.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section style={{"backgroundColor": "#f8f9fa", "padding": "4rem 0"}}>
+          <div className="container">
+            <div style={{"textAlign": "center", "marginBottom": "3rem"}}>
+              <Heading as="h2">What Computer Use Agents Can Do</Heading>
+              <p style={{"fontSize": "1.2rem", "color": "#6c757d", "maxWidth": "800px", "margin": "0 auto"}}>
+                Computer Use Agents can automate any manual work that involves using a computer
+              </p>
+            </div>
+            <div style={{"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(300px, 1fr))", "gap": "2rem", "maxWidth": "1200px", "margin": "0 auto"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🤖 Build Agentic AI Products</h3>
+                <p>Develop intelligent agents using LangGraph, CrewAI, AutoGen with conversational interfaces</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>⚡ Supercharge Make/n8n Workflows</h3>
+                <p>Extend automation platforms with computer use capabilities for complex tasks</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📊 Generate Stunning Reports</h3>
+                <p>Create professional reports with charts, analysis, and formatted presentations</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🎨 Create Great Presentations</h3>
+                <p>Build compelling slide decks, infographics, and visual content automatically</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🌐 Operate Remote Browsers</h3>
+                <p>Control web browsers for testing, data extraction, and web automation</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🔍 Research Any Topic</h3>
+                <p>Deep web research, fact-checking, and comprehensive information gathering</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📈 Conduct Market Research</h3>
+                <p>Analyze competitors, track trends, and generate market intelligence reports</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>💻 Write Better Code</h3>
+                <p>Generate, review, and optimize code with AI-powered development assistance</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🧪 Perform Quality Assurance Testing</h3>
+                <p>Automated testing of applications, websites, and user workflows</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📱 Generate Content for Social Media</h3>
+                <p>Create posts, images, videos, and manage social media content pipelines</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>💰 Handle Financial Operations</h3>
+                <p>Process invoices, reconcile accounts, and manage financial data workflows</p>
+              </div>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+                <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📝 Fill Out Boring Forms</h3>
+                <p>Automate form filling, data entry, and repetitive administrative tasks</p>
               </div>
             </div>
           </div>
@@ -151,16 +211,16 @@ export default function Home(): ReactNode {
         <section className={styles.runtimeSection}>
           <div className="container">
             <div style={{"textAlign": "center", "maxWidth": "800px", "margin": "0 auto"}}>
-              <Heading as="h2">What is an Agent Runtime?</Heading>
+              <Heading as="h2">Remote Computer Use Agents</Heading>
               <p style={{"fontSize": "1.2rem", "marginBottom": "2rem"}}>
-                An Agent Runtime is the missing infrastructure layer between AI frameworks and production deployment. 
-                Just as web applications need servers and mobile apps need operating systems, 
-                <strong> AI agents need runtimes</strong> to handle deployment, security, persistence, and coordination at scale.
+                Raworc offers <strong>Computer use agents with dedicated computers for each session</strong>. 
+                Intelligent agents that use computers like humans do - browsing, managing files, running software 
+                through <strong>natural language commands</strong>.
               </p>
               <Link
                 className="button button--primary button--lg"
-                to="/docs/concepts/agent-runtime">
-                Learn About Agent Runtimes →
+                to="/docs/concepts/computer-use-agents">
+                Learn About Computer Use Agents →
               </Link>
             </div>
           </div>
@@ -168,57 +228,57 @@ export default function Home(): ReactNode {
         <section className={styles.developmentSection}>
           <div className="container">
             <p className={styles.sectionIntro}>
-              Raworc bridges the gap between AI agent development and production deployment, 
-              eliminating the infrastructure complexity that slows teams down.
+              Raworc offers Computer use agents with dedicated computers that automate manual work 
+              just like human workers - with full software access and natural language control interfaces.
             </p>
             <div className={styles.developmentGrid}>
               <div className={styles.developmentCard}>
-                <h3>🚀 Rapid Prototyping</h3>
+                <h3>🚀 Instant Computer Use Agents</h3>
                 <p>
-                  <strong>Start immediately</strong> with any framework - LangChain, CrewAI, AutoGen, or custom code. 
-                  No infrastructure setup required. Just add a <code>raworc.json</code> and deploy.
+                  <strong>Get Computer use agents with dedicated computers</strong> in seconds. 
+                  No setup required - intelligent agents ready to automate any manual work with full computer access.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>🔄 Iterative Development</h3>
+                <h3>🔄 Persistent Work Sessions</h3>
                 <p>
-                  <strong>Session persistence</strong> lets you pause experiments, iterate on code, and resume exactly where you left off. 
-                  No lost context or restarting from scratch.
+                  <strong>Never lose progress</strong> - close agent sessions and restore them later with all files, state, and context preserved. 
+                  Perfect for long-running automation tasks.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>🧪 Safe Experimentation</h3>
+                <h3>🧪 Isolated Automation Environments</h3>
                 <p>
-                  <strong>Containerized environments</strong> provide safe sandboxes for testing agent behavior. 
-                  Experiment with file operations, web browsing, and system tools without risk.
+                  <strong>Each session provides Computer use agents with dedicated computers</strong> and full OS access. 
+                  Safe to run any automation without affecting your local machine.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>📊 Production Readiness</h3>
+                <h3>📊 Enterprise Ready</h3>
                 <p>
-                  <strong>Enterprise features built-in</strong> - RBAC, encrypted secrets, audit trails, and monitoring. 
-                  Scale from prototype to production without rebuilding infrastructure.
+                  <strong>Production-grade automation</strong> - RBAC, encrypted secrets, audit trails, and monitoring. 
+                  Deploy computer-use agents at scale with enterprise security.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>⚡ Zero Infrastructure Overhead</h3>
+                <h3>⚡ Natural Language Control</h3>
                 <p>
-                  <strong>Focus on agent logic</strong>, not DevOps. Pre-compiled dependencies, automatic scaling, 
-                  and professional deployment pipelines handle the operational complexity.
+                  <strong>Control computers with conversation</strong> - no APIs, SDKs, or complex integrations. 
+                  Just describe what you want automated and the agent does it.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>🤝 Team Collaboration</h3>
+                <h3>🤝 Scalable Automation</h3>
                 <p>
-                  <strong>Multi-tenant workspaces</strong> enable teams to collaborate on agents with proper access controls. 
-                  Share sessions, fork experiments, and maintain development history.
+                  <strong>Run multiple Computer use agents</strong> simultaneously with dedicated computers and proper access controls. 
+                  Share automation sessions, fork workflows, and scale manual work elimination.
                 </p>
               </div>
             </div>
             <div style={{"textAlign": "center", "marginTop": "3rem"}}>
-              <h3>Stop Fighting Infrastructure. Start Building Agents.</h3>
+              <h3>Stop Doing Manual Work. Start Automating.</h3>
               <p style={{"fontSize": "1.1rem", "marginBottom": "2rem"}}>
-                Join teams already using Raworc to accelerate their AI agent development
+                Join teams already using Raworc to automate manual work with computer-use agents
               </p>
               <div className={styles.buttons}>
                 <Link
@@ -233,6 +293,13 @@ export default function Home(): ReactNode {
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+        <section style={{"backgroundColor": "#f8f9fa", "padding": "2rem 0", "textAlign": "center", "borderTop": "1px solid #e9ecef"}}>
+          <div className="container">
+            <p style={{"margin": "0", "color": "#6c757d", "fontSize": "0.9rem"}}>
+              Made with ❤️ by <a href="https://remoteagent.com" target="_blank" rel="noopener noreferrer" style={{"color": "#007bff", "textDecoration": "none"}}>RemoteAgent team</a>
+            </p>
           </div>
         </section>
       </main>

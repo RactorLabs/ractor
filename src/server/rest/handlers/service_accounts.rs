@@ -18,9 +18,6 @@ pub struct CreateServiceAccountRequest {
     pub user: String,
     pub pass: String,
     #[serde(default)]
-    #[allow(dead_code)]
-    pub space: Option<String>,
-    #[serde(default)]
     pub description: Option<String>,
 }
 
@@ -32,7 +29,6 @@ pub struct UpdatePasswordRequest {
 
 #[derive(Debug, Deserialize)]
 pub struct UpdateServiceAccountRequest {
-    pub space: Option<String>,
     pub description: Option<String>,
     pub active: Option<bool>,
 }
@@ -41,7 +37,6 @@ pub struct UpdateServiceAccountRequest {
 pub struct ServiceAccountResponse {
     pub id: String,
     pub user: String,
-    pub space: Option<String>,
     pub description: Option<String>,
     pub active: bool,
     pub created_at: String,
@@ -54,7 +49,6 @@ impl From<ServiceAccount> for ServiceAccountResponse {
         Self {
             id: sa.id.map(|id| id.to_string()).unwrap_or_default(),
             user: sa.user,
-            space: None, // Service accounts are global now
             description: sa.description,
             active: sa.active,
             created_at: sa.created_at,
@@ -69,7 +63,7 @@ pub async fn list_service_accounts(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<ServiceAccountResponse>>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_LIST, None)
+    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_LIST)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -87,7 +81,7 @@ pub async fn get_service_account(
     Path(id): Path<String>,
 ) -> ApiResult<Json<ServiceAccountResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_GET, None)
+    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_GET)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -112,7 +106,7 @@ pub async fn create_service_account(
     Json(req): Json<CreateServiceAccountRequest>,
 ) -> ApiResult<Json<ServiceAccountResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_CREATE, None)
+    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_CREATE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -126,7 +120,6 @@ pub async fn create_service_account(
     let pass_hash = hash(&req.pass, DEFAULT_COST)?;
     let account = state.create_service_account(
         &req.user,
-        None, // Service accounts are global now
         &pass_hash,
         req.description,
     ).await?;
@@ -140,7 +133,7 @@ pub async fn delete_service_account(
     Path(id): Path<String>,
 ) -> ApiResult<()> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_DELETE, None)
+    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_DELETE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -169,7 +162,7 @@ pub async fn update_service_account_password(
     };
 
     if !is_self {
-        check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_UPDATE, None)
+        check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_UPDATE)
             .await
             .map_err(|e| match e {
                 axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -214,7 +207,7 @@ pub async fn update_service_account(
     Json(req): Json<UpdateServiceAccountRequest>,
 ) -> ApiResult<Json<ServiceAccountResponse>> {
     // Check permission
-    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_UPDATE, None)
+    check_api_permission(&auth, &state, &permissions::SERVICE_ACCOUNT_UPDATE)
         .await
         .map_err(|e| match e {
             axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
@@ -234,7 +227,6 @@ pub async fn update_service_account(
     // Update the service account - use name as primary key
     let updated = state.update_service_account(
         &account.user,
-        req.space,
         req.description,
         req.active,
     ).await?;

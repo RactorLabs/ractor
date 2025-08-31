@@ -375,5 +375,4 @@ raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 - [Sessions Concepts](/docs/concepts/sessions) - Understanding session architecture
 - [Complete API Reference](/docs/api/rest-api) - Full REST API documentation  
-- [Architecture Overview](/docs/concepts/architecture) - Understanding system design
 - [Troubleshooting](/docs/guides/troubleshooting) - Solve common issues

@@ -51,7 +51,7 @@ pub async fn list_sessions(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<SessionResponse>>> {
     // Check session:list permission
-    check_api_permission(&auth, &state, &permissions::SESSION_LIST, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_LIST)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to list sessions".to_string()))?;
 
@@ -88,7 +88,7 @@ pub async fn get_session(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check session:get permission
-    check_api_permission(&auth, &state, &permissions::SESSION_GET, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_GET)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to get session".to_string()))?;
 
@@ -121,7 +121,7 @@ pub async fn create_session(
         req.setup.is_some());
 
     // Check session:create permission
-    check_api_permission(&auth, &state, &permissions::SESSION_CREATE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to create session".to_string()))?;
 
@@ -175,7 +175,7 @@ pub async fn remix_session(
     Json(req): Json<RemixSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check session:create permission (remixing creates a new session)
-    check_api_permission(&auth, &state, &permissions::SESSION_CREATE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix session".to_string()))?;
 
@@ -234,85 +234,6 @@ pub async fn remix_session(
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
 
-// pub async fn update_session_state(
-//     State(state): State<Arc<AppState>>,
-//     Path(id): Path<String>,
-//     Extension(auth): Extension<AuthContext>,
-//     Json(req): Json<UpdateSessionStateRequest>,
-// ) -> ApiResult<Json<SessionResponse>> {
-//     use crate::shared::rbac::AuthPrincipal;
-//     
-// 
-//     // Check if session exists and user has access
-//     let session = Session::find_by_id(&state.db, session_id)
-//         .await
-//         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-//         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-// 
-//     let username = match &auth.principal {
-//         AuthPrincipal::Subject(s) => &s.name,
-//         AuthPrincipal::ServiceAccount(sa) => &sa.user,
-//     };
-// 
-//     // Check permission for updating sessions in the space
-//     let can_update = check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
-//         .await
-//         .is_ok();
-//     
-//     if !can_update && &session.created_by != username {
-//         return Err(ApiError::Forbidden("Cannot update other users' sessions".to_string()));
-//     }
-// 
-//     // Store old state for comparison
-//     let old_state = session.state;
-//     let new_state = req.state;
-//     
-//     let updated_session = Session::update_state(&state.db, session_id, req)
-//         .await
-//         .map_err(|e| {
-//             if e.to_string().contains("Invalid state transition") {
-//                 ApiError::BadRequest(e.to_string())
-//             } else {
-//                 ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e))
-//             }
-//         })?
-//         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-// 
-//     // Add tasks for container state transitions
-//     match (old_state, new_state) {
-//         (SessionState::Init, SessionState::Ready) => {
-//             // Container should be created by this point
-//             tracing::debug!("Session {} transitioned to Ready", session_id);
-//         }
-//         (SessionState::Ready, SessionState::Idle) => {
-//             // Add task to stop container
-//             let _ = sqlx::query(r#"
-//                 INSERT INTO session_tasks (session_id, task_type, payload, status)
-//                 VALUES (?, 'stop_session', '{}', 'pending')
-//                 "#
-//             )
-//             .bind(session_id)
-//             .execute(&*state.db)
-//             .await;
-//         }
-//         (SessionState::Idle, SessionState::Ready) => {
-//             // Add task to reactivate container
-//             let _ = sqlx::query(r#"
-//                 INSERT INTO session_tasks (session_id, task_type, payload, status)
-//                 VALUES (?, 'reactivate_session', '{}', 'pending')
-//                 "#
-//             )
-//             .bind(session_id)
-//             .execute(&*state.db)
-//             .await;
-//         }
-//         _ => {
-//             tracing::debug!("Session {} state transition {:?} -> {:?}", session_id, old_state, new_state);
-//         }
-//     }
-// 
-//     Ok(Json(SessionResponse::from_session(updated_session, &state.db).await?))
-// }
 
 pub async fn close_session(
     State(state): State<Arc<AppState>>,
@@ -338,7 +259,7 @@ pub async fn close_session(
     tracing::info!("Found session in state: {}", session.state);
 
     // Check permission for updating sessions
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
         .await
         .map_err(|e| {
             tracing::error!("Permission check failed: {:?}", e);
@@ -424,7 +345,7 @@ pub async fn restore_session(
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     // Check permission for updating sessions
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to restore session".to_string()))?;
     
@@ -505,7 +426,7 @@ pub async fn update_session(
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     // Check permission for updating sessions
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to update session".to_string()))?;
     
@@ -574,7 +495,7 @@ pub async fn delete_session(
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     // Check permission for deleting sessions
-    check_api_permission(&auth, &state, &permissions::SESSION_DELETE, None)
+    check_api_permission(&auth, &state, &permissions::SESSION_DELETE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete session".to_string()))?;
     

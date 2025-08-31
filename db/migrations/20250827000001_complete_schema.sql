@@ -100,23 +100,12 @@ VALUES (
 INSERT IGNORE INTO roles (name, description, rules) VALUES
 (
     'admin',
-    'Full administrative access',
+    'Full administrative access including service account management',
     JSON_ARRAY(
         JSON_OBJECT(
             'api_groups', JSON_ARRAY('*'),
             'resources', JSON_ARRAY('*'),
             'verbs', JSON_ARRAY('*')
-        )
-    )
-),
-(
-    'user',
-    'Can manage own sessions',
-    JSON_ARRAY(
-        JSON_OBJECT(
-            'api_groups', JSON_ARRAY('api'),
-            'resources', JSON_ARRAY('sessions', 'session_messages', 'session_tasks'),
-            'verbs', JSON_ARRAY('create', 'read', 'update', 'delete', 'list', 'get')
         )
     )
 );

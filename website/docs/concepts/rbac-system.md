@@ -5,7 +5,7 @@ title: RBAC & Authentication
 
 # Role-Based Access Control (RBAC) & Authentication
 
-Raworc implements a comprehensive RBAC system providing fine-grained access control for spaces, sessions, agents, and secrets. The system supports both user accounts and service accounts with JWT-based authentication.
+Raworc implements a comprehensive RBAC system providing fine-grained access control for sessions and secrets. The system supports both user accounts and service accounts with JWT-based authentication, focusing on session-based permissions for remote computer management.
 
 ## Architecture Overview
 
@@ -34,7 +34,7 @@ Raworc implements a comprehensive RBAC system providing fine-grained access cont
 - **JWT Claims**: Identity and authorization information
 - **Principals**: Users and Service Accounts
 - **Roles**: Collections of permissions (rules)
-- **Role Bindings**: Mapping principals to roles in spaces
+- **Role Bindings**: Mapping principals to roles globally
 - **Rules**: API permissions (resource + verbs)
 
 ## Authentication System
@@ -47,7 +47,6 @@ Raworc implements a comprehensive RBAC system providing fine-grained access cont
 pub struct RbacClaims {
     pub sub: String,               // Subject name (user or service account)
     pub sub_type: SubjectType,     // Subject type identifier
-    pub space: Option<String>,     // Optional space scope
     pub exp: usize,                // Expiration timestamp
     pub iat: usize,                // Issued at timestamp
     pub iss: String,               // Issuer (usually "raworc")
@@ -62,14 +61,13 @@ pub enum SubjectType {
 
 **Token Generation:**
 ```rust
-pub async fn create_jwt_token(&self, principal: &str, sub_type: SubjectType, space: Option<&str>) -> Result<String> {
+pub async fn create_jwt_token(&self, principal: &str, sub_type: SubjectType) -> Result<String> {
     let now = chrono::Utc::now().timestamp() as usize;
     let expiration = now + (24 * 60 * 60); // 24 hours
     
     let claims = RbacClaims {
         sub: principal.to_string(),
         sub_type,
-        space: space.map(|s| s.to_string()),
         exp: expiration,
         iat: now,
         iss: "raworc".to_string(),
@@ -106,15 +104,14 @@ raworc auth login --user admin --pass admin
 
 **Service Account Token Generation:**
 ```rust
-async fn create_service_account_token(&self, sa_name: &str, space: &str) -> Result<String> {
+async fn create_service_account_token(&self, sa_name: &str) -> Result<String> {
     // Verify service account exists
-    let sa = self.get_service_account(sa_name, space).await?;
+    let sa = self.get_service_account(sa_name).await?;
     
     // Create JWT token for service account
     self.create_jwt_token(
-        &format!("system:serviceaccount:{}:{}", space, sa_name),
-        SubjectType::ServiceAccount,
-        Some(space)
+        &format!("system:serviceaccount:{}", sa_name),
+        SubjectType::ServiceAccount
     ).await
 }
 ```
@@ -151,14 +148,11 @@ impl OidcAuthProvider {
 **Service Accounts:**
 ```sql
 CREATE TABLE service_accounts (
-    name VARCHAR(255) NOT NULL,
-    space VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL PRIMARY KEY,
     description TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255) NOT NULL,
-    metadata JSON,
-    PRIMARY KEY (name, space),
-    CONSTRAINT fk_service_accounts_space FOREIGN KEY (space) REFERENCES spaces(name) ON DELETE CASCADE
+    metadata JSON
 );
 ```
 
@@ -167,15 +161,12 @@ CREATE TABLE service_accounts (
 **Role Definition:**
 ```sql
 CREATE TABLE roles (
-    name VARCHAR(255) NOT NULL,
-    space VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL PRIMARY KEY,
     description TEXT,
     rules JSON NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255) NOT NULL,
-    metadata JSON,
-    PRIMARY KEY (name, space),
-    CONSTRAINT fk_roles_space FOREIGN KEY (space) REFERENCES spaces(name) ON DELETE CASCADE
+    metadata JSON
 );
 ```
 
@@ -184,7 +175,6 @@ CREATE TABLE roles (
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Role {
     pub name: String,
-    pub space: String,
     pub description: Option<String>,
     pub rules: Vec<Rule>,
     pub created_at: DateTime<Utc>,
@@ -206,19 +196,16 @@ pub struct Rule {
 **Role Binding Definition:**
 ```sql
 CREATE TABLE role_bindings (
-    name VARCHAR(255) NOT NULL,
-    space VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL PRIMARY KEY,
     role_name VARCHAR(255) NOT NULL,
     subject_name VARCHAR(255) NOT NULL,
     subject_type ENUM('Subject', 'ServiceAccount') NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255) NOT NULL,
     metadata JSON,
-    PRIMARY KEY (name, space),
-    CONSTRAINT fk_role_bindings_space FOREIGN KEY (space) REFERENCES spaces(name) ON DELETE CASCADE,
-    CONSTRAINT fk_role_bindings_role FOREIGN KEY (role_name, space) REFERENCES roles(name, space) ON DELETE CASCADE,
+    CONSTRAINT fk_role_bindings_role FOREIGN KEY (role_name) REFERENCES roles(name) ON DELETE CASCADE,
     INDEX idx_role_bindings_subject (subject_name, subject_type),
-    INDEX idx_role_bindings_role (role_name, space)
+    INDEX idx_role_bindings_role (role_name)
 );
 ```
 
@@ -227,7 +214,6 @@ CREATE TABLE role_bindings (
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleBinding {
     pub name: String,
-    pub space: String,
     pub role_name: String,
     pub subject_name: String,
     pub subject_type: SubjectType,
@@ -252,30 +238,13 @@ pub const SESSION_DELETE: &str = "session.delete";
 pub const SESSION_MESSAGE_CREATE: &str = "session.message.create";
 pub const SESSION_MESSAGE_LIST: &str = "session.message.list";
 
-// Agent permissions
-pub const SPACE_AGENT_LIST: &str = "space.agent.list";
-pub const SPACE_AGENT_GET: &str = "space.agent.get";
-pub const SPACE_AGENT_CREATE: &str = "space.agent.create";
-pub const SPACE_AGENT_UPDATE: &str = "space.agent.update";
-pub const SPACE_AGENT_DELETE: &str = "space.agent.delete";
-
 // Secret permissions
-pub const SPACE_SECRET_LIST: &str = "space.secret.list";
-pub const SPACE_SECRET_GET: &str = "space.secret.get";
-pub const SPACE_SECRET_READ_VALUES: &str = "space.secret.read_values";
-pub const SPACE_SECRET_CREATE: &str = "space.secret.create";
-pub const SPACE_SECRET_UPDATE: &str = "space.secret.update";
-pub const SPACE_SECRET_DELETE: &str = "space.secret.delete";
-
-// Space permissions
-pub const SPACE_LIST: &str = "space.list";
-pub const SPACE_GET: &str = "space.get";
-pub const SPACE_CREATE: &str = "space.create";
-pub const SPACE_UPDATE: &str = "space.update";
-pub const SPACE_DELETE: &str = "space.delete";
-pub const SPACE_BUILD_CREATE: &str = "space.build.create";
-pub const SPACE_BUILD_LIST: &str = "space.build.list";
-pub const SPACE_BUILD_GET: &str = "space.build.get";
+pub const SECRET_LIST: &str = "secret.list";
+pub const SECRET_GET: &str = "secret.get";
+pub const SECRET_READ_VALUES: &str = "secret.read_values";
+pub const SECRET_CREATE: &str = "secret.create";
+pub const SECRET_UPDATE: &str = "secret.update";
+pub const SECRET_DELETE: &str = "secret.delete";
 
 // RBAC permissions
 pub const RBAC_ROLE_LIST: &str = "rbac.role.list";
@@ -306,23 +275,18 @@ pub struct RbacEngine {
 }
 
 impl RbacEngine {
-    pub async fn check_permission(&self, principal: &str, sub_type: SubjectType, space: &str, permission: &str) -> Result<bool> {
-        // Get all role bindings for this principal in this space
-        let role_bindings = self.get_role_bindings_for_principal(principal, sub_type, space).await?;
+    pub async fn check_permission(&self, principal: &str, sub_type: SubjectType, permission: &str) -> Result<bool> {
+        // Get all role bindings for this principal
+        let role_bindings = self.get_role_bindings_for_principal(principal, sub_type).await?;
         
         for binding in role_bindings {
             // Get role rules
-            let role = self.get_role(&binding.role_name, space).await?;
+            let role = self.get_role(&binding.role_name).await?;
             
             // Check if any rule grants this permission
             if self.check_rules_allow_permission(&role.rules, permission).await? {
                 return Ok(true);
             }
-        }
-        
-        // Check global permissions (space = "*")
-        if space != "*" {
-            return self.check_permission(principal, sub_type, "*", permission).await;
         }
         
         Ok(false)
@@ -400,7 +364,6 @@ pub async fn auth_middleware(
     let auth_context = AuthContext {
         principal: claims.claims.sub,
         subject_type: claims.claims.sub_type,
-        space_scope: claims.claims.space,
         rbac_engine: rbac_engine.clone(),
     };
     
@@ -416,32 +379,21 @@ pub async fn auth_middleware(
 pub struct AuthContext {
     pub principal: String,
     pub subject_type: SubjectType,
-    pub space_scope: Option<String>,
     pub rbac_engine: Arc<RbacEngine>,
 }
 
 impl AuthContext {
-    pub async fn check_permission(&self, space: &str, permission: &str) -> Result<(), ApiError> {
-        // Check space scope if token is space-scoped
-        if let Some(token_space) = &self.space_scope {
-            if token_space != space && token_space != "*" {
-                return Err(ApiError::Forbidden(format!(
-                    "Token scoped to space '{}', cannot access space '{}'",
-                    token_space, space
-                )));
-            }
-        }
-        
+    pub async fn check_permission(&self, permission: &str) -> Result<(), ApiError> {
         // Check RBAC permission
         let allowed = self.rbac_engine
-            .check_permission(&self.principal, self.subject_type, space, permission)
+            .check_permission(&self.principal, self.subject_type, permission)
             .await
             .map_err(|e| ApiError::Internal(e))?;
         
         if !allowed {
             return Err(ApiError::Forbidden(format!(
-                "Principal '{}' does not have permission '{}' in space '{}'",
-                self.principal, permission, space
+                "Principal '{}' does not have permission '{}'",
+                self.principal, permission
             )));
         }
         
@@ -462,7 +414,6 @@ impl AuthContext {
 ```rust
 let admin_role = Role {
     name: "admin".to_string(),
-    space: "*".to_string(), // Global role
     description: Some("Full system administrator access".to_string()),
     rules: vec![
         Rule {
@@ -482,8 +433,7 @@ let admin_role = Role {
 ```rust
 let developer_role = Role {
     name: "developer".to_string(),
-    space: "default".to_string(),
-    description: Some("Developer access to application resources".to_string()),
+    description: Some("Developer access to session resources".to_string()),
     rules: vec![
         // Session management
         Rule {
@@ -492,17 +442,10 @@ let developer_role = Role {
             verbs: vec!["list".to_string(), "get".to_string(), "create".to_string(), "delete".to_string()],
             resource_names: None,
         },
-        // Agent access
+        // Secret read-only for own sessions
         Rule {
             api_groups: vec!["api".to_string()],
-            resources: vec!["space.agent".to_string()],
-            verbs: vec!["list".to_string(), "get".to_string()],
-            resource_names: None,
-        },
-        // Secret read-only
-        Rule {
-            api_groups: vec!["api".to_string()],
-            resources: vec!["space.secret".to_string()],
+            resources: vec!["secret".to_string()],
             verbs: vec!["list".to_string(), "get".to_string()],
             resource_names: None,
         },
@@ -517,12 +460,11 @@ let developer_role = Role {
 ```rust
 let viewer_role = Role {
     name: "viewer".to_string(),
-    space: "*".to_string(),
-    description: Some("Read-only access to all resources".to_string()),
+    description: Some("Read-only access to sessions".to_string()),
     rules: vec![
         Rule {
             api_groups: vec!["api".to_string()],
-            resources: vec!["*".to_string()],
+            resources: vec!["session".to_string()],
             verbs: vec!["list".to_string(), "get".to_string()],
             resource_names: None,
         }
@@ -535,31 +477,23 @@ let viewer_role = Role {
 
 **CI/CD Service Account:**
 ```rust
-let ci_cd_role = Role {
-    name: "ci-cd".to_string(),
-    space: "default".to_string(),
-    description: Some("CI/CD pipeline access".to_string()),
+let automation_role = Role {
+    name: "automation".to_string(),
+    description: Some("Automation service access".to_string()),
     rules: vec![
-        // Agent management for deployments
+        // Session management for automation
         Rule {
             api_groups: vec!["api".to_string()],
-            resources: vec!["space.agent".to_string()],
+            resources: vec!["session".to_string()],
             verbs: vec!["create".to_string(), "update".to_string(), "delete".to_string()],
             resource_names: None,
         },
-        // Space builds for deployments
+        // Secret management for automation
         Rule {
             api_groups: vec!["api".to_string()],
-            resources: vec!["space.build".to_string()],
-            verbs: vec!["create".to_string(), "get".to_string(), "list".to_string()],
-            resource_names: None,
-        },
-        // Secret management for deployments
-        Rule {
-            api_groups: vec!["api".to_string()],
-            resources: vec!["space.secret".to_string()],
+            resources: vec!["secret".to_string()],
             verbs: vec!["create".to_string(), "update".to_string()],
-            resource_names: Some(vec!["DEPLOY_KEY".to_string(), "BUILD_TOKEN".to_string()]),
+            resource_names: Some(vec!["AUTOMATION_KEY".to_string(), "SERVICE_TOKEN".to_string()]),
         },
     ],
     // ... metadata
@@ -574,7 +508,6 @@ let ci_cd_role = Role {
 ```bash
 raworc api roles -m post -b '{
   "name": "data-analyst",
-  "space": "analytics",
   "description": "Data analysis team access",
   "rules": [
     {
@@ -584,13 +517,13 @@ raworc api roles -m post -b '{
     },
     {
       "api_groups": ["api"],
-      "resources": ["space.agent"],
+      "resources": ["sessions"],
       "verbs": ["list", "get"],
       "resource_names": ["data-processor", "chart-generator"]
     },
     {
       "api_groups": ["api"],
-      "resources": ["space.secret"],
+      "resources": ["session_secrets"],
       "verbs": ["list", "get", "read_values"],
       "resource_names": ["DATABASE_URL", "API_KEY"]
     }
@@ -604,8 +537,7 @@ raworc api roles -m post -b '{
 ```bash
 raworc api role-bindings -m post -b '{
     "name": "john-data-analyst",
-    "space": "analytics",
-    "role_name": "data-analyst",
+      "role_name": "data-analyst",
     "subject_name": "john@company.com",
     "subject_type": "Subject"
   }'
@@ -615,8 +547,7 @@ raworc api role-bindings -m post -b '{
 ```bash
 raworc api role-bindings -m post -b '{
     "name": "backup-service-binding",
-    "space": "production",
-    "role_name": "backup-operator",
+      "role_name": "backup-operator",
     "subject_name": "backup-service",
     "subject_type": "ServiceAccount"
   }'
@@ -628,16 +559,14 @@ raworc api role-bindings -m post -b '{
 ```bash
 raworc api service-accounts -m post -b '{
     "name": "monitoring-agent",
-    "space": "production",
-    "description": "Service account for monitoring and alerting"
+      "description": "Service account for monitoring and alerting"
   }'
 ```
 
 **Generate Service Account Token:**
 ```bash
 raworc api service-accounts/monitoring-agent/token -m post -b '{
-    "space": "production",
-    "description": "Token for monitoring dashboard"
+      "description": "Token for monitoring dashboard"
   }'
 ```
 
@@ -735,10 +664,9 @@ async fn audit_rbac_operation(&self, operation: &str, resource: &str, principal:
 
 **Environment-Specific Roles:**
 ```bash
-# Production space - restricted access
+# Production environment - restricted access
 raworc api roles -m post -b '{
   "name": "prod-operator",
-  "space": "production",
   "rules": [
     {
       "api_groups": ["api"],
@@ -748,10 +676,10 @@ raworc api roles -m post -b '{
   ]
 }'
 
-# Development space - broader access
+# Development environment - broader access
 raworc api roles -m post -b '{
   "name": "dev-user",
-  "space": "development", 
+ 
   "rules": [
     {
       "api_groups": ["api"],
@@ -769,16 +697,15 @@ raworc api roles -m post -b '{
 # Data team role
 raworc api roles -m post -b '{
   "name": "data-team",
-  "space": "analytics",
   "rules": [
     {
       "api_groups": ["api"],
-      "resources": ["session", "space.agent"],
+      "resources": ["sessions"],
       "verbs": ["list", "get", "create", "delete"]
     },
     {
       "api_groups": ["api"],
-      "resources": ["space.secret"],
+      "resources": ["session_secrets"],
       "verbs": ["list", "get", "read_values"],
       "resource_names": ["DATABASE_URL", "ANALYTICS_API_KEY"]
     }
@@ -788,11 +715,10 @@ raworc api roles -m post -b '{
 # Backend team role  
 raworc api roles -m post -b '{
   "name": "backend-team",
-  "space": "api",
   "rules": [
     {
       "api_groups": ["api"],
-      "resources": ["session", "space.agent", "space.build"],
+      "resources": ["sessions", "session_messages"],
       "verbs": ["*"]
     }
   ]
