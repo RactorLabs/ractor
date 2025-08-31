@@ -358,7 +358,7 @@ async function waitForAgentResponse(sessionId, userMessageTime, timeoutMs = 6000
     await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
   
-  throw new Error('Timeout waiting for agent response');
+  throw new Error('Timeout waiting for host response');
 }
 
 async function chatLoop(sessionId) {
@@ -414,14 +414,14 @@ async function chatLoop(sessionId) {
         continue;
       }
       
-      // Wait for agent response
-      const spinner = ora('Waiting for agent response...').start();
+      // Wait for host response
+      const spinner = ora('Waiting for host response...').start();
       
       try {
         const agentMessage = await waitForAgentResponse(sessionId, userMessageTime);
         spinner.stop();
         
-        // Display agent response
+        // Display host response
         console.log(chalk.cyan('Agent:'), agentMessage.content);
         console.log();
         

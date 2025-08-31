@@ -81,7 +81,7 @@ Once in a session, you can interact directly with the Host:
 
 ```
 You: Hello, how can you help me?
-⠋ Waiting for agent response...
+⠋ Waiting for host response...
 Assistant: Hello! I'm an AI assistant that can help you with various tasks including:
 - Writing and debugging code
 - Data analysis and visualization  
@@ -90,7 +90,7 @@ Assistant: Hello! I'm an AI assistant that can help you with various tasks inclu
 - And much more!
 
 You: Create a Python script to calculate fibonacci numbers
-⠋ Waiting for agent response...
+⠋ Waiting for host response...
 Assistant: I'll create a Python script to calculate Fibonacci numbers for you.
 
 [Creates fibonacci.py with implementation]
