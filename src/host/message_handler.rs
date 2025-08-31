@@ -1,4 +1,3 @@
-use super::agent_manager::AgentManager;
 use super::api::{RaworcClient, Message, MessageRole, SESSION_STATE_IDLE, SESSION_STATE_BUSY, MESSAGE_ROLE_USER};
 use super::claude::ClaudeClient;
 use super::error::Result;
@@ -12,7 +11,6 @@ pub struct MessageHandler {
     api_client: Arc<RaworcClient>,
     claude_client: Arc<ClaudeClient>,
     guardrails: Arc<Guardrails>,
-    agent_manager: Arc<Mutex<AgentManager>>,
     processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -21,13 +19,11 @@ impl MessageHandler {
         api_client: Arc<RaworcClient>,
         claude_client: Arc<ClaudeClient>,
         guardrails: Arc<Guardrails>,
-        agent_manager: Arc<Mutex<AgentManager>>,
     ) -> Self {
         Self {
             api_client,
             claude_client,
             guardrails,
-            agent_manager,
             processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
         }
     }
@@ -167,7 +163,7 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
         
-        // Use Claude API directly (skipping agent delegation to avoid blocking)
+        // Use Claude API directly
         info!("Using Claude API for message processing");
         
         // Fetch ALL messages from session for complete conversation history
@@ -178,7 +174,7 @@ impl MessageHandler {
         let conversation = self.prepare_conversation_history(&all_messages, &message.id);
         
         // Get Claude's response with fallback
-        let system_prompt = self.build_system_prompt();
+        let system_prompt = self.build_system_prompt().await;
         let response_result = self.claude_client
             .complete(conversation, Some(system_prompt))
             .await;
@@ -197,7 +193,7 @@ impl MessageHandler {
                     I'm a Raworc host agent designed to help with various tasks including:\n\
                     - Code generation and analysis\n\
                     - File operations\n\
-                    - Agent delegation\n\n\
+                    - Session management\n\n\
                     Please try your request again.",
                     message.content
                 );
@@ -216,42 +212,6 @@ impl MessageHandler {
         
         Ok(())
     }
-    
-    async fn try_agent_delegation(&self, message_content: &str) -> Result<Option<String>> {
-        let agent_manager = self.agent_manager.lock().await;
-        
-        // Use Claude-powered delegation to find best agent
-        if let Some(agent_name) = agent_manager.get_agent_for_message(message_content).await {
-            info!("Claude delegating message to agent: {}", agent_name);
-            
-            // Prepare context for agent
-            let context = serde_json::json!({
-                "session_id": std::env::var("RAWORC_SESSION_ID").unwrap_or_default(),
-                "space": std::env::var("RAWORC_SPACE_ID").unwrap_or_else(|_| "default".to_string()),
-                "timestamp": std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-            });
-            
-            // Execute agent
-            match agent_manager.execute_agent(&agent_name, message_content, &context).await {
-                Ok(response) => {
-                    info!("Agent {} executed successfully via Claude delegation", agent_name);
-                    return Ok(Some(response));
-                }
-                Err(e) => {
-                    warn!("Agent {} execution failed: {}, falling back to Claude", agent_name, e);
-                    return Ok(None);
-                }
-            }
-        }
-        
-        Ok(None)
-    }
-    
-    
-    
     
     async fn fetch_all_session_messages(&self) -> Result<Vec<Message>> {
         // Fetch ALL messages in session without pagination limits
@@ -290,8 +250,8 @@ impl MessageHandler {
         conversation
     }
     
-    fn build_system_prompt(&self) -> String {
-        format!(
+    async fn build_system_prompt(&self) -> String {
+        let mut prompt = String::from(
             r#"You are a helpful AI assistant operating within a Raworc session.
 
 Key capabilities:
@@ -303,10 +263,9 @@ Working Directory and File Operations:
 - Your working directory is /session/
 - When creating files, writing code, or performing file operations, use /session/ as your base directory
 - The session has persistent storage mounted at /session/ with the following structure:
-  - /session/ - Main working directory for user files and code
-  - /session/agents/ - Agent deployments and builds (managed automatically)
-  - /session/cache/ - Build caches for cargo, pip, npm, git
-  - /session/state/ - Session state
+  - /session/code/ - User code and scripts
+  - /session/data/ - User data files
+  - /session/secrets/ - Environment variables and secrets (automatically sourced)
 - All file paths should be relative to /session/ unless specifically working with system files
 
 Guidelines:
@@ -314,15 +273,31 @@ Guidelines:
 - Respect user privacy and security
 - Do not execute or suggest harmful commands
 - If asked to perform actions outside your capabilities, explain your limitations
-- When generating code or creating files, place them in /session/
+- When generating code or creating files, place them in /session/code/ or /session/data/ as appropriate
 - Assume the current working directory is /session/
-
 
 Current session context:
 - This is an isolated session environment with persistent storage
 - Messages are persisted in the Raworc system
-- You're operating as an agent within this session
+- You're operating as the host agent within this session
 - Your session persists between container restarts"#
-        )
+        );
+
+        // Read instructions from /session/code/instructions.md if it exists
+        let instructions_path = std::path::Path::new("/session/code/instructions.md");
+        if instructions_path.exists() {
+            match tokio::fs::read_to_string(instructions_path).await {
+                Ok(instructions) => {
+                    prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
+                    prompt.push_str(&instructions);
+                    info!("Loaded instructions from /session/code/instructions.md");
+                }
+                Err(e) => {
+                    warn!("Failed to read instructions file: {}", e);
+                }
+            }
+        }
+
+        prompt
     }
 }

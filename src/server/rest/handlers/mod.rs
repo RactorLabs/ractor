@@ -3,8 +3,3 @@ pub mod roles;
 pub mod role_bindings;
 pub mod sessions;
 pub mod messages;
-pub mod spaces;
-pub mod space_secrets;
-pub mod space_build;
-pub mod agents;
-pub mod agent_logs;

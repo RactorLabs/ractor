@@ -36,29 +36,6 @@ impl DockerManager {
         }
     }
     
-    async fn get_space_secrets(&self, space: &str) -> Result<HashMap<String, String>> {
-        let mut secrets = HashMap::new();
-        
-        // Fetch secrets from database
-        let rows = sqlx::query_as::<_, (String, String)>(
-            r#"
-            SELECT key_name, encrypted_value 
-            FROM space_secrets 
-            WHERE space = ?
-            "#
-        )
-        .bind(space)
-        .fetch_all(&self.db_pool)
-        .await?;
-        
-        for (key_name, encrypted_value) in rows {
-            // In production, you would decrypt the value here
-            // For now, we'll use the value as-is
-            secrets.insert(key_name, encrypted_value);
-        }
-        
-        Ok(secrets)
-    }
 
     // NEW: Create session volume with explicit naming
     async fn create_session_volume(&self, session_id: &str) -> Result<String> {
@@ -121,33 +98,48 @@ impl DockerManager {
         }
     }
 
-    // NEW: Initialize session directory structure
-    async fn initialize_session_structure(&self, session_id: &str) -> Result<()> {
+    // Initialize session directory structure with secrets, instructions, and setup
+    async fn initialize_session_structure(&self, session_id: &str, secrets: &HashMap<String, String>, instructions: Option<&str>, setup: Option<&str>) -> Result<()> {
         info!("Initializing session structure for session {}", session_id);
         
-        let init_script = "mkdir -p /session/{space,agents,cache,state,tmp}
-mkdir -p /session/cache/{cargo,pip,npm,git}
-
+        // Create base directories
+        let init_script = "mkdir -p /session/{code,data,secrets}
 cd /session
 echo '# Welcome to your Raworc session!' > README.md
 echo 'This is your persistent space. Files here will be saved across session restarts.' >> README.md
 echo '' >> README.md
 echo '## Directory Structure:' >> README.md
-echo '- /session/ - Your main working directory (current directory)' >> README.md
-echo '- /session/agents/ - Custom agents and their data' >> README.md
-echo '- /session/cache/ - Build caches for tools' >> README.md
-echo '- /session/state/ - Session state and tasks' >> README.md
-
-echo '{}' > /session/state/agent_metadata.json
-echo '{\"initialized\": true, \"version\": \"1.0\", \"structure\": \"session_v1\"}' > /session/state/session.state
+echo '- /session/code/ - Your code and scripts' >> README.md
+echo '- /session/data/ - Your data files' >> README.md
+echo '- /session/secrets/ - Environment variables and secrets (automatically sourced)' >> README.md
 
 chmod -R 755 /session
-
-echo 'Session structure initialized'
+echo 'Session directories created'
 ";
 
         self.execute_command(session_id, init_script).await?;
-        info!("Session structure initialized");
+        
+        // Write secrets to /session/secrets/ folder
+        for (key, value) in secrets {
+            let write_secret_command = format!("echo '{}' > /session/secrets/{}", value, key);
+            self.execute_command(session_id, &write_secret_command).await?;
+        }
+        
+        // Write instructions if provided
+        if let Some(instructions_content) = instructions {
+            let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
+            let write_instructions_command = format!("echo '{}' > /session/code/instructions.md", escaped_instructions);
+            self.execute_command(session_id, &write_instructions_command).await?;
+        }
+        
+        // Write and make setup script executable if provided
+        if let Some(setup_content) = setup {
+            let escaped_setup = setup_content.replace("'", "'\"'\"'");
+            let write_setup_command = format!("echo '{}' > /session/code/setup.sh && chmod +x /session/code/setup.sh", escaped_setup);
+            self.execute_command(session_id, &write_setup_command).await?;
+        }
+        
+        info!("Session structure initialized with {} secrets", secrets.len());
         
         Ok(())
     }
@@ -179,9 +171,8 @@ echo 'Session structure initialized'
         Ok(())
     }
     
-    async fn generate_operator_token(&self, space: &str) -> Result<String> {
-        // Generate a JWT token with operator role for the space
-        // This would use the same JWT logic as the auth system
+    async fn generate_operator_token(&self) -> Result<String> {
+        // Generate a JWT token with operator role
         use jsonwebtoken::{encode, EncodingKey, Header};
         use serde::{Deserialize, Serialize};
         use chrono::{Duration, Utc};
@@ -190,7 +181,6 @@ echo 'Session structure initialized'
         struct Claims {
             sub: String,
             sub_type: String,
-            space: Option<String>,
             exp: usize,
             iat: usize,
             iss: String,
@@ -200,7 +190,6 @@ echo 'Session structure initialized'
         let claims = Claims {
             sub: "operator".to_string(),
             sub_type: "ServiceAccount".to_string(),
-            space: Some(space.to_string()),
             exp: (now + Duration::days(365)).timestamp() as usize,
             iat: now.timestamp() as usize,
             iss: "raworc-operator".to_string(),
@@ -234,7 +223,7 @@ echo 'Session structure initialized'
         let copy_container_name = format!("raworc_volume_copy_{}", session_id);
         
         let config = Config {
-            image: Some("raworc_host:0.2.9".to_string()),
+            image: Some(self.host_image.clone()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -319,44 +308,36 @@ echo 'Session structure initialized'
     }
 
 
+    pub async fn create_container_with_params(
+        &self, 
+        session_id: &str, 
+        secrets: std::collections::HashMap<String, String>,
+        instructions: Option<String>,
+        setup: Option<String>
+    ) -> Result<String> {
+        let container_name = self.create_container_internal(session_id, Some(secrets), instructions, setup).await?;
+        Ok(container_name)
+    }
+
     pub async fn create_container(&self, session_id: &str) -> Result<String> {
+        let container_name = self.create_container_internal(session_id, None, None, None).await?;
+        Ok(container_name)
+    }
+
+    async fn create_container_internal(
+        &self, 
+        session_id: &str, 
+        secrets: Option<std::collections::HashMap<String, String>>,
+        instructions: Option<String>,
+        setup: Option<String>
+    ) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
         
-        // Fetch session details and space image
-        let session_row = sqlx::query_as::<_, (String, Option<String>)>(
-            r#"
-            SELECT s.space,
-                   wb.image_tag
-            FROM sessions s
-            LEFT JOIN space_builds wb ON s.space = wb.space 
-                AND wb.status = 'completed'
-            WHERE s.id = ?
-            ORDER BY wb.started_at DESC
-            LIMIT 1
-            "#
-        )
-        .bind(session_id)
-        .fetch_optional(&self.db_pool)
-        .await?;
+        // Use host image directly for all sessions
+        let container_image = self.host_image.clone();
+        info!("Creating container {} with host image {}", container_name, container_image);
         
-        let (space, container_image) = match session_row {
-            Some(row) => {
-                let space = row.0;
-                let image = row.1.unwrap_or_else(|| {
-                    warn!("No space image found for {}, falling back to host image", space);
-                    self.host_image.clone()
-                });
-                (space, image)
-            }
-            None => {
-                warn!("Session {} not found, using default space and host image", session_id);
-                ("default".to_string(), self.host_image.clone())
-            }
-        };
-        
-        info!("Creating container {} with image {}", container_name, container_image);
-        
-        info!("Creating container for session {} in space {}", session_id, space);
+        info!("Creating container for session {}", session_id);
 
         // Create or get existing session volume
         let session_volume = match self.get_session_volume(session_id).await? {
@@ -366,15 +347,11 @@ echo 'Session structure initialized'
 
         let mut labels = HashMap::new();
         labels.insert("raworc.session".to_string(), session_id.to_string());
-        labels.insert("raworc.space".to_string(), space.clone());
         labels.insert("raworc.managed".to_string(), "true".to_string());
         labels.insert("raworc.volume".to_string(), session_volume.clone());
         
-        // Generate operator token for this space
-        let operator_token = self.generate_operator_token(&space).await?;
-        
-        // Get space secrets
-        let secrets = self.get_space_secrets(&space).await?;
+        // Generate operator token
+        let operator_token = self.generate_operator_token().await?;
 
         // Configure volume mounts
         let mounts = vec![
@@ -387,28 +364,20 @@ echo 'Session structure initialized'
             }
         ];
 
-        // Set environment variables for the clean directory structure
+        // Set environment variables for the session structure
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
             format!("RAWORC_SESSION_ID={}", session_id),
-            format!("RAWORC_SPACE_ID={}", space),
             format!("RAWORC_API_TOKEN={}", operator_token),
-            
-            // Clean, simple paths
             format!("RAWORC_SESSION_DIR=/session"),
-            format!("RAWORC_AGENTS_DIR=/session/agents"),
-            format!("RAWORC_STATE_DIR=/session/state"),
-            format!("RAWORC_CACHE_DIR=/session/cache"),
-            
-            // Build tool cache configuration
-            format!("CARGO_HOME=/session/cache/cargo"),
-            format!("PIP_CACHE_DIR=/session/cache/pip"),
-            format!("NPM_CONFIG_CACHE=/session/cache/npm"),
         ];
         
-        // Add space secrets as environment variables
-        for (key, value) in secrets {
-            env.push(format!("{}={}", key, value));
+        // Add secrets as environment variables
+        if let Some(secrets_map) = &secrets {
+            for (key, value) in secrets_map {
+                env.push(format!("{}={}", key, value));
+                info!("Adding secret {} as environment variable for session {}", key, session_id);
+            }
         }
 
         // Set the command with required arguments
@@ -454,8 +423,17 @@ echo 'Session structure initialized'
 
         // Initialize session structure if needed
         if !self.session_initialized(&session_volume).await? {
-            self.initialize_session_structure(session_id).await?;
+            let empty_secrets = HashMap::new();
+            let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
+            self.initialize_session_structure(session_id, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
         }
+
+        // Update database with container ID
+        sqlx::query("UPDATE sessions SET container_id = ? WHERE id = ?")
+            .bind(&container.id)
+            .bind(session_id)
+            .execute(&self.db_pool)
+            .await?;
 
         info!("Container {} created with session volume {}", container_name, session_volume);
         Ok(container.id)

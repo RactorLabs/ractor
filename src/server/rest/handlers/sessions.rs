@@ -14,7 +14,6 @@ use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
     pub id: String,
-    pub space: String,
     pub created_by: String,
     pub state: String,
     pub container_id: Option<String>,
@@ -27,7 +26,6 @@ pub struct SessionResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ListSessionsQuery {
-    pub space: Option<String>,
     pub state: Option<String>,
 }
 
@@ -35,7 +33,6 @@ impl SessionResponse {
     async fn from_session(session: Session, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
         Ok(Self {
             id: session.id,
-            space: session.space,
             created_by: session.created_by,
             state: session.state,
             container_id: session.container_id,
@@ -51,11 +48,26 @@ impl SessionResponse {
 pub async fn list_sessions(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListSessionsQuery>,
-    Extension(_auth): Extension<AuthContext>,
+    Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<SessionResponse>>> {
-    let mut sessions = Session::find_all(&state.db, query.space.as_deref())
+    // Check session:list permission
+    check_api_permission(&auth, &state, &permissions::SESSION_LIST, None)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to list sessions".to_string()))?;
+
+    let mut sessions = Session::find_all(&state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list sessions: {}", e)))?;
+
+    // For non-admin users, only show their own sessions
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    // For regular users, only show their own sessions
+    // Admins have permission to list all sessions and will see all sessions
+    sessions.retain(|s| s.created_by == *username);
 
     // Filter by state if provided
     if let Some(state_filter) = query.state {
@@ -73,12 +85,27 @@ pub async fn list_sessions(
 pub async fn get_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Extension(_auth): Extension<AuthContext>,
+    Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
+    // Check session:get permission
+    check_api_permission(&auth, &state, &permissions::SESSION_GET, None)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to get session".to_string()))?;
+
     let session = Session::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    // Only allow access to own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only access your own sessions".to_string()));
+    }
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
@@ -88,55 +115,20 @@ pub async fn create_session(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Creating session: {:?}", req);
+    tracing::info!("Creating session with secrets: {} keys, instructions: {}, setup: {}", 
+        req.secrets.len(), 
+        req.instructions.is_some(), 
+        req.setup.is_some());
+
+    // Check session:create permission
+    check_api_permission(&auth, &state, &permissions::SESSION_CREATE, None)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to create session".to_string()))?;
 
     // Get the principal name
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
-    };
-
-    // Validate that ANTHROPIC_API_KEY exists in space secrets
-    let secret_exists = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM space_secrets WHERE space = ? AND key_name = 'ANTHROPIC_API_KEY'"
-    )
-    .bind(&req.space)
-    .fetch_one(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to check space secrets: {}", e)))?;
-
-    if secret_exists == 0 {
-        return Err(ApiError::BadRequest(
-            "ANTHROPIC_API_KEY secret is required in space before creating sessions. Add it with: /api POST spaces/{space}/secrets".to_string()
-        ));
-    }
-
-    // Validate that space has been built successfully
-    let latest_build = sqlx::query_as::<_, (String, Option<String>, String)>(
-        r#"
-        SELECT status, image_tag, build_id
-        FROM space_builds 
-        WHERE space = ? AND status = 'completed'
-        ORDER BY started_at DESC 
-        LIMIT 1
-        "#
-    )
-    .bind(&req.space)
-    .fetch_optional(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to check space build status: {}", e)))?;
-
-    let _space_image = match latest_build {
-        Some(build) => build.1.ok_or_else(|| {
-            ApiError::BadRequest(
-                format!("Space '{}' build completed but missing image tag. Please rebuild space.", req.space)
-            )
-        })?,
-        None => {
-            return Err(ApiError::BadRequest(
-                format!("Space '{}' must be built before creating sessions. Use: POST /spaces/{}/build", req.space, req.space)
-            ));
-        }
     };
 
     let session = Session::create(&state.db, req.clone(), created_by)
@@ -146,7 +138,13 @@ pub async fn create_session(
             ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
         })?;
 
-    // Add task to queue for session manager to create container
+    // Add task to queue for session manager to create container with session parameters
+    let payload = serde_json::json!({
+        "secrets": req.secrets,
+        "instructions": req.instructions,
+        "setup": req.setup
+    });
+
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
@@ -154,7 +152,7 @@ pub async fn create_session(
     )
     .bind(&session.id)
     .bind(created_by)
-    .bind(serde_json::json!({}))
+    .bind(payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
@@ -170,11 +168,26 @@ pub async fn remix_session(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<RemixSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Check if parent session exists
-    let _parent = Session::find_by_id(&state.db, &id)
+    // Check session:create permission (remixing creates a new session)
+    check_api_permission(&auth, &state, &permissions::SESSION_CREATE, None)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix session".to_string()))?;
+
+    // Check if parent session exists and user has access to it
+    let parent = Session::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch parent session: {}", e)))?
         .ok_or(ApiError::NotFound("Parent session not found".to_string()))?;
+
+    // Only allow remixing own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if parent.created_by != *username {
+        return Err(ApiError::Forbidden("Can only remix your own sessions".to_string()));
+    }
 
     let session = Session::remix(&state.db, &id, req)
         .await
@@ -305,15 +318,25 @@ pub async fn close_session(
         }
     };
     
-    tracing::info!("Found session in state: {} space: {}", session.state, session.space);
+    tracing::info!("Found session in state: {}", session.state);
 
-    // Check permission for updating sessions in the space
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
+    // Check permission for updating sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
         .await
         .map_err(|e| {
             tracing::error!("Permission check failed: {:?}", e);
             ApiError::Forbidden("Insufficient permissions to close session".to_string())
         })?;
+    
+    // Only allow closing own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only close your own sessions".to_string()));
+    }
     tracing::info!("Permission check passed");
 
     // Check current state - cannot suspend if already suspended or in error
@@ -383,10 +406,20 @@ pub async fn restore_session(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Check permission for updating sessions in the space
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
+    // Check permission for updating sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to restore session".to_string()))?;
+    
+    // Only allow restoring own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only restore your own sessions".to_string()));
+    }
 
     // Check current state - can only resume if suspended
     if session.state != crate::shared::models::constants::SESSION_STATE_CLOSED {
@@ -454,10 +487,20 @@ pub async fn update_session(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Check permission for updating sessions in the space
-    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, Some(&session.space))
+    // Check permission for updating sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE, None)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to update session".to_string()))?;
+    
+    // Only allow updating own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only update your own sessions".to_string()));
+    }
 
     let updated_session = Session::update(&state.db, &id, req)
         .await
@@ -513,10 +556,20 @@ pub async fn delete_session(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Check permission for deleting sessions in the space
-    check_api_permission(&auth, &state, &permissions::SESSION_DELETE, Some(&session.space))
+    // Check permission for deleting sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_DELETE, None)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete session".to_string()))?;
+    
+    // Only allow deleting own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
+    
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only delete your own sessions".to_string()));
+    }
 
     // Get the principal name
     let created_by = match &auth.principal {

@@ -7,7 +7,6 @@ use super::constants::SESSION_STATE_DELETED;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
     pub id: String,
-    pub space: String, // Name of space that owns this session
     pub created_by: String,
     pub state: String,
     pub container_id: Option<String>,
@@ -20,10 +19,14 @@ pub struct Session {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
-    #[serde(default = "default_space")]
-    pub space: String, // Name of space for this session
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub secrets: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub instructions: Option<String>,
+    #[serde(default)]
+    pub setup: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,48 +58,30 @@ fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }
 
-fn default_space() -> String {
-    "default".to_string()
-}
 
 
 // Database queries
 impl Session {
-    pub async fn find_all(pool: &sqlx::MySqlPool, space: Option<&str>) -> Result<Vec<Session>, sqlx::Error> {
-        let query = if let Some(space_id) = space {
-            sqlx::query_as::<_, Session>(
-                r#"
-                SELECT id, space, created_by, state,
-                       container_id, persistent_volume_id, parent_session_id,
-                       created_at,  last_activity_at,
-                       metadata
-                FROM sessions
-                WHERE space = ? AND state != 'deleted'
-                ORDER BY created_at DESC
-                "#
-            )
-            .bind(space_id)
-        } else {
-            sqlx::query_as::<_, Session>(
-                r#"
-                SELECT id, space, created_by, state,
-                       container_id, persistent_volume_id, parent_session_id,
-                       created_at,  last_activity_at,
-                       metadata
-                FROM sessions
-                WHERE state != 'deleted'
-                ORDER BY created_at DESC
-                "#
-            )
-        };
-        
-        query.fetch_all(pool).await
+    pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, created_by, state,
+                   container_id, persistent_volume_id, parent_session_id,
+                   created_at,  last_activity_at,
+                   metadata
+            FROM sessions
+            WHERE state != 'deleted'
+            ORDER BY created_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await
     }
 
     pub async fn find_by_id(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, space, created_by, state,
+            SELECT id, created_by, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at,  last_activity_at,
                    metadata
@@ -120,12 +105,11 @@ impl Session {
         // Insert the session
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, space, created_by, metadata)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sessions (id, created_by, metadata)
+            VALUES (?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
-        .bind(&req.space)
         .bind(created_by)
         .bind(&req.metadata)
         .execute(pool)
@@ -133,7 +117,6 @@ impl Session {
         
         // Fetch the created session
         let session = Self::find_by_id(pool, &session_id.to_string()).await?.unwrap();
-
 
         Ok(session)
     }
@@ -154,14 +137,13 @@ impl Session {
         sqlx::query(
             r#"
             INSERT INTO sessions (
-                id, space, created_by, 
+                id, created_by, 
                 parent_session_id, metadata
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
-        .bind(&parent.space) // Inherit space from parent
         .bind(&parent.created_by) // Inherit created_by from parent
         .bind(parent_id)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
@@ -170,7 +152,6 @@ impl Session {
         
         // Fetch the created session
         let session = Self::find_by_id(pool, &session_id.to_string()).await?.unwrap();
-
 
         Ok(session)
     }

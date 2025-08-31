@@ -1,5 +1,4 @@
 // Host agent modules
-mod agent_manager;
 mod api;
 mod claude;
 mod config;
@@ -9,7 +8,6 @@ mod message_handler;
 
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::{info, error, warn};
 
 pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
@@ -19,9 +17,6 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     
     // Use RAWORC_API_TOKEN from environment if available (set by operator), otherwise use provided api_key
     let api_token = std::env::var("RAWORC_API_TOKEN").unwrap_or_else(|_| api_key.to_string());
-    
-    // Get space name from environment (set by operator)
-    let _space = std::env::var("RAWORC_SPACE_ID").unwrap_or_else(|_| "default".to_string());
     
     // Get Claude API key from environment - ANTHROPIC_API_KEY is required
     let claude_api_key = std::env::var("ANTHROPIC_API_KEY")
@@ -50,18 +45,12 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
     
-    // Agent client no longer needed - using on-demand execution instead
-    
-    
-    // No preemptive deployment needed for on-demand execution
-    info!("Using on-demand agent execution - agents will be prepared when needed");
-    
     // Initialize session directories
     let session_dirs = [
         "/session",
-        "/session/agents", 
-        "/session/cache",
-        "/session/tmp"
+        "/session/code", 
+        "/session/data",
+        "/session/secrets"
     ];
     
     for dir in session_dirs.iter() {
@@ -70,31 +59,48 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
         }
     }
     
-    // Initialize agent manager
-    let mut agent_manager = agent_manager::AgentManager::new(api_client.clone(), claude_client.clone());
-    if let Err(e) = agent_manager.initialize().await {
-        warn!("Failed to initialize agent manager: {}, proceeding with Claude-only mode", e);
+    // Execute setup script if it exists
+    let setup_script = std::path::Path::new("/session/code/setup.sh");
+    if setup_script.exists() {
+        info!("Executing setup script: /session/code/setup.sh");
+        match std::process::Command::new("bash")
+            .arg("/session/code/setup.sh")
+            .current_dir("/session")
+            .output() 
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Setup script executed successfully");
+                    if !output.stdout.is_empty() {
+                        info!("Setup stdout: {}", String::from_utf8_lossy(&output.stdout));
+                    }
+                } else {
+                    error!("Setup script failed with exit code: {:?}", output.status.code());
+                    if !output.stderr.is_empty() {
+                        error!("Setup stderr: {}", String::from_utf8_lossy(&output.stderr));
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to execute setup script: {}", e);
+            }
+        }
+    } else {
+        info!("No setup script found at /session/code/setup.sh");
     }
-    let agent_manager = Arc::new(Mutex::new(agent_manager));
     
     // Set working directory to session directory
     if let Err(e) = std::env::set_current_dir("/session") {
         warn!("Failed to set working directory to /session: {}", e);
-        if let Err(set_err) = std::env::set_current_dir("/session") {
-            warn!("Failed to set working directory after creation: {}", set_err);
-        } else {
-            info!("Set working directory to /session");
-        }
     } else {
         info!("Set working directory to /session");
     }
 
-    // Initialize message handler
+    // Initialize message handler (simplified without agent manager)
     let message_handler = message_handler::MessageHandler::new(
         api_client.clone(),
         claude_client.clone(),
         guardrails.clone(),
-        agent_manager.clone(),
     );
 
     // Initialize processed message tracking to prevent reprocessing on restore
@@ -102,12 +108,7 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
         warn!("Failed to initialize processed tracking: {}, proceeding anyway", e);
     }
     
-    // Using Claude API directly for all processing
-    info!("Claude API client ready for message processing");
-    
     info!("Host agent initialized, starting message polling loop...");
-    
-    // No health monitoring needed for on-demand execution
     
     // Main polling loop
     loop {

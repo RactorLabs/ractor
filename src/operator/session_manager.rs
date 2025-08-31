@@ -159,6 +159,26 @@ impl SessionManager {
     pub async fn handle_create_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id.clone();
         
+        // Parse the payload to get session creation parameters
+        let secrets = task.payload.get("secrets")
+            .and_then(|v| v.as_object())
+            .map(|obj| {
+                obj.iter().map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
+                   .collect::<std::collections::HashMap<String, String>>()
+            })
+            .unwrap_or_default();
+            
+        let instructions = task.payload.get("instructions")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+            
+        let setup = task.payload.get("setup")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        
+        info!("Creating session {} with {} secrets, instructions: {}, setup: {}", 
+              session_id, secrets.len(), instructions.is_some(), setup.is_some());
+        
         // Check if this is a remix session (has parent_session_id)
         let session = sqlx::query_as::<_, (String, Option<String>)>(
             "SELECT id, parent_session_id FROM sessions WHERE id = ?"
@@ -177,8 +197,8 @@ impl SessionManager {
         } else {
             info!("Creating new session {}", session_id);
             
-            // For regular sessions, create container normally
-            self.docker_manager.create_container(&session_id).await?;
+            // For regular sessions, create container with session parameters
+            self.docker_manager.create_container_with_params(&session_id, secrets, instructions, setup).await?;
         }
         
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#)

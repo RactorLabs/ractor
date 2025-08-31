@@ -15,15 +15,19 @@ module.exports = (program) => {
   program
     .command('session')
     .description('Start an interactive AI agent session')
-    .option('-s, --space <space>', 'Space name for the session', 'default')
     .option('--restore <session-id>', 'Restore an existing session by ID')
     .option('--remix <session-id>', 'Create a new session remixing an existing session')
+    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs)')
+    .option('--instructions <file>', 'Path to instructions file')
+    .option('--setup <file>', 'Path to setup script file')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session                    # Start a new session\n' +
-      '  $ raworc session --space production # Start session in production space\n' +
-      '  $ raworc session --restore abc123   # Restore and continue existing session\n' +
-      '  $ raworc session --remix abc123     # Create new session based on existing one\n')
+      '  $ raworc session                           # Start a new session\n' +
+      '  $ raworc session --restore abc123         # Restore and continue existing session\n' +
+      '  $ raworc session --remix abc123           # Create new session based on existing one\n' +
+      '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
+      '  $ raworc session --instructions ./inst.md # Create session with instructions\n' +
+      '  $ raworc session --setup ./setup.sh       # Create session with setup script\n')
     .action(async (options) => {
       await sessionCommand(options);
     });
@@ -48,8 +52,18 @@ async function sessionCommand(options) {
   } else {
     console.log(chalk.gray('Mode:'), 'New Session');
   }
-  console.log(chalk.gray('Space:'), options.space);
   console.log(chalk.gray('User:'), authData.user?.username || 'Unknown');
+  
+  // Show session creation parameters if provided
+  if (options.secrets) {
+    console.log(chalk.gray('Secrets:'), 'Provided');
+  }
+  if (options.instructions) {
+    console.log(chalk.gray('Instructions:'), options.instructions);
+  }
+  if (options.setup) {
+    console.log(chalk.gray('Setup:'), options.setup);
+  }
   console.log();
 
   let sessionId = null;
@@ -104,7 +118,6 @@ async function sessionCommand(options) {
       
       // Show session info
       console.log(chalk.gray('Session state:'), session.state);
-      console.log(chalk.gray('Space:'), session.space || session.space_name || 'default');
       
       // If session is closed or idle, restore it
       if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
@@ -178,18 +191,53 @@ async function sessionCommand(options) {
       // Create a new session
       const spinner = ora('Creating session...').start();
       
-      const createResponse = await api.post('/sessions', {
-        space: options.space
-      });
+      // Prepare session creation payload
+      const sessionPayload = {};
+      
+      // Add secrets if provided
+      if (options.secrets) {
+        try {
+          sessionPayload.secrets = JSON.parse(options.secrets);
+        } catch (error) {
+          spinner.fail('Invalid secrets JSON format');
+          console.error(chalk.red('Error:'), 'Secrets must be valid JSON');
+          process.exit(1);
+        }
+      }
+      
+      // Add instructions if provided
+      if (options.instructions) {
+        try {
+          const fs = require('fs');
+          sessionPayload.instructions = fs.readFileSync(options.instructions, 'utf8');
+        } catch (error) {
+          spinner.fail('Failed to read instructions file');
+          console.error(chalk.red('Error:'), error.message);
+          process.exit(1);
+        }
+      }
+      
+      // Add setup script if provided
+      if (options.setup) {
+        try {
+          const fs = require('fs');
+          sessionPayload.setup = fs.readFileSync(options.setup, 'utf8');
+        } catch (error) {
+          spinner.fail('Failed to read setup script');
+          console.error(chalk.red('Error:'), error.message);
+          process.exit(1);
+        }
+      }
+      
+      const createResponse = await api.post('/sessions', sessionPayload);
       
       if (!createResponse.success) {
         spinner.fail('Failed to create session');
         console.error(chalk.red('Error:'), createResponse.error);
         
-        if (createResponse.status === 404) {
+        if (createResponse.status === 400) {
           console.log();
-          console.log(chalk.yellow('💡 Space may not exist. Available commands:'));
-          console.log('  • List spaces: ' + chalk.white('raworc api spaces'));
+          console.log(chalk.yellow('💡 Check if your session parameters are valid'));
         }
         
         process.exit(1);
@@ -303,7 +351,6 @@ async function chatLoop(sessionId) {
         console.log(chalk.blue('📊 Session Status'));
         console.log(chalk.gray('Session ID:'), sessionId);
         console.log(chalk.gray('Server:'), config.getServerUrl());
-        console.log(chalk.gray('Space:'), options?.space || 'default');
         console.log();
         continue;
       }

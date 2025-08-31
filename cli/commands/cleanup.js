@@ -43,8 +43,7 @@ module.exports = (program) => {
         console.log(chalk.yellow(`Found ${sessions.length} session(s):`));
         sessions.forEach((session, i) => {
           const status = session.state || session.status || 'unknown';
-          const space = session.space || 'unknown';
-          console.log(`  ${i + 1}. ${session.id} (${status}) in space '${space}'`);
+          console.log(`  ${i + 1}. ${session.id} (${status})`);
         });
 
         console.log();

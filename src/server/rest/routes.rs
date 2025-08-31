@@ -52,34 +52,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/messages", post(handlers::messages::create_message))
         .route("/sessions/{id}/messages/count", get(handlers::messages::get_message_count))
         .route("/sessions/{id}/messages", delete(handlers::messages::clear_messages))
-        // Space endpoints
-        .route("/spaces", get(handlers::spaces::list_spaces))
-        .route("/spaces", post(handlers::spaces::create_space))
-        .route("/spaces/{space}", get(handlers::spaces::get_space))
-        .route("/spaces/{space}", put(handlers::spaces::update_space))
-        .route("/spaces/{space}", delete(handlers::spaces::delete_space))
-        // Space secrets endpoints
-        .route("/spaces/{space}/secrets", get(handlers::space_secrets::list_space_secrets))
-        .route("/spaces/{space}/secrets", post(handlers::space_secrets::create_space_secret))
-        .route("/spaces/{space}/secrets/{key_name}", get(handlers::space_secrets::get_space_secret))
-        .route("/spaces/{space}/secrets/{key_name}", put(handlers::space_secrets::update_space_secret))
-        .route("/spaces/{space}/secrets/{key_name}", delete(handlers::space_secrets::delete_space_secret))
-        // Agent endpoints
-        .route("/spaces/{space}/agents", get(handlers::agents::list_space_agents))
-        .route("/spaces/{space}/agents", post(handlers::agents::create_agent))
-        .route("/spaces/{space}/agents/{name}", get(handlers::agents::get_agent))
-        .route("/spaces/{space}/agents/{name}", put(handlers::agents::update_agent))
-        .route("/spaces/{space}/agents/{name}", delete(handlers::agents::delete_agent))
-        .route("/spaces/{space}/agents/{name}/status", axum::routing::patch(handlers::agents::update_agent_status))
-        .route("/spaces/{space}/agents/{name}/deploy", post(handlers::agents::deploy_agent))
-        .route("/spaces/{space}/agents/{name}/stop", post(handlers::agents::stop_agent))
-        .route("/spaces/{space}/agents/running", get(handlers::agents::list_running_agents))
-        // Agent logs endpoint
-        .route("/spaces/{space}/agents/{name}/logs", get(handlers::agent_logs::get_agent_logs))
-        // Space build endpoints
-        .route("/spaces/{space}/build", post(handlers::space_build::build_space))
-        .route("/spaces/{space}/build/latest", get(handlers::space_build::get_latest_build))
-        .route("/spaces/{space}/build/{build_id}", get(handlers::space_build::get_build_status))
         .layer(middleware::from_fn_with_state(state.clone(), auth_middleware));
 
     let api_routes = public_routes.merge(protected_routes).with_state(state.clone());

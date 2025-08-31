@@ -5,13 +5,9 @@ pub mod session;
 pub mod message;
 pub mod constants;
 pub mod state_helpers;
-pub mod space;
-pub mod agent;
 
 pub use session::{Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionStateRequest, UpdateSessionRequest};
 pub use message::{SessionMessage, CreateMessageRequest, MessageResponse, ListMessagesQuery};
-pub use space::{Space, SpaceSecretWithValue};
-pub use agent::{Agent, CreateAgentRequest, UpdateAgentRequest, AgentStatusUpdate};
 
 // Database errors
 #[derive(Error, Debug)]

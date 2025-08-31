@@ -59,7 +59,7 @@ module.exports = (program) => {
         console.log(chalk.yellow('  - Remove ALL Raworc containers (session, server, operator, mysql)'));
 
         if (!options.servicesOnly) {
-          console.log(chalk.yellow('  - Remove ALL Raworc images (including space images)'));
+          console.log(chalk.yellow('  - Remove ALL Raworc images'));
           console.log(chalk.yellow('  - Remove ALL Docker volumes'));
           console.log(chalk.yellow('  - Remove unused Docker networks'));
           console.log(chalk.yellow('  - Clean up build cache'));
@@ -138,7 +138,7 @@ module.exports = (program) => {
           return;
         }
 
-        // Step 3: Remove ALL raworc images (including space images)
+        // Step 3: Remove ALL raworc images
         console.log();
         const imageSpinner = ora('[3/8] Removing ALL raworc images...').start();
 

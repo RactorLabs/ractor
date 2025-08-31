@@ -168,7 +168,7 @@ async function loginCommand(options) {
       console.log();
       console.log(chalk.cyan('Next steps:'));
       console.log('  • Check health: ' + chalk.white('raworc api health'));
-      console.log('  • List spaces: ' + chalk.white('raworc api spaces'));
+      console.log('  • List sessions: ' + chalk.white('raworc api sessions'));
       console.log('  • Start session: ' + chalk.white('raworc session'));
 
     } else {
