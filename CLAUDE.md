@@ -452,8 +452,8 @@ You: /quit
 **Session Interface:**
 - **Conversational Control**: Send natural language requests to control the computer
 - **Clean Interface**: Simple "You:" prompt for requests, "Agent:" for computer responses
-- **Real-time Feedback**: Shows spinner while the agent works on your computer (60s timeout)
-- **Turn-based**: Send request → agent performs work → send next request
+- **Real-time Feedback**: Shows spinner while the Host works on your computer (60s timeout)
+- **Turn-based**: Send request → Host performs work → send next request
 - **Session Cleanup**: Computer sessions are automatically cleaned up when you quit (via /quit, /q, or /exit)
 - **Session Commands**: /status (show session info), /quit (end session)
 
@@ -523,7 +523,7 @@ raworc api sessions/{session-id}/messages
 raworc api sessions/{session-id}/messages?limit=10
 ```
 
-The computer agent will receive your request, perform the work using full computer access (file operations, web browsing, software installation), and respond with results. In the interactive session interface, computer responses appear automatically in real-time. All interactions are persistent and viewable through the API.
+The Host will receive your request, perform the work using full computer access (file operations, web browsing, software installation), and respond with results. In the interactive session interface, Host responses appear automatically in real-time. All interactions are persistent and viewable through the API.
 
 ### Session Operations via API
 
