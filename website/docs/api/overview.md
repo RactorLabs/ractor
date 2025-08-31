@@ -72,25 +72,6 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/service-accounts/{id}`](./rest-api#delete-service-accountsid) | DELETE | Delete service account |
 | [`/service-accounts/{id}/password`](./rest-api#put-service-accountsidpassword) | PUT | Update service account password |
 
-### Roles
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/roles`](./rest-api#get-roles) | GET | List all roles |
-| [`/roles`](./rest-api#post-roles) | POST | Create new role |
-| [`/roles/{id}`](./rest-api#get-rolesid) | GET | Get specific role |
-| [`/roles/{id}`](./rest-api#delete-rolesid) | DELETE | Delete role |
-
-### Role Bindings
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/role-bindings`](./rest-api#get-role-bindings) | GET | List all role bindings |
-| [`/role-bindings`](./rest-api#post-role-bindings) | POST | Create new role binding |
-| [`/role-bindings/{id}`](./rest-api#get-role-bindingsid) | GET | Get specific role binding |
-| [`/role-bindings/{id}`](./rest-api#delete-role-bindingsid) | DELETE | Delete role binding |
-
-
 ### Host Sessions
 
 | Endpoint | Method | Description |
@@ -186,7 +167,6 @@ List endpoints support pagination:
 ```
 GET /sessions?limit=20&offset=0
 GET /service-accounts?limit=50&offset=100
-GET /spaces?limit=10&offset=0
 ```
 
 **Parameters**:

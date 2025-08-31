@@ -77,31 +77,6 @@ pub mod permissions {
     pub const SERVICE_ACCOUNT_DELETE: PermissionRequirement = 
         PermissionRequirement::new("api", "service-accounts", "delete");
 
-    // Role permissions
-    pub const ROLE_LIST: PermissionRequirement = 
-        PermissionRequirement::new("api", "roles", "list");
-    pub const ROLE_GET: PermissionRequirement = 
-        PermissionRequirement::new("api", "roles", "get");
-    pub const ROLE_CREATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "roles", "create");
-    #[allow(dead_code)]
-    pub const ROLE_UPDATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "roles", "update");
-    pub const ROLE_DELETE: PermissionRequirement = 
-        PermissionRequirement::new("api", "roles", "delete");
-
-    // Role Binding permissions
-    pub const ROLE_BINDING_LIST: PermissionRequirement = 
-        PermissionRequirement::new("api", "role-bindings", "list");
-    pub const ROLE_BINDING_GET: PermissionRequirement = 
-        PermissionRequirement::new("api", "role-bindings", "get");
-    pub const ROLE_BINDING_CREATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "role-bindings", "create");
-    #[allow(dead_code)]
-    pub const ROLE_BINDING_UPDATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "role-bindings", "update");
-    pub const ROLE_BINDING_DELETE: PermissionRequirement = 
-        PermissionRequirement::new("api", "role-bindings", "delete");
 
     // Session permissions
     #[allow(dead_code)]

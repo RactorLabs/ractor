@@ -27,16 +27,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/service-accounts/{id}", put(handlers::service_accounts::update_service_account))
         .route("/service-accounts/{id}", delete(handlers::service_accounts::delete_service_account))
         .route("/service-accounts/{id}/password", put(handlers::service_accounts::update_service_account_password))
-        // Role endpoints
-        .route("/roles", get(handlers::roles::list_roles))
-        .route("/roles", post(handlers::roles::create_role))
-        .route("/roles/{id}", get(handlers::roles::get_role))
-        .route("/roles/{id}", delete(handlers::roles::delete_role))
-        // Role binding endpoints
-        .route("/role-bindings", get(handlers::role_bindings::list_role_bindings))
-        .route("/role-bindings", post(handlers::role_bindings::create_role_binding))
-        .route("/role-bindings/{id}", get(handlers::role_bindings::get_role_binding))
-        .route("/role-bindings/{id}", delete(handlers::role_bindings::delete_role_binding))
         // Session endpoints
         .route("/sessions", get(handlers::sessions::list_sessions))
         .route("/sessions", post(handlers::sessions::create_session))

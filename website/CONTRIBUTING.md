@@ -28,7 +28,6 @@ Optional longer description explaining the change.
 ```
 feat: add session pause/resume functionality
 fix: resolve container cleanup race condition
-docs: update API reference for space management
 refactor: extract authentication middleware
 test: add integration tests for agent deployment
 chore: update Docker base images to latest
@@ -139,3 +138,4 @@ chore/update-docker-images
 - Ask questions in pull request comments
 
 Thank you for contributing to Raworc!
+
