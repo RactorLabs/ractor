@@ -15,6 +15,14 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     tracing::info!("Connecting to API: {}", api_url);
     tracing::info!("Session ID: {}", session_id);
     
+    // Log which principal this Host is running as
+    if let Ok(principal) = std::env::var("RAWORC_PRINCIPAL") {
+        let principal_type = std::env::var("RAWORC_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
+        tracing::info!("Running as principal: {} ({})", principal, principal_type);
+    } else {
+        tracing::info!("Running as operator principal");
+    }
+    
     // Use RAWORC_API_TOKEN from environment if available (set by operator), otherwise use provided api_key
     let api_token = std::env::var("RAWORC_API_TOKEN").unwrap_or_else(|_| api_key.to_string());
     

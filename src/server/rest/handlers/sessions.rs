@@ -148,7 +148,12 @@ pub async fn create_session(
     let payload = serde_json::json!({
         "secrets": req.secrets,
         "instructions": req.instructions,
-        "setup": req.setup
+        "setup": req.setup,
+        "principal": created_by,
+        "principal_type": match &auth.principal {
+            crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
+            crate::shared::rbac::AuthPrincipal::ServiceAccount(_) => "ServiceAccount",
+        }
     });
 
     sqlx::query(r#"
