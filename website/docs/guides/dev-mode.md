@@ -188,11 +188,11 @@ The Coding Agent can work with existing codebases:
 raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 You: "Clone the LangGraph repository and show me how to build a customer service agent"
-Coding Agent: I'll clone the LangGraph repo and guide you through building a customer service agent...
+Host: I'll clone the LangGraph repo and guide you through building a customer service agent...
 [Agent clones repo, analyzes structure, creates example]
 
 You: "Now deploy this as a REST API"
-Coding Agent: I'll create a FastAPI wrapper for your LangGraph agent...
+Host: I'll create a FastAPI wrapper for your LangGraph agent...
 [Agent builds deployment code]
 ```
 
@@ -202,11 +202,11 @@ Explore and learn frameworks interactively:
 
 ```bash
 You: "Check out the CrewAI repository and build a content creation team"
-Coding Agent: I'll explore CrewAI and build a content creation team for you...
+Host: I'll explore CrewAI and build a content creation team for you...
 [Agent clones CrewAI, studies examples, builds custom team]
 
 You: "Compare this approach with AutoGen for the same task"
-Coding Agent: Let me clone AutoGen and show you how to accomplish the same task...
+Host: Let me clone AutoGen and show you how to accomplish the same task...
 [Agent compares frameworks and shows differences]
 ```
 

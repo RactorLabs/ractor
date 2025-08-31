@@ -159,11 +159,11 @@ class DockerManager {
           '-v', 'operator_data:/var/lib/raworc/volumes',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
-          '-e', `HOST_AGENT_IMAGE=${this.images.host}`,
-          '-e', 'HOST_AGENT_CPU_LIMIT=0.5',
-          '-e', 'HOST_AGENT_MEMORY_LIMIT=536870912',
-          '-e', 'HOST_AGENT_DISK_LIMIT=1073741824',
-          '-e', 'HOST_AGENT_VOLUMES_PATH=/var/lib/raworc/volumes',
+          '-e', `HOST_IMAGE=${this.images.host}`,
+          '-e', 'HOST_CPU_LIMIT=0.5',
+          '-e', 'HOST_MEMORY_LIMIT=536870912',
+          '-e', 'HOST_DISK_LIMIT=1073741824',
+          '-e', 'HOST_VOLUMES_PATH=/var/lib/raworc/volumes',
           '-e', 'RUST_LOG=info',
           this.images.operator
         ]);

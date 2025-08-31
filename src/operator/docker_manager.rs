@@ -24,13 +24,13 @@ impl DockerManager {
         Self {
             docker,
             db_pool,
-            host_image: std::env::var("HOST_AGENT_IMAGE")
+            host_image: std::env::var("HOST_IMAGE")
                 .unwrap_or_else(|_| "raworc_host:latest".to_string()),
-            cpu_limit: std::env::var("HOST_AGENT_CPU_LIMIT")
+            cpu_limit: std::env::var("HOST_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
                 .unwrap_or(0.5),
-            memory_limit: std::env::var("HOST_AGENT_MEMORY_LIMIT")
+            memory_limit: std::env::var("HOST_MEMORY_LIMIT")
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),

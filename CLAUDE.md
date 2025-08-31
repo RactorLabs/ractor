@@ -439,11 +439,11 @@ raworc session
 # In session interface:
 You: Hello, can you help me automate some tasks?
 ⠋ Waiting for host response...
-Agent: Hello! I'm ready to help automate your work. I have full access to this computer and can help with file management, web tasks, development work, and more. What would you like to automate?
+Host: Hello! I'm ready to help automate your work. I have full access to this computer and can help with file management, web tasks, development work, and more. What would you like to automate?
 
 You: Please create a Python script to process CSV files in the current directory
 ⠋ Waiting for host response...
-Agent: I'll create a Python script to process CSV files. Let me check what's in the current directory and create an appropriate script for you...
+Host: I'll create a Python script to process CSV files. Let me check what's in the current directory and create an appropriate script for you...
 
 You: /quit
 👋 Ending session...
@@ -451,7 +451,7 @@ You: /quit
 
 **Session Interface:**
 - **Conversational Control**: Send natural language requests to control the computer
-- **Clean Interface**: Simple "You:" prompt for requests, "Agent:" for computer responses
+- **Clean Interface**: Simple "You:" prompt for requests, "Host:" for computer responses
 - **Real-time Feedback**: Shows spinner while the Host works on your computer (60s timeout)
 - **Turn-based**: Send request → Host performs work → send next request
 - **Session Cleanup**: Computer sessions are automatically cleaned up when you quit (via /quit, /q, or /exit)
