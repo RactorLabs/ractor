@@ -28,7 +28,7 @@ impl MessageHandler {
         }
     }
 
-    /// Find which user messages already have agent responses to avoid reprocessing.
+    /// Find which user messages already have Host responses to avoid reprocessing.
     /// Simple and reliable approach for both fresh and restored sessions.
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!("Initializing processed message tracking...");
@@ -40,21 +40,21 @@ impl MessageHandler {
             return Ok(());
         }
 
-        // Find user messages that have corresponding agent responses
-        // Simple approach: if there are any agent messages, assume all previous user messages have responses
+        // Find user messages that have corresponding Host responses
+        // Simple approach: if there are any Host messages, assume all previous user messages have responses
         let mut user_messages_with_responses = HashSet::new();
         
-        // Collect all user and agent message IDs first
+        // Collect all user and Host message IDs first
         let mut user_messages = Vec::new();
-        let mut agent_count = 0;
+        let mut host_count = 0;
         
         for message in &all_messages {
             match message.role {
                 MessageRole::User => {
                     user_messages.push(message.id.clone());
                 },
-                MessageRole::Agent => {
-                    agent_count += 1;
+                MessageRole::Host => {
+                    host_count += 1;
                 },
                 MessageRole::System => {
                     // System messages don't affect counting
@@ -62,15 +62,15 @@ impl MessageHandler {
             }
         }
         
-        // Mark the first N user messages as having responses (where N = agent_count)
+        // Mark the first N user messages as having responses (where N = host_count)
         for (i, user_msg_id) in user_messages.iter().enumerate() {
-            if i < agent_count {
+            if i < host_count {
                 user_messages_with_responses.insert(user_msg_id.clone());
             }
         }
         
-        info!("Found {} user messages, {} agent responses, marking first {} user messages as processed", 
-              user_messages.len(), agent_count, user_messages_with_responses.len());
+        info!("Found {} user messages, {} Host responses, marking first {} user messages as processed", 
+              user_messages.len(), host_count, user_messages_with_responses.len());
 
         // Mark user messages that have responses as processed
         let mut processed = self.processed_user_message_ids.lock().await;
@@ -93,15 +93,15 @@ impl MessageHandler {
         // Find user messages that need processing (much simpler approach)
         let mut unprocessed_user_messages = Vec::new();
         
-        // Simple logic: check if each user message has an agent message after it
+        // Simple logic: check if each user message has a Host message after it
         for (i, message) in recent_messages.iter().enumerate() {
             if message.role == MessageRole::User {
-                // Check if the next message is an agent response
+                // Check if the next message is a Host response
                 let has_immediate_response = i + 1 < recent_messages.len() 
-                    && recent_messages[i + 1].role == MessageRole::Agent;
+                    && recent_messages[i + 1].role == MessageRole::Host;
                 
                 
-                // Only process if no immediate agent response and not already processed
+                // Only process if no immediate Host response and not already processed
                 let processed_ids = self.processed_user_message_ids.lock().await;
                 let already_processed = processed_ids.contains(&message.id);
                 drop(processed_ids);
@@ -190,7 +190,7 @@ impl MessageHandler {
                 let fallback_response = format!(
                     "I'm currently experiencing technical difficulties with my AI processing. Here's what I can tell you:\n\n\
                     Your message was: \"{}\"\n\n\
-                    I'm a Raworc host agent designed to help with various tasks including:\n\
+                    I'm a Raworc Host (Computer Use Agent) designed to help with various tasks including:\n\
                     - Code generation and analysis\n\
                     - File operations\n\
                     - Session management\n\n\
@@ -228,11 +228,11 @@ impl MessageHandler {
         let history: Vec<_> = messages
             .iter()
             .filter(|m| m.id != current_id)
-            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
+            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Host)
             .map(|m| {
                 let role = match m.role {
                     MessageRole::User => MESSAGE_ROLE_USER,
-                    MessageRole::Agent => "assistant", // Claude expects "assistant" not "agent"  
+                    MessageRole::Host => "assistant", // Claude expects "assistant" not "host"  
                     _ => MESSAGE_ROLE_USER,
                 };
                 (role.to_string(), m.content.clone())
@@ -279,7 +279,7 @@ Guidelines:
 Current session context:
 - This is an isolated session environment with persistent storage
 - Messages are persisted in the Raworc system
-- You're operating as the host agent within this session
+- You're operating as the Host (Computer Use Agent) within this session
 - Your session persists between container restarts"#
         );
 

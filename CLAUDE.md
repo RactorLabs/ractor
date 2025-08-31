@@ -693,7 +693,7 @@ raworc/
 ├── src/           # Rust source code
 │   ├── api/       # API server code
 │   ├── operator/  # Operator service
-│   └── host/      # Host agent for containers
+│   └── host/      # Host (Computer Use Agent) for containers
 ├── cli/           # Node.js CLI implementation (npm package)
 ├── scripts/       # Shell scripts for development workflow
 ├── migrations/    # Database migrations
@@ -707,7 +707,7 @@ raworc/
 - `scripts/` - Shell scripts for development workflow (build, start, stop, link, etc.)
 - `src/api/server.rs` - Rust API server implementation
 - `src/operator/main.rs` - Rust Operator service
-- `src/host/agent.rs` - Rust Container host agent
+- `src/host/` - Rust Host (Computer Use Agent)
 - `docker-compose.yml` - Service orchestration
 
 ### Code Patterns and Conventions

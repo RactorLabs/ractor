@@ -144,7 +144,7 @@ raworc api sessions -m post -b '{
 1. Validate ANTHROPIC_API_KEY is provided in secrets
 2. Generate UUID and create session record with `init` state
 3. Operator detects new session and spawns container
-4. Container mounts persistent volume and starts host agent
+4. Container mounts persistent volume and starts Host
 5. Setup script executed if provided
 6. Session transitions to `idle` state when ready
 
@@ -156,7 +156,7 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 **Flow:**
 1. Message stored in database with `user` role
 2. Session state transitions to `busy`
-3. Host agent polls and receives message
+3. Host polls and receives message
 4. Agent executes using AI capabilities and computer-use tools
 5. Response stored with `assistant` role
 6. Session returns to `idle` state
@@ -180,7 +180,7 @@ raworc api sessions/{session-id}/restore -m post
 **Flow:**
 1. New container created from host image
 2. Persistent volume remounted with preserved state
-3. Host agent initializes and resumes message polling
+3. Host initializes and resumes message polling
 4. **No reprocessing** - Only new messages after restore are handled
 5. Session returns to `idle` state (~3-5 seconds)
 

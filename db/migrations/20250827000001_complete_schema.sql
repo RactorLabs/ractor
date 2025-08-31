@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS session_messages (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     session_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'agent', 'system')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'host', 'system')),
     content TEXT NOT NULL,
     metadata JSON DEFAULT ('{}'),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

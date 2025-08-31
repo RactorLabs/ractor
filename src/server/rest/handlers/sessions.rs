@@ -461,7 +461,7 @@ pub async fn update_session_state(
     Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // For operator service accounts, allow state updates without permission checks
-    // This is needed for the host agent to update session states
+    // This is needed for the Host to update session states
     
     // Just update the state directly - operators manage containers and need this access
     let result = sqlx::query(

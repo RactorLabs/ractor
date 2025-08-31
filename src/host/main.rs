@@ -8,7 +8,7 @@ mod host;
 
 #[derive(Parser)]
 #[command(name = "raworc-host")]
-#[command(about = "Raworc Host Agent - runs inside session containers")]
+#[command(about = "Raworc Host - Computer Use Agent inside session containers")]
 struct Args {
     /// API server URL
     #[arg(long, env = "RAWORC_API_URL")]
@@ -30,6 +30,6 @@ async fn main() -> Result<()> {
     // Initialize service logging
     let _ = logging::init_service_logging("/app/logs", "raworc_host");
     
-    // Run the host agent
+    // Run the Host (Computer Use Agent)
     host::run(&args.api_url, &args.session_id, &args.api_key).await
 }

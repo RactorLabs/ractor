@@ -1,4 +1,4 @@
-// Host agent modules
+// Host (Computer Use Agent) modules
 mod api;
 mod claude;
 mod config;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tracing::{info, error, warn};
 
 pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
-    tracing::info!("Starting Raworc Host Agent...");
+    tracing::info!("Starting Raworc Host...");
     tracing::info!("Connecting to API: {}", api_url);
     tracing::info!("Session ID: {}", session_id);
     
@@ -96,7 +96,7 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
         info!("Set working directory to /session");
     }
 
-    // Initialize message handler (simplified without agent manager)
+    // Initialize message handler
     let message_handler = message_handler::MessageHandler::new(
         api_client.clone(),
         claude_client.clone(),
@@ -108,7 +108,7 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
         warn!("Failed to initialize processed tracking: {}, proceeding anyway", e);
     }
     
-    info!("Host agent initialized, starting message polling loop...");
+    info!("Host initialized, starting message polling loop...");
     
     // Main polling loop
     loop {

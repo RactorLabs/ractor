@@ -14,7 +14,7 @@ pub use constants::*;
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     User,
-    Agent,
+    Host,
     System,
 }
 
@@ -106,7 +106,7 @@ impl RaworcClient {
         }
     }
     
-    /// Send a message as the agent
+    /// Send a message as the Host
     pub async fn send_message(
         &self,
         content: String,
@@ -119,7 +119,7 @@ impl RaworcClient {
         );
         
         let request = CreateMessageRequest {
-            role: MessageRole::Agent,
+            role: MessageRole::Host,
             content,
             metadata,
         };

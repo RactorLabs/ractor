@@ -8,5 +8,5 @@ pub const SESSION_STATE_DELETED: &str = "deleted";
 
 // Message role constants
 pub const MESSAGE_ROLE_USER: &str = "user";
-pub const MESSAGE_ROLE_AGENT: &str = "agent";
+pub const MESSAGE_ROLE_HOST: &str = "host";
 pub const MESSAGE_ROLE_SYSTEM: &str = "system";
