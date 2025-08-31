@@ -5,7 +5,7 @@ title: CLI Usage Guide
 
 # Using the Raworc CLI
 
-The Raworc CLI provides complete command-line access to all functionality for managing AI agent deployments, spaces, sessions, and runtime operations. This guide covers everything you need to know about using the CLI effectively.
+The Raworc CLI provides complete command-line access to all functionality for managing AI agent sessions and runtime operations. This guide covers everything you need to know about using the CLI effectively.
 
 ## Prerequisites
 
@@ -63,99 +63,37 @@ raworc auth
 raworc api health
 ```
 
-## 3. Space Setup
-
-Set up spaces and secrets for your projects:
-
-### Space Operations
-
-```bash
-# List all spaces (default space always exists)
-raworc api spaces
-
-# Get specific space details
-raworc api spaces/default
-
-# Create new space (admin only)
-raworc api spaces -m post -b '{
-  "name": "staging",
-  "description": "Staging environment",
-  "settings": {
-    "environment": "staging"
-  }
-}'
-```
-
-### Essential: Set up API Keys
-
-```bash
-# Add your Anthropic API key (required for AI functionality)
-raworc api spaces/default/secrets -m post -b '{
-  "key_name": "ANTHROPIC_API_KEY",
-  "value": "sk-ant-your-actual-key",
-  "description": "Claude API key"
-}'
-
-# Add other API keys as needed
-raworc api spaces/default/secrets -m post -b '{
-  "key_name": "OPENAI_API_KEY",
-  "value": "sk-your-openai-key",
-  "description": "OpenAI API key"
-}'
-```
-
-### Manage Secrets
-
-```bash
-# List secrets (metadata only)
-raworc api spaces/default/secrets
-
-# List secrets with values (requires permissions)
-raworc api "spaces/default/secrets?show_values=true"
-
-# Update secret value
-raworc api spaces/default/secrets/API_KEY -m put -b '{"value":"new-secret-value"}'
-
-# Delete secret
-raworc api spaces/default/secrets/API_KEY -m delete
-```
-
-## 4. Agent Management
-
-Deploy custom agents to enhance functionality:
-
-```bash
-# List agents in space
-raworc api spaces/default/agents
-
-# Add a demo agent
-raworc api spaces/default/agents -m post -b '{
-  "name": "data-analyzer",
-  "description": "Data analysis specialist", 
-  "purpose": "analyze data, create visualizations, statistical analysis",
-  "source_repo": "Raworc/raworc-agent-python-demo",
-  "source_branch": "main"
-}'
-
-# Trigger space build (required after adding agents)
-raworc api spaces/default/build -m post
-
-# Check build status
-raworc api spaces/default/build/latest
-```
-
-## 5. Session Management
+## 3. Session Management
 
 Create and manage AI agent sessions:
 
-### Interactive Sessions
+### Interactive Sessions (Recommended)
 
 ```bash
-# Start interactive session (easiest way)
-raworc session
+# Start session with API key (REQUIRED for new sessions)
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
 
-# Start session in specific space
-raworc session --space production
+# Note: ANTHROPIC_API_KEY is required for all new sessions
+
+# Start session with instructions
+raworc session --instructions "You are a helpful coding assistant"
+
+# Start session with setup script
+raworc session --setup "pip install pandas numpy matplotlib"
+
+# Full configuration
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --instructions "You are a data analyst assistant" \
+  --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
+
+# Restore previous session
+raworc session --restore abc123-def456-789
+
+# Create remix from existing session
+raworc session --remix abc123-def456-789
+raworc session --remix abc123-def456-789 --data false    # Don't copy data files
+raworc session --remix abc123-def456-789 --code false    # Don't copy code files
 
 # In session interface:
 # - Type messages directly: "Hello, help me write Python code"
@@ -166,8 +104,18 @@ raworc session --space production
 ### API-based Session Management
 
 ```bash
-# Create new session
-raworc api sessions -m post -b '{"space":"default"}'
+# Create new session (requires ANTHROPIC_API_KEY)
+raworc api sessions -m post -b '{"secrets":{"ANTHROPIC_API_KEY":"sk-ant-your-key"}}'
+
+# Create session with configuration
+raworc api sessions -m post -b '{
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key",
+    "DATABASE_URL": "mysql://user:pass@host/db"
+  },
+  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
+}'
 
 # List all sessions
 raworc api sessions
@@ -184,45 +132,145 @@ raworc api sessions/{session-id}/messages
 # Get latest messages (limit to last 10)
 raworc api "sessions/{session-id}/messages?limit=10"
 
-# Close session (saves resources)
+# Close session (saves resources, preserves data)
 raworc api sessions/{session-id}/close -m post
 
-# Restore session
+# Restore closed session
 raworc api sessions/{session-id}/restore -m post
 
-# Terminate session
+# Create remix from session
+raworc api sessions/{session-id}/remix -m post -b '{
+  "data": true,
+  "code": true,
+  "secrets": false
+}'
+
+# Terminate session permanently
 raworc api sessions/{session-id} -m delete
 ```
 
-## Advanced Operations
+## 4. Session Configuration Options
 
-### Space Management
+### Secrets Configuration
+
+Pass environment variables and API keys to sessions:
 
 ```bash
-# Update space (admin only)
-raworc api spaces/staging -m put -b '{"description":"Updated staging space"}'
+# Single secret
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
 
-# Delete space (admin only)
-raworc api spaces/staging -m delete
+# Multiple secrets
+raworc session --secrets '{
+  "ANTHROPIC_API_KEY": "sk-ant-your-key",
+  "DATABASE_URL": "mysql://user:pass@host/db",
+  "OPENAI_API_KEY": "sk-your-openai-key"
+}'
 ```
 
-### Multi-Environment Setup
+### Instructions Configuration
+
+Provide system instructions for the AI agent:
 
 ```bash
-# Create production space
-raworc api spaces -m post -b '{
-  "name": "production",
-  "description": "Production environment"
-}'
+# Inline instructions
+raworc session --instructions "You are a helpful coding assistant specialized in Python"
 
-# Set production secrets
-raworc api spaces/production/secrets -m post -b '{
-  "key_name": "ANTHROPIC_API_KEY",
-  "value": "sk-ant-production-key"
-}'
+# Instructions from file
+raworc session --instructions ./my-instructions.md
+```
 
-# Use production space
-raworc session --space production
+### Setup Script Configuration
+
+Run initialization commands in the session container:
+
+```bash
+# Inline setup
+raworc session --setup "pip install pandas numpy matplotlib"
+
+# Multi-line setup
+raworc session --setup "#!/bin/bash
+echo 'Setting up development environment'
+apt-get update
+apt-get install -y curl git
+pip install pandas numpy matplotlib jupyter"
+
+# Setup from file
+raworc session --setup ./setup.sh
+```
+
+## 5. Session Remix (Advanced)
+
+Create new sessions based on existing ones with selective copying:
+
+```bash
+# Default remix (copies everything)
+raworc session --remix {source-session-id}
+
+# Selective copying
+raworc session --remix {source-session-id} --data false      # Skip data files
+raworc session --remix {source-session-id} --code false      # Skip code files
+
+# Combination
+raworc session --remix {source-session-id} --data false --code false
+
+# API version with selective copying
+raworc api sessions/{source-session-id}/remix -m post -b '{
+  "metadata": {
+    "remixed_from": "{source-session-id}",
+    "purpose": "experiment with new approach"
+  },
+  "data": true,
+  "code": false
+}'
+```
+
+### Remix Use Cases
+
+- **Experimentation**: Try different approaches from same starting point
+- **Template Sessions**: Create base sessions and remix for new projects
+- **A/B Testing**: Compare different configurations from same baseline
+
+## 6. System Maintenance
+
+### Cleanup Operations
+
+```bash
+# Clean up all sessions
+raworc cleanup --yes
+
+# Complete system reset
+raworc reset --yes
+
+# Stop services with cleanup
+raworc stop --cleanup
+```
+
+### Update Operations
+
+```bash
+# Pull latest CLI and images
+raworc pull
+
+# Only update CLI
+raworc pull --cli-only
+
+# Only pull Docker images
+raworc pull --images-only
+```
+
+### Troubleshooting
+
+```bash
+# Check system health
+raworc api health
+
+# View service logs
+docker logs raworc_server
+docker logs raworc_operator
+docker logs raworc_mysql
+
+# Restart services
+raworc start --restart
 ```
 
 ## Error Handling
@@ -274,15 +322,58 @@ Common error responses and solutions:
 - Sessions persist until explicitly deleted
 - Interactive sessions auto-cleanup on exit (`/quit`)
 - Use close/restore for long-running sessions to save resources
+- **Always include `ANTHROPIC_API_KEY` secret for AI functionality** - this is required for all new sessions
 
 ### Performance Tips
 - Use `raworc start --pull` to ensure latest images
-- Pause unused sessions to save system resources
+- Close unused sessions to save system resources
 - Use `raworc stop --cleanup` for complete cleanup
+- Use selective remix to avoid copying unnecessary data
+
+### Security Best Practices
+- Never commit secrets to version control
+- Use file-based instructions/setup instead of inline for complex configurations
+- Use selective remix to avoid copying unnecessary files
+- Regularly clean up old sessions
+
+## Common Workflows
+
+### Development Environment Setup
+
+```bash
+# Start services
+raworc start
+
+# Authenticate
+raworc auth login --user admin --pass admin
+
+# Create coding session
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+  --instructions "You are a senior developer assistant" \
+  --setup "pip install black flake8 pytest"
+```
+
+### Data Analysis Session
+
+```bash
+# Create data science session
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db"}' \
+  --instructions "You are a data scientist assistant" \
+  --setup "pip install pandas numpy matplotlib seaborn jupyter"
+```
+
+### Quick Testing
+
+```bash
+# Minimal session for quick tasks (ANTHROPIC_API_KEY is required)
+raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+```
 
 ## Next Steps
 
+- [Sessions Concepts](/docs/concepts/sessions) - Understanding session architecture
 - [Complete API Reference](/docs/api/rest-api) - Full REST API documentation  
-- [Bring Your Own Agent](/docs/guides/bring-your-own-agent) - Deploy custom agents
 - [Architecture Overview](/docs/concepts/architecture) - Understanding system design
 - [Troubleshooting](/docs/guides/troubleshooting) - Solve common issues

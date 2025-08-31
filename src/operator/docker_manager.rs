@@ -313,11 +313,10 @@ echo 'Session directories created'
         session_id: &str, 
         parent_session_id: &str,
         copy_data: bool,
-        copy_code: bool,
-        copy_secrets: bool
+        copy_code: bool
     ) -> Result<String> {
-        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {})", 
-              session_id, parent_session_id, copy_data, copy_code, copy_secrets);
+        info!("Creating remix session {} with selective copy from {} (data: {}, code: {})", 
+              session_id, parent_session_id, copy_data, copy_code);
         
         // First create the session volume (without starting container)
         let session_volume = self.create_session_volume(session_id).await?;
@@ -342,9 +341,8 @@ echo 'Session directories created'
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
         }
         
-        if copy_secrets {
-            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
-        }
+        // Always copy secrets for remix sessions
+        copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
         
         // Always copy README.md from root if it exists
         copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());
@@ -430,27 +428,22 @@ echo 'Session directories created'
         
         info!("Selective copy logs: {}", log_output.trim());
         
-        // Parse secrets from copy output if secrets were copied
-        let secrets = if copy_secrets {
-            let mut secrets_map = std::collections::HashMap::new();
-            
-            // Parse SECRET:key=value lines from the copy output
-            for line in log_output.lines() {
-                if line.starts_with("SECRET:") {
-                    if let Some(secret_part) = line.strip_prefix("SECRET:") {
-                        if let Some((key, value)) = secret_part.split_once('=') {
-                            secrets_map.insert(key.to_string(), value.to_string());
-                            info!("Parsed secret from copy output: {}", key);
-                        }
+        // Parse secrets from copy output (always copied for remix sessions)
+        let mut secrets = std::collections::HashMap::new();
+        
+        // Parse SECRET:key=value lines from the copy output
+        for line in log_output.lines() {
+            if line.starts_with("SECRET:") {
+                if let Some(secret_part) = line.strip_prefix("SECRET:") {
+                    if let Some((key, value)) = secret_part.split_once('=') {
+                        secrets.insert(key.to_string(), value.to_string());
+                        info!("Parsed secret from copy output: {}", key);
                     }
                 }
             }
-            
-            info!("Successfully parsed {} secrets from copy output", secrets_map.len());
-            secrets_map
-        } else {
-            std::collections::HashMap::new()
-        };
+        }
+        
+        info!("Successfully parsed {} secrets from copy output", secrets.len());
         
         // Clean up copy container
         let _ = self.docker.remove_container(

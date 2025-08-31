@@ -1,77 +1,22 @@
 ---
 sidebar_position: 2
-title: Spaces and Sessions
+title: Sessions
 ---
 
-# Spaces and Sessions
+# Sessions
 
-Raworc organizes agent work through **Spaces** and **Sessions** - two core data models that enable secure multi-tenancy, containerized execution, and session lifecycle management.
+Raworc organizes AI agent work through **Sessions** - isolated containerized environments where AI agents execute tasks. Each session provides secure execution, persistent storage, and comprehensive lifecycle management.
 
-## Spaces: Multi-Tenant Organization
-
-**Spaces** are isolated environments that organize agent projects by team, environment, or use case. Each space contains its own agents, secrets, and sessions with complete separation.
-
-### Space Data Model
-
-```typescript
-interface Space {
-  name: string;              // Unique space identifier
-  description?: string;      // Human-readable description
-  settings: object;          // JSON configuration
-  active: boolean;           // Space status
-  created_at: timestamp;     // Creation time
-  updated_at: timestamp;     // Last modification
-  created_by: string;        // Creator service account
-}
-```
-
-### Space Components
-
-#### **Agents**
-- Git-based deployment from any repository
-- Framework-agnostic: LangChain, CrewAI, AutoGen, custom code
-- Pre-compiled during space builds for instant session startup
-- Configured via `raworc.json` manifest
-
-#### **Secrets**
-- Encrypted storage of API keys and credentials
-- Space-scoped access control
-- Required for agent authentication (e.g., `ANTHROPIC_API_KEY`)
-- Granular permissions for viewing secret values
-
-#### **Builds**
-- Immutable space images containing pre-built agents
-- UUID-tagged for version control: `raworc_space_{name}:{build-id}`
-- Triggered when agents are added or modified
-- Build status tracking and error reporting
-
-### Space Lifecycle
-
-```
-Create Space → Add Secrets → Add Agents → Build Space → Create Sessions
-```
-
-1. **Create Space**: Initialize isolated environment
-2. **Add Secrets**: Store encrypted credentials for agent authentication
-3. **Add Agents**: Deploy agents from GitHub repositories
-4. **Build Space**: Compile agents into immutable container image
-5. **Create Sessions**: Launch containerized sessions using built image
-
-## Sessions: Containerized Execution
-
-**Sessions** are individual containerized environments where AI agents execute tasks. Each session runs in isolation with persistent storage and state management.
-
-### Session Data Model
+## Session Data Model
 
 ```typescript
 interface Session {
   id: string;                    // UUID identifier
-  space: string;                 // Parent space name
   created_by: string;            // Creator service account
   state: SessionState;           // Current lifecycle state
   container_id?: string;         // Docker container ID
   persistent_volume_id: string;  // Data volume ID
-  parent_session_id?: string;    // For session forking
+  parent_session_id?: string;    // For session remixing
   created_at: timestamp;         // Session creation
   started_at?: timestamp;        // Container started
   last_activity_at?: timestamp;  // Last message/activity
@@ -81,7 +26,7 @@ interface Session {
 }
 ```
 
-### Session State Machine
+## Session State Machine
 
 Sessions follow a validated state machine with controlled transitions:
 
@@ -92,16 +37,15 @@ init → idle → busy → closed → errored
   └─── delete (soft delete with cleanup)
 ```
 
-#### State Definitions
+### State Definitions
 
 - **`init`** - Container being created and initialized
 - **`idle`** - Ready to receive and process messages
 - **`busy`** - Processing messages and executing tasks
 - **`closed`** - Container stopped, volume preserved (can be restored)
 - **`errored`** - Container failed, requires intervention
-- **`error`** - Error state requiring manual intervention
 
-#### State Transitions
+### State Transitions
 
 | From | To | Trigger | Result |
 |------|----|---------|---------| 
@@ -112,7 +56,6 @@ init → idle → busy → closed → errored
 | `closed` | `idle` | Restore request | Container restarted |
 | `idle` | `errored` | Error condition | Container marked failed |
 | `errored` | `idle` | Manual recovery | Container recreated |
-| `*` | `error` | System error | Manual intervention needed |
 
 ## Session Architecture
 
@@ -122,13 +65,12 @@ Each session runs in an isolated Docker container with:
 
 ```
 raworc_session_{session-id}/
-├── /session/agents/          # Pre-built agents from space
-│   ├── langchain-rag/       # LangChain agent with venv
-│   ├── crewai-team/         # CrewAI multi-agent setup
-│   └── custom-rust/         # Compiled Rust binary
-├── /session/workspace/       # User working directory
-├── /session/state/          # Session metadata and context
-└── /session/logs/           # Agent execution logs
+├── /session/code/            # Instructions and setup scripts
+│   ├── instructions.md      # AI agent instructions
+│   └── setup.sh            # Environment setup script
+├── /session/data/           # Persistent user data
+├── /session/secrets/        # Environment secrets as files
+└── /session/logs/           # Execution logs
 ```
 
 ### Persistent Storage
@@ -136,7 +78,7 @@ raworc_session_{session-id}/
 Sessions use persistent Docker volumes for data that survives container lifecycle:
 
 - **Volume Name**: `raworc_session_data_{session-id}`
-- **Mount Point**: `/session/` (workspace, state, logs)
+- **Mount Point**: `/session/` (code, data, secrets, logs)
 - **Persistence**: Survives close/restore operations
 - **Cleanup**: Removed only when session is deleted
 
@@ -152,19 +94,59 @@ resources:
   network: raworc_network    # Isolated network
 ```
 
+## Session Creation with Configuration
+
+Create sessions with optional secrets, instructions, and setup scripts:
+
+```bash
+# Basic session (requires ANTHROPIC_API_KEY)
+raworc api sessions -m post -b '{
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key"
+  }
+}'
+
+# Session with multiple secrets
+raworc api sessions -m post -b '{
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key",
+    "DATABASE_URL": "mysql://user:pass@host/db"
+  }
+}'
+
+# Session with instructions
+raworc api sessions -m post -b '{
+  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
+}'
+```
+
+### Configuration Options
+
+- **`secrets`** - Environment variables/secrets for the session
+- **`instructions`** - Instructions for the AI agent (written to `/session/code/instructions.md`)
+- **`setup`** - Setup script to run in the container (written to `/session/code/setup.sh`)
+- **`metadata`** - Additional metadata object
+
 ## Session Lifecycle Operations
 
 ### Create Session
 ```bash
-raworc api sessions -m post -b '{"space":"production"}'
+# ANTHROPIC_API_KEY is required for all new sessions
+raworc api sessions -m post -b '{
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key"
+  }
+}'
 ```
 
 **Flow:**
-1. Validate space exists and user has permissions
+1. Validate ANTHROPIC_API_KEY is provided in secrets
 2. Generate UUID and create session record with `init` state
 3. Operator detects new session and spawns container
 4. Container mounts persistent volume and starts host agent
-5. Session transitions to `idle` state when ready
+5. Setup script executed if provided
+6. Session transitions to `idle` state when ready
 
 ### Session Messaging
 ```bash
@@ -176,7 +158,7 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 2. Session state transitions to `busy`
 3. Host agent polls and receives message
 4. Agent executes using AI capabilities and computer-use tools
-5. Response stored with `agent` role
+5. Response stored with `assistant` role
 6. Session returns to `idle` state
 
 ### Close Session
@@ -196,7 +178,7 @@ raworc api sessions/{session-id}/restore -m post
 ```
 
 **Flow:**
-1. New container created from latest space image
+1. New container created from host image
 2. Persistent volume remounted with preserved state
 3. Host agent initializes and resumes message polling
 4. **No reprocessing** - Only new messages after restore are handled
@@ -236,40 +218,36 @@ raworc session --restore {session-id}
 
 ## Session Remix
 
-Create new sessions based on existing ones to branch your workflow:
+Create new sessions based on existing ones with selective content copying:
 
 ```bash
-# Create remix from existing session
+# CLI usage with selective copying
 raworc session --remix {source-session-id}
+raworc session --remix {source-session-id} --data false
+raworc session --remix {source-session-id} --code false
+raworc session --remix {source-session-id} --code false --data false
 
-# Remix preserves all files and state from the source session
-# but creates an independent new session for further development
+# API usage
+raworc api sessions/{source-session-id}/remix -m post -b '{
+  "data": true,
+  "code": false
+}'
 ```
+
+### Selective Copying Options
+
+- **`data`** (default: true) - Copy data files from parent session
+- **`code`** (default: true) - Copy code files from parent session
 
 **Use Cases:**
 - 🔄 **Experiment branching** - Try different approaches from the same starting point
 - 📋 **Template sessions** - Create base sessions and remix them for new projects
-- 🧪 **A/B testing** - Compare different agent configurations from same baseline
+- 🧪 **A/B testing** - Compare different configurations from same baseline
 - 🎯 **Checkpoint workflows** - Save progress and create multiple paths forward
 
-## Session Forking and Data Lineage
+### Remix Data Lineage
 
-Sessions support creating child sessions from parent sessions:
-
-```bash
-raworc api sessions -m post -b '{
-  "space": "default",
-  "parent_session_id": "parent-uuid"
-}'
-```
-
-**Benefits:**
-- **Experimentation**: Try different approaches without losing original work
-- **Branching**: Create parallel workflows from common starting point
-- **Data Lineage**: Track relationships between related sessions
-- **Collaboration**: Share session state between team members
-
-### Lineage Tracking
+Sessions support creating child sessions from parent sessions for tracking relationships:
 
 ```typescript
 interface SessionLineage {
@@ -277,59 +255,21 @@ interface SessionLineage {
   parent_session_id?: string;
   children: string[];         // Child session IDs
   depth: number;              // How many levels from root
-  created_from: "new" | "fork";
-}
-```
-
-## Space Build Process
-
-Before sessions can be created, spaces must be built to compile agents into immutable container images.
-
-### Build Trigger
-
-Builds are triggered when:
-- Agents are added to a space
-- Space build is manually requested
-- Agent repositories are updated (future)
-
-### Build Process
-
-```bash
-raworc api spaces/{space}/build -m post
-```
-
-**Flow:**
-1. Build task created with `pending` status
-2. Operator creates temporary build container
-3. Agents cloned from GitHub repositories
-4. Dependencies compiled (pip install, npm install, cargo build)
-5. Immutable image tagged: `raworc_space_{space}:{build-id}`
-6. Build status updated to `completed` or `failed`
-7. New sessions use latest successful build image
-
-### Build Data Model
-
-```typescript
-interface SpaceBuild {
-  id: string;                    // Build UUID
-  space: string;                 // Target space
-  status: BuildStatus;           // pending|building|completed|failed
-  image_tag?: string;            // Docker image tag
-  build_id: string;              // Unique build identifier
-  started_at: timestamp;         // Build start time
-  completed_at?: timestamp;      // Build completion
-  agents_deployed?: object;      // Successfully built agents
-  error?: string;                // Build error message
+  created_from: "new" | "remix";
+  remix_options?: {           // What was copied in remix
+    data: boolean;
+    code: boolean;
+  };
 }
 ```
 
 ## Performance and Optimization
 
-### Zero-Cold-Start Architecture
+### Direct Session Architecture
 
-Sessions start instantly because:
-- **Pre-Compilation**: Agents built during space creation, not runtime
-- **Immutable Images**: `raworc_space_{name}:{build-id}` ready for deployment
+Sessions start quickly because:
+- **No Build Pipeline**: Direct host image usage without pre-compilation steps
+- **Environment Variables**: Secrets passed directly to container
 - **Container Recreation**: Close/restore with quick startup
 - **Persistent Volumes**: Data survives container lifecycle
 
@@ -342,18 +282,12 @@ Sessions start instantly because:
 
 ### Scaling Strategies
 
-- **Horizontal Sessions**: Multiple concurrent sessions per space
-- **Space Isolation**: Complete separation between teams/projects
+- **Horizontal Sessions**: Multiple concurrent sessions per user
 - **Resource Limits**: Prevent runaway sessions from consuming resources
 - **Cleanup Automation**: Old sessions automatically cleaned up
+- **Selective Remixing**: Copy only needed data for new sessions
 
 ## Security Model
-
-### Space Isolation
-- **Secrets**: Encrypted per-space with access control
-- **RBAC**: Role-based permissions scoped to spaces
-- **Network**: Container networking with controlled access
-- **Data**: Complete separation between spaces
 
 ### Session Security
 - **Container Isolation**: Each session runs in secure boundaries
@@ -363,14 +297,37 @@ Sessions start instantly because:
 
 ### Access Control
 - **JWT Authentication**: Secure token-based authentication
-- **Space Permissions**: Fine-grained access control per space
 - **Session Ownership**: Sessions tied to creator service account
-- **Secret Permissions**: Separate permissions for viewing secret values
+- **RBAC Permissions**: Role-based access control for session operations
+
+### Secret Management
+- **Environment Variables**: Secrets injected as environment variables
+- **File-based Secrets**: Secrets written to `/session/secrets/` directory
+
+## Interactive Session Interface
+
+Use the interactive session interface for real-time AI interaction:
+
+```bash
+# All new sessions require ANTHROPIC_API_KEY
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'    # Start new session
+raworc session --restore abc123                                         # Continue existing session
+raworc session --remix def456                                           # Create remix (inherits key if secrets=true)
+
+# In session interface:
+You: Hello, how can you help me?
+Assistant: I can help you with coding, analysis, and more!
+
+You: /quit
+```
+
+**Commands:**
+- `/quit` or `/exit` - End session
+- `/status` - Show session information
 
 ## Next Steps
 
-- [Session Playground](/docs/guides/session-playground) - Interactive examples and advanced session features
-- [Architecture Overview](/docs/concepts/architecture) - Complete system architecture
 - [CLI Usage](/docs/guides/cli-usage) - Complete CLI usage guide
-- [API Reference](/docs/api/overview) - CLI and API for spaces and sessions
+- [Architecture Overview](/docs/concepts/architecture) - Complete system architecture
+- [API Reference](/docs/api/rest-api) - Complete REST API documentation
 - [Troubleshooting](/docs/guides/troubleshooting) - Common issues and solutions

@@ -125,6 +125,12 @@ pub async fn create_session(
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to create session".to_string()))?;
 
+    // Validate that ANTHROPIC_API_KEY is provided for new sessions
+    if !req.secrets.contains_key("ANTHROPIC_API_KEY") {
+        tracing::warn!("Attempted to create session without ANTHROPIC_API_KEY");
+        return Err(ApiError::BadRequest("ANTHROPIC_API_KEY secret is required for new sessions. Get your key from console.anthropic.com".to_string()));
+    }
+
     // Get the principal name
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -192,7 +198,6 @@ pub async fn remix_session(
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
     let copy_code = req.code;
-    let copy_secrets = req.secrets;
     
     let session = Session::remix(&state.db, &id, req)
         .await
@@ -209,8 +214,7 @@ pub async fn remix_session(
         "remix": true,
         "parent_session_id": parent.id,
         "copy_data": copy_data,
-        "copy_code": copy_code,
-        "copy_secrets": copy_secrets
+        "copy_code": copy_code
     });
     
     sqlx::query(r#"

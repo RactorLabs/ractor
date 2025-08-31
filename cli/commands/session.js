@@ -19,7 +19,7 @@ module.exports = (program) => {
     .option('--remix <session-id>', 'Create a new session remixing an existing session')
     .option('--data <boolean>', 'Include data files in remix (default: true)')
     .option('--code <boolean>', 'Include code files in remix (default: true)')
-    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs) or "false" to exclude in remix')
+    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
     .option('--instructions <file>', 'Path to instructions file')
     .option('--setup <file>', 'Path to setup script file')
     .addHelpText('after', '\n' +
@@ -28,7 +28,6 @@ module.exports = (program) => {
       '  $ raworc session --restore abc123         # Restore and continue existing session\n' +
       '  $ raworc session --remix abc123           # Create new session based on existing one\n' +
       '  $ raworc session --remix abc123 --data false # Remix without copying data files\n' +
-      '  $ raworc session --remix abc123 --secrets false # Remix without copying secrets\n' +
       '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
       '  $ raworc session --instructions ./inst.md # Create session with instructions\n' +
       '  $ raworc session --setup ./setup.sh       # Create session with setup script\n')
@@ -58,13 +57,6 @@ async function sessionCommand(options) {
     if (options.code !== undefined) {
       console.log(chalk.gray('Copy Code:'), options.code === 'true' || options.code === true ? 'Yes' : 'No');
     }
-    if (options.secrets !== undefined) {
-      if (options.secrets === 'false') {
-        console.log(chalk.gray('Copy Secrets:'), 'No');
-      } else {
-        console.log(chalk.gray('Copy Secrets:'), options.secrets === 'true' || options.secrets === true ? 'Yes' : 'No');
-      }
-    }
   } else if (options.restore) {
     console.log(chalk.gray('Mode:'), 'Restore');
     console.log(chalk.gray('Session:'), options.restore);
@@ -74,7 +66,7 @@ async function sessionCommand(options) {
   console.log(chalk.gray('User:'), authData.user?.username || 'Unknown');
   
   // Show session creation parameters if provided
-  if (options.secrets) {
+  if (options.secrets && !options.remix && !options.restore) {
     console.log(chalk.gray('Secrets:'), 'Provided');
   }
   if (options.instructions) {
@@ -119,14 +111,6 @@ async function sessionCommand(options) {
         remixPayload.code = options.code === 'true' || options.code === true;
       }
       
-      if (options.secrets !== undefined) {
-        if (options.secrets === 'false') {
-          remixPayload.secrets = false;
-        } else {
-          // For remix, secrets parameter controls copying, not providing new secrets
-          remixPayload.secrets = options.secrets === 'true' || options.secrets === true;
-        }
-      }
       
       // Create remix session
       const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
@@ -243,6 +227,16 @@ async function sessionCommand(options) {
           console.error(chalk.red('Error:'), 'Secrets must be valid JSON');
           process.exit(1);
         }
+      }
+      
+      // Validate that ANTHROPIC_API_KEY is provided for new sessions
+      if (!sessionPayload.secrets || !sessionPayload.secrets.ANTHROPIC_API_KEY) {
+        spinner.fail('Anthropic API key required');
+        console.error(chalk.red('Error:'), 'ANTHROPIC_API_KEY is required for new sessions');
+        console.log();
+        console.log(chalk.yellow('💡 Get your API key from: https://console.anthropic.com'));
+        console.log(chalk.yellow('💡 Usage:'), 'raworc session --secrets \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\');
+        process.exit(1);
       }
       
       // Add instructions if provided

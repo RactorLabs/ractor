@@ -99,7 +99,7 @@ List all service accounts.
   {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "user": "api-user",
-    "space": null,
+    "scope": null,
     "description": "API access user",
     "active": true,
     "created_at": "2025-01-01T00:00:00Z",
@@ -120,7 +120,7 @@ Create a new service account.
 {
   "user": "api-user",
   "pass": "secure-password",
-  "space": null,
+  "scope": null,
   "description": "API access user"
 }
 ```
@@ -130,7 +130,7 @@ Create a new service account.
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "user": "api-user",
-  "space": null,
+  "scope": null,
   "description": "API access user",
   "active": true,
   "created_at": "2025-01-01T00:00:00Z",
@@ -330,7 +330,7 @@ List all role bindings.
     "id": "admin-binding",
     "subject": "admin",
     "role_ref": "admin",
-    "space": null,
+    "scope": null,
     "created_at": "2025-01-01T00:00:00Z",
     "updated_at": "2025-01-01T00:00:00Z"
   }
@@ -381,460 +381,6 @@ Delete a role binding.
 
 **Response**: `200 OK`
 
-## Spaces
-
-### GET /spaces
-
-List all spaces.
-
-**Authentication**: Required
-
-**Response**: `200 OK`
-```json
-[
-  {
-    "name": "default",
-    "description": "Default space",
-    "settings": {},
-    "active": true,
-    "created_at": "2025-01-01T00:00:00Z",
-    "updated_at": "2025-01-01T00:00:00Z"
-  }
-]
-```
-
-### POST /spaces
-
-Create a new space (admin only).
-
-**Authentication**: Required
-
-**Request Body**:
-```json
-{
-  "name": "staging",
-  "description": "Staging environment",
-  "settings": {
-    "environment": "staging"
-  }
-}
-```
-
-**Response**: `200 OK`
-```json
-{
-  "name": "staging",
-  "description": "Staging environment", 
-  "settings": {
-    "environment": "staging"
-  },
-  "active": true,
-  "created_at": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-01T00:00:00Z"
-}
-```
-
-### GET /spaces/\{name\}
-
-Get a specific space by name.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-(Same format as POST response)
-
-**Errors**:
-- `404 Not Found` - Space not found
-
-### PUT /spaces/\{name\}
-
-Update a space (admin only).
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Request Body**:
-```json
-{
-  "description": "Updated staging space"
-}
-```
-
-**Response**: `200 OK`
-(Returns updated space)
-
-### DELETE /spaces/\{name\}
-
-Delete a space (admin only, cannot delete 'default').
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-
-## Space Secrets
-
-### GET /spaces/\{name\}/secrets
-
-List secrets in a space (metadata only).
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Query Parameters**:
-- `show_values` (optional) - Include secret values (requires read-values permission)
-
-**Response**: `200 OK`
-```json
-[
-  {
-    "key_name": "ANTHROPIC_API_KEY",
-    "description": "Claude API key",
-    "created_at": "2025-01-01T00:00:00Z",
-    "updated_at": "2025-01-01T00:00:00Z"
-  }
-]
-```
-
-### POST /spaces/\{name\}/secrets
-
-Create a secret in a space.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Request Body**:
-```json
-{
-  "key_name": "ANTHROPIC_API_KEY",
-  "value": "sk-ant-your-actual-key",
-  "description": "Claude API key"
-}
-```
-
-**Fields**:
-- `key_name` (required) - Secret key identifier
-- `value` (required) - Secret value
-- `description` (optional) - Human-readable description
-
-**Response**: `200 OK`
-```json
-{
-  "space": "default",
-  "key_name": "ANTHROPIC_API_KEY",
-  "description": "Claude API key",
-  "created_at": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-01T00:00:00Z",
-  "created_by": "admin"
-}
-```
-
-### GET /spaces/\{name\}/secrets/\{key\}
-
-Get a specific secret.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `key` (path) - Secret key name
-
-**Query Parameters**:
-- `show_values` (optional) - Include secret value
-
-**Response**: `200 OK`
-```json
-{
-  "key_name": "ANTHROPIC_API_KEY",
-  "value": "sk-ant-your-actual-key",
-  "description": "Claude API key",
-  "created_at": "2025-01-01T00:00:00Z",
-  "updated_at": "2025-01-01T00:00:00Z"
-}
-```
-
-### PUT /spaces/\{name\}/secrets/\{key\}
-
-Update a secret value or description.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `key` (path) - Secret key name
-
-**Request Body**:
-```json
-{
-  "value": "new-secret-value",
-  "description": "Updated description"
-}
-```
-
-**Response**: `200 OK`
-(Returns updated secret)
-
-### DELETE /spaces/\{name\}/secrets/\{key\}
-
-Delete a secret.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `key` (path) - Secret key name
-
-**Response**: `200 OK`
-
-## Space Agents
-
-### GET /spaces/\{name\}/agents
-
-List agents in a space.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-```json
-[
-  {
-    "name": "raworc-agent-python-demo",
-    "description": "Python demo agent",
-    "purpose": "Python agent that speaks English",
-    "source_repo": "Raworc/raworc-agent-python-demo",
-    "source_branch": "main",
-    "status": "active"
-  }
-]
-```
-
-### POST /spaces/\{name\}/agents
-
-Create an agent (triggers automatic space rebuild).
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Request Body**:
-```json
-{
-  "name": "data-analyzer",
-  "description": "Data analysis specialist",
-  "purpose": "analyze data, create visualizations, statistical analysis", 
-  "source_repo": "Raworc/raworc-agent-python-demo",
-  "source_branch": "main"
-}
-```
-
-**Response**: `200 OK`
-(Returns created agent)
-
-### GET /spaces/\{name\}/agents/\{agent_name\}
-
-Get a specific agent.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Response**: `200 OK`
-(Same format as POST response)
-
-**Errors**:
-- `404 Not Found` - Agent not found
-
-### PUT /spaces/\{name\}/agents/\{agent_name\}
-
-Update an agent.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Request Body**:
-```json
-{
-  "description": "Updated data analysis specialist",
-  "purpose": "enhanced data analysis and visualization"
-}
-```
-
-**Response**: `200 OK`
-(Returns updated agent)
-
-### DELETE /spaces/\{name\}/agents/\{agent_name\}
-
-Delete an agent.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Response**: `200 OK`
-
-### PATCH /spaces/\{name\}/agents/\{agent_name\}/status
-
-Update agent status.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Request Body**:
-```json
-{
-  "status": "inactive"
-}
-```
-
-**Response**: `200 OK`
-
-### POST /spaces/\{name\}/agents/\{agent_name\}/deploy
-
-Deploy an agent.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Response**: `200 OK`
-
-### POST /spaces/\{name\}/agents/\{agent_name\}/stop
-
-Stop an agent.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Response**: `200 OK`
-
-### GET /spaces/\{name\}/agents/running
-
-List running agents in a space.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-```json
-[
-  {
-    "name": "raworc-agent-python-demo",
-    "status": "running",
-    "started_at": "2025-01-01T12:00:00Z"
-  }
-]
-```
-
-### GET /spaces/\{name\}/agents/\{agent_name\}/logs
-
-Get agent logs.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `agent_name` (path) - Agent name
-
-**Query Parameters**:
-- `limit` (optional) - Maximum number of log lines to return
-- `follow` (optional) - Follow log output
-
-**Response**: `200 OK`
-```json
-{
-  "logs": [
-    "2025-01-01T12:00:00Z [INFO] Agent started",
-    "2025-01-01T12:01:00Z [INFO] Processing request"
-  ]
-}
-```
-
-## Space Builds
-
-### POST /spaces/\{name\}/build
-
-Manually trigger space build after adding agents.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-
-### GET /spaces/\{name\}/build/latest
-
-Check space build status.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-
-**Response**: `200 OK`
-```json
-{
-  "status": "completed",
-  "started_at": "2025-01-01T00:00:00Z",
-  "completed_at": "2025-01-01T00:05:00Z"
-}
-```
-
-### GET /spaces/\{name\}/build/\{build_id\}
-
-Get specific build status.
-
-**Authentication**: Required
-
-**Parameters**:
-- `name` (path) - Space name
-- `build_id` (path) - Build ID
-
-**Response**: `200 OK`
-```json
-{
-  "id": "build-550e8400-e29b-41d4-a716-446655440000",
-  "status": "completed",
-  "started_at": "2025-01-01T00:00:00Z",
-  "completed_at": "2025-01-01T00:05:00Z",
-  "logs": "Build completed successfully"
-}
-```
-
-**Errors**:
-- `404 Not Found` - Build not found
 
 ## Sessions
 
@@ -849,11 +395,11 @@ List sessions.
 [
   {
     "id": "61549530-3095-4cbf-b379-cd32416f626d",
-    "space": "default",
     "state": "IDLE",
     "created_at": "2025-01-20T10:00:00Z",
     "started_at": "2025-01-20T10:01:00Z",
-    "last_activity_at": "2025-01-20T10:05:00Z"
+    "last_activity_at": "2025-01-20T10:05:00Z",
+    "created_by": "admin"
   }
 ]
 ```
@@ -867,20 +413,26 @@ Create a new session.
 **Request Body**:
 ```json
 {
-  "space": "default",
-  "metadata": {}
+  "metadata": {},
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key",
+    "DATABASE_URL": "mysql://user:pass@host/db"
+  },
+  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "setup": "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
 }
 ```
 
 **Fields**:
-- `space` (optional) - Space name (defaults to "default")
 - `metadata` (optional) - Additional metadata object (defaults to {})
+- `secrets` (optional) - Environment variables/secrets for the session
+- `instructions` (optional) - Instructions for the AI agent
+- `setup` (optional) - Setup script to run in the container
 
 **Response**: `200 OK`
 ```json
 {
   "id": "61549530-3095-4cbf-b379-cd32416f626d",
-  "space": "default",
   "created_by": "admin",
   "state": "INIT",
   "container_id": null,
@@ -919,7 +471,10 @@ Update session details.
 **Request Body**:
 ```json
 {
-  "space": "production"
+  "metadata": {
+    "updated_by": "admin",
+    "purpose": "production deployment"
+  }
 }
 ```
 
@@ -968,28 +523,42 @@ Restore a closed session (restarts the container with preserved state).
 
 ### POST /sessions/\{id\}/remix
 
-Fork session (create child session).
+Create a new session based on an existing session with selective content copying.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Parent session ID
 
 **Request Body**:
 ```json
 {
-  "space": "development"
+  "metadata": {
+    "remixed_from": "61549530-3095-4cbf-b379-cd32416f626d",
+    "remix_timestamp": "2025-01-20T10:00:00Z"
+  },
+  "data": true,
+  "code": false
 }
 ```
+
+**Fields**:
+- `metadata` (optional) - Additional metadata for the new session
+- `data` (optional) - Copy data files from parent session (default: true)
+- `code` (optional) - Copy code files from parent session (default: true)
 
 **Response**: `200 OK`
 ```json
 {
   "id": "new-session-id",
-  "space": "development",
   "state": "INIT",
-  "parent_session": "61549530-3095-4cbf-b379-cd32416f626d",
-  "created_at": "2025-01-20T10:00:00Z"
+  "parent_session_id": "61549530-3095-4cbf-b379-cd32416f626d",
+  "created_at": "2025-01-20T10:00:00Z",
+  "created_by": "admin",
+  "metadata": {
+    "remixed_from": "61549530-3095-4cbf-b379-cd32416f626d",
+    "remix_timestamp": "2025-01-20T10:00:00Z"
+  }
 }
 ```
 

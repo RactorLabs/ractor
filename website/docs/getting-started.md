@@ -13,7 +13,7 @@ Get started with the Universal AI Agent Runtime in just a few commands. Raworc p
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+ 
 - **Anthropic API Key**: Required for AI functionality - get one at [console.anthropic.com](https://console.anthropic.com)
 
-## Quick Start (60 seconds)
+## Quick Start (30 seconds)
 
 ### 1. Install Raworc CLI
 
@@ -33,57 +33,196 @@ raworc start
 raworc auth login --user admin --pass admin
 ```
 
-### 4. Set up API Key
+### 4. Start Your First Session (with API Key)
 
 ```bash
-raworc api spaces/default/secrets -m POST -b '{
-  "key_name": "ANTHROPIC_API_KEY",
-  "value": "sk-ant-your-actual-key"
-}'
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-actual-key"}'
 ```
 
-### 5. Add Demo Agents
+**⚠️ Important**: You must provide an Anthropic API key to start a new session. Get your key from [console.anthropic.com](https://console.anthropic.com).
+
+That's it! You now have a running AI agent session.
+
+## Session Configuration
+
+### Basic Session (Requires API Key)
 
 ```bash
-# Python agent that speaks English
-raworc api spaces/default/agents -m POST -b '{
-  "name": "raworc-agent-python-demo",
-  "source_repo": "Raworc/raworc-agent-python-demo",
-  "purpose": "Python agent that speaks English"
-}'
-
-# Rust agent that speaks in pirate  
-raworc api spaces/default/agents -m POST -b '{
-  "name": "raworc-agent-rust-demo",
-  "source_repo": "Raworc/raworc-agent-rust-demo",
-  "purpose": "Rust agent that speaks in pirate"
-}'
-
-# Node.js agent that speaks Klingon
-raworc api spaces/default/agents -m POST -b '{
-  "name": "raworc-agent-node-demo",
-  "source_repo": "Raworc/raworc-agent-node-demo",
-  "purpose": "Node.js agent that speaks Klingon"
-}'
-
-# Build space (wait for completion)
-raworc api spaces/default/build -m POST
-
-# Check build status (repeat until "completed")
-raworc api spaces/default/build/latest
+# New sessions always require an Anthropic API key
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-actual-key"}'
 ```
 
-### 6. Start Your First Session
+**Note**: The Anthropic API key is required for all new sessions. You cannot start a session without it unless you're remixing from an existing session that already has the key.
+
+### Session with Instructions
 
 ```bash
-raworc session
+raworc session --instructions ./my-instructions.md
 ```
 
-Try these sample messages to see the value:
+### Session with Setup Script
+
+```bash
+raworc session --setup ./setup.sh
 ```
-Say hi in English
-Say hi in Klingon  
-Say hi in Pirate
+
+### Full Configuration
+
+```bash
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --instructions "You are a helpful data analysis assistant." \
+  --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
+```
+
+## Interactive Session Usage
+
+Once in a session, you can interact directly with the AI agent:
+
+```
+You: Hello, how can you help me?
+⠋ Waiting for agent response...
+Assistant: Hello! I'm an AI assistant that can help you with various tasks including:
+- Writing and debugging code
+- Data analysis and visualization  
+- File management and organization
+- Web research and information gathering
+- And much more!
+
+You: Create a Python script to calculate fibonacci numbers
+⠋ Waiting for agent response...
+Assistant: I'll create a Python script to calculate Fibonacci numbers for you.
+
+[Creates fibonacci.py with implementation]
+
+You: /quit
+👋 Ending session...
+```
+
+### Session Commands
+
+- **Regular messages**: Just type your request
+- **`/quit`** or **`/exit`** - End the session
+- **`/status`** - Show session information
+
+## Session Management
+
+### List Your Sessions
+
+```bash
+raworc api sessions
+```
+
+### Restore Previous Session
+
+```bash
+raworc session --restore abc123-def456-789
+```
+
+### Create Session Remix
+
+```bash
+# Remix from existing session
+raworc session --remix abc123-def456-789
+
+# Selective remix options
+raworc session --remix abc123-def456-789 --data false    # Don't copy data files
+raworc session --remix abc123-def456-789 --code false    # Don't copy code files
+```
+
+## Direct API Usage
+
+### Create Session via API
+
+```bash
+# Basic session
+raworc api sessions -m POST -b '{}'
+
+# Session with configuration
+raworc api sessions -m POST -b '{
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key",
+    "DATABASE_URL": "mysql://user:pass@host/db"
+  },
+  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
+}'
+```
+
+### Send Messages to Session
+
+```bash
+raworc api sessions/{session-id}/messages -m POST -b '{
+  "content": "Generate a Python script to calculate fibonacci numbers"
+}'
+```
+
+### Session Lifecycle
+
+```bash
+# Close session (saves resources, preserves data)
+raworc api sessions/{session-id}/close -m POST
+
+# Restore closed session
+raworc api sessions/{session-id}/restore -m POST
+
+# Delete session permanently
+raworc api sessions/{session-id} -m DELETE
+```
+
+## Troubleshooting
+
+### Services won't start
+```bash
+raworc stop
+raworc start --restart
+```
+
+### Check system health
+```bash
+raworc api health
+```
+
+### View service logs
+```bash
+docker logs raworc_server
+docker logs raworc_operator
+docker logs raworc_mysql
+```
+
+### Complete reset
+```bash
+raworc reset --yes
+```
+
+## Common Use Cases
+
+### Development Environment
+
+```bash
+# Create a coding assistant session
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+  --instructions "You are a senior developer. Help with code review, debugging, and best practices."
+```
+
+### Data Analysis
+
+```bash
+# Create a data science session
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db-url"}' \
+  --instructions "You are a data scientist. Help with analysis, visualization, and insights." \
+  --setup "pip install pandas numpy matplotlib seaborn jupyter"
+```
+
+### System Administration
+
+```bash
+# Create a sysadmin assistant
+raworc session \
+  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+  --instructions "You are a system administrator. Help with DevOps, monitoring, and infrastructure."
 ```
 
 ## Next Steps
@@ -91,9 +230,9 @@ Say hi in Pirate
 Now that you have Raworc running:
 
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all CLI commands and features
-- **[Session Playground](/docs/guides/session-playground)** - Learn advanced session features like restore and remix
-- **[Bring Your Own Agent](/docs/guides/bring-your-own-agent)** - Deploy custom agents
-- **[Spaces and Sessions](/docs/concepts/spaces-and-sessions)** - Understand core concepts
+- **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture and lifecycle
+- **[API Reference](/docs/api/rest-api)** - Complete REST API documentation
+- **[Architecture Overview](/docs/concepts/architecture)** - System architecture and design
 
 ## Support
 
