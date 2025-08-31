@@ -105,15 +105,6 @@ impl DockerManager {
         
         // Create base directories
         let init_script = "mkdir -p /session/{code,data,secrets}
-cd /session
-echo '# Welcome to your Raworc session!' > README.md
-echo 'This is your persistent space. Files here will be saved across session restarts.' >> README.md
-echo '' >> README.md
-echo '## Directory Structure:' >> README.md
-echo '- /session/code/ - Your code and scripts' >> README.md
-echo '- /session/data/ - Your data files' >> README.md
-echo '- /session/secrets/ - Environment variables and secrets (automatically sourced)' >> README.md
-
 chmod -R 755 /session
 echo 'Session directories created'
 ";

@@ -373,7 +373,7 @@ Delete a role binding.
 
 ### GET /sessions
 
-List sessions.
+List Host sessions.
 
 **Authentication**: Required
 
@@ -393,7 +393,7 @@ List sessions.
 
 ### POST /sessions
 
-Create a new session.
+Create a new Host session.
 
 **Authentication**: Required
 
@@ -413,7 +413,7 @@ Create a new session.
 **Fields**:
 - `metadata` (optional) - Additional metadata object (defaults to {})
 - `secrets` (optional) - Environment variables/secrets for the session
-- `instructions` (optional) - Instructions for the AI agent
+- `instructions` (optional) - Instructions for the Host
 - `setup` (optional) - Setup script to run in the container
 
 **Response**: `200 OK`
@@ -488,7 +488,7 @@ Update session state.
 
 ### POST /sessions/\{id\}/close
 
-Close a session (saves resources by stopping the container while preserving state).
+Close a Host session (saves resources by stopping the container while preserving state).
 
 **Authentication**: Required
 
@@ -499,7 +499,7 @@ Close a session (saves resources by stopping the container while preserving stat
 
 ### POST /sessions/\{id\}/restore
 
-Restore a closed session (restarts the container with preserved state).
+Restore a closed Host session (restarts the container with preserved state).
 
 **Authentication**: Required
 
@@ -510,7 +510,7 @@ Restore a closed session (restarts the container with preserved state).
 
 ### POST /sessions/\{id\}/remix
 
-Create a new session based on an existing session with selective content copying.
+Create a new Host session based on an existing session with selective content copying.
 
 **Authentication**: Required
 
@@ -551,7 +551,7 @@ Create a new session based on an existing session with selective content copying
 
 ### DELETE /sessions/\{id\}
 
-Terminate a session.
+Terminate a Host session.
 
 **Authentication**: Required
 
@@ -564,7 +564,7 @@ Terminate a session.
 
 ### GET /sessions/\{id\}/messages
 
-List messages in a session.
+List messages in a Host session.
 
 **Authentication**: Required
 
@@ -596,7 +596,7 @@ List messages in a session.
 
 ### POST /sessions/\{id\}/messages
 
-Send a message to a session.
+Send a message to a Host session.
 
 **Authentication**: Required
 
@@ -623,7 +623,7 @@ Send a message to a session.
 
 ### GET /sessions/\{id\}/messages/count
 
-Get message count for session.
+Get message count for Host session.
 
 **Authentication**: Required
 
@@ -639,7 +639,7 @@ Get message count for session.
 
 ### DELETE /sessions/\{id\}/messages
 
-Clear all session messages.
+Clear all Host session messages.
 
 **Authentication**: Required
 

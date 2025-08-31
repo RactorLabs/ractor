@@ -5,19 +5,19 @@ title: Session Playground
 
 # Session Playground
 
-Master the full power of Raworc sessions with interactive examples and advanced features. This guide demonstrates session management capabilities through practical, hands-on examples.
+Master the full power of Raworc sessions with interactive examples and advanced features. This guide demonstrates session management capabilities with Host (Computer Use Agent) through practical, hands-on examples.
 
 ## Interactive Sessions
 
 The simplest way to work with sessions is through the interactive CLI:
 
 ```bash
-# Start a new interactive session (requires ANTHROPIC_API_KEY)
+# Start a new interactive session with Host (requires ANTHROPIC_API_KEY)
 raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 ```
 
 In the interactive session interface:
-- Type messages directly to control the computer and automate tasks
+- Type messages directly to control the Host and automate computer tasks
 - Use `/status` to show session information
 - Use `/quit` or `/q` to exit the session
 
@@ -47,7 +47,7 @@ raworc session --restore {session-id}
 
 **✅ State Preservation**: All files, data, and computer state are preserved
 **✅ No Reprocessing**: Previous messages are not reprocessed - only new messages after restore
-**✅ Fast Recovery**: Sessions restore in 3-5 seconds with full context
+**✅ Fast Recovery**: Sessions restore in 3-5 seconds with full Host context
 **✅ Resource Efficiency**: Closed sessions don't consume CPU or memory
 
 ### Practical Example: Long-Running Analysis
@@ -57,7 +57,7 @@ raworc session --restore {session-id}
 raworc session
 > Analyze the sales data in /data/sales_2024.csv
 
-# Agent begins processing...
+# Host begins processing...
 # Need to leave for a meeting? Close the session:
 /quit
 
@@ -83,7 +83,7 @@ raworc session --remix {source-session-id}
 # The new session starts with:
 # - All files from the source session
 # - Complete computer state
-# - Independent message history
+# - Independent Host message history
 ```
 
 ### Remix Use Cases
@@ -253,9 +253,9 @@ docker ps -a --filter "name=raworc_session_"
 # Access session filesystem
 docker exec raworc_session_{id} ls -la /session/code/
 
-# View agent logs
+# View Host logs
 docker exec raworc_session_{id} ls /session/logs/
-docker exec raworc_session_{id} cat /session/logs/agent_*.log
+docker exec raworc_session_{id} cat /session/logs/host_*.log
 ```
 
 ## Best Practices
@@ -266,21 +266,21 @@ docker exec raworc_session_{id} cat /session/logs/agent_*.log
 - **Set resource limits** appropriate for your workload
 
 ### Workflow Organization
-- **Use spaces** to separate different projects or environments
-- **Create template sessions** for common starting points
+- **Create template sessions** for common starting points with Host configurations
 - **Leverage remix** for experimentation without losing original work
 - **Name sessions clearly** with metadata for easy identification
+- **Use Host instructions** to specialize sessions for different tasks
 
 ### Performance Tips
 - **Close sessions** when not actively using them to save resources
-- **Use session remix** instead of recreating similar automation setups
+- **Use session remix** instead of recreating similar Host setups
 - **Monitor resource usage** to optimize computer allocation
 
 ## Troubleshooting Sessions
 
 ### Session Won't Start
 ```bash
-# Check that ANTHROPIC_API_KEY was provided
+# Check that ANTHROPIC_API_KEY was provided and session state
 raworc api sessions/{id}
 
 # Check operator logs

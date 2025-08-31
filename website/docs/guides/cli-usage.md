@@ -5,7 +5,7 @@ title: CLI Usage Guide
 
 # Using the Raworc CLI
 
-The Raworc CLI provides complete command-line access to all functionality for managing AI agent sessions and runtime operations. This guide covers everything you need to know about using the CLI effectively.
+The Raworc CLI provides complete command-line access to all functionality for managing Host sessions and runtime operations. This guide covers everything you need to know about using the CLI effectively.
 
 ## Prerequisites
 
@@ -65,20 +65,20 @@ raworc api health
 
 ## 3. Session Management
 
-Create and manage AI agent sessions:
+Create and manage Host sessions:
 
 ### Interactive Sessions (Recommended)
 
 ```bash
-# Start session with API key (REQUIRED for new sessions)
+# Start Host session with API key (REQUIRED for new sessions)
 raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
 
-# Note: ANTHROPIC_API_KEY is required for all new sessions
+# Note: ANTHROPIC_API_KEY is required for all new Host sessions
 
-# Start session with instructions
+# Start Host session with instructions
 raworc session --instructions "You are a helpful coding assistant"
 
-# Start session with setup script
+# Start Host session with setup script
 raworc session --setup "pip install pandas numpy matplotlib"
 
 # Full configuration
@@ -123,7 +123,7 @@ raworc api sessions
 # Get specific session details
 raworc api sessions/{session-id}
 
-# Send message to agent
+# Send message to Host
 raworc api sessions/{session-id}/messages -m post -b '{"content":"Generate a Python script to calculate fibonacci numbers"}'
 
 # View messages
@@ -153,7 +153,7 @@ raworc api sessions/{session-id} -m delete
 
 ### Secrets Configuration
 
-Pass environment variables and API keys to sessions:
+Pass environment variables and API keys to Host sessions:
 
 ```bash
 # Single secret
@@ -169,7 +169,7 @@ raworc session --secrets '{
 
 ### Instructions Configuration
 
-Provide system instructions for the AI agent:
+Provide system instructions for the Host:
 
 ```bash
 # Inline instructions
@@ -181,7 +181,7 @@ raworc session --instructions ./my-instructions.md
 
 ### Setup Script Configuration
 
-Run initialization commands in the session container:
+Run initialization commands in the Host session container:
 
 ```bash
 # Inline setup
@@ -321,8 +321,8 @@ Common error responses and solutions:
 ### Session Management
 - Sessions persist until explicitly deleted
 - Interactive sessions auto-cleanup on exit (`/quit`)
-- Use close/restore for long-running sessions to save resources
-- **Always include `ANTHROPIC_API_KEY` secret for AI functionality** - this is required for all new sessions
+- Use close/restore for long-running Host sessions to save resources
+- **Always include `ANTHROPIC_API_KEY` secret for Host functionality** - this is required for all new sessions
 
 ### Performance Tips
 - Use `raworc start --pull` to ensure latest images
@@ -347,7 +347,7 @@ raworc start
 # Authenticate
 raworc auth login --user admin --pass admin
 
-# Create coding session
+# Create coding Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You are a senior developer assistant" \
@@ -357,7 +357,7 @@ raworc session \
 ### Data Analysis Session
 
 ```bash
-# Create data science session
+# Create data science Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db"}' \
   --instructions "You are a data scientist assistant" \
@@ -367,7 +367,7 @@ raworc session \
 ### Quick Testing
 
 ```bash
-# Minimal session for quick tasks (ANTHROPIC_API_KEY is required)
+# Minimal Host session for quick tasks (ANTHROPIC_API_KEY is required)
 raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 ```
 

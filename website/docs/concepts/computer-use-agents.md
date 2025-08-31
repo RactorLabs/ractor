@@ -3,13 +3,13 @@ sidebar_position: 2
 title: Computer Use Agents
 ---
 
-# Computer Use Agents (CUA)
+# Computer Use Agents (Host)
 
-Raworc provides Computer Use Agents (CUA) - intelligent agents that use computers like humans do to automate manual work. Each CUA comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
+Raworc provides Computer Use Agents through the Host - Raworc's Computer Use implementation that uses computers like humans do to automate manual work. Each Host comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
 
 ## What are Computer Use Agents?
 
-Computer Use Agents are AI-powered assistants that interact with computers using the same interfaces humans use:
+The Host is Raworc's Computer Use Agent implementation that interacts with computers using the same interfaces humans use:
 
 - **Visual interfaces** - Click buttons, fill forms, navigate websites
 - **Command line tools** - Execute terminal commands, run scripts, manage files  
@@ -17,9 +17,9 @@ Computer Use Agents are AI-powered assistants that interact with computers using
 - **File operations** - Create, edit, move, and organize files and folders
 - **Web browsing** - Navigate websites, extract data, interact with web applications
 
-## What Computer Use Agents Can Do
+## What the Host Can Do
 
-Computer Use Agents can automate any manual work that involves using a computer. Here are the key categories:
+The Host can automate any manual work that involves using a computer. Here are the key categories:
 
 ### 🤖 Build Agentic AI Products
 **Create intelligent agents and AI-powered applications:**
@@ -179,23 +179,23 @@ Computer Use Agents can automate any manual work that involves using a computer.
 
 ## How to Get Started
 
-### Basic Computer Use Agent
+### Basic Host Session
 ```bash
-# Start a general-purpose CUA session
+# Start a general-purpose Host session
 raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 You: "Help me organize these files and create a summary report"
-CUA: I'll help you organize your files and create a professional summary report...
+Host: I'll help you organize your files and create a professional summary report...
 ```
 
-### Specialized CUA Setup
+### Specialized Host Setup
 ```bash
-# CUA for web automation
+# Host for web automation
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in web automation and data extraction."
 
-# CUA for content creation
+# Host for content creation
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in content creation and social media management."
@@ -203,7 +203,7 @@ raworc session \
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first CUA session
+- **[Getting Started](/docs/getting-started)** - Set up your first Host session
 - **[Dev Mode](/docs/guides/dev-mode)** - Enable Coding Agent for development tasks
 - **[Sessions](/docs/concepts/sessions)** - Understand session management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all CLI commands

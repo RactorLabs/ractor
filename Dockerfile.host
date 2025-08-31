@@ -60,8 +60,7 @@ USER root
 COPY target/release/raworc-host /usr/local/bin/raworc-host
 
 # Create session directory structure (will be overridden by volume mount)
-RUN mkdir -p /session/{agents,cache,state,tmp} && \
-    mkdir -p /session/cache/{cargo,pip,npm,git} && \
+RUN mkdir -p /session && \
     chown -R host:host /session && \
     chmod -R 755 /session
 
@@ -69,15 +68,7 @@ RUN mkdir -p /session/{agents,cache,state,tmp} && \
 USER host
 WORKDIR /session
 
-# Configure environment variables for persistent session structure
+# Configure environment variables for session structure
 ENV RAWORC_SESSION_DIR=/session
-ENV RAWORC_AGENTS_DIR=/session/agents
-ENV RAWORC_STATE_DIR=/session/state
-ENV RAWORC_CACHE_DIR=/session/cache
-
-# Override cache locations to use persistent storage
-ENV CARGO_HOME=/session/cache/cargo
-ENV PIP_CACHE_DIR=/session/cache/pip
-ENV NPM_CONFIG_CACHE=/session/cache/npm
 
 CMD ["raworc-host", "--api-url", "http://raworc_server:9000", "--session-id", "unknown", "--api-key", "unknown"]

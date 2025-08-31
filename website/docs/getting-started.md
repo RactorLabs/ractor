@@ -5,7 +5,7 @@ title: Getting Started
 
 # Getting Started with Raworc
 
-Get started with the Remote Agentic Work Orchestrator in just a few commands. Raworc provides dedicated remote computers for AI agents to automate any manual work with enterprise-grade reliability.
+Get started with the Remote Agentic Work Orchestrator in just a few commands. Raworc provides dedicated remote computers with Host to automate any manual work with enterprise-grade reliability.
 
 ## Prerequisites
 
@@ -41,7 +41,7 @@ raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-actual-key"}'
 
 **⚠️ Important**: You must provide an Anthropic API key to start a new session. Get your key from [console.anthropic.com](https://console.anthropic.com).
 
-That's it! You now have a running AI agent session.
+That's it! You now have a running Host session.
 
 ## Session Configuration
 
@@ -77,7 +77,7 @@ raworc session \
 
 ## Interactive Session Usage
 
-Once in a session, you can interact directly with the AI agent:
+Once in a session, you can interact directly with the Host:
 
 ```
 You: Hello, how can you help me?
@@ -200,7 +200,7 @@ raworc reset --yes
 ### Web Automation
 
 ```bash
-# Create a web automation agent
+# Create a web automation Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites."
@@ -209,7 +209,7 @@ raworc session \
 ### Document Processing
 
 ```bash
-# Create a document processing agent
+# Create a document processing Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
@@ -219,7 +219,7 @@ raworc session \
 ### System Administration
 
 ```bash
-# Create a system automation agent
+# Create a system automation Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems."

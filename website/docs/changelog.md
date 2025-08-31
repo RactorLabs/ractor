@@ -5,6 +5,15 @@ title: Changelog
 
 # Changelog
 
+## v0.3.0
+
+- **Session-Based Architecture**: Simplified to session-based system with Host as Raworc's Computer Use Agent implementation
+- **ANTHROPIC_API_KEY Required**: All new sessions now require ANTHROPIC_API_KEY for Host functionality  
+- **Host Nomenclature**: Updated terminology - Host is Raworc's Computer Use Agent, CUA abbreviation removed
+- **Selective Session Remix**: Enhanced remix functionality with selective copying of data and code files
+- **Improved Session Restore**: Reliable session persistence with no message reprocessing
+- **Documentation Updates**: Updated all documentation to reflect session-based architecture and Host terminology
+
 ## v0.2.10
 
 - **Documentation Reorganization**: Restructured session documentation for better clarity

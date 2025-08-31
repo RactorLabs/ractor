@@ -5,11 +5,11 @@ title: API Overview
 
 # REST API Overview
 
-Raworc provides a comprehensive REST API for accelerating agent development from prototype to production. The API enables programmatic control over containerized sessions, computer-use capabilities, multi-agent orchestration, and enterprise operations.
+Raworc provides a comprehensive REST API for Computer Use automation. The API enables programmatic control over Host sessions, dedicated computers, and enterprise operations.
 
 ## Base Information
 
-- **Base URL**: `http://your-server:9000/api/v0`
+- **Base URL**: `http://localhost:9000/api/v0`
 - **Protocol**: HTTP/HTTPS
 - **Format**: JSON
 - **Authentication**: Bearer token (JWT)
@@ -18,9 +18,9 @@ Raworc provides a comprehensive REST API for accelerating agent development from
 
 All API endpoints (except `/health`, `/version`, and `/auth/login`) require authentication using a JWT bearer token.
 
-## Workspaces
+## Sessions
 
-Raworc uses spaces to organize resources and provide isolation. Sessions and secrets belong to spaces, while users and roles are global. Access is controlled through role bindings that specify which users have which roles in which spaces.
+Raworc uses sessions to provide Computer Use automation. Each session includes a dedicated computer with a Host for automating manual work. Access is controlled through session ownership where users can only access their own sessions and admins can access all sessions.
 
 ### Obtaining a Token
 
@@ -90,36 +90,27 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/role-bindings/{id}`](./rest-api#get-role-bindingsid) | GET | Get specific role binding |
 | [`/role-bindings/{id}`](./rest-api#delete-role-bindingsid) | DELETE | Delete role binding |
 
-### Secrets
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| [`/secrets`](./rest-api#get-secrets) | GET | List secrets |
-| [`/secrets`](./rest-api#post-secrets) | POST | Create new secret |
-| [`/secrets/{key}`](./rest-api#get-secretskey) | GET | Get specific secret |
-| [`/secrets/{key}`](./rest-api#put-secretskey) | PUT | Update secret |
-| [`/secrets/{key}`](./rest-api#delete-secretskey) | DELETE | Delete secret |
-
-### Computer Sessions
+### Host Sessions
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions`](./rest-api#get-sessions) | GET | List computer sessions |
-| [`/sessions`](./rest-api#post-sessions) | POST | Create new computer session |
+| [`/sessions`](./rest-api#get-sessions) | GET | List Host sessions |
+| [`/sessions`](./rest-api#post-sessions) | POST | Create new Host session |
 | [`/sessions/{id}`](./rest-api#get-sessionsid) | GET | Get specific session |
 | [`/sessions/{id}`](./rest-api#put-sessionsid) | PUT | Update session details |
 | [`/sessions/{id}/state`](./rest-api#put-sessionsidstate) | PUT | Update session state |
-| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close computer session |
-| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore computer session |
-| [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork computer session |
+| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close Host session |
+| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore Host session |
+| [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork Host session |
 | [`/sessions/{id}`](./rest-api#delete-sessionsid) | DELETE | Delete session |
 
-### Task Communication
+### Host Communication
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions/{id}/messages`](./rest-api#get-sessionsidmessages) | GET | List task messages |
-| [`/sessions/{id}/messages`](./rest-api#post-sessionsidmessages) | POST | Send task to Computer Use agent |
+| [`/sessions/{id}/messages`](./rest-api#get-sessionsidmessages) | GET | List Host messages |
+| [`/sessions/{id}/messages`](./rest-api#post-sessionsidmessages) | POST | Send message to Host |
 | [`/sessions/{id}/messages/count`](./rest-api#get-sessionsidmessagescount) | GET | Get message count |
 | [`/sessions/{id}/messages`](./rest-api#delete-sessionsidmessages) | DELETE | Clear all messages |
 
@@ -213,10 +204,7 @@ X-Page-Limit: 50
 
 Some endpoints support filtering:
 ```
-GET /sessions?workspace_name=my-project  # Sessions for workspace
 GET /sessions?state=IDLE
-GET /spaces?active=true
-GET /spaces/{name}/secrets?show_values=true
 ```
 
 ## SDK Support
@@ -253,9 +241,9 @@ Breaking changes will result in a new API version.
 
 ## Available API Documentation
 
-- [REST API Reference](rest-api.md) - HTTP REST API documentation (updated with correct base URLs)
+- [REST API Reference](rest-api.md) - HTTP REST API documentation
 
 ## Next Steps
 
 - Explore the [REST API Reference](rest-api.md) for detailed endpoint documentation  
-- Review [RBAC Permissions](/docs/guides/security-rbac) for API access control
+- Review [RBAC System](/docs/concepts/rbac-system) for API access control

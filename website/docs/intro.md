@@ -10,7 +10,7 @@ slug: /
   <img src="/img/logo.png" alt="Raworc Logo" width="200"/>
 </div>
 
-**Raworc** is a Remote Agentic Work Orchestrator that provides Computer use agents with dedicated computers for each session. Intelligent agents that use computers like humans do - browsing the web, managing files, running software, and performing any computer-based task through natural language interfaces.
+**Raworc** is a Remote Agentic Work Orchestrator that provides Computer Use Agents with dedicated computers for each session. The Host uses computers like humans do - browsing the web, managing files, running software, and performing any computer-based task through natural language interfaces.
 
 :::tip Get Started in 60 Seconds
 
@@ -22,24 +22,24 @@ Get **Computer use agents with dedicated computers** - the simplest setup in the
 
 ## What is Raworc?
 
-Raworc is a **Remote Agentic Work Orchestrator** that provides Computer use agents with dedicated computers to automate manual work. Instead of doing repetitive tasks manually, get intelligent agents that use computers like humans do to handle any computer-based work through natural language instructions.
+Raworc is a **Remote Agentic Work Orchestrator** that provides Computer Use Agents with dedicated computers to automate manual work. Instead of doing repetitive tasks manually, get a Host that uses computers like humans do to handle any computer-based work through natural language instructions.
 
 ### Key Features
 
-- 🖥️ **Computer Use Agents** - Intelligent agents that control computers like humans do for any automation task
-- 🎯 **Dedicated Computers** - Each session provides a dedicated computer with full OS access for the CUA
-- 🗣️ **Natural Language Control** - Describe any manual work and the CUA executes it automatically
+- 🖥️ **Computer Use Agents** - Host that controls computers like humans do for any automation task
+- 🎯 **Dedicated Computers** - Each session provides a dedicated computer with full OS access for the Host
+- 🗣️ **Natural Language Control** - Describe any manual work and the Host executes it automatically
 - 💾 **Persistent Sessions** - Close and restore long-running automation workflows without losing progress
 - 🔐 **Secure Automation** - Enterprise-grade security with session isolation and encrypted secrets
-- ⚡ **Instant Setup** - Get automation-ready CUA with dedicated computer in seconds
+- ⚡ **Instant Setup** - Get automation-ready Host with dedicated computer in seconds
 
 ## How Raworc Works
 
-Raworc provides Computer use agents with dedicated computers to automate any manual work:
+Raworc provides Computer Use Agents with dedicated computers to automate any manual work:
 
-1. **Get CUA with Computer** - Each session provides a Computer Use Agent with dedicated computer
-2. **Describe Manual Work** - Tell the CUA what you want automated in natural language
-3. **CUA Executes Tasks** - Agent uses the computer like a human to complete the work
+1. **Get Host with Computer** - Each session provides a Host with dedicated computer
+2. **Describe Manual Work** - Tell the Host what you want automated in natural language
+3. **Host Executes Tasks** - Host uses the computer like a human to complete the work
 4. **Results Delivered** - Automated workflows with files, reports, and completed tasks
 
 ## What You Can Automate
@@ -61,9 +61,9 @@ Raworc provides Computer use agents with dedicated computers to automate any man
 ## Quick Links
 
 - [Get Started](/docs/getting-started) - Get your first Computer Use Agent in 60 seconds
-- [Computer Use Agents](/docs/concepts/computer-use-agents) - Understand CUA capabilities and automation potential
+- [Computer Use Agents](/docs/concepts/computer-use-agents) - Understand Host capabilities and automation potential
 - [Sessions](/docs/concepts/sessions) - Core data models and workflow management
-- [REST API Usage](/docs/guides/rest-api-guide) - Complete REST API usage guide
+- [REST API Reference](/docs/api/rest-api) - Complete REST API documentation
 - [Dev Mode](/docs/guides/dev-mode) - Enable Coding Agent to develop scripts, APIs, tools, and agents
 
 ## Getting Help

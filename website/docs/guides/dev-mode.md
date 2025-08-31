@@ -5,7 +5,7 @@ title: Dev Mode
 
 # Dev Mode - Coding Agent
 
-Dev Mode enables the **Coding Agent** within the Raworc Computer Use Agent. This specialized mode allows your CUA to write code, execute programs, and build agents using frameworks like LangGraph, CrewAI, AutoGen through conversational interfaces.
+Dev Mode enables the **Coding Agent** within the Raworc Computer Use Agent. This specialized mode allows your Host to write code, execute programs, and build agents using frameworks like LangGraph, CrewAI, AutoGen through conversational interfaces.
 
 ## What is Dev Mode?
 
@@ -18,7 +18,7 @@ Dev Mode enables the Coding Agent within your Computer Use Agent, providing spec
 - Maintains session state and persistence
 
 ### **Coding Agent (Dev Mode)**
-When Dev Mode is enabled, the CUA gains coding capabilities to develop anything:
+When Dev Mode is enabled, the Host gains coding capabilities to develop anything:
 - **Scripts and automation tools** - Create custom scripts for any task
 - **API integrations** - Build connections to external services
 - **Agent development** - Build specialized agents using LangGraph, CrewAI, AutoGen, LangChain
@@ -36,21 +36,21 @@ raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 You: "I need to build a customer service agent using LangGraph"
 
-CUA (with Coding Agent): I'll handle this development task:
-1. [CUA] Setting up development environment
+Host (with Coding Agent): I'll handle this development task:
+1. [Host] Setting up development environment
 2. [Coding Agent] Cloning LangGraph repository and analyzing examples
 3. [Coding Agent] Writing customer service agent code
-4. [CUA] Installing dependencies and testing the agent
+4. [Host] Installing dependencies and testing the agent
 5. [Coding Agent] Creating deployment configuration
 
-[CUA manages computer operations while Coding Agent handles all development work]
+[Host manages computer operations while Coding Agent handles all development work]
 ```
 
 ## Dev Mode Capabilities
 
 ### Conversational Framework Development
 
-Your CUA with Coding Agent can build using any framework through conversation:
+Your Host with Coding Agent can build using any framework through conversation:
 
 ```bash
 # Start Dev Mode session
@@ -58,39 +58,39 @@ raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 You: "Create a Python script that scrapes product data from Amazon and analyzes pricing trends"
 
-CUA (with Coding Agent): I'll handle this development task:
-1. [CUA] Setting up Python environment and installing libraries
+Host (with Coding Agent): I'll handle this development task:
+1. [Host] Setting up Python environment and installing libraries
 2. [Coding Agent] Writing web scraping script with error handling
 3. [Coding Agent] Creating data analysis and trend visualization
-4. [CUA] Testing the complete pipeline and saving results
+4. [Host] Testing the complete pipeline and saving results
 
-[CUA manages computer while Coding Agent writes the code]
+[Host manages computer while Coding Agent writes the code]
 ```
 
 #### **Framework Development Examples**
 ```bash
 You: "Clone the LangGraph examples repo and help me build a customer service agent"
 
-CUA (with Coding Agent): I'll build this for you:
-1. [CUA] Cloning LangGraph repository and analyzing documentation
+Host (with Coding Agent): I'll build this for you:
+1. [Host] Cloning LangGraph repository and analyzing documentation
 2. [Coding Agent] Setting up development environment and dependencies
 3. [Coding Agent] Writing customer service agent using LangGraph patterns
-4. [CUA] Testing the agent and validating functionality
+4. [Host] Testing the agent and validating functionality
 
 You: "Add memory capabilities to remember customer interactions"
 [Coding Agent] Implementing persistent memory using LangGraph state management
-[CUA] Testing memory functionality and validating persistence
+[Host] Testing memory functionality and validating persistence
 ```
 
 #### **API Integration Development**
 ```bash
 You: "Create a script that posts our daily sales report to Slack automatically"
 
-CUA (with Coding Agent): I'll build this script:
-1. [CUA] Setting up Python environment and Slack API access
+Host (with Coding Agent): I'll build this script:
+1. [Host] Setting up Python environment and Slack API access
 2. [Coding Agent] Writing script to generate sales report from database
 3. [Coding Agent] Adding Slack API integration to post formatted reports
-4. [CUA] Testing the script and saving it for scheduled execution
+4. [Host] Testing the script and saving it for scheduled execution
 
 Result: Script ready to run on your servers or automation platform
 ```
@@ -99,12 +99,12 @@ Result: Script ready to run on your servers or automation platform
 ```bash
 You: "Create a script that scrapes competitor prices and generates a pricing analysis report"
 
-CUA (with Coding Agent): I'll build this data processing script:
-1. [CUA] Setting up development environment and web scraping tools
+Host (with Coding Agent): I'll build this data processing script:
+1. [Host] Setting up development environment and web scraping tools
 2. [Coding Agent] Writing web scraping scripts for competitor websites
 3. [Coding Agent] Creating price comparison and analysis logic
 4. [Coding Agent] Building report generation with charts and insights
-5. [CUA] Testing the complete script and saving output files
+5. [Host] Testing the complete script and saving output files
 
 Result: Script that generates pricing analysis reports on demand
 ```
@@ -113,7 +113,7 @@ Result: Script that generates pricing analysis reports on demand
 
 ### **What You Can Develop with Coding Agent**
 
-The Coding Agent within your CUA can develop anything:
+The Coding Agent within your Host can develop anything:
 
 - **Custom Scripts** - Python, JavaScript, Bash scripts for data processing and automation
 - **API Integration Scripts** - Scripts that connect to external services and APIs

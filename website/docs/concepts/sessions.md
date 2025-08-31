@@ -5,7 +5,7 @@ title: Sessions
 
 # Sessions
 
-Raworc organizes AI agent work through **Sessions** - isolated containerized environments where AI agents execute tasks. Each session provides secure execution, persistent storage, and comprehensive lifecycle management.
+Raworc organizes Host work through **Sessions** - isolated containerized environments where the Host executes tasks. Each session provides secure execution, persistent storage, and comprehensive lifecycle management.
 
 ## Session Data Model
 
@@ -39,7 +39,7 @@ init → idle → busy → closed → errored
 
 ### State Definitions
 
-- **`init`** - Container being created and initialized
+- **`init`** - Container being created and Host initialized
 - **`idle`** - Ready to receive and process messages
 - **`busy`** - Processing messages and executing tasks
 - **`closed`** - Container stopped, volume preserved (can be restored)
@@ -49,8 +49,8 @@ init → idle → busy → closed → errored
 
 | From | To | Trigger | Result |
 |------|----|---------|---------| 
-| `init` | `idle` | Container ready | Agent polling starts |
-| `idle` | `busy` | Message received | Agent processing |
+| `init` | `idle` | Container ready | Host polling starts |
+| `idle` | `busy` | Message received | Host processing |
 | `busy` | `idle` | Task completed | Ready for next message |
 | `idle` | `closed` | Manual close | Container stopped |
 | `closed` | `idle` | Restore request | Container restarted |
@@ -66,11 +66,11 @@ Each session runs in an isolated Docker container with:
 ```
 raworc_session_{session-id}/
 ├── /session/code/            # Instructions and setup scripts
-│   ├── instructions.md      # AI agent instructions
+│   ├── instructions.md      # Host instructions
 │   └── setup.sh            # Environment setup script
 ├── /session/data/           # Persistent user data
 ├── /session/secrets/        # Environment secrets as files
-└── /session/logs/           # Execution logs
+└── /session/logs/           # Host execution logs
 ```
 
 ### Persistent Storage
@@ -124,7 +124,7 @@ raworc api sessions -m post -b '{
 ### Configuration Options
 
 - **`secrets`** - Environment variables/secrets for the session
-- **`instructions`** - Instructions for the AI agent (written to `/session/code/instructions.md`)
+- **`instructions`** - Instructions for the Host (written to `/session/code/instructions.md`)
 - **`setup`** - Setup script to run in the container (written to `/session/code/setup.sh`)
 - **`metadata`** - Additional metadata object
 
@@ -157,7 +157,7 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 1. Message stored in database with `user` role
 2. Session state transitions to `busy`
 3. Host polls and receives message
-4. Agent executes using AI capabilities and computer-use tools
+4. Host executes using AI capabilities and computer-use tools
 5. Response stored with `assistant` role
 6. Session returns to `idle` state
 
@@ -214,7 +214,7 @@ raworc session --restore {session-id}
 - ✅ **No message reprocessing** - Restored sessions only handle new messages
 - ✅ **Persistent storage** - All files and state preserved between restarts
 - ✅ **Reliable message loop** - Second and subsequent messages process correctly
-- ✅ **Fast restoration** - Sessions resume quickly with minimal overhead
+- ✅ **Fast restoration** - Host sessions resume quickly with minimal overhead
 
 ## Session Remix
 
@@ -306,12 +306,12 @@ Sessions start quickly because:
 
 ## Interactive Session Interface
 
-Use the interactive session interface for real-time AI interaction:
+Use the interactive session interface for real-time Host interaction:
 
 ```bash
 # All new sessions require ANTHROPIC_API_KEY
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'    # Start new session
-raworc session --restore abc123                                         # Continue existing session
+raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'    # Start new Host session
+raworc session --restore abc123                                         # Continue existing Host session
 raworc session --remix def456                                           # Create remix (inherits key if secrets=true)
 
 # In session interface:

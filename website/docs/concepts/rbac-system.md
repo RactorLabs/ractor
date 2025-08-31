@@ -5,7 +5,7 @@ title: RBAC & Authentication
 
 # Role-Based Access Control (RBAC) & Authentication
 
-Raworc implements a comprehensive RBAC system providing fine-grained access control for sessions and secrets. The system supports both user accounts and service accounts with JWT-based authentication, focusing on session-based permissions for remote computer management.
+Raworc implements a comprehensive RBAC system providing fine-grained access control for Host sessions. The system supports both user accounts and service accounts with JWT-based authentication, focusing on session-based permissions for remote computer management.
 
 ## Architecture Overview
 
@@ -229,7 +229,7 @@ pub struct RoleBinding {
 
 **API Resources:**
 ```rust
-// Session permissions
+// Host session permissions
 pub const SESSION_LIST: &str = "session.list";
 pub const SESSION_GET: &str = "session.get";
 pub const SESSION_CREATE: &str = "session.create";
@@ -237,14 +237,6 @@ pub const SESSION_UPDATE: &str = "session.update";
 pub const SESSION_DELETE: &str = "session.delete";
 pub const SESSION_MESSAGE_CREATE: &str = "session.message.create";
 pub const SESSION_MESSAGE_LIST: &str = "session.message.list";
-
-// Secret permissions
-pub const SECRET_LIST: &str = "secret.list";
-pub const SECRET_GET: &str = "secret.get";
-pub const SECRET_READ_VALUES: &str = "secret.read_values";
-pub const SECRET_CREATE: &str = "secret.create";
-pub const SECRET_UPDATE: &str = "secret.update";
-pub const SECRET_DELETE: &str = "secret.delete";
 
 // RBAC permissions
 pub const RBAC_ROLE_LIST: &str = "rbac.role.list";
@@ -433,20 +425,13 @@ let admin_role = Role {
 ```rust
 let developer_role = Role {
     name: "developer".to_string(),
-    description: Some("Developer access to session resources".to_string()),
+    description: Some("Developer access to Host session resources".to_string()),
     rules: vec![
-        // Session management
+        // Host session management
         Rule {
             api_groups: vec!["api".to_string()],
             resources: vec!["session".to_string()],
             verbs: vec!["list".to_string(), "get".to_string(), "create".to_string(), "delete".to_string()],
-            resource_names: None,
-        },
-        // Secret read-only for own sessions
-        Rule {
-            api_groups: vec!["api".to_string()],
-            resources: vec!["secret".to_string()],
-            verbs: vec!["list".to_string(), "get".to_string()],
             resource_names: None,
         },
     ],
@@ -460,7 +445,7 @@ let developer_role = Role {
 ```rust
 let viewer_role = Role {
     name: "viewer".to_string(),
-    description: Some("Read-only access to sessions".to_string()),
+    description: Some("Read-only access to Host sessions".to_string()),
     rules: vec![
         Rule {
             api_groups: vec!["api".to_string()],
@@ -481,19 +466,12 @@ let automation_role = Role {
     name: "automation".to_string(),
     description: Some("Automation service access".to_string()),
     rules: vec![
-        // Session management for automation
+        // Host session management for automation
         Rule {
             api_groups: vec!["api".to_string()],
             resources: vec!["session".to_string()],
             verbs: vec!["create".to_string(), "update".to_string(), "delete".to_string()],
             resource_names: None,
-        },
-        // Secret management for automation
-        Rule {
-            api_groups: vec!["api".to_string()],
-            resources: vec!["secret".to_string()],
-            verbs: vec!["create".to_string(), "update".to_string()],
-            resource_names: Some(vec!["AUTOMATION_KEY".to_string(), "SERVICE_TOKEN".to_string()]),
         },
     ],
     // ... metadata
@@ -518,14 +496,7 @@ raworc api roles -m post -b '{
     {
       "api_groups": ["api"],
       "resources": ["sessions"],
-      "verbs": ["list", "get"],
-      "resource_names": ["data-processor", "chart-generator"]
-    },
-    {
-      "api_groups": ["api"],
-      "resources": ["session_secrets"],
-      "verbs": ["list", "get", "read_values"],
-      "resource_names": ["DATABASE_URL", "API_KEY"]
+      "verbs": ["list", "get"]
     }
   ]
 }'
@@ -702,12 +673,6 @@ raworc api roles -m post -b '{
       "api_groups": ["api"],
       "resources": ["sessions"],
       "verbs": ["list", "get", "create", "delete"]
-    },
-    {
-      "api_groups": ["api"],
-      "resources": ["session_secrets"],
-      "verbs": ["list", "get", "read_values"],
-      "resource_names": ["DATABASE_URL", "ANALYTICS_API_KEY"]
     }
   ]
 }'

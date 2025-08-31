@@ -20,12 +20,12 @@ The computer use market is emerging with several platforms offering different ap
 - **Best For**: Developers building computer use applications who need the AI model
 
 ### **Raworc (Computer Use Agents)**
-- **Purpose**: Complete computer use platform with dedicated computers and built-in agents
+- **Purpose**: Complete computer use platform with dedicated computers and built-in Host
 - **Strengths**:
   - **Dedicated computers** - Each session gets a full Ubuntu environment
-  - **Built-in CUA** - Pre-configured with Anthropic's Claude computer use model
+  - **Built-in Host** - Pre-configured with Anthropic's Claude computer use model
   - **Session persistence** - Close and restore long-running automation workflows
-  - **Natural language control** - Describe any task and the CUA executes it
+  - **Natural language control** - Describe any task and the Host executes it
   - **No integration required** - Ready to automate any computer-based work immediately
 - **Best For**: Anyone needing to automate manual computer work without technical setup
 
@@ -91,12 +91,12 @@ The computer use market is emerging with several platforms offering different ap
 ### **Complete Computer Use Solution**
 ```
 Other Platforms: [AI Model] + [Complex Setup] + [Limited Scope]
-Raworc:         [CUA] + [Dedicated Computer] + [Any Task]
+Raworc:         [Host] + [Dedicated Computer] + [Any Task]
 ```
 
 ### **Key Differentiators**
 
-1. **Instant Computer Use**: Get CUA with dedicated computer in seconds, no setup
+1. **Instant Computer Use**: Get Host with dedicated computer in seconds, no setup
 2. **Universal Automation**: Automate any computer-based task, not just specific workflows  
 3. **Session Persistence**: Long-running automation that survives restarts
 4. **Natural Language Control**: Conversational interface for any automation task
@@ -123,11 +123,11 @@ Raworc:         [CUA] + [Dedicated Computer] + [Any Task]
 - **Universal Compatibility**: Works with any software, even legacy applications
 - **Visual Interface Control**: Can handle any visual interface like humans do
 - **Robust Automation**: Adapts to interface changes and unexpected scenarios  
-- **Natural Language**: Describe what you want, CUA figures out how to do it
+- **Natural Language**: Describe what you want, Host figures out how to do it
 
 ## Getting Started
 
-Ready to automate manual computer work with Computer Use Agents?
+Ready to automate manual computer work with the Host?
 
 ```bash
 # Install Raworc
@@ -136,7 +136,7 @@ npm install -g @raworc/cli
 # Start services  
 raworc start
 
-# Get your first CUA
+# Get your first Host session
 raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
 
 # Describe any manual work you want automated
@@ -145,6 +145,6 @@ You: "Help me organize these files and create a summary report"
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first CUA session
-- **[Sessions](/docs/concepts/sessions)** - Understand CUA session management
-- **[CLI Usage](/docs/guides/cli-usage)** - Master all commands for CUA control
+- **[Getting Started](/docs/getting-started)** - Set up your first Host session
+- **[Sessions](/docs/concepts/sessions)** - Understand Host session management
+- **[CLI Usage](/docs/guides/cli-usage)** - Master all commands for Host control
