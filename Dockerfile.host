@@ -29,7 +29,7 @@ RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/master/install.sh 
     nvm use --lts && \
     nvm alias default lts/*
 
-# Install Rust for agent runtime
+# Install Rust
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 # Create global symlinks as root
