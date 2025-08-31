@@ -285,9 +285,12 @@ Current session context:
 
         // Read instructions from /session/code/instructions.md if it exists
         let instructions_path = std::path::Path::new("/session/code/instructions.md");
+        info!("Checking for instructions file at: {}", instructions_path.display());
         if instructions_path.exists() {
+            info!("Instructions file exists, reading contents...");
             match tokio::fs::read_to_string(instructions_path).await {
                 Ok(instructions) => {
+                    info!("Read instructions content: '{}'", instructions.trim());
                     prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
                     prompt.push_str(&instructions);
                     info!("Loaded instructions from /session/code/instructions.md");
@@ -296,6 +299,8 @@ Current session context:
                     warn!("Failed to read instructions file: {}", e);
                 }
             }
+        } else {
+            info!("No instructions file found at {}", instructions_path.display());
         }
 
         prompt
