@@ -20,8 +20,10 @@ module.exports = (program) => {
     .option('--data <boolean>', 'Include data files in remix (default: true)')
     .option('--code <boolean>', 'Include code files in remix (default: true)')
     .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
-    .option('--instructions <file>', 'Path to instructions file')
-    .option('--setup <file>', 'Path to setup script file')
+    .option('--instructions <text>', 'Direct instructions text')
+    .option('--instructions-file <file>', 'Path to instructions file')
+    .option('--setup <text>', 'Direct setup script text')
+    .option('--setup-file <file>', 'Path to setup script file')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
@@ -29,8 +31,10 @@ module.exports = (program) => {
       '  $ raworc session --remix abc123           # Create new session based on existing one\n' +
       '  $ raworc session --remix abc123 --data false # Remix without copying data files\n' +
       '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
-      '  $ raworc session --instructions ./inst.md # Create session with instructions\n' +
-      '  $ raworc session --setup ./setup.sh       # Create session with setup script\n')
+      '  $ raworc session --instructions "Talk like a pirate" # Direct instructions\n' +
+      '  $ raworc session --instructions-file ./inst.md # Instructions from file\n' +
+      '  $ raworc session --setup "pip install pandas" # Direct setup command\n' +
+      '  $ raworc session --setup-file ./setup.sh # Setup from file\n')
     .action(async (options) => {
       await sessionCommand(options);
     });
@@ -239,11 +243,13 @@ async function sessionCommand(options) {
         process.exit(1);
       }
       
-      // Add instructions if provided
+      // Add instructions if provided (direct text or from file)
       if (options.instructions) {
+        sessionPayload.instructions = options.instructions;
+      } else if (options.instructionsFile) {
         try {
           const fs = require('fs');
-          sessionPayload.instructions = fs.readFileSync(options.instructions, 'utf8');
+          sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
         } catch (error) {
           spinner.fail('Failed to read instructions file');
           console.error(chalk.red('Error:'), error.message);
@@ -251,11 +257,13 @@ async function sessionCommand(options) {
         }
       }
       
-      // Add setup script if provided
+      // Add setup script if provided (direct text or from file)
       if (options.setup) {
+        sessionPayload.setup = options.setup;
+      } else if (options.setupFile) {
         try {
           const fs = require('fs');
-          sessionPayload.setup = fs.readFileSync(options.setup, 'utf8');
+          sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
         } catch (error) {
           spinner.fail('Failed to read setup script');
           console.error(chalk.red('Error:'), error.message);
