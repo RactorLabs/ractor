@@ -69,7 +69,7 @@ Raworc uses a control plane and worker nodes pattern for session orchestration:
                     │       Session Computers         │
                     │ ┌─────────────┐ ┌─────────────┐ │
                     │ │ Computer    │ │ Computer    │ │
-                    │ │ + Agent     │ │ + Agent     │ │
+                    │ │ + Host      │ │ + Host      │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
 ```

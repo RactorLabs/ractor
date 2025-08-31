@@ -68,7 +68,7 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for Computer use age
                     ┌─────────────────────────────────┐
                     │    Computer Use Agents          │
                     │ ┌─────────────┐ ┌─────────────┐ │
-                    │ │   Agent +   │ │   Agent +   │ │
+                    │ │   Host +    │ │   Host +    │ │
                     │ │  Computer   │ │  Computer   │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
