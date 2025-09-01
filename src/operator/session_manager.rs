@@ -6,11 +6,21 @@ use sqlx::{mysql::MySqlPoolOptions, Pool, MySql};
 use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
+use jsonwebtoken::{encode, EncodingKey, Header};
 
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
 pub use constants::SESSION_STATE_IDLE;
+
+// Import shared modules
+#[path = "../shared/anthropic.rs"]
+pub mod anthropic;
+use anthropic::AnthropicKeyManager;
+
+#[path = "../shared/rbac.rs"]
+pub mod rbac;
+use rbac::{RbacClaims, SubjectType};
 
 use super::docker_manager::DockerManager;
 
@@ -32,6 +42,8 @@ pub struct SessionTask {
 pub struct SessionManager {
     pool: Pool<MySql>,
     docker_manager: DockerManager,
+    key_manager: AnthropicKeyManager,
+    jwt_secret: String,
 }
 
 impl SessionManager {
@@ -43,10 +55,18 @@ impl SessionManager {
 
         let docker = Docker::connect_with_socket_defaults()?;
         let docker_manager = DockerManager::new(docker, pool.clone());
+        
+        let key_manager = AnthropicKeyManager::new()
+            .map_err(|e| anyhow::anyhow!("Failed to initialize Anthropic key manager: {}", e))?;
+        
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .unwrap_or_else(|_| "default-secret-change-in-production".to_string());
 
         Ok(Self {
             pool,
             docker_manager,
+            key_manager,
+            jwt_secret,
         })
     }
 
@@ -66,6 +86,32 @@ impl SessionManager {
                 }
             }
         }
+    }
+
+    /// Generate a session-specific API key for Anthropic
+    async fn generate_session_api_key(&self, session_id: &str) -> Result<String> {
+        self.key_manager.generate_session_api_key(session_id).await
+    }
+
+    /// Generate a session-specific RAWORC token for the given principal
+    fn generate_session_token(&self, principal: &str, principal_type: SubjectType, session_id: &str) -> Result<String> {
+        let exp = chrono::Utc::now() + chrono::Duration::hours(24);
+        let claims = RbacClaims {
+            sub: principal.to_string(), // Use original principal name for API server compatibility
+            sub_type: principal_type,
+            exp: exp.timestamp() as usize,
+            iat: chrono::Utc::now().timestamp() as usize,
+            iss: "raworc-session-manager".to_string(),
+        };
+
+        let token = encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.jwt_secret.as_ref()),
+        ).map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+
+        info!("Generated session token for principal: {} (session: {})", principal, session_id);
+        Ok(token)
     }
 
     async fn process_pending_tasks(&self) -> Result<usize> {
@@ -181,28 +227,31 @@ impl SessionManager {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        // Extract user token and principal info, add to secrets automatically
-        if let Some(user_token) = task.payload.get("user_token").and_then(|v| v.as_str()) {
-            secrets.insert("RAWORC_TOKEN".to_string(), user_token.to_string());
-        }
-        
-        // Add principal information to secrets for Host logging
-        if let Some(principal) = task.payload.get("principal").and_then(|v| v.as_str()) {
-            secrets.insert("RAWORC_PRINCIPAL".to_string(), principal.to_string());
-        }
-        if let Some(principal_type) = task.payload.get("principal_type").and_then(|v| v.as_str()) {
-            secrets.insert("RAWORC_PRINCIPAL_TYPE".to_string(), principal_type.to_string());
-        }
-
-        // Extract principal information for logging
+        // Extract principal information for logging and token generation
         let principal = task.payload.get("principal")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let principal_type = task.payload.get("principal_type")
+        let principal_type_str = task.payload.get("principal_type")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         
-        info!("Creating session {} for principal {} ({}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
+        // Parse principal type for token generation
+        let principal_type = match principal_type_str {
+            "Operator" => SubjectType::Operator,
+            "User" => SubjectType::Subject,
+            _ => SubjectType::Subject,
+        };
+
+        // Generate dynamic tokens for this session
+        info!("Generating dynamic tokens for session {}", session_id);
+        let session_api_key = self.generate_session_api_key(&session_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to generate session API key: {}", e))?;
+        let session_token = self.generate_session_token(principal, principal_type, &session_id)
+            .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+        
+        info!("Generated dynamic tokens for session {} (principal: {})", session_id, principal);
+        
+        info!("Creating session {} for principal {} ({:?}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
               session_id, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
         
         // Check if this is a remix session from task payload
@@ -237,19 +286,35 @@ impl SessionManager {
                   session_id, parent_session_id, copy_data, copy_code, copy_secrets);
             
             // For remix sessions, create container with selective volume copy from parent
-            self.docker_manager.create_container_with_selective_copy(
+            // Generate fresh tokens for remix session
+            let remix_api_key = self.generate_session_api_key(&session_id).await
+                .map_err(|e| anyhow::anyhow!("Failed to generate remix session API key: {}", e))?;
+            let remix_token = self.generate_session_token(principal, principal_type, &session_id)
+                .map_err(|e| anyhow::anyhow!("Failed to generate remix session token: {}", e))?;
+            
+            self.docker_manager.create_container_with_selective_copy_and_tokens(
                 &session_id, 
                 parent_session_id, 
                 copy_data, 
                 copy_code,
-                copy_secrets
+                copy_secrets,
+                remix_api_key,
+                remix_token,
+                principal.to_string()
             ).await?;
         } else {
             info!("Creating new session {}", session_id);
             
-            // For new sessions, ANTHROPIC_API_KEY validation was already done above
-            // For regular sessions, create container with session parameters
-            self.docker_manager.create_container_with_params(&session_id, secrets, instructions, setup).await?;
+            // For regular sessions, create container with session parameters and generated tokens
+            self.docker_manager.create_container_with_params_and_tokens(
+                &session_id, 
+                secrets, 
+                instructions, 
+                setup,
+                session_api_key,
+                session_token,
+                principal.to_string()
+            ).await?;
         }
         
         // Send prompt if provided (BEFORE setting state to IDLE)
@@ -366,12 +431,20 @@ impl SessionManager {
 
     pub async fn handle_restore_session(&self, task: SessionTask) -> Result<()> {
         let session_id = task.session_id;
+        let principal = task.created_by.clone();
         
         info!("Restoring container for session {}", session_id);
         
+        // Generate fresh tokens for restored session
+        info!("Generating fresh tokens for restored session {}", session_id);
+        let restore_api_key = self.generate_session_api_key(&session_id).await
+            .map_err(|e| anyhow::anyhow!("Failed to generate restore session API key: {}", e))?;
+        let restore_token = self.generate_session_token(&principal, SubjectType::Subject, &session_id)
+            .map_err(|e| anyhow::anyhow!("Failed to generate restore session token: {}", e))?;
+        
         // All restored sessions were closed (container destroyed), so recreate container
-        info!("Session {} was closed, restoring container with persistent volume and secrets", session_id);
-        self.docker_manager.restore_container(&session_id).await?;
+        info!("Session {} was closed, restoring container with persistent volume and fresh tokens", session_id);
+        self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone()).await?;
         
         // Update last_activity_at to track when session was restored
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)

@@ -435,6 +435,188 @@ echo 'Session directories created'
         Ok(container_name)
     }
 
+    pub async fn create_container_with_selective_copy_and_tokens(
+        &self, 
+        session_id: &str, 
+        parent_session_id: &str,
+        copy_data: bool,
+        copy_code: bool,
+        copy_secrets: bool,
+        api_key: String,
+        raworc_token: String,
+        principal: String
+    ) -> Result<String> {
+        info!("Creating remix session {} with selective copy from {} and fresh tokens", 
+              session_id, parent_session_id);
+        
+        // First create the session volume (without starting container)
+        let session_volume = self.create_session_volume(session_id).await?;
+        
+        // Then copy specific directories from parent volume to new volume
+        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
+        let new_volume = format!("raworc_session_data_{}", session_id);
+        
+        info!("Copying selective data from {} to {}", parent_volume, new_volume);
+        
+        // Build copy commands based on what should be copied
+        let mut copy_commands = Vec::new();
+        
+        // Always create base directory structure with proper ownership
+        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets && sudo chown -R host:host /dest".to_string());
+        
+        if copy_data {
+            copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
+        }
+        
+        if copy_code {
+            copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
+        }
+        
+        if copy_secrets {
+            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        } else {
+            copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+        }
+        
+        // Always copy README.md from root if it exists
+        copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());
+        
+        copy_commands.push("echo 'Selective copy completed'".to_string());
+        
+        let copy_command = copy_commands.join(" && ");
+        
+        // Use bollard Docker API to create copy container
+        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        
+        let config = Config {
+            image: Some(self.host_image.clone()),
+            user: Some("host".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                copy_command
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(parent_volume.clone()),
+                        target: Some("/source".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    },
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some(new_volume.clone()),
+                        target: Some("/dest".to_string()),
+                        read_only: Some(false),
+                        ..Default::default()
+                    }
+                ]),
+                network_mode: Some("raworc_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        
+        // Create copy container
+        self.docker.create_container(
+            Some(CreateContainerOptions {
+                name: copy_container_name.clone(),
+                ..Default::default()
+            }),
+            config,
+        ).await?;
+        
+        // Start container
+        self.docker.start_container::<String>(&copy_container_name, None).await?;
+        
+        // Wait for completion
+        let mut wait_stream = self.docker.wait_container::<String>(&copy_container_name, None);
+        while let Some(wait_result) = wait_stream.next().await {
+            let exit_result = wait_result?;
+            if exit_result.status_code == 0 {
+                info!("Selective volume copy completed successfully");
+            } else {
+                warn!("Selective volume copy container exited with code {}", exit_result.status_code);
+            }
+            break;
+        }
+        
+        // Get logs from copy container for debugging
+        let logs = self.docker.logs::<String>(
+            &copy_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            })
+        );
+        
+        let log_output = logs.map(|log| {
+            match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                Err(_) => String::new(),
+            }
+        }).collect::<Vec<_>>().await.join("");
+        
+        info!("Selective copy logs: {}", log_output.trim());
+        
+        // Parse secrets from copy output (user secrets only - system tokens are generated separately)
+        let mut secrets = std::collections::HashMap::new();
+        
+        // Parse SECRET:key=value lines from the copy output
+        for line in log_output.lines() {
+            if line.starts_with("SECRET:") {
+                if let Some(secret_part) = line.strip_prefix("SECRET:") {
+                    if let Some((key, value)) = secret_part.split_once('=') {
+                        secrets.insert(key.to_string(), value.to_string());
+                        info!("Parsed user secret from copy output: {}", key);
+                    }
+                }
+            }
+        }
+        
+        info!("Successfully parsed {} user secrets from copy output", secrets.len());
+        
+        // Clean up copy container
+        let _ = self.docker.remove_container(
+            &copy_container_name,
+            Some(RemoveContainerOptions {
+                force: true,
+                ..Default::default()
+            }),
+        ).await;
+        
+        // Read instructions and setup if code was copied
+        let instructions = if copy_code {
+            self.read_file_from_volume(&new_volume, "code/instructions.md").await.ok()
+        } else {
+            None
+        };
+        
+        let setup = if copy_code {
+            self.read_file_from_volume(&new_volume, "code/setup.sh").await.ok()
+        } else {
+            None
+        };
+        
+        info!("Creating remix container with {} user secrets and fresh system tokens", secrets.len());
+        
+        // Now create and start the container with user secrets + generated system tokens
+        let container_name = self.create_container_internal_with_tokens(
+            session_id, 
+            Some(secrets), 
+            instructions, 
+            setup,
+            api_key,
+            raworc_token,
+            principal
+        ).await?;
+        
+        Ok(container_name)
+    }
+
     // Helper method to read secrets from a volume
     async fn read_secrets_from_volume(&self, volume_name: &str) -> Result<std::collections::HashMap<String, String>> {
         let mut secrets = std::collections::HashMap::new();
@@ -614,6 +796,28 @@ echo 'Session directories created'
         Ok(container_name)
     }
 
+    pub async fn create_container_with_params_and_tokens(
+        &self, 
+        session_id: &str, 
+        secrets: std::collections::HashMap<String, String>,
+        instructions: Option<String>,
+        setup: Option<String>,
+        api_key: String,
+        raworc_token: String,
+        principal: String
+    ) -> Result<String> {
+        let container_name = self.create_container_internal_with_tokens(
+            session_id, 
+            Some(secrets), 
+            instructions, 
+            setup,
+            api_key,
+            raworc_token,
+            principal
+        ).await?;
+        Ok(container_name)
+    }
+
     pub async fn create_container(&self, session_id: &str) -> Result<String> {
         let container_name = self.create_container_internal(session_id, None, None, None).await?;
         Ok(container_name)
@@ -643,6 +847,44 @@ echo 'Session directories created'
         let setup = self.read_file_from_volume(&volume_name, "code/setup.sh").await.ok();
         
         let container_name = self.create_container_internal(session_id, secrets, instructions, setup).await?;
+        Ok(container_name)
+    }
+
+    pub async fn restore_container_with_tokens(
+        &self, 
+        session_id: &str,
+        api_key: String,
+        raworc_token: String,
+        principal: String
+    ) -> Result<String> {
+        // Read existing user secrets from the volume (but generate fresh system tokens)
+        let volume_name = format!("raworc_session_data_{}", session_id);
+        info!("Restoring container for session {} with fresh tokens", session_id);
+        
+        let secrets = match self.read_secrets_from_volume(&volume_name).await {
+            Ok(s) => {
+                info!("Found {} user secrets in volume for session {}", s.len(), session_id);
+                Some(s)
+            },
+            Err(e) => {
+                warn!("Could not read secrets from volume for session {}: {}", session_id, e);
+                None
+            }
+        };
+        
+        // Read existing instructions and setup from volume
+        let instructions = self.read_file_from_volume(&volume_name, "code/instructions.md").await.ok();
+        let setup = self.read_file_from_volume(&volume_name, "code/setup.sh").await.ok();
+        
+        let container_name = self.create_container_internal_with_tokens(
+            session_id, 
+            secrets, 
+            instructions, 
+            setup,
+            api_key,
+            raworc_token,
+            principal
+        ).await?;
         Ok(container_name)
     }
 
@@ -773,6 +1015,131 @@ echo 'Session directories created'
         Ok(container.id)
     }
 
+    async fn create_container_internal_with_tokens(
+        &self, 
+        session_id: &str, 
+        secrets: Option<std::collections::HashMap<String, String>>,
+        instructions: Option<String>,
+        setup: Option<String>,
+        api_key: String,
+        raworc_token: String,
+        principal: String
+    ) -> Result<String> {
+        let container_name = format!("raworc_session_{session_id}");
+        
+        // Use host image directly for all sessions
+        let container_image = self.host_image.clone();
+        info!("Creating container {} with host image and generated tokens", container_name);
+        
+        info!("Creating container for session {} with fresh tokens", session_id);
+
+        // Create or get existing session volume
+        let session_volume = match self.get_session_volume(session_id).await? {
+            Some(existing) => existing,
+            None => self.create_session_volume(session_id).await?,
+        };
+
+        let mut labels = HashMap::new();
+        labels.insert("raworc.session".to_string(), session_id.to_string());
+        labels.insert("raworc.managed".to_string(), "true".to_string());
+        labels.insert("raworc.volume".to_string(), session_volume.clone());
+
+        // Configure volume mounts
+        let mounts = vec![
+            bollard::models::Mount {
+                typ: Some(bollard::models::MountTypeEnum::VOLUME),
+                source: Some(session_volume.clone()),
+                target: Some("/session".to_string()),
+                read_only: Some(false),
+                ..Default::default()
+            }
+        ];
+
+        // Set environment variables for the session structure
+        let mut env = vec![
+            format!("RAWORC_API_URL=http://raworc_server:9000"),
+            format!("RAWORC_SESSION_ID={}", session_id),
+            format!("RAWORC_SESSION_DIR=/session"),
+            // Set the generated system tokens directly as environment variables
+            format!("ANTHROPIC_API_KEY={}", api_key),
+            format!("RAWORC_TOKEN={}", raworc_token),
+            format!("RAWORC_PRINCIPAL={}", principal),
+            format!("RAWORC_PRINCIPAL_TYPE=User"), // For now, assume User type for restore
+        ];
+        
+        info!("Set system-generated ANTHROPIC_API_KEY and RAWORC_TOKEN as environment variables");
+        
+        // Add user secrets as environment variables (but NOT ANTHROPIC_API_KEY or RAWORC_TOKEN)
+        if let Some(secrets_map) = &secrets {
+            for (key, value) in secrets_map {
+                // Skip if user provided their own ANTHROPIC_API_KEY or RAWORC_TOKEN - we use system ones
+                if key == "ANTHROPIC_API_KEY" || key == "RAWORC_TOKEN" {
+                    info!("Skipping user-provided {} - using system-generated token instead", key);
+                    continue;
+                }
+                env.push(format!("{}={}", key, value));
+                info!("Adding user secret {} as environment variable for session {}", key, session_id);
+            }
+        }
+
+        // Set the command with required arguments
+        let cmd = vec![
+            "raworc-host".to_string(),
+            "--api-url".to_string(),
+            "http://raworc_server:9000".to_string(),
+            "--session-id".to_string(),
+            session_id.to_string(),
+        ];
+
+        let config = Config {
+            image: Some(container_image),
+            hostname: Some(format!("session-{}", &session_id.to_string()[..8])),
+            labels: Some(labels),
+            env: Some(env),
+            cmd: Some(cmd),
+            working_dir: Some("/session".to_string()), // User starts in their session
+            host_config: Some(bollard::models::HostConfig {
+                cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
+                cpu_period: Some(100000),
+                memory: Some(self.memory_limit),
+                memory_swap: Some(self.memory_limit),
+                network_mode: Some("raworc_network".to_string()),
+                mounts: Some(mounts),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let options = CreateContainerOptions {
+            name: container_name.clone(),
+            ..Default::default()
+        };
+
+        let container = self.docker.create_container(Some(options), config).await?;
+        
+        self.docker
+            .start_container::<String>(&container.id, None)
+            .await?;
+
+        // Initialize session structure after starting container so host can execute setup script
+        // Only initialize with user secrets (system tokens are already in environment)
+        if !self.session_initialized(&session_volume).await? {
+            let empty_secrets = HashMap::new();
+            let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
+            self.initialize_session_structure(session_id, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
+        }
+
+        // Update database with container ID
+        sqlx::query("UPDATE sessions SET container_id = ? WHERE id = ?")
+            .bind(&container.id)
+            .bind(session_id)
+            .execute(&self.db_pool)
+            .await?;
+
+        info!("Container {} created with session volume {} and fresh system tokens", container_name, session_volume);
+        Ok(container.id)
+    }
+
     // Close container but retain persistent volume (for session pause/close)
     pub async fn close_container(&self, session_id: &str) -> Result<()> {
         let container_name = format!("raworc_session_{session_id}");
@@ -790,8 +1157,13 @@ echo 'Session directories created'
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to close container {}: {}", container_name, e);
-                Err(anyhow::anyhow!("Failed to close container: {}", e))
+                if e.to_string().contains("404") || e.to_string().contains("No such container") {
+                    warn!("Container {} already removed or doesn't exist, treating as success", container_name);
+                    Ok(())
+                } else {
+                    error!("Failed to close container {}: {}", container_name, e);
+                    Err(anyhow::anyhow!("Failed to close container: {}", e))
+                }
             }
         }
     }
@@ -819,8 +1191,19 @@ echo 'Session directories created'
                 Ok(())
             }
             Err(e) => {
-                error!("Failed to delete container {}: {}", container_name, e);
-                Err(anyhow::anyhow!("Failed to delete container: {}", e))
+                if e.to_string().contains("404") || e.to_string().contains("No such container") {
+                    warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
+                    
+                    // Still try to cleanup the session volume
+                    if let Err(e) = self.cleanup_session_volume(session_id).await {
+                        warn!("Failed to cleanup session volume for {}: {}", session_id, e);
+                    }
+                    
+                    Ok(())
+                } else {
+                    error!("Failed to delete container {}: {}", container_name, e);
+                    Err(anyhow::anyhow!("Failed to delete container: {}", e))
+                }
             }
         }
     }

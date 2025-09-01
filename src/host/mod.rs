@@ -25,9 +25,25 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     let api_token = std::env::var("RAWORC_TOKEN")
         .map_err(|_| anyhow::anyhow!("RAWORC_TOKEN environment variable is required"))?;
     
+    // Debug: Log the RAWORC token being used (partially masked for security)
+    let masked_token = if api_token.len() > 20 {
+        format!("{}...{}", &api_token[..20], &api_token[api_token.len()-8..])
+    } else {
+        "<too-short>".to_string()
+    };
+    tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
+    
     // Get Claude API key from environment - ANTHROPIC_API_KEY is required
     let claude_api_key = std::env::var("ANTHROPIC_API_KEY")
         .map_err(|_| anyhow::anyhow!("ANTHROPIC_API_KEY environment variable is required"))?;
+    
+    // Debug: Log the API key being used (partially masked for security)
+    let masked_key = if claude_api_key.len() > 10 {
+        format!("{}...{}", &claude_api_key[..10], &claude_api_key[claude_api_key.len()-4..])
+    } else {
+        "<too-short>".to_string()
+    };
+    tracing::info!("Using ANTHROPIC_API_KEY: {}", masked_key);
     
     // Initialize configuration
     let config = Arc::new(config::Config {

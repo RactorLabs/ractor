@@ -32,7 +32,7 @@ module.exports = (program) => {
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
       '  $ raworc session start -n "my-session"    # Start with name\n' +
-      '  $ raworc session start -S \'{"API_KEY":"sk-123"}\' # Start with secrets\n' +
+      '  $ raworc session start -S \'{"DB_URL":"postgres://..."}\' # Start with user secrets\n' +
       '  $ raworc session start -p "Hello" -n "test" # Start with prompt and name\n')
     .action(async (options) => {
       await sessionStartCommand(options);
@@ -123,15 +123,8 @@ async function sessionStartCommand(options) {
       }
     }
 
-    // Validate that ANTHROPIC_API_KEY is provided for new sessions
-    if (!sessionPayload.secrets || !sessionPayload.secrets.ANTHROPIC_API_KEY) {
-      spinner.fail('Anthropic API key required');
-      console.error(chalk.red('Error:'), 'ANTHROPIC_API_KEY is required for new sessions');
-      console.log();
-      console.log(chalk.yellow('💡 Get your API key from: https://console.anthropic.com'));
-      console.log(chalk.yellow('💡 Usage:'), 'raworc session start -S \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\'');
-      process.exit(1);
-    }
+    // Note: ANTHROPIC_API_KEY is now generated automatically by the system
+    // Users can still provide their own API key in secrets for custom code if needed
 
     // Add instructions if provided
     if (options.instructions) {
@@ -274,7 +267,7 @@ async function sessionRestoreCommand(sessionId, options) {
       process.exit(1);
     }
 
-    await startInteractiveSession(sessionId, options);
+    await startInteractiveSession(sessionId, { ...options, isRestore: true });
 
   } catch (error) {
     console.error(chalk.red('❌ Error:'), error.message);
@@ -380,6 +373,49 @@ async function startInteractiveSession(sessionId, options) {
   console.log(chalk.green('✅ Session active! Type your messages below.'));
   console.log(chalk.gray('Commands: /status, /quit'));
   console.log(chalk.gray('Session ID:'), sessionId);
+  
+  // Show recent conversation history for restored sessions
+  if (options.isRestore) {
+    try {
+      const historySpinner = ora('Loading conversation history...').start();
+      const messagesResponse = await api.get(`/sessions/${sessionId}/messages`);
+      
+      if (messagesResponse.success && messagesResponse.data && messagesResponse.data.length > 0) {
+        const messages = messagesResponse.data;
+        const recentMessages = messages.slice(-6); // Show last 6 messages (3 exchanges)
+        
+        historySpinner.succeed('Conversation history loaded');
+        console.log();
+        console.log(chalk.blue('📜 Recent conversation history:'));
+        console.log(chalk.gray('─'.repeat(50)));
+        
+        recentMessages.forEach((msg, index) => {
+          const timestamp = new Date(msg.created_at).toLocaleTimeString();
+          const roleColor = msg.role === 'user' ? chalk.green : chalk.cyan;
+          const roleLabel = msg.role === 'user' ? 'You' : 'Host';
+          
+          console.log();
+          console.log(roleColor(`${roleLabel} (${timestamp}):`));
+          
+          // Truncate long messages for history display
+          const content = msg.content.length > 200 
+            ? msg.content.substring(0, 200) + '...'
+            : msg.content;
+          
+          console.log(chalk.white(content));
+        });
+        
+        console.log();
+        console.log(chalk.gray('─'.repeat(50)));
+        console.log(chalk.blue('💬 Continue the conversation below:'));
+      } else {
+        historySpinner.succeed('No previous messages found');
+      }
+    } catch (error) {
+      console.log(chalk.yellow('Warning: Could not load conversation history'));
+    }
+  }
+  
   console.log();
 
   // Handle prompt if provided (for any session type)

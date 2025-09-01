@@ -146,11 +146,6 @@ pub async fn create_session(
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to create session".to_string()))?;
 
-    // Validate that ANTHROPIC_API_KEY is provided for new sessions
-    if !req.secrets.contains_key("ANTHROPIC_API_KEY") {
-        tracing::warn!("Attempted to create session without ANTHROPIC_API_KEY");
-        return Err(ApiError::BadRequest("ANTHROPIC_API_KEY secret is required for new sessions. Get your key from console.anthropic.com".to_string()));
-    }
 
     // Get the principal name
     let created_by = match &auth.principal {

@@ -303,6 +303,19 @@ for component in "${COMPONENTS[@]}"; do
         operator)
             print_status "Starting operator service..."
             
+            # Validate required environment variables for operator
+            if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+                print_error "ANTHROPIC_API_KEY environment variable is required for the operator"
+                echo ""
+                echo "💡 The operator needs an Anthropic API key to provide to session containers."
+                echo "   Set the environment variable and try again:"
+                echo ""
+                echo "   export ANTHROPIC_API_KEY=sk-ant-api03-..."
+                echo "   ./scripts/start.sh operator"
+                echo ""
+                exit 1
+            fi
+            
             # Check if MySQL is running and healthy (if it was requested)
             if [[ " ${COMPONENTS[*]} " =~ " mysql " ]] || docker ps --filter "name=raworc_mysql" --format "{{.Names}}" | grep -q "raworc_mysql"; then
                 print_status "Waiting for MySQL to be healthy..."
@@ -343,6 +356,7 @@ for component in "${COMPONENTS[@]}"; do
                 -v operator_data:/var/lib/raworc/volumes \
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
+                -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
                 -e HOST_IMAGE="$HOST_IMAGE" \
                 -e HOST_CPU_LIMIT="0.5" \
                 -e HOST_MEMORY_LIMIT="536870912" \
