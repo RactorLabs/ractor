@@ -330,8 +330,8 @@ impl SessionManager {
         info!("Restoring container for session {}", session_id);
         
         // All restored sessions were closed (container destroyed), so recreate container
-        info!("Session {} was closed, creating new container with persistent volume", session_id);
-        self.docker_manager.create_container(&session_id).await?;
+        info!("Session {} was closed, restoring container with persistent volume and secrets", session_id);
+        self.docker_manager.restore_container(&session_id).await?;
         
         // Update last_activity_at to track when session was restored
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)

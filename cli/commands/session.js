@@ -67,7 +67,7 @@ async function sessionCommand(options) {
   } else {
     console.log(chalk.gray('Mode:'), 'New Session');
   }
-  console.log(chalk.gray('User:'), authData.user?.username || 'Unknown');
+  console.log(chalk.gray('User:'), authData.user?.user || authData.user || 'Unknown');
 
   // Show session creation parameters if provided
   if (options.secrets && !options.remix && !options.restore) {

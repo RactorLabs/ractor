@@ -98,7 +98,7 @@ Create token for a ServiceAccount:
 ```
 
 **Fields**:
-- `principal` - The username or identifier for the principal
+- `principal` - The user identifier for the principal
 - `principal_type` - Must be "User" or "ServiceAccount"
 
 **Response**: `200 OK`

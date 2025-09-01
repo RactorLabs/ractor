@@ -54,7 +54,7 @@ usage() {
   echo ""
   echo "Options:"
   echo "  -t, --tag TAG           Docker image tag (default: $DEFAULT_TAG from Cargo.toml)"
-  echo "  -r, --registry REGISTRY Registry/username prefix (default: $DEFAULT_REGISTRY)"
+  echo "  -r, --registry REGISTRY Registry/user prefix (default: $DEFAULT_REGISTRY)"
   echo "  -h, --help              Show this help message"
   echo ""
   echo "Examples:"

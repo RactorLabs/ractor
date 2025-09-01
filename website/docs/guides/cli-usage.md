@@ -51,10 +51,10 @@ raworc auth login --user admin --pass admin
 raworc auth login --server https://your-raworc-server.com --user admin --pass admin
 
 # Token-based auth (recommended for production)
-raworc auth login --token sk-ant-your-token
+raworc auth use --token sk-ant-your-token
 
 # Token auth with remote server
-raworc auth login --server https://your-raworc-server.com --token sk-ant-your-token
+raworc auth use --server https://your-raworc-server.com --token sk-ant-your-token
 
 # Check authentication status
 raworc auth

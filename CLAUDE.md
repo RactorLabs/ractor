@@ -312,7 +312,7 @@ Commands:
 
 **New Workflow:**
 The CLI (Node.js implementation from cli/ folder) has been updated with a streamlined interface:
-- **Intuitive auth**: `raworc auth` shows status, `raworc auth login --token <token>` to authenticate
+- **Intuitive auth**: `raworc auth` shows status, `raworc auth login` for user/pass, `raworc auth use --token <token>` for token auth
 - **Direct messaging**: `raworc session` starts a session where you can type messages directly
 - **Standalone API**: `raworc api <endpoint>` (GET) or `raworc api <endpoint>` works from any terminal with saved auth
 - **Professional interface**: Removed "playground" terminology for production usage
@@ -409,21 +409,22 @@ raworc pull --images-only
 # Check authentication status
 raworc auth
 
-# Token-based authentication
-raworc auth login --token sk-ant-api03-your-token
-
 # User/pass authentication  
 raworc auth login --user admin --pass admin
 
+# Token-based authentication (use existing token)
+raworc auth use --token sk-ant-api03-your-token
+
 # Custom server (default: http://localhost:9000)
-raworc auth login --server https://raworc.example.com --token sk-ant-api03-your-token
+raworc auth login --server https://raworc.example.com --user admin --pass admin
+raworc auth use --server https://raworc.example.com --token sk-ant-api03-your-token
 ```
 
 **Authentication Commands:**
 - **`raworc auth`**: Show current authentication status (default behavior)
-- **`raworc auth login`**: Authenticate with server using token or credentials
-- **Token**: Direct JWT token authentication (recommended for automation)
-- **Credentials**: User/pass authentication (gets JWT token)
+- **`raworc auth login`**: Authenticate with server using user/pass credentials
+- **`raworc auth use`**: Authenticate using an existing JWT token
+- **`raworc auth token`**: Create a new token for a principal (requires admin)
 - **Server**: Defaults to `http://localhost:9000` for development
 
 All login commands are non-interactive and suitable for scripting.

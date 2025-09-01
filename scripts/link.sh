@@ -161,7 +161,7 @@ echo ""
 print_status "Available Commands:"
 echo "  raworc --help           # Show help"
 echo "  raworc start            # Start services"
-echo "  raworc auth:login       # Authenticate"
+echo "  raworc auth login       # Authenticate"
 echo "  raworc api health       # Check API"
 echo "  raworc session          # Interactive session"
 

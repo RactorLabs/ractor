@@ -28,7 +28,7 @@ async function apiCommand(endpoint, options) {
   if (!authData && endpoint !== 'health') {
     console.log();
     console.log(chalk.yellow('⚠️ This endpoint may require authentication'));
-    console.log('   Run: ' + chalk.white('raworc auth:login') + ' to authenticate first');
+    console.log('   Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
   }
   
   console.log();
@@ -68,7 +68,7 @@ async function apiCommand(endpoint, options) {
       if (response.status === 401) {
         console.log();
         console.log(chalk.yellow('💡 Authentication required:'));
-        console.log('   Run: ' + chalk.white('raworc auth:login'));
+        console.log('   Run: ' + chalk.white('raworc auth login'));
       } else if (response.status === 403) {
         console.log();
         console.log(chalk.yellow('💡 Access denied:'));

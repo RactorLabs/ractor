@@ -495,7 +495,9 @@ echo 'Session directories created'
                 Ok(line) => String::from_utf8_lossy(&line.into_bytes()).trim().to_string(),
                 Err(_) => String::new(),
             }
-        }).collect::<Vec<_>>().await.join("").lines().map(|s| s.to_string()).collect::<Vec<_>>();
+        }).collect::<Vec<_>>().await.join("\n").lines().map(|s| s.to_string()).collect::<Vec<_>>();
+        
+        info!("Found {} secret files in volume {}: {:?}", secret_files.len(), volume_name, secret_files);
         
         // Clean up the read container
         let _ = self.docker.remove_container(
@@ -610,6 +612,29 @@ echo 'Session directories created'
 
     pub async fn create_container(&self, session_id: &str) -> Result<String> {
         let container_name = self.create_container_internal(session_id, None, None, None).await?;
+        Ok(container_name)
+    }
+    
+    pub async fn restore_container(&self, session_id: &str) -> Result<String> {
+        // Read existing secrets from the volume
+        let volume_name = format!("raworc_session_data_{}", session_id);
+        info!("Restoring container for session {} - reading secrets from volume {}", session_id, volume_name);
+        
+        let secrets = match self.read_secrets_from_volume(&volume_name).await {
+            Ok(s) => {
+                info!("Found {} secrets in volume for session {}", s.len(), session_id);
+                for key in s.keys() {
+                    info!("  - Secret: {}", key);
+                }
+                Some(s)
+            },
+            Err(e) => {
+                warn!("Could not read secrets from volume for session {}: {}", session_id, e);
+                None
+            }
+        };
+        
+        let container_name = self.create_container_internal(session_id, secrets, None, None).await?;
         Ok(container_name)
     }
 

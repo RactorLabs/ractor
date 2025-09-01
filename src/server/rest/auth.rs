@@ -28,6 +28,8 @@ pub struct LoginResponse {
     pub token: String,
     pub token_type: String,
     pub expires_at: String,
+    pub user: String,
+    pub role: String,
 }
 
 impl From<TokenResponse> for LoginResponse {
@@ -36,6 +38,8 @@ impl From<TokenResponse> for LoginResponse {
             token: token.token,
             token_type: "Bearer".to_string(),
             expires_at: token.expires_at,
+            user: String::new(), // Will be filled in by the caller
+            role: String::new(), // Will be filled in by the caller
         }
     }
 }
@@ -68,7 +72,12 @@ pub async fn login(
 
     let token_response = create_service_account_jwt(&service_account, &state.jwt_secret, 24)?;
     
-    Ok(Json(token_response.into()))
+    // Include user info in response
+    let mut response: LoginResponse = token_response.into();
+    response.user = service_account.user.clone();
+    response.role = if service_account.user == "admin" { "admin".to_string() } else { "user".to_string() };
+    
+    Ok(Json(response))
 }
 
 
@@ -128,5 +137,10 @@ pub async fn create_token(
         expires_at: exp.to_rfc3339(),
     };
 
-    Ok(Json(token_response.into()))
+    // Include principal info in response
+    let mut response: LoginResponse = token_response.into();
+    response.user = req.principal.clone();
+    response.role = "user".to_string(); // Created tokens are non-admin by default
+    
+    Ok(Json(response))
 }
