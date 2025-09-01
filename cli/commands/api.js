@@ -121,7 +121,7 @@ async function apiCommand(endpoint, options) {
       console.log();
       console.log(chalk.cyan('💡 Raworc is healthy! Try these commands:'));
       console.log('  • List sessions: ' + chalk.white('raworc api sessions'));
-      console.log('  • Check auth: ' + chalk.white('raworc api auth/me'));
+      console.log('  • Check auth: ' + chalk.white('raworc api auth'));
     } else if (endpoint === 'sessions' && response.success) {
       console.log();
       console.log(chalk.cyan('💡 Next steps:'));

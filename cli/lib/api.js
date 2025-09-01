@@ -142,9 +142,9 @@ class ApiClient {
       this.baseURL = server;
     }
     
-    // Test token by making a request to /auth/me
+    // Test token by making a request to /auth
     this.token = token;
-    const response = await this.get('/auth/me');
+    const response = await this.get('/auth');
     
     if (response.success) {
       const authData = {
@@ -170,7 +170,7 @@ class ApiClient {
       };
     }
 
-    const response = await this.get('/auth/me');
+    const response = await this.get('/auth');
     return response;
   }
 
