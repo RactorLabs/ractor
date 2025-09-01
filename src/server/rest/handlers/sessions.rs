@@ -234,7 +234,12 @@ pub async fn remix_session(
         "copy_data": copy_data,
         "copy_code": copy_code,
         "copy_secrets": copy_secrets,
-        "prompt": initial_prompt
+        "prompt": initial_prompt,
+        "principal": created_by,
+        "principal_type": match &auth.principal {
+            crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
+            crate::shared::rbac::AuthPrincipal::Operator(_) => "Operator",
+        }
     });
     
     sqlx::query(r#"

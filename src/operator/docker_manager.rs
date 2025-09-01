@@ -444,7 +444,8 @@ echo 'Session directories created'
         copy_secrets: bool,
         api_key: String,
         raworc_token: String,
-        principal: String
+        principal: String,
+        principal_type: String
     ) -> Result<String> {
         info!("Creating remix session {} with selective copy from {} and fresh tokens", 
               session_id, parent_session_id);
@@ -611,7 +612,8 @@ echo 'Session directories created'
             setup,
             api_key,
             raworc_token,
-            principal
+            principal,
+            principal_type
         ).await?;
         
         Ok(container_name)
@@ -804,7 +806,8 @@ echo 'Session directories created'
         setup: Option<String>,
         api_key: String,
         raworc_token: String,
-        principal: String
+        principal: String,
+        principal_type: String
     ) -> Result<String> {
         let container_name = self.create_container_internal_with_tokens(
             session_id, 
@@ -813,7 +816,8 @@ echo 'Session directories created'
             setup,
             api_key,
             raworc_token,
-            principal
+            principal,
+            principal_type
         ).await?;
         Ok(container_name)
     }
@@ -855,7 +859,8 @@ echo 'Session directories created'
         session_id: &str,
         api_key: String,
         raworc_token: String,
-        principal: String
+        principal: String,
+        principal_type: String
     ) -> Result<String> {
         // Read existing user secrets from the volume (but generate fresh system tokens)
         let volume_name = format!("raworc_session_data_{}", session_id);
@@ -883,7 +888,8 @@ echo 'Session directories created'
             setup,
             api_key,
             raworc_token,
-            principal
+            principal,
+            principal_type
         ).await?;
         Ok(container_name)
     }
@@ -1023,7 +1029,8 @@ echo 'Session directories created'
         setup: Option<String>,
         api_key: String,
         raworc_token: String,
-        principal: String
+        principal: String,
+        principal_type: String
     ) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
         
@@ -1064,7 +1071,7 @@ echo 'Session directories created'
             format!("ANTHROPIC_API_KEY={}", api_key),
             format!("RAWORC_TOKEN={}", raworc_token),
             format!("RAWORC_PRINCIPAL={}", principal),
-            format!("RAWORC_PRINCIPAL_TYPE=User"), // For now, assume User type for restore
+            format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
         
         info!("Set system-generated ANTHROPIC_API_KEY and RAWORC_TOKEN as environment variables");

@@ -282,14 +282,33 @@ impl SessionManager {
             let copy_secrets = task.payload.get("copy_secrets")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {})", 
-                  session_id, parent_session_id, copy_data, copy_code, copy_secrets);
+                
+            // For remix sessions, get principal info from remix task payload
+            let remix_principal = task.payload.get("principal")
+                .and_then(|v| v.as_str())
+                .unwrap_or(principal);
+            let remix_principal_type_str = task.payload.get("principal_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or(principal_type_str);
+                
+            info!("DEBUG: Remix task payload principal: {:?}, principal_type: {:?}", 
+                  task.payload.get("principal"), task.payload.get("principal_type"));
+            info!("DEBUG: Using remix_principal: {}, remix_principal_type_str: {}", 
+                  remix_principal, remix_principal_type_str);
+            let remix_principal_type = match remix_principal_type_str {
+                "Operator" => SubjectType::Operator,
+                "User" => SubjectType::Subject,
+                _ => SubjectType::Subject,
+            };
+                
+            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}) for principal {} ({})", 
+                  session_id, parent_session_id, copy_data, copy_code, copy_secrets, remix_principal, remix_principal_type_str);
             
             // For remix sessions, create container with selective volume copy from parent
             // Generate fresh tokens for remix session
             let remix_api_key = self.generate_session_api_key(&session_id).await
                 .map_err(|e| anyhow::anyhow!("Failed to generate remix session API key: {}", e))?;
-            let remix_token = self.generate_session_token(principal, principal_type, &session_id)
+            let remix_token = self.generate_session_token(remix_principal, remix_principal_type, &session_id)
                 .map_err(|e| anyhow::anyhow!("Failed to generate remix session token: {}", e))?;
             
             self.docker_manager.create_container_with_selective_copy_and_tokens(
@@ -300,7 +319,8 @@ impl SessionManager {
                 copy_secrets,
                 remix_api_key,
                 remix_token,
-                principal.to_string()
+                remix_principal.to_string(),
+                remix_principal_type_str.to_string()
             ).await?;
         } else {
             info!("Creating new session {}", session_id);
@@ -313,7 +333,8 @@ impl SessionManager {
                 setup,
                 session_api_key,
                 session_token,
-                principal.to_string()
+                principal.to_string(),
+                principal_type_str.to_string()
             ).await?;
         }
         
@@ -444,7 +465,7 @@ impl SessionManager {
         
         // All restored sessions were closed (container destroyed), so recreate container
         info!("Session {} was closed, restoring container with persistent volume and fresh tokens", session_id);
-        self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone()).await?;
+        self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone(), "User".to_string()).await?;
         
         // Update last_activity_at to track when session was restored
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)
