@@ -307,7 +307,7 @@ Content-Type: application/json
 
 {
   "principal": "myuser",
-  "principal_type": "User"
+  "type": "User"
 }
 
 Response:

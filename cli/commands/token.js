@@ -29,7 +29,7 @@ async function createTokenCommand(options) {
     const api = require('../lib/api');
     const response = await api.post('/auth/token', {
       principal: options.principal,
-      principal_type: options.type
+      type: options.type
     });
 
     if (response.success) {

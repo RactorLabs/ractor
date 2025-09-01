@@ -57,7 +57,7 @@ Content-Type: application/json
 
 {
   "principal": "user@example.com",
-  "principal_type": "User"
+  "type": "User"
 }
 ```
 

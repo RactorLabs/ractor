@@ -18,6 +18,7 @@ pub struct LoginRequest {
 #[derive(Debug, Deserialize)]
 pub struct CreateTokenRequest {
     pub principal: String,
+    #[serde(rename = "type")]
     pub principal_type: String, // "User" or "Operator"
 }
 
@@ -113,7 +114,7 @@ pub async fn create_token(
     let principal_type = match req.principal_type.as_str() {
         "User" => SubjectType::Subject,
         "Operator" => SubjectType::Operator,
-        _ => return Err(ApiError::BadRequest("Invalid principal_type. Must be 'User' or 'Operator'".to_string())),
+        _ => return Err(ApiError::BadRequest("Invalid type. Must be 'User' or 'Operator'".to_string())),
     };
 
     // Create JWT claims for the principal (non-admin, limited access)

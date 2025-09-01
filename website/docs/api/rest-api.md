@@ -128,7 +128,7 @@ Create token for a User:
 ```json
 {
   "principal": "user@example.com",
-  "principal_type": "User"
+  "type": "User"
 }
 ```
 
@@ -136,13 +136,13 @@ Create token for a Operator:
 ```json
 {
   "principal": "api-service",
-  "principal_type": "Operator"
+  "type": "Operator"
 }
 ```
 
 **Fields**:
 - `principal` - The user identifier for the principal
-- `principal_type` - Must be "User" or "Operator"
+- `type` - Must be "User" or "Operator"
 
 **Response**: `200 OK`
 ```json
@@ -154,7 +154,7 @@ Create token for a Operator:
 ```
 
 **Errors**:
-- `400 Bad Request` - Invalid principal_type
+- `400 Bad Request` - Invalid type
 - `403 Forbidden` - Not admin
 
 ## Operators
