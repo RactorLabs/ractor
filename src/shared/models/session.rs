@@ -44,9 +44,10 @@ pub struct RemixSessionRequest {
     pub data: bool,
     #[serde(default = "default_true")]
     pub code: bool,
+    #[serde(default = "default_true")]
+    pub secrets: bool,
     #[serde(default)]
     pub prompt: Option<String>,
-    // secrets parameter removed - always true for remix (ANTHROPIC_API_KEY required)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

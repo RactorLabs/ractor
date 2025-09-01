@@ -219,6 +219,7 @@ pub async fn remix_session(
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
     let copy_code = req.code;
+    let copy_secrets = req.secrets;
     let initial_prompt = req.prompt.clone();
     
     let session = Session::remix(&state.db, &parent.id, req)
@@ -237,6 +238,7 @@ pub async fn remix_session(
         "parent_session_id": parent.id,
         "copy_data": copy_data,
         "copy_code": copy_code,
+        "copy_secrets": copy_secrets,
         "prompt": initial_prompt
     });
     

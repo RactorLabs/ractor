@@ -230,15 +230,19 @@ impl SessionManager {
             let copy_code = task.payload.get("copy_code")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {})", 
-                  session_id, parent_session_id, copy_data, copy_code);
+            let copy_secrets = task.payload.get("copy_secrets")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {})", 
+                  session_id, parent_session_id, copy_data, copy_code, copy_secrets);
             
             // For remix sessions, create container with selective volume copy from parent
             self.docker_manager.create_container_with_selective_copy(
                 &session_id, 
                 parent_session_id, 
                 copy_data, 
-                copy_code
+                copy_code,
+                copy_secrets
             ).await?;
         } else {
             info!("Creating new session {}", session_id);

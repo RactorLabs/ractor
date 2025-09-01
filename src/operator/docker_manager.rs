@@ -269,10 +269,11 @@ echo 'Session directories created'
         session_id: &str, 
         parent_session_id: &str,
         copy_data: bool,
-        copy_code: bool
+        copy_code: bool,
+        copy_secrets: bool
     ) -> Result<String> {
-        info!("Creating remix session {} with selective copy from {} (data: {}, code: {})", 
-              session_id, parent_session_id, copy_data, copy_code);
+        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {})", 
+              session_id, parent_session_id, copy_data, copy_code, copy_secrets);
         
         // First create the session volume (without starting container)
         let session_volume = self.create_session_volume(session_id).await?;
@@ -297,8 +298,11 @@ echo 'Session directories created'
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
         }
         
-        // Always copy secrets for remix sessions
-        copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        if copy_secrets {
+            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        } else {
+            copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+        }
         
         // Always copy README.md from root if it exists
         copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());

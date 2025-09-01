@@ -3,22 +3,24 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+
 const {
   SESSION_STATE_IDLE,
-  SESSION_STATE_BUSY,
   SESSION_STATE_CLOSED,
+  SESSION_STATE_BUSY,
   MESSAGE_ROLE_USER,
   MESSAGE_ROLE_HOST
 } = require('../lib/constants');
 
 module.exports = (program) => {
-  program
+  const sessionCmd = program
     .command('session')
-    .description('Start an interactive session')
-    .option('-r, --restore <session-id>', 'Restore an existing session by ID')
-    .option('-R, --remix <session-id>', 'Create a new session remixing an existing session')
-    .option('-d, --data <boolean>', 'Include data files in remix (default: true)')
-    .option('-c, --code <boolean>', 'Include code files in remix (default: true)')
+    .description('Session management and interactive sessions');
+
+  // Default session start (no subcommand)
+  sessionCmd
+    .command('start', { isDefault: true })
+    .description('Start a new interactive session')
     .option('-S, --secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
     .option('-i, --instructions <text>', 'Direct instructions text')
     .option('-if, --instructions-file <file>', 'Path to instructions file')
@@ -29,21 +31,49 @@ module.exports = (program) => {
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
-      '  $ raworc session --restore abc123         # Restore and continue existing session\n' +
-      '  $ raworc session -R abc123           # Create new session based on existing one\n' +
-      '  $ raworc session -R abc123 --data false # Remix without copying data files\n' +
-      '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
-      '  $ raworc session --instructions "Talk like a pirate" # Direct instructions\n' +
-      '  $ raworc session --instructions-file ./inst.md # Instructions from file\n' +
-      '  $ raworc session --setup "pip install pandas" # Direct setup command\n' +
-      '  $ raworc session --setup-file ./setup.sh # Setup from file\n' +
-      '  $ raworc session -p "Hello, help me code" # Start with prompt\n')
+      '  $ raworc session start -n "my-session"    # Start with name\n' +
+      '  $ raworc session start -S \'{"API_KEY":"sk-123"}\' # Start with secrets\n' +
+      '  $ raworc session start -p "Hello" -n "test" # Start with prompt and name\n')
     .action(async (options) => {
-      await sessionCommand(options);
+      await sessionStartCommand(options);
+    });
+
+  // Restore subcommand
+  sessionCmd
+    .command('restore <session-id>')
+    .description('Restore an existing session by ID or name')
+    .option('-p, --prompt <text>', 'Prompt to send after restoring')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session restore abc123           # Restore by ID\n' +
+      '  $ raworc session restore my-session       # Restore by name\n' +
+      '  $ raworc session restore my-session -p "Continue work" # Restore with prompt\n')
+    .action(async (sessionId, options) => {
+      await sessionRestoreCommand(sessionId, options);
+    });
+
+  // Remix subcommand  
+  sessionCmd
+    .command('remix <session-id>')
+    .description('Create a new session remixing an existing session')
+    .option('-n, --name <name>', 'Name for the new session')
+    .option('-d, --data <boolean>', 'Include data files (default: true)')
+    .option('-c, --code <boolean>', 'Include code files (default: true)')
+    .option('-s, --secrets <boolean>', 'Include secrets (default: true)')
+    .option('-p, --prompt <text>', 'Prompt to send after creation')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session remix abc123             # Remix by ID\n' +
+      '  $ raworc session remix my-session         # Remix by name\n' +
+      '  $ raworc session remix my-session -n "new-name" # Remix with new name\n' +
+      '  $ raworc session remix my-session -s false # Remix without secrets\n' +
+      '  $ raworc session remix my-session --data false --code false # Copy only secrets\n')
+    .action(async (sessionId, options) => {
+      await sessionRemixCommand(sessionId, options);
     });
 };
 
-async function sessionCommand(options) {
+async function sessionStartCommand(options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -52,33 +82,14 @@ async function sessionCommand(options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🤖 Starting Raworc AI Session'));
-  if (options.remix) {
-    console.log(chalk.gray('Mode:'), 'Remix');
-    console.log(chalk.gray('Source:'), options.remix);
-    if (options.name) {
-      console.log(chalk.gray('New Name:'), options.name);
-    }
-
-    // Show remix parameters if specified
-    if (options.data !== undefined) {
-      console.log(chalk.gray('Copy Data:'), options.data === 'true' || options.data === true ? 'Yes' : 'No');
-    }
-    if (options.code !== undefined) {
-      console.log(chalk.gray('Copy Code:'), options.code === 'true' || options.code === true ? 'Yes' : 'No');
-    }
-  } else if (options.restore) {
-    console.log(chalk.gray('Mode:'), 'Restore');
-    console.log(chalk.gray('Session:'), options.restore);
-  } else {
-    console.log(chalk.gray('Mode:'), 'New Session');
-  }
+  console.log(chalk.blue('🤖 Starting New Raworc AI Session'));
+  console.log(chalk.gray('Mode:'), 'New Session');
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
   console.log(chalk.gray('User:'), userName + userType);
 
   // Show session creation parameters if provided
-  if (options.secrets && !options.remix && !options.restore) {
+  if (options.secrets) {
     console.log(chalk.gray('Secrets:'), 'Provided');
   }
   if (options.instructions) {
@@ -87,326 +98,318 @@ async function sessionCommand(options) {
   if (options.setup) {
     console.log(chalk.gray('Setup:'), options.setup);
   }
+  if (options.name) {
+    console.log(chalk.gray('Name:'), options.name);
+  }
   console.log();
 
   let sessionId = null;
 
   try {
-    // Check if we're remixing an existing session
-    if (options.remix) {
-      const sourceSessionId = options.remix;
-      const spinner = ora('Remixing session...').start();
+    // Create a new session
+    const spinner = ora('Creating session...').start();
 
-      // Check if source session exists
-      const sourceSessionResponse = await api.get(`/sessions/${sourceSessionId}`);
+    // Prepare session creation payload
+    const sessionPayload = {};
 
-      if (!sourceSessionResponse.success) {
-        spinner.fail('Source session not found');
-        console.error(chalk.red('Error:'), sourceSessionResponse.error || 'Source session does not exist');
-        process.exit(1);
-      }
-
-      // Prepare remix payload with selective parameters
-      const remixPayload = {
-        metadata: {
-          remixed_from: sourceSessionId,
-          remix_timestamp: new Date().toISOString()
-        }
-      };
-
-      // Parse selective copy parameters
-      if (options.data !== undefined) {
-        remixPayload.data = options.data === 'true' || options.data === true;
-      }
-
-      if (options.code !== undefined) {
-        remixPayload.code = options.code === 'true' || options.code === true;
-      }
-
-      // Add prompt if provided
-      if (options.prompt) {
-        remixPayload.prompt = options.prompt;
-      }
-
-      // Add name if provided
-      if (options.name) {
-        remixPayload.name = options.name;
-      }
-
-      // Create remix session
-      const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
-
-      if (!remixResponse.success) {
-        spinner.fail('Failed to remix session');
-        console.error(chalk.red('Error:'), remixResponse.error);
-        process.exit(1);
-      }
-
-      sessionId = remixResponse.data.id;
-      const newSession = remixResponse.data;
-      
-      // Show detailed remix success info
-      if (newSession.name) {
-        spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
-      } else {
-        spinner.succeed(`Session remixed: ${sessionId}`);
-      }
-      
-      console.log(chalk.gray('Source session:'), options.remix);
-      if (newSession.name) {
-        console.log(chalk.gray('New session name:'), newSession.name);
-      }
-      console.log(chalk.gray('New session ID:'), sessionId);
-
-    } else if (options.restore) {
-      // Check if we're restoring an existing session
-      sessionId = options.restore;
-      const spinner = ora('Restoring session...').start();
-
-      // Check if session exists
-      const sessionResponse = await api.get(`/sessions/${sessionId}`);
-
-      if (!sessionResponse.success) {
-        spinner.fail('Session not found');
-        console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
-        process.exit(1);
-      }
-
-      const session = sessionResponse.data;
-
-      // Show session info
-      console.log(chalk.gray('Session state:'), session.state);
-      
-      // Update sessionId to the actual UUID for consistent display
-      sessionId = session.id;
-
-      // If session is closed, restore it
-      if (session.state === SESSION_STATE_CLOSED) {
-        const restorePayload = {};
-        if (options.prompt) {
-          restorePayload.prompt = options.prompt;
-        }
-        
-        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
-
-        if (!restoreResponse.success) {
-          spinner.fail('Failed to restore session');
-          console.error(chalk.red('Error:'), restoreResponse.error);
-          process.exit(1);
-        }
-
-        spinner.succeed(`Session restored: ${sessionId}`);
-
-        // Brief delay to allow container initialization
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Wait for session to become idle (ready for messages)
-        let attempts = 0;
-        while (attempts < 15) { // Wait up to 15 seconds
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const statusCheck = await api.get(`/sessions/${sessionId}`);
-          if (statusCheck.success && (statusCheck.data.state === SESSION_STATE_IDLE || statusCheck.data.state === SESSION_STATE_BUSY)) {
-            break;
-          }
-          attempts++;
-        }
-
-      } else if (session.state === SESSION_STATE_IDLE) {
-        spinner.succeed(`Session already ready: ${sessionId}`);
-        
-        // If prompt provided for already-running session, send it as a message
-        if (options.prompt) {
-          console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
-          try {
-            const messageResponse = await api.post(`/sessions/${sessionId}/messages`, {
-              content: options.prompt,
-              role: 'user'
-            });
-            
-            if (messageResponse.success) {
-              console.log(chalk.green('Prompt sent successfully'));
-            } else {
-              console.log(chalk.yellow('Warning: Failed to send prompt:'), messageResponse.error);
-            }
-          } catch (error) {
-            console.log(chalk.yellow('Warning: Failed to send prompt:'), error.message);
-          }
-          console.log();
-        }
-      } else if (session.state === SESSION_STATE_BUSY) {
-        spinner.succeed(`Session is being restored: ${sessionId}`);
-
-        // Wait for session to become idle (ready for messages)
-        let attempts = 0;
-        while (attempts < 15) { // Wait up to 15 seconds
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const statusCheck = await api.get(`/sessions/${sessionId}`);
-          if (statusCheck.success && (statusCheck.data.state === SESSION_STATE_IDLE || statusCheck.data.state === SESSION_STATE_BUSY)) {
-            break;
-          }
-          attempts++;
-        }
-      } else {
-        spinner.fail(`Cannot restore session in state: ${session.state}`);
-        process.exit(1);
-      }
-
-      // Get and display recent messages if any
-      const messagesResponse = await api.get(`/sessions/${sessionId}/messages?limit=10`);
-      if (messagesResponse.success && messagesResponse.data) {
-        const messages = Array.isArray(messagesResponse.data) ? messagesResponse.data : messagesResponse.data.messages || [];
-
-        if (messages.length > 0) {
-          console.log();
-          console.log(chalk.gray('--- Recent messages ---'));
-
-          // Show last few messages for context
-          const recentMessages = messages.slice(-5);
-          recentMessages.forEach(msg => {
-            if (msg.role === MESSAGE_ROLE_USER) {
-              console.log(chalk.gray('You:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
-            } else if (msg.role === MESSAGE_ROLE_HOST) {
-              console.log(chalk.cyan('Host:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
-            }
-          });
-          console.log(chalk.gray('--- End of history ---'));
-        }
-      }
-
-    } else {
-      // Create a new session
-      const spinner = ora('Creating session...').start();
-
-      // Prepare session creation payload
-      const sessionPayload = {};
-
-      // Add secrets if provided
-      if (options.secrets) {
-        try {
-          sessionPayload.secrets = JSON.parse(options.secrets);
-        } catch (error) {
-          spinner.fail('Invalid secrets JSON format');
-          console.error(chalk.red('Error:'), 'Secrets must be valid JSON');
-          process.exit(1);
-        }
-      }
-
-      // Validate that ANTHROPIC_API_KEY is provided for new sessions
-      if (!sessionPayload.secrets || !sessionPayload.secrets.ANTHROPIC_API_KEY) {
-        spinner.fail('Anthropic API key required');
-        console.error(chalk.red('Error:'), 'ANTHROPIC_API_KEY is required for new sessions');
-        console.log();
-        console.log(chalk.yellow('💡 Get your API key from: https://console.anthropic.com'));
-        console.log(chalk.yellow('💡 Usage:'), 'raworc session --secrets \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\'');
-        process.exit(1);
-      }
-
-      // Add instructions if provided (direct text or from file)
-      if (options.instructions) {
-        sessionPayload.instructions = options.instructions;
-      } else if (options.instructionsFile) {
-        try {
-          const fs = require('fs');
-          sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
-        } catch (error) {
-          spinner.fail('Failed to read instructions file');
-          console.error(chalk.red('Error:'), error.message);
-          process.exit(1);
-        }
-      }
-
-      // Add setup script if provided (direct text or from file)
-      if (options.setup) {
-        sessionPayload.setup = options.setup;
-      } else if (options.setupFile) {
-        try {
-          const fs = require('fs');
-          sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
-        } catch (error) {
-          spinner.fail('Failed to read setup script');
-          console.error(chalk.red('Error:'), error.message);
-          process.exit(1);
-        }
-      }
-
-      // Add prompt if provided
-      if (options.prompt) {
-        sessionPayload.prompt = options.prompt;
-      }
-
-      // Add name if provided
-      if (options.name) {
-        sessionPayload.name = options.name;
-      }
-
-      const createResponse = await api.post('/sessions', sessionPayload);
-
-      if (!createResponse.success) {
-        spinner.fail('Failed to create session');
-        console.error(chalk.red('Error:'), createResponse.error);
-
-        if (createResponse.status === 400) {
-          console.log();
-          console.log(chalk.yellow('💡 Check if your session parameters are valid'));
-        }
-
-        process.exit(1);
-      }
-
-      sessionId = createResponse.data.id;
-      spinner.succeed(`Session created: ${sessionId}`);
-    }
-
-    console.log();
-    console.log(chalk.green('✅ Session active! Type your messages below.'));
-    console.log(chalk.gray('Commands: /status, /quit'));
-    console.log(chalk.gray('Session ID:'), sessionId);
-    console.log();
-
-    // If prompt provided, wait for host response before starting chat loop
-    if (options.prompt) {
-      console.log(chalk.blue('Prompt sent:'), options.prompt);
-      console.log();
-      
-      const responseSpinner = ora('Waiting for host response...').start();
-      
+    // Add secrets if provided
+    if (options.secrets) {
       try {
-        // Wait for the host to respond to the initial message
-        const hostResponse = await waitForHostResponse(sessionId, Date.now());
-        
-        if (hostResponse) {
-          responseSpinner.succeed('Host responded');
-          console.log();
-          console.log(chalk.cyan('Host:'), hostResponse.content);
-          console.log();
-        } else {
-          responseSpinner.warn('No host response received within timeout');
-          console.log();
-        }
+        sessionPayload.secrets = JSON.parse(options.secrets);
       } catch (error) {
-        responseSpinner.fail('Error waiting for host response');
-        console.log(chalk.yellow('Warning:'), error.message);
-        console.log();
+        spinner.fail('Invalid secrets JSON format');
+        console.error(chalk.red('Error:'), 'Secrets must be valid JSON');
+        process.exit(1);
       }
     }
 
-    // Start synchronous chat loop
-    await chatLoop(sessionId);
+    // Validate that ANTHROPIC_API_KEY is provided for new sessions
+    if (!sessionPayload.secrets || !sessionPayload.secrets.ANTHROPIC_API_KEY) {
+      spinner.fail('Anthropic API key required');
+      console.error(chalk.red('Error:'), 'ANTHROPIC_API_KEY is required for new sessions');
+      console.log();
+      console.log(chalk.yellow('💡 Get your API key from: https://console.anthropic.com'));
+      console.log(chalk.yellow('💡 Usage:'), 'raworc session start -S \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\'');
+      process.exit(1);
+    }
+
+    // Add instructions if provided
+    if (options.instructions) {
+      sessionPayload.instructions = options.instructions;
+    } else if (options.instructionsFile) {
+      try {
+        const fs = require('fs');
+        sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
+      } catch (error) {
+        spinner.fail('Failed to read instructions file');
+        console.error(chalk.red('Error:'), error.message);
+        process.exit(1);
+      }
+    }
+
+    // Add setup if provided
+    if (options.setup) {
+      sessionPayload.setup = options.setup;
+    } else if (options.setupFile) {
+      try {
+        const fs = require('fs');
+        sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
+      } catch (error) {
+        spinner.fail('Failed to read setup script');
+        console.error(chalk.red('Error:'), error.message);
+        process.exit(1);
+      }
+    }
+
+    // Add prompt if provided
+    if (options.prompt) {
+      sessionPayload.prompt = options.prompt;
+    }
+
+    // Add name if provided
+    if (options.name) {
+      sessionPayload.name = options.name;
+    }
+
+    const createResponse = await api.post('/sessions', sessionPayload);
+
+    if (!createResponse.success) {
+      spinner.fail('Failed to create session');
+      console.error(chalk.red('Error:'), createResponse.error);
+
+      if (createResponse.status === 400) {
+        console.log();
+        console.log(chalk.yellow('💡 Check if your session parameters are valid'));
+      }
+
+      process.exit(1);
+    }
+
+    sessionId = createResponse.data.id;
+    spinner.succeed(`Session created: ${sessionId}`);
+    
+    await startInteractiveSession(sessionId, options);
 
   } catch (error) {
     console.error(chalk.red('❌ Error:'), error.message);
-
-    // Clean up session if it was created
-    if (sessionId) {
-      try {
-        await api.post(`/sessions/${sessionId}/close`);
-      } catch (cleanupError) {
-        // Ignore cleanup errors
-      }
-    }
-
     process.exit(1);
   }
+}
+
+async function sessionRestoreCommand(sessionId, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('❌ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('🤖 Restoring Raworc AI Session'));
+  console.log(chalk.gray('Mode:'), 'Restore');
+  console.log(chalk.gray('Session:'), sessionId);
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
+  console.log();
+
+  try {
+    const spinner = ora('Restoring session...').start();
+
+    // Get session details first
+    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+
+    if (!sessionResponse.success) {
+      spinner.fail('Failed to fetch session');
+      console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
+      process.exit(1);
+    }
+
+    const session = sessionResponse.data;
+    console.log(chalk.gray('Session state:'), session.state);
+    
+    // Update sessionId to actual UUID for consistent display
+    sessionId = session.id;
+
+    // Handle different session states
+    if (session.state === SESSION_STATE_CLOSED) {
+      const restorePayload = {};
+      if (options.prompt) {
+        restorePayload.prompt = options.prompt;
+      }
+      
+      const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
+
+      if (!restoreResponse.success) {
+        spinner.fail('Failed to restore session');
+        console.error(chalk.red('Error:'), restoreResponse.error);
+        process.exit(1);
+      }
+
+      spinner.succeed(`Session restored: ${sessionId}`);
+    } else if (session.state === SESSION_STATE_IDLE) {
+      spinner.succeed(`Session already ready: ${sessionId}`);
+      
+      // If prompt provided for already-running session, send it as a message
+      if (options.prompt) {
+        console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
+        try {
+          const messageResponse = await api.post(`/sessions/${sessionId}/messages`, {
+            content: options.prompt,
+            role: 'user'
+          });
+          
+          if (messageResponse.success) {
+            console.log(chalk.green('Prompt sent successfully'));
+          } else {
+            console.log(chalk.yellow('Warning: Failed to send prompt:'), messageResponse.error);
+          }
+        } catch (error) {
+          console.log(chalk.yellow('Warning: Failed to send prompt:'), error.message);
+        }
+        console.log();
+      }
+    } else {
+      spinner.fail(`Cannot restore session in state: ${session.state}`);
+      process.exit(1);
+    }
+
+    await startInteractiveSession(sessionId, options);
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+async function sessionRemixCommand(sourceSessionId, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('❌ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('🤖 Remixing Raworc AI Session'));
+  console.log(chalk.gray('Mode:'), 'Remix');
+  console.log(chalk.gray('Source:'), sourceSessionId);
+  if (options.name) {
+    console.log(chalk.gray('New Name:'), options.name);
+  }
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
+
+  // Show remix parameters
+  if (options.data !== undefined) {
+    console.log(chalk.gray('Copy Data:'), options.data === 'true' || options.data === true ? 'Yes' : 'No');
+  }
+  if (options.code !== undefined) {
+    console.log(chalk.gray('Copy Code:'), options.code === 'true' || options.code === true ? 'Yes' : 'No');
+  }
+  if (options.secrets !== undefined) {
+    console.log(chalk.gray('Copy Secrets:'), options.secrets === 'true' || options.secrets === true ? 'Yes' : 'No');
+  }
+  console.log();
+
+  try {
+    const spinner = ora('Remixing session...').start();
+
+    // Prepare remix payload
+    const remixPayload = {};
+
+    if (options.data !== undefined) {
+      remixPayload.data = options.data === 'true' || options.data === true;
+    }
+
+    if (options.code !== undefined) {
+      remixPayload.code = options.code === 'true' || options.code === true;
+    }
+
+    if (options.secrets !== undefined) {
+      remixPayload.secrets = options.secrets === 'true' || options.secrets === true;
+    }
+
+    // Add prompt if provided
+    if (options.prompt) {
+      remixPayload.prompt = options.prompt;
+    }
+
+    // Add name if provided
+    if (options.name) {
+      remixPayload.name = options.name;
+    }
+
+    // Create remix session
+    const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
+
+    if (!remixResponse.success) {
+      spinner.fail('Failed to remix session');
+      console.error(chalk.red('Error:'), remixResponse.error);
+      process.exit(1);
+    }
+
+    const sessionId = remixResponse.data.id;
+    const newSession = remixResponse.data;
+    
+    // Show detailed remix success info
+    if (newSession.name) {
+      spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
+    } else {
+      spinner.succeed(`Session remixed: ${sessionId}`);
+    }
+    
+    console.log(chalk.gray('Source session:'), sourceSessionId);
+    if (newSession.name) {
+      console.log(chalk.gray('New session name:'), newSession.name);
+    }
+    console.log(chalk.gray('New session ID:'), sessionId);
+    console.log();
+
+    await startInteractiveSession(sessionId, options);
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+async function startInteractiveSession(sessionId, options) {
+  console.log();
+  console.log(chalk.green('✅ Session active! Type your messages below.'));
+  console.log(chalk.gray('Commands: /status, /quit'));
+  console.log(chalk.gray('Session ID:'), sessionId);
+  console.log();
+
+  // Handle prompt if provided (for any session type)
+  if (options.prompt) {
+    console.log(chalk.blue('Prompt sent:'), options.prompt);
+    
+    const responseSpinner = ora('Waiting for host response...').start();
+    
+    try {
+      // Wait for the host to respond to the prompt
+      const hostResponse = await waitForHostResponse(sessionId, Date.now());
+      
+      if (hostResponse) {
+        responseSpinner.succeed('Host responded');
+        console.log();
+        console.log(chalk.cyan('Host:'), hostResponse.content);
+        console.log();
+      } else {
+        responseSpinner.warn('No host response received within timeout');
+        console.log();
+      }
+    } catch (error) {
+      responseSpinner.fail('Error waiting for host response');
+      console.log(chalk.yellow('Warning:'), error.message);
+      console.log();
+    }
+  }
+
+  // Start synchronous chat loop
+  await chatLoop(sessionId);
 }
 
 async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000) {
@@ -463,88 +466,82 @@ async function chatLoop(sessionId) {
   try {
     while (true) {
       // Get user input
-      const answers = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'message',
-          message: 'You:',
-          prefix: '', // Remove default prefix
-          validate: (input) => {
-            if (!input.trim()) {
-              return 'Please enter a message';
-            }
-            return true;
-          }
-        }
-      ]);
+      const rl = require('readline').createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
 
-      const message = answers.message.trim();
+      const userInput = await new Promise(resolve => {
+        rl.question(chalk.white('You: '), resolve);
+      });
+      
+      rl.close();
+
+      if (!userInput.trim()) {
+        continue;
+      }
 
       // Handle special commands
-      if (message === '/quit' || message === '/q' || message === '/exit') {
-        console.log(chalk.yellow('👋 Ending session...'));
+      if (userInput.trim() === '/quit' || userInput.trim() === '/q' || userInput.trim() === '/exit') {
+        console.log(chalk.blue('👋 Ending session...'));
         break;
       }
 
-      if (message === '/status') {
-        console.log();
-        console.log(chalk.blue('📊 Session Status'));
-        console.log(chalk.gray('Session ID:'), sessionId);
-        console.log(chalk.gray('Server:'), config.getServerUrl());
-        console.log();
-        continue;
-      }
-
-      // Send message to host
-      const userMessageTime = Date.now();
-      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
-        role: MESSAGE_ROLE_USER,
-        content: message
-      });
-
-      if (!sendResponse.success) {
-        console.error(chalk.red('❌ Failed to send message:'), sendResponse.error);
-
-        if (sendResponse.status === 404) {
-          console.log(chalk.red('❌ Session may have expired. Please start a new session.'));
-          break;
+      if (userInput.trim() === '/status') {
+        const statusResponse = await api.get(`/sessions/${sessionId}`);
+        if (statusResponse.success) {
+          console.log(chalk.blue('Session Status:'));
+          console.log(chalk.gray('  ID:'), statusResponse.data.id);
+          console.log(chalk.gray('  State:'), statusResponse.data.state);
+          console.log(chalk.gray('  Created:'), statusResponse.data.created_at);
+        } else {
+          console.log(chalk.red('Failed to get session status:'), statusResponse.error);
         }
         continue;
       }
 
-      // Wait for host response
+      // Send message to session
+      const userMessageTime = Date.now();
       const spinner = ora('Waiting for host response...').start();
 
       try {
-        const hostMessage = await waitForHostResponse(sessionId, userMessageTime);
-        spinner.stop();
+        const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+          content: userInput,
+          role: 'user'
+        });
 
-        // Display host response
-        console.log(chalk.cyan('Host:'), hostMessage.content);
-        console.log();
+        if (!sendResponse.success) {
+          spinner.fail('Failed to send message');
+          console.error(chalk.red('Error:'), sendResponse.error);
+          continue;
+        }
+
+        // Wait for host response
+        const hostMessage = await waitForHostResponse(sessionId, userMessageTime);
+        
+        if (hostMessage) {
+          spinner.succeed('Host responded');
+          console.log();
+          console.log(chalk.cyan('Host:'), hostMessage.content);
+          console.log();
+        } else {
+          spinner.warn('No response received');
+        }
 
       } catch (error) {
-        spinner.fail('Host response timeout');
-        console.log(chalk.yellow('⚠️ No response received within 60 seconds'));
-        console.log();
+        spinner.fail('Error');
+        console.error(chalk.red('Error:'), error.message);
       }
     }
 
-  } finally {
-    // Close session for later restore
+    // Close session on exit
     try {
-      const spinner = ora('Closing session...').start();
       await api.post(`/sessions/${sessionId}/close`);
-      spinner.succeed('Session closed (can be restored later)');
     } catch (error) {
-      console.log(chalk.yellow('⚠️ Failed to close session'));
+      // Ignore cleanup errors
     }
+
+  } catch (error) {
+    console.error(chalk.red('❌ Chat error:'), error.message);
   }
 }
-
-// Handle Ctrl+C gracefully
-process.on('SIGINT', () => {
-  console.log();
-  console.log(chalk.yellow('👋 Goodbye!'));
-  process.exit(0);
-});
