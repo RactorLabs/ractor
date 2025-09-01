@@ -11,6 +11,14 @@ use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
 
+// Helper function to check if authenticated user is admin
+fn is_admin_user(auth: &AuthContext) -> bool {
+    match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Operator(op) => op.user == "admin",
+        _ => false,
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
     pub id: String,
@@ -51,18 +59,19 @@ impl SessionResponse {
 async fn find_session_by_id_or_name(
     state: &AppState, 
     id_or_name: &str, 
-    created_by: &str
+    created_by: &str,
+    is_admin: bool
 ) -> Result<Session, ApiError> {
     // Try to find by ID first
     if let Some(session) = Session::find_by_id(&state.db, id_or_name).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))? {
-        // Check ownership
-        if session.created_by == created_by {
+        // Admins can access any session, regular users only their own
+        if is_admin || session.created_by == created_by {
             return Ok(session);
         }
     }
     
-    // If not found by ID, try by name
+    // If not found by ID, try by name (only for owned sessions unless admin)
     if let Some(session) = Session::find_by_name(&state.db, id_or_name, created_by).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session by name: {}", e)))? {
         return Ok(session);
@@ -91,9 +100,14 @@ pub async fn list_sessions(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
+    // Check if user is admin - only admin operator can see all sessions
+    let is_admin = is_admin_user(&auth);
+    
     // For regular users, only show their own sessions
-    // Admins have permission to list all sessions and will see all sessions
-    sessions.retain(|s| s.created_by == *username);
+    // Admins can see all sessions
+    if !is_admin {
+        sessions.retain(|s| s.created_by == *username);
+    }
 
     // Filter by state if provided
     if let Some(state_filter) = query.state {
@@ -124,8 +138,9 @@ pub async fn get_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find session by ID or name (admin can access any session)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
@@ -208,8 +223,9 @@ pub async fn remix_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find parent session by ID or name
-    let parent = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find parent session by ID or name (admin can remix any session)
+    let is_admin = is_admin_user(&auth);
+    let parent = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
 
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
@@ -271,8 +287,9 @@ pub async fn close_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     }; 
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, created_by).await?;
+    // Find session by ID or name (admin can close any session)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, created_by, is_admin).await?;
     
     tracing::info!("Found session in state: {}", session.state);
 
@@ -284,13 +301,14 @@ pub async fn close_session(
             ApiError::Forbidden("Insufficient permissions to close session".to_string())
         })?;
     
-    // Only allow closing own sessions (ownership-based access control)
+    // Allow closing own sessions or admin can close any session
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
+    let is_admin = is_admin_user(&auth);
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden("Can only close your own sessions".to_string()));
     }
     tracing::info!("Permission check passed");
@@ -368,8 +386,13 @@ pub async fn restore_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find session by ID or name (restore only allowed for own sessions, even for admins)
+    let session = find_session_by_id_or_name(&state, &id, username, false).await?;
+
+    // Additional check: Even admins cannot restore other users' sessions (only remix)
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Cannot restore other users' sessions. Use remix instead.".to_string()));
+    }
 
     // Check current state - can only resume if suspended
     if session.state != crate::shared::models::constants::SESSION_STATE_CLOSED {
@@ -447,8 +470,9 @@ pub async fn update_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find session by ID or name (admin can access any session for update/delete)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
 
     let updated_session = Session::update(&state.db, &session.id, req)
         .await
@@ -477,8 +501,9 @@ pub async fn update_session_state(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find session by ID or name (admin can access any session for update/delete)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
     
     // Update the state with ownership verification
     let result = sqlx::query(
@@ -517,8 +542,9 @@ pub async fn delete_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name
-    let session = find_session_by_id_or_name(&state, &id, username).await?;
+    // Find session by ID or name (admin can access any session for update/delete)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
 
     // Sessions can be soft deleted in any state
 
