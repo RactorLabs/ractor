@@ -66,6 +66,12 @@ pub struct UpdateSessionRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoreSessionRequest {
+    #[serde(default)]
+    pub prompt: Option<String>,
+}
+
 fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }

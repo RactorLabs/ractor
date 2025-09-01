@@ -39,16 +39,16 @@ pub async fn create_message(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
         
-        // Add task to reactivate container (resume_session recreates container)
+        // Add task to reactivate container (restore_session recreates container)
         sqlx::query(r#"
             INSERT INTO session_tasks (session_id, task_type, payload, status)
-            VALUES (?, 'resume_session', '{}', 'pending')
+            VALUES (?, 'restore_session', '{}', 'pending')
             "#
         )
         .bind(&session_id)
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create resume task: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create restore task: {}", e)))?;
         
         // Now transition to BUSY for message processing
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#

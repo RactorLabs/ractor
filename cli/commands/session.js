@@ -160,10 +160,18 @@ async function sessionCommand(options) {
 
       // Show session info
       console.log(chalk.gray('Session state:'), session.state);
+      
+      // Update sessionId to the actual UUID for consistent display
+      sessionId = session.id;
 
-      // If session is closed or idle, restore it
-      if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
-        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
+      // If session is closed, restore it
+      if (session.state === SESSION_STATE_CLOSED) {
+        const restorePayload = {};
+        if (options.prompt) {
+          restorePayload.prompt = options.prompt;
+        }
+        
+        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
 
         if (!restoreResponse.success) {
           spinner.fail('Failed to restore session');
@@ -189,6 +197,26 @@ async function sessionCommand(options) {
 
       } else if (session.state === SESSION_STATE_IDLE) {
         spinner.succeed(`Session already ready: ${sessionId}`);
+        
+        // If prompt provided for already-running session, send it as a message
+        if (options.prompt) {
+          console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
+          try {
+            const messageResponse = await api.post(`/sessions/${sessionId}/messages`, {
+              content: options.prompt,
+              role: 'user'
+            });
+            
+            if (messageResponse.success) {
+              console.log(chalk.green('Prompt sent successfully'));
+            } else {
+              console.log(chalk.yellow('Warning: Failed to send prompt:'), messageResponse.error);
+            }
+          } catch (error) {
+            console.log(chalk.yellow('Warning: Failed to send prompt:'), error.message);
+          }
+          console.log();
+        }
       } else if (session.state === SESSION_STATE_BUSY) {
         spinner.succeed(`Session is being restored: ${sessionId}`);
 

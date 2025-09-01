@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::query;
 use std::sync::Arc;
 
-use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest};
+use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest, RestoreSessionRequest};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
@@ -309,7 +309,7 @@ pub async fn close_session(
         WHERE id = ?
     "#)
     .bind(crate::shared::models::constants::SESSION_STATE_CLOSED)
-    .bind(id.clone())
+    .bind(&session.id)
     .execute(&*state.db)
     .await
     .map_err(|e| {
@@ -329,7 +329,7 @@ pub async fn close_session(
         VALUES (?, 'close_session', ?, '{}', 'pending')
         "#
     )
-    .bind(&id)
+    .bind(&session.id)
     .bind(&created_by)
     .execute(&*state.db)
     .await
@@ -353,6 +353,7 @@ pub async fn restore_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
+    Json(req): Json<RestoreSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check permission for updating sessions
     check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
@@ -381,7 +382,7 @@ pub async fn restore_session(
         "#
     )
     .bind(crate::shared::models::constants::SESSION_STATE_IDLE)
-    .bind(id.clone())
+    .bind(&session.id)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restore session: {}", e)))?;
@@ -396,14 +397,19 @@ pub async fn restore_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Add task to restart the container  
+    // Add task to restart the container with optional prompt
+    let restore_payload = serde_json::json!({
+        "prompt": req.prompt
+    });
+    
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'restore_session', ?, '{}', 'pending')
+        VALUES (?, 'restore_session', ?, ?, 'pending')
         "#
     )
     .bind(&session.id)
     .bind(username)
+    .bind(&restore_payload)
     .execute(&*state.db)
     .await
     .map_err(|e| {
@@ -411,10 +417,10 @@ pub async fn restore_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create resume task: {}", e))
     })?;
     
-    tracing::info!("Created resume task for session {}", id);
+    tracing::info!("Created resume task for session {}", session.id);
 
     // Fetch updated session
-    let updated_session = Session::find_by_id(&state.db, &id)
+    let updated_session = Session::find_by_id(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
