@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::query;
 use std::sync::Arc;
 
-use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest};
+use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest, RestoreSessionRequest};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
@@ -115,10 +115,11 @@ pub async fn create_session(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Creating session with secrets: {} keys, instructions: {}, setup: {}", 
+    tracing::info!("Creating session with secrets: {} keys, instructions: {}, setup: {}, prompt: {}", 
         req.secrets.len(), 
         req.instructions.is_some(), 
-        req.setup.is_some());
+        req.setup.is_some(),
+        req.prompt.is_some());
 
     // Check session:create permission
     check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
@@ -149,6 +150,7 @@ pub async fn create_session(
         "secrets": req.secrets,
         "instructions": req.instructions,
         "setup": req.setup,
+        "prompt": req.prompt,
         "principal": created_by,
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
@@ -204,6 +206,7 @@ pub async fn remix_session(
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
     let copy_code = req.code;
+    let initial_prompt = req.prompt.clone();
     
     let session = Session::remix(&state.db, &id, req)
         .await
@@ -220,7 +223,8 @@ pub async fn remix_session(
         "remix": true,
         "parent_session_id": parent.id,
         "copy_data": copy_data,
-        "copy_code": copy_code
+        "copy_code": copy_code,
+        "prompt": initial_prompt
     });
     
     sqlx::query(r#"
@@ -343,6 +347,7 @@ pub async fn restore_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
+    Json(req): Json<RestoreSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check if session exists
     let session = Session::find_by_id(&state.db, &id)
@@ -394,13 +399,18 @@ pub async fn restore_session(
     };
 
     // Add task to restart the container
+    let restore_payload = serde_json::json!({
+        "prompt": req.prompt
+    });
+    
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'restore_session', ?, '{}', 'pending')
+        VALUES (?, 'restore_session', ?, ?, 'pending')
         "#
     )
     .bind(&id)
     .bind(created_by)
+    .bind(&restore_payload)
     .execute(&*state.db)
     .await
     .map_err(|e| {

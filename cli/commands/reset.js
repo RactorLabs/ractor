@@ -50,19 +50,20 @@ module.exports = (program) => {
         if (options.servicesOnly) {
           console.log(chalk.blue('Services-only mode: Will stop services but skip Docker cleanup'));
         } else {
-          console.log(chalk.blue('Full reset mode: This will remove ALL Raworc-related Docker resources'));
+          console.log(chalk.red('Full reset mode: This will remove EVERYTHING from Docker'));
         }
 
         console.log();
-        console.log(chalk.yellow('⚠️  This will:'));
-        console.log(chalk.yellow('  - Stop all Raworc services'));
-        console.log(chalk.yellow('  - Remove ALL Raworc containers (session, server, operator, mysql)'));
+        console.log(chalk.red('⚠️  This will:'));
+        console.log(chalk.red('  - Stop ALL running containers'));
+        console.log(chalk.red('  - Remove ALL containers (running and stopped)'));
 
         if (!options.servicesOnly) {
-          console.log(chalk.yellow('  - Remove ALL Raworc images'));
-          console.log(chalk.yellow('  - Remove ALL Docker volumes'));
-          console.log(chalk.yellow('  - Remove unused Docker networks'));
-          console.log(chalk.yellow('  - Clean up build cache'));
+          console.log(chalk.red('  - Remove ALL Docker images'));
+          console.log(chalk.red('  - Remove ALL Docker volumes'));
+          console.log(chalk.red('  - Remove ALL Docker networks'));
+          console.log(chalk.red('  - Clear ALL build cache'));
+          console.log(chalk.red('  - Completely reset Docker to clean state'));
         }
 
         // Confirm with user unless --yes flag is provided
@@ -87,12 +88,12 @@ module.exports = (program) => {
         console.log();
         console.log(chalk.blue('Starting reset process...'));
 
-        // Step 1: Stop all running containers first
+        // Step 1: Stop ALL running containers first
         console.log();
-        const stopSpinner = ora('[1/8] Stopping Raworc services...').start();
+        const stopSpinner = ora('[1/9] Stopping ALL running containers...').start();
 
         try {
-          const runningResult = await execDocker(['ps', '-q', '--filter', 'name=raworc_'], { silent: true });
+          const runningResult = await execDocker(['ps', '-q'], { silent: true });
 
           if (runningResult.stdout.trim()) {
             const runningIds = runningResult.stdout.trim().split('\n').filter(id => id);
@@ -109,12 +110,12 @@ module.exports = (program) => {
           stopSpinner.warn(`Stop warning: ${error.message}`);
         }
 
-        // Step 2: Remove ALL raworc containers (running and stopped)
+        // Step 2: Remove ALL containers (running and stopped)
         console.log();
-        const removeSpinner = ora('[2/8] Removing ALL raworc containers...').start();
+        const removeSpinner = ora('[2/9] Removing ALL containers...').start();
 
         try {
-          const result = await execDocker(['ps', '-a', '-q', '--filter', 'name=raworc'], { silent: true });
+          const result = await execDocker(['ps', '-a', '-q'], { silent: true });
 
           if (result.stdout.trim()) {
             const containerIds = result.stdout.trim().split('\n').filter(id => id);
@@ -138,12 +139,12 @@ module.exports = (program) => {
           return;
         }
 
-        // Step 3: Remove ALL raworc images
+        // Step 3: Remove ALL Docker images
         console.log();
-        const imageSpinner = ora('[3/8] Removing ALL raworc images...').start();
+        const imageSpinner = ora('[3/9] Removing ALL Docker images...').start();
 
         try {
-          const imageResult = await execDocker(['images', '-q', '--filter', 'reference=raworc*', '--filter', 'reference=*/raworc*'], { silent: true });
+          const imageResult = await execDocker(['images', '-q'], { silent: true });
 
           if (imageResult.stdout.trim()) {
             const imageIds = imageResult.stdout.trim().split('\n').filter(id => id);
@@ -152,28 +153,42 @@ module.exports = (program) => {
               await execDocker(['rmi', '-f', ...imageIds], { silent: true });
               imageSpinner.succeed(`Removed ${imageIds.length} images`);
             } else {
-              imageSpinner.succeed('No raworc images found');
+              imageSpinner.succeed('No images found');
             }
           } else {
-            imageSpinner.succeed('No raworc images found');
+            imageSpinner.succeed('No images found');
           }
         } catch (error) {
           imageSpinner.warn(`Image cleanup warning: ${error.message}`);
         }
 
-        // Step 4: Prune unused networks
+        // Step 4: Remove ALL custom networks
         console.log();
-        const networkSpinner = ora('[4/8] Pruning unused networks...').start();
+        const networkSpinner = ora('[4/9] Removing ALL custom networks...').start();
         try {
-          await execDocker(['network', 'prune', '-f'], { silent: true });
-          networkSpinner.succeed('Networks pruned');
+          // Get all custom networks (exclude default ones)
+          const networkResult = await execDocker(['network', 'ls', '--filter', 'type=custom', '-q'], { silent: true });
+          
+          if (networkResult.stdout.trim()) {
+            const networkIds = networkResult.stdout.trim().split('\n').filter(id => id);
+            if (networkIds.length > 0) {
+              await execDocker(['network', 'rm', ...networkIds], { silent: true });
+              networkSpinner.succeed(`Removed ${networkIds.length} custom networks`);
+            } else {
+              networkSpinner.succeed('No custom networks found');
+            }
+          } else {
+            // Fallback to prune
+            await execDocker(['network', 'prune', '-f'], { silent: true });
+            networkSpinner.succeed('Networks pruned');
+          }
         } catch (error) {
           networkSpinner.warn(`Network cleanup warning: ${error.message}`);
         }
 
         // Step 5: Remove ALL Docker volumes
         console.log();
-        const volumeSpinner = ora('[5/8] Removing ALL Docker volumes...').start();
+        const volumeSpinner = ora('[5/9] Removing ALL Docker volumes...').start();
         try {
           const volumeResult = await execDocker(['volume', 'ls', '-q'], { silent: true });
 
@@ -211,27 +226,37 @@ module.exports = (program) => {
 
         // Step 6: Prune dangling images
         console.log();
-        const danglingSpinner = ora('[6/8] Pruning dangling images...').start();
+        const danglingSpinner = ora('[6/9] Pruning system...').start();
         try {
-          await execDocker(['image', 'prune', '-f'], { silent: true });
-          danglingSpinner.succeed('Dangling images pruned');
+          await execDocker(['system', 'prune', '-a', '-f', '--volumes'], { silent: true });
+          danglingSpinner.succeed('System completely pruned');
         } catch (error) {
           danglingSpinner.warn(`Image prune warning: ${error.message}`);
         }
 
         // Step 7: Prune build cache
         console.log();
-        const cacheSpinner = ora('[7/8] Pruning build cache...').start();
+        const cacheSpinner = ora('[7/9] Clearing ALL build cache...').start();
         try {
-          await execDocker(['builder', 'prune', '-f'], { silent: true });
-          cacheSpinner.succeed('Build cache pruned');
+          await execDocker(['builder', 'prune', '-a', '-f'], { silent: true });
+          cacheSpinner.succeed('ALL build cache cleared');
         } catch (error) {
           cacheSpinner.warn(`Build cache cleanup warning: ${error.message}`);
         }
 
-        // Step 8: Show final disk usage
+        // Step 8: Final system prune to catch anything missed
         console.log();
-        const diskSpinner = ora('[8/8] Checking Docker disk usage...').start();
+        const systemSpinner = ora('[8/9] Final complete system prune...').start();
+        try {
+          await execDocker(['system', 'prune', '-a', '-f', '--volumes'], { silent: true });
+          systemSpinner.succeed('Final system prune completed');
+        } catch (error) {
+          systemSpinner.warn(`Final prune warning: ${error.message}`);
+        }
+
+        // Step 9: Show final disk usage
+        console.log();
+        const diskSpinner = ora('[9/9] Checking Docker disk usage...').start();
         try {
           console.log(); // Add space before disk usage output
           await execDocker(['system', 'df'], { silent: false });
@@ -244,10 +269,14 @@ module.exports = (program) => {
         console.log(chalk.green('🎉 Reset completed!'));
         console.log();
         console.log(chalk.blue('Summary:'));
-        console.log(chalk.green('  ✓ Docker containers, volumes, and networks cleaned up'));
-        console.log(chalk.green('  ✓ Raworc images removed'));
-        console.log(chalk.green('  ✓ Build cache cleaned (preserving some for faster rebuilds)'));
+        console.log(chalk.green('  ✓ ALL containers stopped and removed'));
+        console.log(chalk.green('  ✓ ALL Docker images removed'));
+        console.log(chalk.green('  ✓ ALL Docker volumes removed'));
+        console.log(chalk.green('  ✓ ALL custom networks removed'));
+        console.log(chalk.green('  ✓ ALL build cache cleared'));
+        console.log(chalk.green('  ✓ Docker system completely reset'));
         console.log();
+        console.log(chalk.cyan('Docker has been completely reset to clean state'));
         console.log(chalk.cyan('To start Raworc again:'));
         console.log('  • ' + chalk.white('raworc start'));
 

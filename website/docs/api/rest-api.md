@@ -13,6 +13,47 @@ Complete reference for all Raworc REST API endpoints.
 - **Authentication**: Bearer token (JWT) required for most endpoints
 - **Content-Type**: application/json
 
+## CLI API Access
+
+The Raworc CLI provides convenient access to all API endpoints:
+
+```bash
+# Direct API calls
+raworc api <endpoint>
+
+# Examples
+raworc api version                   # GET /version
+raworc api sessions                  # GET /sessions
+raworc api sessions -m POST          # POST /sessions
+raworc api sessions/abc123          # GET /sessions/abc123
+raworc api sessions/abc123 -m DELETE # DELETE /sessions/abc123
+
+# With request body
+raworc api sessions -m POST -b '{"instructions":"Hello"}'
+
+# With query parameters  
+raworc api "sessions/abc123/messages?limit=10"
+
+# Response formatting
+raworc api sessions --pretty         # Pretty print JSON
+raworc api sessions --headers        # Show response headers
+raworc api sessions --status         # Show HTTP status
+```
+
+**CLI Options:**
+- `-m, --method <method>` - HTTP method (GET, POST, PUT, DELETE, PATCH)
+- `-b, --body <body>` - JSON request body
+- `-H, --headers` - Show response headers
+- `-p, --pretty` - Pretty print JSON (default: true)
+- `-s, --status` - Show HTTP status code
+
+**Authentication:**
+The CLI automatically includes your stored authentication token. Authenticate first:
+```bash
+raworc login -u admin -p admin    # Generate token
+raworc auth -t <jwt-token>        # Authenticate CLI
+```
+
 ## Version & Health
 
 ### GET /version

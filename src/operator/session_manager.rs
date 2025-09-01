@@ -19,6 +19,7 @@ pub struct SessionTask {
     id: String,
     task_type: String,
     session_id: String,
+    created_by: String,
     payload: serde_json::Value,
     status: String,
     created_at: DateTime<Utc>,
@@ -176,6 +177,10 @@ impl SessionManager {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let prompt = task.payload.get("prompt")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         // Extract user token and principal info, add to secrets automatically
         if let Some(user_token) = task.payload.get("user_token").and_then(|v| v.as_str()) {
             secrets.insert("RAWORC_TOKEN".to_string(), user_token.to_string());
@@ -197,13 +202,22 @@ impl SessionManager {
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         
-        info!("Creating session {} for principal {} ({}) with {} secrets, instructions: {}, setup: {}", 
-              session_id, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some());
+        info!("Creating session {} for principal {} ({}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
+              session_id, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
         
         // Check if this is a remix session from task payload
         let is_remix = task.payload.get("remix")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+        
+        // For remix sessions, extract prompt from task payload 
+        let remix_prompt = if is_remix {
+            task.payload.get("prompt")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        } else {
+            None
+        };
         
         if is_remix {
             let parent_session_id = task.payload.get("parent_session_id")
@@ -234,6 +248,28 @@ impl SessionManager {
             self.docker_manager.create_container_with_params(&session_id, secrets, instructions, setup).await?;
         }
         
+        // Send prompt if provided (BEFORE setting state to IDLE)
+        let prompt_to_send = prompt.or(remix_prompt);
+        if let Some(prompt) = prompt_to_send {
+            info!("Sending prompt to session {}: {}", session_id, prompt);
+            
+            // Create message record in database
+            let message_id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(r#"
+                INSERT INTO session_messages (id, session_id, created_by, content, role, created_at)
+                VALUES (?, ?, ?, ?, 'user', NOW())
+                "#)
+            .bind(&message_id)
+            .bind(&session_id)
+            .bind(&principal)
+            .bind(&prompt)
+            .execute(&self.pool)
+            .await?;
+            
+            info!("Prompt message {} created for session {}", message_id, session_id);
+        }
+        
+        // Set session state to IDLE after prompt is created (so host will find it when it starts polling)
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#)
         .bind(SESSION_STATE_IDLE)
         .bind(&session_id)
@@ -340,6 +376,29 @@ impl SessionManager {
             .await?;
         
         info!("Container restored for session {}", session_id);
+        
+        // Send prompt if provided
+        if let Some(prompt) = task.payload.get("prompt").and_then(|v| v.as_str()) {
+            info!("Sending prompt to restored session {}: {}", session_id, prompt);
+            
+            // Get the principal name from the task
+            let principal = task.created_by;
+            
+            // Create message record in database
+            let message_id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(r#"
+                INSERT INTO session_messages (id, session_id, created_by, content, role, created_at)
+                VALUES (?, ?, ?, ?, 'user', NOW())
+                "#)
+            .bind(&message_id)
+            .bind(&session_id)
+            .bind(&principal)
+            .bind(prompt)
+            .execute(&self.pool)
+            .await?;
+            
+            info!("Prompt message {} created for restored session {}", message_id, session_id);
+        }
         
         Ok(())
     }

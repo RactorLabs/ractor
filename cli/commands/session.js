@@ -15,26 +15,28 @@ module.exports = (program) => {
   program
     .command('session')
     .description('Start an interactive session')
-    .option('--restore <session-id>', 'Restore an existing session by ID')
-    .option('--remix <session-id>', 'Create a new session remixing an existing session')
-    .option('--data <boolean>', 'Include data files in remix (default: true)')
-    .option('--code <boolean>', 'Include code files in remix (default: true)')
-    .option('--secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
-    .option('--instructions <text>', 'Direct instructions text')
-    .option('--instructions-file <file>', 'Path to instructions file')
-    .option('--setup <text>', 'Direct setup script text')
-    .option('--setup-file <file>', 'Path to setup script file')
+    .option('-r, --restore <session-id>', 'Restore an existing session by ID')
+    .option('-R, --remix <session-id>', 'Create a new session remixing an existing session')
+    .option('-d, --data <boolean>', 'Include data files in remix (default: true)')
+    .option('-c, --code <boolean>', 'Include code files in remix (default: true)')
+    .option('-S, --secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
+    .option('-i, --instructions <text>', 'Direct instructions text')
+    .option('-if, --instructions-file <file>', 'Path to instructions file')
+    .option('-s, --setup <text>', 'Direct setup script text')
+    .option('-sf, --setup-file <file>', 'Path to setup script file')
+    .option('-p, --prompt <text>', 'Prompt to send after session creation')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
       '  $ raworc session --restore abc123         # Restore and continue existing session\n' +
-      '  $ raworc session --remix abc123           # Create new session based on existing one\n' +
-      '  $ raworc session --remix abc123 --data false # Remix without copying data files\n' +
+      '  $ raworc session -R abc123           # Create new session based on existing one\n' +
+      '  $ raworc session -R abc123 --data false # Remix without copying data files\n' +
       '  $ raworc session --secrets \'{"API_KEY":"sk-123"}\' # Create session with secrets\n' +
       '  $ raworc session --instructions "Talk like a pirate" # Direct instructions\n' +
       '  $ raworc session --instructions-file ./inst.md # Instructions from file\n' +
       '  $ raworc session --setup "pip install pandas" # Direct setup command\n' +
-      '  $ raworc session --setup-file ./setup.sh # Setup from file\n')
+      '  $ raworc session --setup-file ./setup.sh # Setup from file\n' +
+      '  $ raworc session -p "Hello, help me code" # Start with prompt\n')
     .action(async (options) => {
       await sessionCommand(options);
     });
@@ -67,7 +69,9 @@ async function sessionCommand(options) {
   } else {
     console.log(chalk.gray('Mode:'), 'New Session');
   }
-  console.log(chalk.gray('User:'), authData.user?.user || authData.user || 'Unknown');
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
 
   // Show session creation parameters if provided
   if (options.secrets && !options.remix && !options.restore) {
@@ -115,6 +119,10 @@ async function sessionCommand(options) {
         remixPayload.code = options.code === 'true' || options.code === true;
       }
 
+      // Add prompt if provided
+      if (options.prompt) {
+        remixPayload.prompt = options.prompt;
+      }
 
       // Create remix session
       const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
@@ -149,7 +157,14 @@ async function sessionCommand(options) {
 
       // If session is closed or idle, restore it
       if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
-        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
+        const restorePayload = {};
+        
+        // Add prompt if provided
+        if (options.prompt) {
+          restorePayload.prompt = options.prompt;
+        }
+        
+        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
 
         if (!restoreResponse.success) {
           spinner.fail('Failed to restore session');
@@ -271,6 +286,11 @@ async function sessionCommand(options) {
         }
       }
 
+      // Add prompt if provided
+      if (options.prompt) {
+        sessionPayload.prompt = options.prompt;
+      }
+
       const createResponse = await api.post('/sessions', sessionPayload);
 
       if (!createResponse.success) {
@@ -294,6 +314,33 @@ async function sessionCommand(options) {
     console.log(chalk.gray('Commands: /status, /quit'));
     console.log(chalk.gray('Session ID:'), sessionId);
     console.log();
+
+    // If prompt provided, wait for host response before starting chat loop
+    if (options.prompt) {
+      console.log(chalk.blue('Prompt sent:'), options.prompt);
+      console.log();
+      
+      const responseSpinner = ora('Waiting for host response...').start();
+      
+      try {
+        // Wait for the host to respond to the initial message
+        const hostResponse = await waitForHostResponse(sessionId, Date.now());
+        
+        if (hostResponse) {
+          responseSpinner.succeed('Host responded');
+          console.log();
+          console.log(chalk.cyan('Host:'), hostResponse.content);
+          console.log();
+        } else {
+          responseSpinner.warn('No host response received within timeout');
+          console.log();
+        }
+      } catch (error) {
+        responseSpinner.fail('Error waiting for host response');
+        console.log(chalk.yellow('Warning:'), error.message);
+        console.log();
+      }
+    }
 
     // Start synchronous chat loop
     await chatLoop(sessionId);
@@ -339,11 +386,14 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 
         // Check if we have new messages
         if (messages.length > lastCheckedCount) {
-          // Look for the newest host message
+          // Look for the newest host message that was created after our user message
           for (let i = messages.length - 1; i >= 0; i--) {
             const message = messages[i];
             if (message.role === MESSAGE_ROLE_HOST) {
-              return message;
+              const messageTime = new Date(message.created_at).getTime();
+              if (messageTime > userMessageTime) {
+                return message;
+              }
             }
           }
         }

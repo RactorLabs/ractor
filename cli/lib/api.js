@@ -118,13 +118,20 @@ class ApiClient {
   }
 
   // Authentication methods
-  async login(credentials) {
+  async loginAndSave(credentials) {
     const response = await this.post(`/operators/${credentials.user}/login`, { pass: credentials.pass });
     
     if (response.success) {
+      // Structure the user data consistently 
+      const userData = {
+        user: response.data.user,
+        role: response.data.role || 'Unknown',
+        type: 'Operator'
+      };
+      
       const authData = {
         token: response.data.token,
-        user: response.data.user,
+        user: userData,
         expires: response.data.expires,
         server: this.baseURL
       };
@@ -136,6 +143,12 @@ class ApiClient {
     return response;
   }
 
+  async login(credentials) {
+    // Just return the login response without saving auth data
+    const response = await this.post(`/operators/${credentials.user}/login`, { pass: credentials.pass });
+    return response;
+  }
+
   async loginWithToken(token, server = null) {
     if (server) {
       config.saveConfig({ server });
@@ -143,19 +156,66 @@ class ApiClient {
     }
     
     // Test token by making a request to /auth
+    // We need to temporarily save the old token and use the new one
+    const oldToken = this.token;
     this.token = token;
-    const response = await this.get('/auth');
+    
+    // Create a special client for this request without updateConfig()
+    const client = this.createClient();
+    const endpoint = '/api/v0/auth';
+    
+    let response;
+    try {
+      const axiosResponse = await client.get(endpoint);
+      response = {
+        success: true,
+        data: axiosResponse.data,
+        status: axiosResponse.status,
+        headers: axiosResponse.headers
+      };
+    } catch (error) {
+      if (error.response) {
+        response = {
+          success: false,
+          error: error.response.data?.error || error.response.statusText,
+          status: error.response.status,
+          data: error.response.data
+        };
+      } else if (error.request) {
+        response = {
+          success: false,
+          error: 'No response from server. Is Raworc running?',
+          status: 0
+        };
+      } else {
+        response = {
+          success: false,
+          error: error.message,
+          status: 0
+        };
+      }
+    }
     
     if (response.success) {
+      // Structure the user data to match what auth status expects
+      const userData = {
+        user: response.data.user,
+        role: response.data.type === 'Operator' ? 'admin' : 'user',
+        type: response.data.type
+      };
+      
       const authData = {
         token,
-        user: response.data,
+        user: userData,
         server: this.baseURL
       };
       
       config.saveAuth(authData);
+      // Keep the new token
+      this.token = token;
     } else {
-      this.token = null;
+      // Restore the old token on failure
+      this.token = oldToken;
     }
     
     return response;

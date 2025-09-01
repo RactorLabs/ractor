@@ -27,6 +27,8 @@ pub struct CreateSessionRequest {
     pub instructions: Option<String>,
     #[serde(default)]
     pub setup: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +39,8 @@ pub struct RemixSessionRequest {
     pub data: bool,
     #[serde(default = "default_true")]
     pub code: bool,
+    #[serde(default)]
+    pub prompt: Option<String>,
     // secrets parameter removed - always true for remix (ANTHROPIC_API_KEY required)
 }
 
@@ -57,7 +61,11 @@ pub struct UpdateSessionRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RestoreSessionRequest {
+    #[serde(default)]
+    pub prompt: Option<String>,
+}
 
 fn default_metadata() -> serde_json::Value {
     serde_json::json!({})

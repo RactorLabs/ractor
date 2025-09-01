@@ -7,8 +7,8 @@ module.exports = (program) => {
   program
     .command('pull')
     .description('Pull latest CLI version and Docker images from registries')
-    .option('--cli-only', 'Only update the CLI, skip Docker images')
-    .option('--images-only', 'Only pull Docker images, skip CLI update')
+    .option('-c, --cli-only', 'Only update the CLI, skip Docker images')
+    .option('-i, --images-only', 'Only pull Docker images, skip CLI update')
     .action(async (options) => {
       try {
         console.log(chalk.blue('📦 Pulling latest versions...'));

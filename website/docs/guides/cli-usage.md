@@ -38,28 +38,43 @@ raworc api version
 
 ## 2. Authentication
 
-Authenticate with the Raworc server:
+Raworc uses a two-step authentication process:
 
+### Step 1: Generate Token (Login)
 ```bash
-# Start services first
-raworc start
+# Generate operator token (doesn't authenticate CLI)
+raworc login -u admin -p admin
 
-# Authenticate with default credentials (localhost)
-raworc auth login --user admin --pass admin
+# Generate token with remote server
+raworc login -s https://your-server.com -u admin -p admin
+```
 
-# Authenticate with remote server
-raworc auth login --server https://your-raworc-server.com --user admin --pass admin
-
-# Token-based auth (recommended for production)
-raworc auth use --token sk-ant-your-token
+### Step 2: Authenticate CLI with Token
+```bash
+# Use token to authenticate CLI
+raworc auth -t <jwt-token>
 
 # Token auth with remote server
-raworc auth use --server https://your-raworc-server.com --token sk-ant-your-token
+raworc auth -s https://your-server.com -t <jwt-token>
 
 # Check authentication status
 raworc auth
 
-# Check server status
+# Clear authentication
+raworc logout
+```
+
+### Token Creation for Principals
+```bash
+# Create token for a user (requires authentication)
+raworc token -p myuser -t User
+
+# Create operator token
+raworc token -p newoperator -t Operator
+```
+
+### Check Server Status
+```bash
 raworc api version
 ```
 
@@ -235,11 +250,20 @@ raworc api sessions/{source-session-id}/remix -m post -b '{
 ### Cleanup Operations
 
 ```bash
-# Clean up all sessions
-raworc cleanup --yes
+# Clean containers only
+raworc clean
 
-# Complete system reset
-raworc reset --yes
+# Clean containers and images (preserves volumes)
+raworc clean --all
+
+# Auto-confirm cleanup
+raworc clean -y
+
+# Complete Docker reset (nuclear option)
+raworc reset -y
+
+# Services-only cleanup (skip Docker cleanup)
+raworc reset -s
 
 # Stop services with cleanup
 raworc stop --cleanup

@@ -8,9 +8,12 @@ const pkg = require('./package.json');
 const startCommand = require('./commands/start');
 const stopCommand = require('./commands/stop');
 const resetCommand = require('./commands/reset');
-const cleanupCommand = require('./commands/cleanup');
+const cleanCommand = require('./commands/clean');
 const sessionCommand = require('./commands/session');
 const authCommand = require('./commands/auth');
+const loginCommand = require('./commands/login');
+const logoutCommand = require('./commands/logout');
+const tokenCommand = require('./commands/token');
 const apiCommand = require('./commands/api');
 const pullCommand = require('./commands/pull');
 
@@ -19,15 +22,18 @@ const program = new Command();
 program
   .name('raworc')
   .description('Remote Agentic Work Orchestrator - CLI for Computer use agents')
-  .version(pkg.version);
+  .version(pkg.version, '-v, --version', 'output the version number');
 
 // Configure commands
 startCommand(program);
 stopCommand(program);
 resetCommand(program);
-cleanupCommand(program);
+cleanCommand(program);
 sessionCommand(program);
 authCommand(program);
+loginCommand(program);
+logoutCommand(program);
+tokenCommand(program);
 apiCommand(program);
 pullCommand(program);
 
