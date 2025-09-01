@@ -13,22 +13,11 @@ Complete reference for all Raworc REST API endpoints.
 - **Authentication**: Bearer token (JWT) required for most endpoints
 - **Content-Type**: application/json
 
-## Health & Status
-
-### GET /health
-
-Comprehensive health check including database connectivity, Docker daemon status, and system resource monitoring.
-
-**Authentication**: Not required
-
-**Response**: `200 OK`
-```text
-OK
-```
+## Version & Health
 
 ### GET /version
 
-Get API version and build information.
+Get API version and health information.
 
 **Authentication**: Not required
 

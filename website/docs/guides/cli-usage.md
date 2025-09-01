@@ -33,7 +33,7 @@ raworc stop
 raworc stop --cleanup           # Also clean up session containers
 
 # Check service status
-raworc api health
+raworc api version
 ```
 
 ## 2. Authentication
@@ -59,8 +59,8 @@ raworc auth login --server https://your-raworc-server.com --token sk-ant-your-to
 # Check authentication status
 raworc auth
 
-# Check server health
-raworc api health
+# Check server status
+raworc api version
 ```
 
 ## 3. Session Management
@@ -261,8 +261,8 @@ raworc pull --images-only
 ### Troubleshooting
 
 ```bash
-# Check system health
-raworc api health
+# Check system status
+raworc api version
 
 # View service logs
 docker logs raworc_server

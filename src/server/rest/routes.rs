@@ -1,5 +1,4 @@
 use axum::{
-    http::StatusCode,
     middleware,
     routing::{delete, get, post, put},
     Router,
@@ -13,7 +12,6 @@ use crate::server::rest::{auth, handlers, middleware::auth_middleware, logging_m
 pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
     let public_routes = Router::new()
-        .route("/health", get(health))
         .route("/version", get(version))
         .route("/auth/login", post(auth::login));
     
@@ -53,9 +51,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .layer(TraceLayer::new_for_http())
 }
 
-async fn health() -> StatusCode {
-    StatusCode::OK
-}
 
 async fn version() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({

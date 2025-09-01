@@ -70,7 +70,7 @@ raworc reset --yes
 docker ps --filter "name=raworc_"
 
 # Test API connectivity
-raworc api health
+raworc api version
 
 # Check authentication
 raworc auth

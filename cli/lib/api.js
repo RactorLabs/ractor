@@ -186,7 +186,7 @@ class ApiClient {
     const tempToken = this.token;
     this.token = null;
     
-    const response = await this.get('/health');
+    const response = await this.get('/version');
     
     // Restore token
     this.token = tempToken;

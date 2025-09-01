@@ -178,9 +178,9 @@ raworc stop
 raworc start --restart
 ```
 
-### Check system health
+### Check system status
 ```bash
-raworc api health
+raworc api version
 ```
 
 ### View service logs

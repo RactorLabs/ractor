@@ -77,7 +77,7 @@ async function apiCommand(endpoint, options) {
         console.log();
         console.log(chalk.yellow('💡 Endpoint not found:'));
         console.log('   Check the endpoint URL spelling');
-        console.log('   Available endpoints: /health, /sessions, /auth/me');
+        console.log('   Available endpoints: /version, /sessions, /auth');
       } else if (response.status === 0) {
         console.log();
         console.log(chalk.yellow('💡 Connection failed:'));

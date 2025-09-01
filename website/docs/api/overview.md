@@ -16,7 +16,7 @@ Raworc provides a comprehensive REST API for Computer Use automation. The API en
 
 ## Authentication
 
-All API endpoints (except `/health`, `/version`, and `/auth/login`) require authentication using a JWT bearer token.
+All API endpoints (except `/version` and `/auth/login`) require authentication using a JWT bearer token.
 
 ## Sessions
 
@@ -75,8 +75,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/health`](./rest-api#get-health) | GET | Health check |
-| [`/version`](./rest-api#get-version) | GET | API version info |
+| [`/version`](./rest-api#get-version) | GET | API version and health info |
 | [`/auth/login`](./rest-api#post-authlogin) | POST | Authenticate and get token |
 | [`/auth`](./rest-api#get-auth) | GET | Get current user info |
 | [`/auth/token`](./rest-api#post-authtoken) | POST | Create token for any principal (admin only) |
