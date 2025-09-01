@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::query;
 use std::sync::Arc;
 
-use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest, RestoreSessionRequest};
+use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
@@ -15,6 +15,7 @@ use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
 pub struct SessionResponse {
     pub id: String,
     pub created_by: String,
+    pub name: Option<String>,
     pub state: String,
     pub container_id: Option<String>,
     pub persistent_volume_id: Option<String>,
@@ -34,6 +35,7 @@ impl SessionResponse {
         Ok(Self {
             id: session.id,
             created_by: session.created_by,
+            name: session.name,
             state: session.state,
             container_id: session.container_id,
             persistent_volume_id: session.persistent_volume_id,
@@ -43,6 +45,30 @@ impl SessionResponse {
             metadata: session.metadata,
         })
     }
+}
+
+// Helper function to find session by ID or name
+async fn find_session_by_id_or_name(
+    state: &AppState, 
+    id_or_name: &str, 
+    created_by: &str
+) -> Result<Session, ApiError> {
+    // Try to find by ID first
+    if let Some(session) = Session::find_by_id(&state.db, id_or_name).await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))? {
+        // Check ownership
+        if session.created_by == created_by {
+            return Ok(session);
+        }
+    }
+    
+    // If not found by ID, try by name
+    if let Some(session) = Session::find_by_name(&state.db, id_or_name, created_by).await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session by name: {}", e)))? {
+        return Ok(session);
+    }
+    
+    Err(ApiError::NotFound("Session not found".to_string()))
 }
 
 pub async fn list_sessions(
@@ -92,20 +118,14 @@ pub async fn get_session(
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to get session".to_string()))?;
 
-    let session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
-    // Only allow access to own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
-        return Err(ApiError::Forbidden("Can only access your own sessions".to_string()));
-    }
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, username).await?;
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
@@ -187,21 +207,14 @@ pub async fn remix_session(
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix session".to_string()))?;
 
-    // Check if parent session exists and user has access to it
-    let parent = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch parent session: {}", e)))?
-        .ok_or(ApiError::NotFound("Parent session not found".to_string()))?;
-
-    // Only allow remixing own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if parent.created_by != *username {
-        return Err(ApiError::Forbidden("Can only remix your own sessions".to_string()));
-    }
+    // Find parent session by ID or name
+    let parent = find_session_by_id_or_name(&state, &id, username).await?;
 
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
@@ -256,15 +269,8 @@ pub async fn close_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     }; 
     
-    // Check if session exists and user has access
-    let session = match Session::find_by_id(&state.db, &id).await {
-        Ok(Some(s)) => s,
-        Ok(None) => return Err(ApiError::NotFound("Session not found".to_string())),
-        Err(e) => {
-            tracing::error!("Database error: {:?}", e);
-            return Err(ApiError::Internal(anyhow::anyhow!("Database error: {}", e)));
-        }
-    };
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, created_by).await?;
     
     tracing::info!("Found session in state: {}", session.state);
 
@@ -347,28 +353,20 @@ pub async fn restore_session(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RestoreSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Check if session exists
-    let session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
     // Check permission for updating sessions
     check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to restore session".to_string()))?;
     
-    // Only allow restoring own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
-        return Err(ApiError::Forbidden("Can only restore your own sessions".to_string()));
-    }
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, username).await?;
 
     // Check current state - can only resume if suspended
     if session.state != crate::shared::models::constants::SESSION_STATE_CLOSED {
@@ -398,19 +396,14 @@ pub async fn restore_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Add task to restart the container
-    let restore_payload = serde_json::json!({
-        "prompt": req.prompt
-    });
-    
+    // Add task to restart the container  
     sqlx::query(r#"
         INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
-        VALUES (?, 'restore_session', ?, ?, 'pending')
+        VALUES (?, 'restore_session', ?, '{}', 'pending')
         "#
     )
-    .bind(&id)
-    .bind(created_by)
-    .bind(&restore_payload)
+    .bind(&session.id)
+    .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| {
@@ -435,28 +428,21 @@ pub async fn update_session(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Check if session exists
-    let session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
     // Check permission for updating sessions
     check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to update session".to_string()))?;
     
-    // Only allow updating own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
-        return Err(ApiError::Forbidden("Can only update your own sessions".to_string()));
-    }
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, username).await?;
 
-    let updated_session = Session::update(&state.db, &id, req)
+    let updated_session = Session::update(&state.db, &session.id, req)
         .await
         .map_err(|e| {
             if e.to_string().contains("No fields to update") {
@@ -477,27 +463,21 @@ pub async fn update_session_state(
     Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Get session and verify ownership (same pattern as other session endpoints)
-    let session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
-    // Only allow access to own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
-        return Err(ApiError::Forbidden("Can only update your own sessions".to_string()));
-    }
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, username).await?;
     
     // Update the state with ownership verification
     let result = sqlx::query(
         "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
-    .bind(&id)
+    .bind(&session.id)
     .bind(username)
     .execute(&*state.db)
     .await
@@ -518,32 +498,19 @@ pub async fn delete_session(
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
-    // Check if session exists
-    let session = Session::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
     // Check permission for deleting sessions
     check_api_permission(&auth, &state, &permissions::SESSION_DELETE)
         .await
         .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete session".to_string()))?;
     
-    // Only allow deleting own sessions (ownership-based access control)
+    // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    if session.created_by != *username {
-        return Err(ApiError::Forbidden("Can only delete your own sessions".to_string()));
-    }
-
-    // Get the principal name
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
+    // Find session by ID or name
+    let session = find_session_by_id_or_name(&state, &id, username).await?;
 
     // Sessions can be soft deleted in any state
 
@@ -553,15 +520,15 @@ pub async fn delete_session(
         VALUES (?, 'destroy_session', ?, '{}', 'pending')
         "#
     )
-    .bind(&id)
-    .bind(created_by)
+    .bind(&session.id)
+    .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy task: {}", e)))?;
     
-    tracing::info!("Created destroy task for session {}", id);
+    tracing::info!("Created destroy task for session {}", session.id);
 
-    let deleted = Session::delete(&state.db, &id)
+    let deleted = Session::delete(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete session: {}", e)))?;
 

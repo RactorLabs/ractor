@@ -25,6 +25,7 @@ module.exports = (program) => {
     .option('-s, --setup <text>', 'Direct setup script text')
     .option('-sf, --setup-file <file>', 'Path to setup script file')
     .option('-p, --prompt <text>', 'Prompt to send after session creation')
+    .option('-n, --name <name>', 'Name for the session')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
@@ -124,6 +125,11 @@ async function sessionCommand(options) {
         remixPayload.prompt = options.prompt;
       }
 
+      // Add name if provided
+      if (options.name) {
+        remixPayload.name = options.name;
+      }
+
       // Create remix session
       const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
 
@@ -157,14 +163,7 @@ async function sessionCommand(options) {
 
       // If session is closed or idle, restore it
       if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
-        const restorePayload = {};
-        
-        // Add prompt if provided
-        if (options.prompt) {
-          restorePayload.prompt = options.prompt;
-        }
-        
-        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
+        const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
 
         if (!restoreResponse.success) {
           spinner.fail('Failed to restore session');
@@ -289,6 +288,11 @@ async function sessionCommand(options) {
       // Add prompt if provided
       if (options.prompt) {
         sessionPayload.prompt = options.prompt;
+      }
+
+      // Add name if provided
+      if (options.name) {
+        sessionPayload.name = options.name;
       }
 
       const createResponse = await api.post('/sessions', sessionPayload);

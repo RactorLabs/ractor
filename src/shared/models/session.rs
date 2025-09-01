@@ -8,6 +8,7 @@ use super::constants::SESSION_STATE_DELETED;
 pub struct Session {
     pub id: String,
     pub created_by: String,
+    pub name: Option<String>,
     pub state: String,
     pub container_id: Option<String>,
     pub persistent_volume_id: Option<String>,
@@ -22,6 +23,8 @@ pub struct CreateSessionRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
     #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
     pub secrets: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub instructions: Option<String>,
@@ -35,6 +38,8 @@ pub struct CreateSessionRequest {
 pub struct RemixSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default = "default_true")]
     pub data: bool,
     #[serde(default = "default_true")]
@@ -61,12 +66,6 @@ pub struct UpdateSessionRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoreSessionRequest {
-    #[serde(default)]
-    pub prompt: Option<String>,
-}
-
 fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }
@@ -82,7 +81,7 @@ impl Session {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, state,
+            SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at,  last_activity_at,
                    metadata
@@ -98,7 +97,7 @@ impl Session {
     pub async fn find_by_id(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, state,
+            SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at,  last_activity_at,
                    metadata
@@ -107,6 +106,25 @@ impl Session {
             "#
         )
         .bind(id)
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn find_by_name(pool: &sqlx::MySqlPool, name: &str, created_by: &str) -> Result<Option<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, created_by, name, state,
+                   container_id, persistent_volume_id, parent_session_id,
+                   created_at,  last_activity_at,
+                   metadata
+            FROM sessions
+            WHERE name = ? AND created_by = ? AND state != 'deleted'
+            ORDER BY created_at DESC
+            LIMIT 1
+            "#
+        )
+        .bind(name)
+        .bind(created_by)
         .fetch_optional(pool)
         .await
     }
@@ -122,12 +140,13 @@ impl Session {
         // Insert the session
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, created_by, metadata)
-            VALUES (?, ?, ?)
+            INSERT INTO sessions (id, created_by, name, metadata)
+            VALUES (?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
         .bind(created_by)
+        .bind(&req.name)
         .bind(&req.metadata)
         .execute(pool)
         .await?;
@@ -154,14 +173,15 @@ impl Session {
         sqlx::query(
             r#"
             INSERT INTO sessions (
-                id, created_by, 
+                id, created_by, name,
                 parent_session_id, metadata
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
         .bind(&parent.created_by) // Inherit created_by from parent
+        .bind(&req.name)
         .bind(parent_id)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .execute(pool)

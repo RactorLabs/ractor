@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 CREATE TABLE IF NOT EXISTS sessions (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     created_by VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
     container_id VARCHAR(255),
     persistent_volume_id VARCHAR(255),
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
     INDEX idx_sessions_created_by (created_by),
+    INDEX idx_sessions_name (name),
     INDEX idx_sessions_state (state),
     INDEX idx_sessions_parent_session_id (parent_session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

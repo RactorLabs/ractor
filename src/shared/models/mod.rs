@@ -6,7 +6,7 @@ pub mod message;
 pub mod constants;
 pub mod state_helpers;
 
-pub use session::{Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionStateRequest, UpdateSessionRequest, RestoreSessionRequest};
+pub use session::{Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionStateRequest, UpdateSessionRequest};
 pub use message::{SessionMessage, CreateMessageRequest, MessageResponse, ListMessagesQuery};
 
 // Database errors
