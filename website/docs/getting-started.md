@@ -71,7 +71,7 @@ raworc session --setup ./setup.sh
 ```bash
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
-  --instructions "You are a helpful data analysis assistant." \
+  --instructions "You are a helpful data analysis Host." \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
 ```
 
@@ -82,7 +82,7 @@ Once in a session, you can interact directly with the Host:
 ```
 You: Hello, how can you help me?
 ⠋ Waiting for host response...
-Assistant: Hello! I'm an AI assistant that can help you with various tasks including:
+Host: Hello! I'm a Host that can help you with various tasks including:
 - Writing and debugging code
 - Data analysis and visualization  
 - File management and organization
@@ -91,7 +91,7 @@ Assistant: Hello! I'm an AI assistant that can help you with various tasks inclu
 
 You: Create a Python script to calculate fibonacci numbers
 ⠋ Waiting for host response...
-Assistant: I'll create a Python script to calculate Fibonacci numbers for you.
+Host: I'll create a Python script to calculate Fibonacci numbers for you.
 
 [Creates fibonacci.py with implementation]
 
@@ -144,7 +144,7 @@ raworc api sessions -m POST -b '{
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
-  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "instructions": "You are a helpful Host specialized in data analysis.",
   "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
 }'
 ```

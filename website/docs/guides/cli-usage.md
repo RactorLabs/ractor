@@ -76,7 +76,7 @@ raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
 # Note: ANTHROPIC_API_KEY is required for all new Host sessions
 
 # Start Host session with instructions
-raworc session --instructions "You are a helpful coding assistant"
+raworc session --instructions "You are a helpful coding Host"
 
 # Start Host session with setup script
 raworc session --setup "pip install pandas numpy matplotlib"
@@ -84,7 +84,7 @@ raworc session --setup "pip install pandas numpy matplotlib"
 # Full configuration
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
-  --instructions "You are a data analyst assistant" \
+  --instructions "You are a data analyst Host" \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
 
 # Restore previous session
@@ -113,7 +113,7 @@ raworc api sessions -m post -b '{
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
-  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "instructions": "You are a helpful Host specialized in data analysis.",
   "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
 }'
 
@@ -173,7 +173,7 @@ Provide system instructions for the Host:
 
 ```bash
 # Inline instructions
-raworc session --instructions "You are a helpful coding assistant specialized in Python"
+raworc session --instructions "You are a helpful coding Host specialized in Python"
 
 # Instructions from file
 raworc session --instructions ./my-instructions.md
@@ -350,7 +350,7 @@ raworc auth login --user admin --pass admin
 # Create coding Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
-  --instructions "You are a senior developer assistant" \
+  --instructions "You are a senior developer Host" \
   --setup "pip install black flake8 pytest"
 ```
 
@@ -360,7 +360,7 @@ raworc session \
 # Create data science Host session
 raworc session \
   --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db"}' \
-  --instructions "You are a data scientist assistant" \
+  --instructions "You are a data scientist Host" \
   --setup "pip install pandas numpy matplotlib seaborn jupyter"
 ```
 

@@ -251,7 +251,7 @@ raworc session --remix {parent-session-id} --data false --code true
 2. **File Organization**: Keep code in `/session/code`, data in `/session/data`
 3. **Secret Management**: Pass secrets via the `--secrets` parameter
 4. **Session Remix**: Use remix to branch and experiment with different approaches
-5. **Instructions**: Provide clear instructions to guide the AI assistant
+5. **Instructions**: Provide clear instructions to guide the Host
 
 ## Next Steps
 

@@ -70,9 +70,9 @@ Authenticate with service account credentials and receive a JWT token.
 - `400 Bad Request` - Missing required fields
 - `401 Unauthorized` - Invalid credentials
 
-### GET /auth/me
+### GET /auth
 
-Get information about the authenticated user.
+Get information about the authenticated user and token status.
 
 **Authentication**: Required
 
@@ -83,6 +83,37 @@ Get information about the authenticated user.
   "type": "ServiceAccount"
 }
 ```
+
+### POST /auth/token
+
+Create a JWT token for any principal. Admin-only endpoint for creating tokens for users or service accounts.
+
+**Authentication**: Required (Admin only)
+
+**Request Body**:
+```json
+{
+  "principal": "user@example.com",
+  "principal_type": "User"
+}
+```
+
+**Fields**:
+- `principal` - The username or identifier for the principal
+- `principal_type` - Must be "User" or "ServiceAccount"
+
+**Response**: `200 OK`
+```json
+{
+  "token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "token_type": "Bearer",
+  "expires_at": "2025-01-15T11:30:00Z"
+}
+```
+
+**Errors**:
+- `400 Bad Request` - Invalid principal_type
+- `403 Forbidden` - Not admin
 
 ## Service Accounts
 
@@ -239,7 +270,7 @@ Create a new Host session.
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
-  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "instructions": "You are a helpful Host specialized in data analysis.",
   "setup": "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
 }
 ```
@@ -421,7 +452,7 @@ List messages in a Host session.
   {
     "id": "msg-uuid-2", 
     "session_id": "session-uuid",
-    "role": "assistant",
+    "role": "host",
     "content": "I'll create a Python script for calculating fibonacci numbers...",
     "created_at": "2025-01-20T10:01:00Z"
   }

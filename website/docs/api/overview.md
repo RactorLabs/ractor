@@ -24,6 +24,8 @@ Raworc uses sessions to provide Computer Use automation. Each session includes a
 
 ### Obtaining a Token
 
+**Service Account Authentication (Primary Method):**
+
 ```bash
 POST /api/v0/auth/login
 Content-Type: application/json
@@ -44,6 +46,21 @@ Response:
 }
 ```
 
+**Token Creation (Admin Only):**
+
+Admins can create tokens for any principal:
+
+```bash
+POST /api/v0/auth/token
+Authorization: Bearer <admin-token>
+Content-Type: application/json
+
+{
+  "principal": "user@example.com",
+  "principal_type": "User"
+}
+```
+
 ### Using the Token
 
 Include the token in the Authorization header:
@@ -61,7 +78,8 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/health`](./rest-api#get-health) | GET | Health check |
 | [`/version`](./rest-api#get-version) | GET | API version info |
 | [`/auth/login`](./rest-api#post-authlogin) | POST | Authenticate and get token |
-| [`/auth/me`](./rest-api#get-authme) | GET | Get current user info |
+| [`/auth`](./rest-api#get-auth) | GET | Get current user info |
+| [`/auth/token`](./rest-api#post-authtoken) | POST | Create token for any principal (admin only) |
 
 ### Service Accounts
 

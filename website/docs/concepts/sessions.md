@@ -116,7 +116,7 @@ raworc api sessions -m post -b '{
 
 # Session with instructions
 raworc api sessions -m post -b '{
-  "instructions": "You are a helpful assistant specialized in data analysis.",
+  "instructions": "You are a helpful Host specialized in data analysis.",
   "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
 }'
 ```
@@ -158,7 +158,7 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 2. Session state transitions to `busy`
 3. Host polls and receives message
 4. Host executes using AI capabilities and computer-use tools
-5. Response stored with `assistant` role
+5. Response stored with `host` role
 6. Session returns to `idle` state
 
 ### Close Session
@@ -316,7 +316,7 @@ raworc session --remix def456                                           # Create
 
 # In session interface:
 You: Hello, how can you help me?
-Assistant: I can help you with coding, analysis, and more!
+Host: I can help you with coding, analysis, and more!
 
 You: /quit
 ```
