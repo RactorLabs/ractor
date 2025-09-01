@@ -386,12 +386,17 @@ pub async fn restore_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name (restore only allowed for own sessions, even for admins)
-    let session = find_session_by_id_or_name(&state, &id, username, false).await?;
+    // Find session by ID or name (admin can find any session, but restore has ownership restrictions)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
 
-    // Additional check: Even admins cannot restore other users' sessions (only remix)
+    // Check ownership: Even admins cannot restore other users' sessions (only remix)
     if session.created_by != *username {
-        return Err(ApiError::Forbidden("Cannot restore other users' sessions. Use remix instead.".to_string()));
+        if is_admin {
+            return Err(ApiError::Forbidden("Admins cannot restore other users' sessions. Use remix instead.".to_string()));
+        } else {
+            return Err(ApiError::Forbidden("You can only restore your own sessions.".to_string()));
+        }
     }
 
     // Check current state - can only resume if suspended
