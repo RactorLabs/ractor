@@ -221,7 +221,7 @@ pub async fn remix_session(
     let copy_code = req.code;
     let initial_prompt = req.prompt.clone();
     
-    let session = Session::remix(&state.db, &id, req)
+    let session = Session::remix(&state.db, &parent.id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e)))?;
 

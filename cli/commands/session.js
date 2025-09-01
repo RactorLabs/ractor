@@ -56,6 +56,9 @@ async function sessionCommand(options) {
   if (options.remix) {
     console.log(chalk.gray('Mode:'), 'Remix');
     console.log(chalk.gray('Source:'), options.remix);
+    if (options.name) {
+      console.log(chalk.gray('New Name:'), options.name);
+    }
 
     // Show remix parameters if specified
     if (options.data !== undefined) {
@@ -140,7 +143,20 @@ async function sessionCommand(options) {
       }
 
       sessionId = remixResponse.data.id;
-      spinner.succeed(`Session remixed: ${sessionId}`);
+      const newSession = remixResponse.data;
+      
+      // Show detailed remix success info
+      if (newSession.name) {
+        spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
+      } else {
+        spinner.succeed(`Session remixed: ${sessionId}`);
+      }
+      
+      console.log(chalk.gray('Source session:'), options.remix);
+      if (newSession.name) {
+        console.log(chalk.gray('New session name:'), newSession.name);
+      }
+      console.log(chalk.gray('New session ID:'), sessionId);
 
     } else if (options.restore) {
       // Check if we're restoring an existing session
