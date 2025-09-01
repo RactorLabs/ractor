@@ -1,7 +1,7 @@
 use crate::shared::{AppState};
 use crate::shared::models::DatabaseError;
 use crate::shared::rbac::{
-    AuthPrincipal, PermissionContext, RbacAuthz, RbacClaims, ServiceAccount, SubjectType,
+    AuthPrincipal, PermissionContext, RbacAuthz, RbacClaims, Operator, SubjectType,
     TokenResponse,
 };
 use anyhow::Result;
@@ -15,8 +15,8 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 
 
 // JWT utility functions for RBAC
-pub fn create_service_account_jwt(
-    service_account: &ServiceAccount,
+pub fn create_operator_jwt(
+    operator: &Operator,
     secret: &str,
     duration_hours: i64,
 ) -> Result<TokenResponse> {
@@ -25,8 +25,8 @@ pub fn create_service_account_jwt(
         .expect("valid timestamp");
 
     let claims = RbacClaims {
-        sub: service_account.user.clone(),
-        sub_type: SubjectType::ServiceAccount,
+        sub: operator.user.clone(),
+        sub_type: SubjectType::Operator,
         exp: exp.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
         iss: "raworc-rbac".to_string(),
@@ -93,16 +93,16 @@ pub async fn check_permission(
 
 
 // Authentication functions
-pub async fn authenticate_service_account(
+pub async fn authenticate_operator(
     app_state: &AppState,
     user: &str,
     pass: &str,
-) -> Result<Option<ServiceAccount>, DatabaseError> {
-    if let Some(service_account) = app_state.get_service_account(user).await? {
-        if service_account.active {
-            let is_valid = bcrypt::verify(pass, &service_account.pass_hash).unwrap_or(false);
+) -> Result<Option<Operator>, DatabaseError> {
+    if let Some(operator) = app_state.get_operator(user).await? {
+        if operator.active {
+            let is_valid = bcrypt::verify(pass, &operator.pass_hash).unwrap_or(false);
             if is_valid {
-                return Ok(Some(service_account));
+                return Ok(Some(operator));
             }
         }
     }

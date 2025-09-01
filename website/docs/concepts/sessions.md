@@ -12,7 +12,7 @@ Raworc organizes Host work through **Sessions** - isolated containerized environ
 ```typescript
 interface Session {
   id: string;                    // UUID identifier
-  created_by: string;            // Creator service account
+  created_by: string;            // Creator operator
   state: SessionState;           // Current lifecycle state
   container_id?: string;         // Docker container ID
   persistent_volume_id: string;  // Data volume ID
@@ -297,7 +297,7 @@ Sessions start quickly because:
 
 ### Access Control
 - **JWT Authentication**: Secure token-based authentication
-- **Session Ownership**: Sessions tied to creator service account
+- **Session Ownership**: Sessions tied to creator operator
 - **RBAC Permissions**: Role-based access control for session operations
 
 ### Secret Management

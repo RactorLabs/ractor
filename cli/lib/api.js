@@ -119,7 +119,7 @@ class ApiClient {
 
   // Authentication methods
   async login(credentials) {
-    const response = await this.post('/auth/login', credentials);
+    const response = await this.post(`/operators/${credentials.user}/login`, { pass: credentials.pass });
     
     if (response.success) {
       const authData = {

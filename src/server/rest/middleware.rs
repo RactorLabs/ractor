@@ -24,7 +24,8 @@ pub async fn auth_middleware(
     // Skip auth for public endpoints
     let path = request.uri().path();
     if path == "/api/v0/version" || 
-       path.starts_with("/api/v0/auth/") {
+       path.starts_with("/api/v0/auth/") ||
+       path.contains("/login") {
         return Ok(next.run(request).await);
     }
 
@@ -45,13 +46,13 @@ pub async fn auth_middleware(
 
     // Get principal from claims
     let principal = match claims.sub_type {
-        SubjectType::ServiceAccount => {
-            let service_account = state
-                .get_service_account(&claims.sub)
+        SubjectType::Operator => {
+            let operator = state
+                .get_operator(&claims.sub)
                 .await
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
                 .ok_or(StatusCode::UNAUTHORIZED)?;
-            AuthPrincipal::ServiceAccount(service_account)
+            AuthPrincipal::Operator(operator)
         }
         SubjectType::Subject => AuthPrincipal::Subject(Subject {
             name: claims.sub.clone(),
@@ -70,7 +71,7 @@ pub async fn auth_middleware(
     let uri = request.uri().clone();
     let user = match &principal {
         AuthPrincipal::Subject(s) => &s.name,
-        AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        AuthPrincipal::Operator(op) => &op.user,
     };
     
     info!(

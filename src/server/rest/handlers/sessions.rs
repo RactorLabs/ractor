@@ -62,7 +62,7 @@ pub async fn list_sessions(
     // For non-admin users, only show their own sessions
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     // For regular users, only show their own sessions
@@ -100,7 +100,7 @@ pub async fn get_session(
     // Only allow access to own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -134,7 +134,7 @@ pub async fn create_session(
     // Get the principal name
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
     let session = Session::create(&state.db, req.clone(), created_by)
@@ -152,7 +152,7 @@ pub async fn create_session(
         "principal": created_by,
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
-            crate::shared::rbac::AuthPrincipal::ServiceAccount(_) => "ServiceAccount",
+            crate::shared::rbac::AuthPrincipal::Operator(_) => "Operator",
         },
         "user_token": auth.token
     });
@@ -194,7 +194,7 @@ pub async fn remix_session(
     // Only allow remixing own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if parent.created_by != *username {
@@ -212,7 +212,7 @@ pub async fn remix_session(
     // Get the principal name for task creation
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
     // Add task to queue for session manager to create container with remix options
@@ -249,7 +249,7 @@ pub async fn close_session(
     tracing::info!("Close request received for session: {}", id);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     }; 
     
     // Check if session exists and user has access
@@ -275,7 +275,7 @@ pub async fn close_session(
     // Only allow closing own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -358,7 +358,7 @@ pub async fn restore_session(
     // Only allow restoring own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -390,7 +390,7 @@ pub async fn restore_session(
     // Get the principal name for task creation
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
     // Add task to restart the container
@@ -439,7 +439,7 @@ pub async fn update_session(
     // Only allow updating own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -475,7 +475,7 @@ pub async fn update_session_state(
     // Only allow access to own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -522,7 +522,7 @@ pub async fn delete_session(
     // Only allow deleting own sessions (ownership-based access control)
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     if session.created_by != *username {
@@ -532,7 +532,7 @@ pub async fn delete_session(
     // Get the principal name
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
     // Sessions can be soft deleted in any state

@@ -1,3 +1,3 @@
-pub mod service_accounts;
+pub mod operators;
 pub mod sessions;
 pub mod messages;

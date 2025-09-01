@@ -13,19 +13,19 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
     let public_routes = Router::new()
         .route("/version", get(version))
-        .route("/auth/login", post(auth::login));
+        .route("/operators/{name}/login", post(auth::login));
     
     // Protected routes
     let protected_routes = Router::new()
         .route("/auth", get(auth::me))
         .route("/auth/token", post(auth::create_token))
-        // Service account endpoints
-        .route("/service-accounts", get(handlers::service_accounts::list_service_accounts))
-        .route("/service-accounts", post(handlers::service_accounts::create_service_account))
-        .route("/service-accounts/{id}", get(handlers::service_accounts::get_service_account))
-        .route("/service-accounts/{id}", put(handlers::service_accounts::update_service_account))
-        .route("/service-accounts/{id}", delete(handlers::service_accounts::delete_service_account))
-        .route("/service-accounts/{id}/password", put(handlers::service_accounts::update_service_account_password))
+        // Operator endpoints
+        .route("/operators", get(handlers::operators::list_operators))
+        .route("/operators", post(handlers::operators::create_operator))
+        .route("/operators/{name}", get(handlers::operators::get_operator))
+        .route("/operators/{name}", put(handlers::operators::update_operator))
+        .route("/operators/{name}", delete(handlers::operators::delete_operator))
+        .route("/operators/{name}/password", put(handlers::operators::update_operator_password))
         // Session endpoints
         .route("/sessions", get(handlers::sessions::list_sessions))
         .route("/sessions", post(handlers::sessions::create_session))

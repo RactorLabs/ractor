@@ -5,7 +5,7 @@ title: RBAC & Authentication
 
 # Role-Based Access Control (RBAC) & Authentication
 
-Raworc implements a comprehensive RBAC system providing fine-grained access control for Host sessions. The system supports both user accounts and service accounts with JWT-based authentication, focusing on session-based permissions for remote computer management.
+Raworc implements a comprehensive RBAC system providing fine-grained access control for Host sessions. The system supports both user accounts and operators with JWT-based authentication, focusing on session-based permissions for remote computer management.
 
 ## Architecture Overview
 
@@ -24,7 +24,7 @@ Raworc implements a comprehensive RBAC system providing fine-grained access cont
 │           │                       │                       │         │
 │    ┌──────▼─────┐         ┌───────▼──────┐       ┌────────▼───────┐ │
 │    │ Principal  │         │Role Bindings │       │     Rules      │ │
-│    │  (User/SA) │         │(Who + What)  │       │ (API + Verbs)  │ │
+│    │  (User/Op) │         │(Who + What)  │       │ (API + Verbs)  │ │
 │    └────────────┘         └──────────────┘       └────────────────┘ │
 │                                                                     │
 └─────────────────────────────────────────────────────────────────────┘
@@ -32,7 +32,7 @@ Raworc implements a comprehensive RBAC system providing fine-grained access cont
 
 **Key Components:**
 - **JWT Claims**: Identity and authorization information
-- **Principals**: Users and Service Accounts
+- **Principals**: Users and Operators
 - **Roles**: Collections of permissions (rules)
 - **Role Bindings**: Mapping principals to roles globally
 - **Rules**: API permissions (resource + verbs)
@@ -45,7 +45,7 @@ Raworc implements a comprehensive RBAC system providing fine-grained access cont
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RbacClaims {
-    pub sub: String,               // Subject name (user or service account)
+    pub sub: String,               // Subject name (user or operator)
     pub sub_type: SubjectType,     // Subject type identifier
     pub exp: usize,                // Expiration timestamp
     pub iat: usize,                // Issued at timestamp
@@ -55,7 +55,7 @@ pub struct RbacClaims {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubjectType {
     Subject,         // Human user
-    ServiceAccount,  // Automated service
+    Operator,  // Automated service
 }
 ```
 
@@ -100,18 +100,18 @@ raworc auth login --user admin --pass admin
 }
 ```
 
-#### 2. Service Account Authentication
+#### 2. Operator Authentication
 
-**Service Account Token Generation:**
+**Operator Token Generation:**
 ```rust
-async fn create_service_account_token(&self, sa_name: &str) -> Result<String> {
-    // Verify service account exists
-    let sa = self.get_service_account(sa_name).await?;
+async fn create_operator_token(&self, operator_name: &str) -> Result<String> {
+    // Verify operator exists
+    let operator = self.get_operator(operator_name).await?;
     
-    // Create JWT token for service account
+    // Create JWT token for operator
     self.create_jwt_token(
-        &format!("system:serviceaccount:{}", sa_name),
-        SubjectType::ServiceAccount
+        &format!("system:operator:{}", operator_name),
+        SubjectType::Operator
     ).await
 }
 ```
@@ -145,9 +145,9 @@ impl OidcAuthProvider {
 -- Identity comes from authentication provider
 ```
 
-**Service Accounts:**
+**Operators:**
 ```sql
-CREATE TABLE service_accounts (
+CREATE TABLE operators (
     name VARCHAR(255) NOT NULL PRIMARY KEY,
     description TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -199,7 +199,7 @@ CREATE TABLE role_bindings (
     name VARCHAR(255) NOT NULL PRIMARY KEY,
     role_name VARCHAR(255) NOT NULL,
     subject_name VARCHAR(255) NOT NULL,
-    subject_type ENUM('Subject', 'ServiceAccount') NOT NULL,
+    subject_type ENUM('Subject', 'Operator') NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255) NOT NULL,
     metadata JSON,
@@ -251,11 +251,11 @@ pub const RBAC_ROLE_BINDING_CREATE: &str = "rbac.role_binding.create";
 pub const RBAC_ROLE_BINDING_UPDATE: &str = "rbac.role_binding.update";
 pub const RBAC_ROLE_BINDING_DELETE: &str = "rbac.role_binding.delete";
 
-pub const RBAC_SERVICE_ACCOUNT_LIST: &str = "rbac.service_account.list";
-pub const RBAC_SERVICE_ACCOUNT_GET: &str = "rbac.service_account.get";
-pub const RBAC_SERVICE_ACCOUNT_CREATE: &str = "rbac.service_account.create";
-pub const RBAC_SERVICE_ACCOUNT_UPDATE: &str = "rbac.service_account.update";
-pub const RBAC_SERVICE_ACCOUNT_DELETE: &str = "rbac.service_account.delete";
+pub const RBAC_OPERATOR_LIST: &str = "rbac.operator.list";
+pub const RBAC_OPERATOR_GET: &str = "rbac.operator.get";
+pub const RBAC_OPERATOR_CREATE: &str = "rbac.operator.create";
+pub const RBAC_OPERATOR_UPDATE: &str = "rbac.operator.update";
+pub const RBAC_OPERATOR_DELETE: &str = "rbac.operator.delete";
 ```
 
 ### Authorization Engine
@@ -458,9 +458,9 @@ let viewer_role = Role {
 };
 ```
 
-### Service Account Roles
+### Operator Roles
 
-**CI/CD Service Account:**
+**CI/CD Operator:**
 ```rust
 let automation_role = Role {
     name: "automation".to_string(),
@@ -514,29 +514,29 @@ raworc api role-bindings -m post -b '{
   }'
 ```
 
-**Bind Service Account to Role:**
+**Bind Operator to Role:**
 ```bash
 raworc api role-bindings -m post -b '{
     "name": "backup-service-binding",
       "role_name": "backup-operator",
     "subject_name": "backup-service",
-    "subject_type": "ServiceAccount"
+    "subject_type": "Operator"
   }'
 ```
 
-### Managing Service Accounts
+### Managing Operators
 
-**Create Service Account:**
+**Create Operator:**
 ```bash
-raworc api service-accounts -m post -b '{
+raworc api operators -m post -b '{
     "name": "monitoring-agent",
-      "description": "Service account for monitoring and alerting"
+      "description": "Operator for monitoring and alerting"
   }'
 ```
 
-**Generate Service Account Token:**
+**Generate Operator Token:**
 ```bash
-raworc api service-accounts/monitoring-agent/token -m post -b '{
+raworc api operators/monitoring-agent/token -m post -b '{
       "description": "Token for monitoring dashboard"
   }'
 ```
@@ -585,18 +585,18 @@ pub struct TokenRotationService {
 }
 
 impl TokenRotationService {
-    async fn rotate_service_account_tokens(&self) -> Result<()> {
+    async fn rotate_operator_tokens(&self) -> Result<()> {
         let expired_tokens = self.get_expired_tokens().await?;
         
         for token in expired_tokens {
             // Generate new token
-            let new_token = self.generate_new_token(&token.service_account).await?;
+            let new_token = self.generate_new_token(&token.operator).await?;
             
             // Revoke old token
             self.revoke_token(&token.token_id).await?;
             
             // Notify services of new token
-            self.notify_token_rotation(&token.service_account, &new_token).await?;
+            self.notify_token_rotation(&token.operator, &new_token).await?;
         }
         
         Ok(())

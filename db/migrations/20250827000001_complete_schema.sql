@@ -1,8 +1,8 @@
 -- Raworc simplified database schema
 -- Date: 2025-08-31
 
--- Service Accounts
-CREATE TABLE IF NOT EXISTS service_accounts (
+-- Operators
+CREATE TABLE IF NOT EXISTS operators (
     name VARCHAR(255) PRIMARY KEY,
     password_hash TEXT NOT NULL,
     description TEXT,
@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS service_accounts (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_login_at TIMESTAMP NULL,
-    CONSTRAINT service_accounts_name_check CHECK (name REGEXP '^[a-zA-Z0-9_.-]+$'),
-    INDEX idx_service_accounts_active (active)
+    CONSTRAINT operators_name_check CHECK (name REGEXP '^[a-zA-Z0-9_.-]+$'),
+    INDEX idx_operators_active (active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Roles
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Role Bindings
 CREATE TABLE IF NOT EXISTS role_bindings (
     principal VARCHAR(255) NOT NULL,
-    principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('ServiceAccount', 'User')),
+    principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('Operator', 'User')),
     role_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (principal, role_name),
@@ -87,12 +87,12 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     INDEX idx_session_tasks_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Default admin service account (password: admin)
-INSERT IGNORE INTO service_accounts (name, password_hash, description, active) 
+-- Default admin operator (password: admin)
+INSERT IGNORE INTO operators (name, password_hash, description, active) 
 VALUES (
     'admin',
     '$2b$12$xJxdkbovt0jOPDz54RrAeufRUuWRCEJRhClksgUmN9uKKUbG.I8Ly',
-    'Default admin account',
+    'Default admin operator',
     true
 );
 
@@ -101,7 +101,7 @@ VALUES (
 INSERT IGNORE INTO roles (name, description, rules) VALUES
 (
     'admin',
-    'Full administrative access including service account management',
+    'Full administrative access including operator management',
     JSON_ARRAY(
         JSON_OBJECT(
             'api_groups', JSON_ARRAY('*'),
@@ -116,6 +116,6 @@ INSERT IGNORE INTO role_bindings (principal, principal_type, role_name)
 VALUES 
 (
     'admin',
-    'ServiceAccount',
+    'Operator',
     'admin'
 );

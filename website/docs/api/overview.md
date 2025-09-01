@@ -24,10 +24,10 @@ Raworc uses sessions to provide Computer Use automation. Each session includes a
 
 ### Obtaining a Token
 
-**Service Account Authentication (Primary Method):**
+**Operator Authentication (Primary Method):**
 
 ```bash
-POST /api/v0/auth/login
+POST /api/v0/operators/{name}/login
 Content-Type: application/json
 
 {
@@ -80,16 +80,16 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/auth`](./rest-api#get-auth) | GET | Get current user info |
 | [`/auth/token`](./rest-api#post-authtoken) | POST | Create token for any principal (admin only) |
 
-### Service Accounts
+### Operators
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/service-accounts`](./rest-api#get-service-accounts) | GET | List all service accounts |
-| [`/service-accounts`](./rest-api#post-service-accounts) | POST | Create new service account |
-| [`/service-accounts/{id}`](./rest-api#get-service-accountsid) | GET | Get specific service account |
-| [`/service-accounts/{id}`](./rest-api#put-service-accountsid) | PUT | Update service account |
-| [`/service-accounts/{id}`](./rest-api#delete-service-accountsid) | DELETE | Delete service account |
-| [`/service-accounts/{id}/password`](./rest-api#put-service-accountsidpassword) | PUT | Update service account password |
+| [`/operators`](./rest-api#get-operators) | GET | List all operators |
+| [`/operators`](./rest-api#post-operators) | POST | Create new operator |
+| [`/operators/{name}`](./rest-api#get-operatorsname) | GET | Get specific operator |
+| [`/operators/{name}`](./rest-api#put-operatorsname) | PUT | Update operator |
+| [`/operators/{name}`](./rest-api#delete-operatorsname) | DELETE | Delete operator |
+| [`/operators/{name}/password`](./rest-api#put-operatorsnamepassword) | PUT | Update operator password |
 
 ### Host Sessions
 
@@ -188,7 +188,7 @@ List endpoints support pagination:
 
 ```
 GET /sessions?limit=20&offset=0
-GET /service-accounts?limit=50&offset=100
+GET /operators?limit=50&offset=100
 ```
 
 **Parameters**:

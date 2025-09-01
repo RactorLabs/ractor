@@ -65,17 +65,17 @@ pub async fn check_api_permission(
 pub mod permissions {
     use super::PermissionRequirement;
 
-    // Service Account permissions
-    pub const SERVICE_ACCOUNT_LIST: PermissionRequirement = 
-        PermissionRequirement::new("api", "service-accounts", "list");
-    pub const SERVICE_ACCOUNT_GET: PermissionRequirement = 
-        PermissionRequirement::new("api", "service-accounts", "get");
-    pub const SERVICE_ACCOUNT_CREATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "service-accounts", "create");
-    pub const SERVICE_ACCOUNT_UPDATE: PermissionRequirement = 
-        PermissionRequirement::new("api", "service-accounts", "update");
-    pub const SERVICE_ACCOUNT_DELETE: PermissionRequirement = 
-        PermissionRequirement::new("api", "service-accounts", "delete");
+    // Operator permissions
+    pub const OPERATOR_LIST: PermissionRequirement = 
+        PermissionRequirement::new("api", "operators", "list");
+    pub const OPERATOR_GET: PermissionRequirement = 
+        PermissionRequirement::new("api", "operators", "get");
+    pub const OPERATOR_CREATE: PermissionRequirement = 
+        PermissionRequirement::new("api", "operators", "create");
+    pub const OPERATOR_UPDATE: PermissionRequirement = 
+        PermissionRequirement::new("api", "operators", "update");
+    pub const OPERATOR_DELETE: PermissionRequirement = 
+        PermissionRequirement::new("api", "operators", "delete");
 
 
     // Session permissions

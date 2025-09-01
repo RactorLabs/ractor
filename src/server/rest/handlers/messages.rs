@@ -74,7 +74,7 @@ pub async fn create_message(
     // Get the principal name
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
     // Create the message

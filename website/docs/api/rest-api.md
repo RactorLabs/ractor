@@ -32,16 +32,18 @@ Get API version and health information.
 
 ## Authentication
 
-### POST /auth/login
+### POST /operators/{name}/login
 
-Authenticate with service account credentials and receive a JWT token.
+Authenticate with operator credentials and receive a JWT token.
 
 **Authentication**: Not required
+
+**Parameters**:
+- `name` (path) - Operator name
 
 **Request Body**:
 ```json
 {
-  "user": "admin", 
   "pass": "admin"
 }
 ```
@@ -69,13 +71,13 @@ Get information about the authenticated user and token status.
 ```json
 {
   "user": "admin",
-  "type": "ServiceAccount"
+  "type": "Operator"
 }
 ```
 
 ### POST /auth/token
 
-Create a JWT token for any principal. Admin-only endpoint for creating tokens for users or service accounts.
+Create a JWT token for any principal. Admin-only endpoint for creating tokens for users or operators.
 
 **Authentication**: Required (Admin only)
 
@@ -89,17 +91,17 @@ Create token for a User:
 }
 ```
 
-Create token for a ServiceAccount:
+Create token for a Operator:
 ```json
 {
   "principal": "api-service",
-  "principal_type": "ServiceAccount"
+  "principal_type": "Operator"
 }
 ```
 
 **Fields**:
 - `principal` - The user identifier for the principal
-- `principal_type` - Must be "User" or "ServiceAccount"
+- `principal_type` - Must be "User" or "Operator"
 
 **Response**: `200 OK`
 ```json
@@ -114,11 +116,11 @@ Create token for a ServiceAccount:
 - `400 Bad Request` - Invalid principal_type
 - `403 Forbidden` - Not admin
 
-## Service Accounts
+## Operators
 
-### GET /service-accounts
+### GET /operators
 
-List all service accounts.
+List all operators.
 
 **Authentication**: Required
 
@@ -138,9 +140,9 @@ List all service accounts.
 ]
 ```
 
-### POST /service-accounts
+### POST /operators
 
-Create a new service account.
+Create a new operator.
 
 **Authentication**: Required
 
@@ -168,29 +170,29 @@ Create a new service account.
 }
 ```
 
-### GET /service-accounts/\{id\}
+### GET /operators/\{name\}
 
-Get a specific service account by ID.
+Get a specific operator by name.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Service account ID
+- `name` (path) - Operator name
 
 **Response**: `200 OK`
 (Same format as POST response)
 
 **Errors**:
-- `404 Not Found` - Service account not found
+- `404 Not Found` - Operator not found
 
-### PUT /service-accounts/\{id\}
+### PUT /operators/\{name\}
 
-Update a service account.
+Update a operator.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Service account ID
+- `name` (path) - Operator name
 
 **Request Body**:
 ```json
@@ -201,27 +203,27 @@ Update a service account.
 ```
 
 **Response**: `200 OK`
-(Returns updated service account)
+(Returns updated operator)
 
-### DELETE /service-accounts/\{id\}
+### DELETE /operators/\{name\}
 
-Delete a service account.
+Delete a operator.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Service account ID
+- `name` (path) - Operator name
 
 **Response**: `200 OK`
 
-### PUT /service-accounts/\{id\}/password
+### PUT /operators/\{name\}/password
 
-Update service account password.
+Update operator password.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Service account ID
+- `name` (path) - Operator name
 
 **Request Body**:
 ```json
@@ -298,7 +300,7 @@ Create a new Host session.
 }
 ```
 
-### GET /sessions/\{id\}
+### GET /sessions/\{name\}
 
 Get a specific session by ID.
 
@@ -310,7 +312,7 @@ Get a specific session by ID.
 **Response**: `200 OK`
 (Same format as POST response)
 
-### PUT /sessions/\{id\}
+### PUT /sessions/\{name\}
 
 Update session details.
 
@@ -332,7 +334,7 @@ Update session details.
 **Response**: `200 OK`
 (Returns updated session)
 
-### PUT /sessions/\{id\}/state
+### PUT /sessions/\{name\}/state
 
 Update session state.
 
@@ -350,7 +352,7 @@ Update session state.
 
 **Response**: `200 OK`
 
-### POST /sessions/\{id\}/close
+### POST /sessions/\{name\}/close
 
 Close a Host session (saves resources by stopping the container while preserving state).
 
@@ -361,7 +363,7 @@ Close a Host session (saves resources by stopping the container while preserving
 
 **Response**: `200 OK`
 
-### POST /sessions/\{id\}/restore
+### POST /sessions/\{name\}/restore
 
 Restore a closed Host session (restarts the container with preserved state).
 
@@ -372,7 +374,7 @@ Restore a closed Host session (restarts the container with preserved state).
 
 **Response**: `200 OK`
 
-### POST /sessions/\{id\}/remix
+### POST /sessions/\{name\}/remix
 
 Create a new Host session based on an existing session with selective content copying.
 
@@ -413,7 +415,7 @@ Create a new Host session based on an existing session with selective content co
 }
 ```
 
-### DELETE /sessions/\{id\}
+### DELETE /sessions/\{name\}
 
 Terminate a Host session.
 
@@ -426,7 +428,7 @@ Terminate a Host session.
 
 ## Session Messages
 
-### GET /sessions/\{id\}/messages
+### GET /sessions/\{name\}/messages
 
 List messages in a Host session.
 
@@ -458,7 +460,7 @@ List messages in a Host session.
 ]
 ```
 
-### POST /sessions/\{id\}/messages
+### POST /sessions/\{name\}/messages
 
 Send a message to a Host session.
 
@@ -485,7 +487,7 @@ Send a message to a Host session.
 }
 ```
 
-### GET /sessions/\{id\}/messages/count
+### GET /sessions/\{name\}/messages/count
 
 Get message count for Host session.
 
@@ -501,7 +503,7 @@ Get message count for Host session.
 }
 ```
 
-### DELETE /sessions/\{id\}/messages
+### DELETE /sessions/\{name\}/messages
 
 Clear all Host session messages.
 

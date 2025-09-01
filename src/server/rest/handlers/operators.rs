@@ -1,0 +1,220 @@
+use axum::{
+    extract::{Path, State},
+    Extension,
+    Json,
+};
+use bcrypt::{hash, DEFAULT_COST};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use crate::shared::models::AppState;
+use crate::shared::rbac::Operator;
+use crate::server::rest::error::{ApiError, ApiResult};
+use crate::server::rest::middleware::AuthContext;
+use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
+
+#[derive(Debug, Deserialize)]
+pub struct CreateOperatorRequest {
+    pub user: String,
+    pub pass: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateOperatorRequest {
+    pub description: Option<String>,
+    pub active: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OperatorResponse {
+    pub user: String,
+    pub description: Option<String>,
+    pub active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    pub last_login_at: Option<String>,
+}
+
+impl From<Operator> for OperatorResponse {
+    fn from(op: Operator) -> Self {
+        Self {
+            user: op.user,
+            description: op.description,
+            active: op.active,
+            created_at: op.created_at,
+            updated_at: op.updated_at,
+            last_login_at: op.last_login_at,
+        }
+    }
+}
+
+pub async fn list_operators(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<Vec<OperatorResponse>>> {
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::OPERATOR_LIST)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+        })?;
+
+    let operators = state.get_all_operators().await?;
+    let response: Vec<OperatorResponse> = operators.into_iter().map(Into::into).collect();
+    Ok(Json(response))
+}
+
+pub async fn get_operator(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> ApiResult<Json<OperatorResponse>> {
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::OPERATOR_GET)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+        })?;
+    let operator = state.get_operator(&name).await?;
+    
+    let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
+    Ok(Json(operator.into()))
+}
+
+pub async fn create_operator(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateOperatorRequest>,
+) -> ApiResult<Json<OperatorResponse>> {
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::OPERATOR_CREATE)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+        })?;
+    // Check if already exists
+    if let Ok(Some(_)) = state.get_operator(&req.user).await {
+        return Err(ApiError::Conflict("Operator already exists".to_string()));
+    }
+    
+    let pass_hash = hash(&req.pass, DEFAULT_COST)?;
+    let operator = state.create_operator(
+        &req.user,
+        &pass_hash,
+        req.description,
+    ).await?;
+    
+    Ok(Json(operator.into()))
+}
+
+pub async fn delete_operator(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> ApiResult<()> {
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::OPERATOR_DELETE)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+        })?;
+    // Operators use name as primary key now
+    let deleted = state.delete_operator(&name).await?;
+    
+    if !deleted {
+        return Err(ApiError::NotFound("Operator not found".to_string()));
+    }
+    
+    Ok(())
+}
+
+pub async fn update_operator_password(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(req): Json<UpdatePasswordRequest>,
+) -> ApiResult<()> {
+    // Check permission - users can update their own password, admins can update any
+    let is_self = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Operator(op) => op.user == name,
+        _ => false,
+    };
+
+    if !is_self {
+        check_api_permission(&auth, &state, &permissions::OPERATOR_UPDATE)
+            .await
+            .map_err(|e| match e {
+                axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+                _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+            })?;
+    }
+    use bcrypt::verify;
+    
+    // Get the operator first
+    let operator = state.get_operator(&name).await?;
+    let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
+    
+    // Verify current password
+    if !verify(&req.current_password, &operator.pass_hash)? {
+        return Err(ApiError::Unauthorized);
+    }
+    
+    // Hash new password
+    let new_pass_hash = hash(&req.new_password, DEFAULT_COST)?;
+    
+    // Update password - use name as primary key
+    let updated = state.update_operator_password(&operator.user, &new_pass_hash).await?;
+    
+    if !updated {
+        return Err(ApiError::NotFound("Operator not found".to_string()));
+    }
+    
+    Ok(())
+}
+
+pub async fn update_operator(
+    Extension(auth): Extension<AuthContext>,
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(req): Json<UpdateOperatorRequest>,
+) -> ApiResult<Json<OperatorResponse>> {
+    // Check permission
+    check_api_permission(&auth, &state, &permissions::OPERATOR_UPDATE)
+        .await
+        .map_err(|e| match e {
+            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
+        })?;
+    // Check if operator exists
+    let operator = state.get_operator(&name).await?;
+    let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
+    
+    // Update the operator - use name as primary key
+    let updated = state.update_operator(
+        &operator.user,
+        req.description,
+        req.active,
+    ).await?;
+    
+    if !updated {
+        return Err(ApiError::NotFound("Operator not found".to_string()));
+    }
+    
+    // Fetch the updated operator
+    let updated_operator = state.get_operator(&name).await?
+        .ok_or(ApiError::NotFound("Operator not found".to_string()))?;
+    
+    Ok(Json(updated_operator.into()))
+}

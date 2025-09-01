@@ -52,7 +52,7 @@ module.exports = (program) => {
     .command('token')
     .description('Create token for a principal')
     .requiredOption('--principal <name>', 'Principal name')
-    .option('--type <type>', 'Principal type (User or ServiceAccount)', 'User')
+    .option('--type <type>', 'Principal type (User or Operator)', 'User')
     .action(async (options) => {
       await createTokenCommand(options);
     });

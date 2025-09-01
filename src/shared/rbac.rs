@@ -4,12 +4,12 @@ use uuid::Uuid;
 // RBAC Subject - External user identifier
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Subject {
-    pub name: String, // External subject identifier (e.g., "user@example.com", "system:serviceaccount:name")
+    pub name: String, // External subject identifier (e.g., "user@example.com", "system:operator:name")
 }
 
-// Service Account - Global account with credentials (can work across organizations)
+// Operator - Global account with credentials (can work across organizations)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceAccount {
+pub struct Operator {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<Uuid>,
     pub user: String,
@@ -47,7 +47,7 @@ pub struct Role {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq)]
 pub enum SubjectType {
     Subject,
-    ServiceAccount,
+    Operator,
 }
 
 // Role Binding Subject
@@ -81,21 +81,21 @@ pub struct RoleRef {
 #[derive(Debug, Clone)]
 pub enum AuthPrincipal {
     Subject(Subject),
-    ServiceAccount(ServiceAccount),
+    Operator(Operator),
 }
 
 impl AuthPrincipal {
     pub fn name(&self) -> &str {
         match self {
             AuthPrincipal::Subject(s) => &s.name,
-            AuthPrincipal::ServiceAccount(sa) => &sa.user,
+            AuthPrincipal::Operator(op) => &op.user,
         }
     }
 
     pub fn subject_type(&self) -> SubjectType {
         match self {
             AuthPrincipal::Subject(_) => SubjectType::Subject,
-            AuthPrincipal::ServiceAccount(_) => SubjectType::ServiceAccount,
+            AuthPrincipal::Operator(_) => SubjectType::Operator,
         }
     }
 }

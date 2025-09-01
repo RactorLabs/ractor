@@ -1,25 +1,24 @@
 use axum::{
-    extract::{Extension, State},
+    extract::{Extension, State, Path},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::server::auth::{authenticate_service_account, create_service_account_jwt};
+use crate::server::auth::{authenticate_operator, create_operator_jwt};
 use crate::shared::models::AppState;
 use crate::shared::rbac::TokenResponse;
 use crate::server::rest::error::{ApiError, ApiResult};
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
-    pub user: String,
     pub pass: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTokenRequest {
     pub principal: String,
-    pub principal_type: String, // "User" or "ServiceAccount"
+    pub principal_type: String, // "User" or "Operator"
 }
 
 
@@ -46,36 +45,37 @@ impl From<TokenResponse> for LoginResponse {
 
 pub async fn login(
     State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
     Json(req): Json<LoginRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
-    tracing::debug!("Login attempt for user: {}", &req.user);
+    tracing::debug!("Login attempt for operator: {}", &name);
     
-    let service_account = match authenticate_service_account(
+    let operator = match authenticate_operator(
         &state,
-        &req.user,
+        &name,
         &req.pass,
     )
     .await {
         Ok(Some(account)) => account,
         Ok(None) => {
-            tracing::debug!("Authentication failed: invalid credentials for {}", &req.user);
+            tracing::debug!("Authentication failed: invalid credentials for {}", &name);
             return Err(ApiError::Unauthorized);
         },
         Err(e) => {
-            tracing::error!("Database error during authentication for {}: {:?}", &req.user, e);
+            tracing::error!("Database error during authentication for {}: {:?}", &name, e);
             return Err(ApiError::Database(e));
         }
     };
 
     // Update last login timestamp
-    let _ = state.update_last_login(&req.user).await;
+    let _ = state.update_last_login(&name).await;
 
-    let token_response = create_service_account_jwt(&service_account, &state.jwt_secret, 24)?;
+    let token_response = create_operator_jwt(&operator, &state.jwt_secret, 24)?;
     
     // Include user info in response
     let mut response: LoginResponse = token_response.into();
-    response.user = service_account.user.clone();
-    response.role = if service_account.user == "admin" { "admin".to_string() } else { "user".to_string() };
+    response.user = operator.user.clone();
+    response.role = if operator.user == "admin" { "admin".to_string() } else { "user".to_string() };
     
     Ok(Json(response))
 }
@@ -88,7 +88,7 @@ pub async fn me(
     
     let (user, principal_type) = match &auth.principal {
         AuthPrincipal::Subject(s) => (&s.name, "Subject"),
-        AuthPrincipal::ServiceAccount(sa) => (&sa.user, "ServiceAccount"),
+        AuthPrincipal::Operator(op) => (&op.user, "Operator"),
     };
     
     Ok(Json(serde_json::json!({
@@ -112,8 +112,8 @@ pub async fn create_token(
     // Parse principal type
     let principal_type = match req.principal_type.as_str() {
         "User" => SubjectType::Subject,
-        "ServiceAccount" => SubjectType::ServiceAccount,
-        _ => return Err(ApiError::BadRequest("Invalid principal_type. Must be 'User' or 'ServiceAccount'".to_string())),
+        "Operator" => SubjectType::Operator,
+        _ => return Err(ApiError::BadRequest("Invalid principal_type. Must be 'User' or 'Operator'".to_string())),
     };
 
     // Create JWT claims for the principal (non-admin, limited access)

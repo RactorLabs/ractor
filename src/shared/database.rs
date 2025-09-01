@@ -1,5 +1,5 @@
 use crate::shared::models::{AppState, DatabaseError};
-use crate::shared::rbac::{Role, RoleBinding, ServiceAccount, SubjectType};
+use crate::shared::rbac::{Role, RoleBinding, Operator, SubjectType};
 use chrono::Utc;
 use std::sync::Arc;
 use sqlx::{query, Row};
@@ -7,17 +7,17 @@ use tracing::{error, info, warn};
 
 impl AppState {
     // RBAC Operations
-    // Service Account operations
-    pub async fn create_service_account(
+    // Operator operations
+    pub async fn create_operator(
         &self,
         user: &str,
         pass_hash: &str,
         description: Option<String>,
-    ) -> Result<ServiceAccount, DatabaseError> {
+    ) -> Result<Operator, DatabaseError> {
         let created_at = Utc::now().to_rfc3339();
         
         query(r#"
-            INSERT INTO service_accounts (name, password_hash, description)
+            INSERT INTO operators (name, password_hash, description)
             VALUES (?, ?, ?)
             "#
         )
@@ -27,7 +27,7 @@ impl AppState {
         .execute(&*self.db)
         .await?;
 
-        Ok(ServiceAccount {
+        Ok(Operator {
             id: None,
             user: user.to_string(),
             pass_hash: pass_hash.to_string(),
@@ -39,15 +39,15 @@ impl AppState {
         })
     }
 
-    pub async fn get_service_account(
+    pub async fn get_operator(
         &self,
         user: &str,
-    ) -> Result<Option<ServiceAccount>, DatabaseError> {
-        tracing::debug!("Fetching service account for user: {}", user);
+    ) -> Result<Option<Operator>, DatabaseError> {
+        tracing::debug!("Fetching operator for user: {}", user);
         
         let row = query(r#"
             SELECT name, password_hash, description, created_at, updated_at, active, last_login_at
-            FROM service_accounts
+            FROM operators
             WHERE name = ?
             "#
         )
@@ -55,13 +55,13 @@ impl AppState {
         .fetch_optional(&*self.db)
         .await
         .map_err(|e| {
-            tracing::error!("SQL error fetching service account {}: {:?}", user, e);
+            tracing::error!("SQL error fetching operator {}: {:?}", user, e);
             DatabaseError::from(e)
         })?;
 
         Ok(row.map(|r| {
-            tracing::debug!("Found service account, mapping fields");
-            ServiceAccount {
+            tracing::debug!("Found operator, mapping fields");
+            Operator {
                 id: None,
                 user: r.get("name"),
                 pass_hash: r.get("password_hash"),
@@ -75,17 +75,17 @@ impl AppState {
         }))
     }
 
-    pub async fn get_all_service_accounts(&self) -> Result<Vec<ServiceAccount>, DatabaseError> {
+    pub async fn get_all_operators(&self) -> Result<Vec<Operator>, DatabaseError> {
         let rows = sqlx::query(r#"
             SELECT name, password_hash, description, created_at, updated_at, active, last_login_at
-            FROM service_accounts
+            FROM operators
             ORDER BY created_at DESC
             "#
         )
         .fetch_all(&*self.db)
         .await?;
 
-        Ok(rows.into_iter().map(|r| ServiceAccount {
+        Ok(rows.into_iter().map(|r| Operator {
             id: None,
             user: r.get("name"),
             pass_hash: r.get("password_hash"),
@@ -98,12 +98,12 @@ impl AppState {
         }).collect())
     }
 
-    pub async fn delete_service_account(
+    pub async fn delete_operator(
         &self,
         user: &str,
     ) -> Result<bool, DatabaseError> {
         let result = query(r#"
-            DELETE FROM service_accounts
+            DELETE FROM operators
             WHERE name = ?
             "#
         )
@@ -114,15 +114,15 @@ impl AppState {
         Ok(result.rows_affected() > 0)
     }
 
-    // Removed: delete_service_account_by_id - we use name as primary key now
+    // Removed: delete_operator_by_id - we use name as primary key now
 
-    pub async fn update_service_account_password(
+    pub async fn update_operator_password(
         &self,
         user: &str,
         new_pass_hash: &str,
     ) -> Result<bool, DatabaseError> {
         let result = query(r#"
-            UPDATE service_accounts
+            UPDATE operators
             SET password_hash = ?, updated_at = NOW()
             WHERE name = ?
             "#
@@ -135,9 +135,9 @@ impl AppState {
         Ok(result.rows_affected() > 0)
     }
 
-    // Removed: update_service_account_password_by_id - we use name as primary key now
+    // Removed: update_operator_password_by_id - we use name as primary key now
 
-    pub async fn update_service_account(
+    pub async fn update_operator(
         &self,
         name: &str,
         description: Option<String>,
@@ -146,7 +146,7 @@ impl AppState {
         // Build dynamic update query based on provided fields
         let result = if let (Some(desc), Some(act)) = (&description, &active) {
             query(r#"
-                UPDATE service_accounts
+                UPDATE operators
                 SET description = ?, active = ?, updated_at = NOW()
                 WHERE name = ?
                 "#
@@ -158,7 +158,7 @@ impl AppState {
             .await?
         } else if let Some(desc) = description {
             query(r#"
-                UPDATE service_accounts
+                UPDATE operators
                 SET description = ?, updated_at = NOW()
                 WHERE name = ?
                 "#
@@ -169,7 +169,7 @@ impl AppState {
             .await?
         } else if let Some(act) = active {
             query(r#"
-                UPDATE service_accounts
+                UPDATE operators
                 SET active = ?, updated_at = NOW()
                 WHERE name = ?
                 "#
@@ -191,7 +191,7 @@ impl AppState {
         user: &str,
     ) -> Result<bool, DatabaseError> {
         let result = query(r#"
-            UPDATE service_accounts
+            UPDATE operators
             SET last_login_at = NOW()
             WHERE name = ?
             "#
@@ -289,7 +289,7 @@ impl AppState {
     ) -> Result<RoleBinding, DatabaseError> {
         // Convert SubjectType enum to string for database
         let principal_type_str = match role_binding.principal_type {
-            SubjectType::ServiceAccount => "ServiceAccount",
+            SubjectType::Operator => "Operator",
             SubjectType::Subject => "User",
         };
         
@@ -330,7 +330,7 @@ impl AppState {
         Ok(row.map(|r| {
             let principal_type_str: String = r.get("principal_type");
             let principal_type = match principal_type_str.as_str() {
-                "ServiceAccount" => SubjectType::ServiceAccount,
+                "Operator" => SubjectType::Operator,
                 _ => SubjectType::Subject,
             };
             
@@ -357,7 +357,7 @@ impl AppState {
         Ok(rows.into_iter().map(|r| {
             let principal_type_str: String = r.get("principal_type");
             let principal_type = match principal_type_str.as_str() {
-                "ServiceAccount" => SubjectType::ServiceAccount,
+                "Operator" => SubjectType::Operator,
                 _ => SubjectType::Subject,
             };
             
@@ -379,7 +379,7 @@ impl AppState {
     ) -> Result<Vec<RoleBinding>, DatabaseError> {
         let principal_type_str = match subject_type {
             SubjectType::Subject => "User",
-            SubjectType::ServiceAccount => "ServiceAccount",
+            SubjectType::Operator => "Operator",
         };
         
         let rows = query(r#"
@@ -397,7 +397,7 @@ impl AppState {
         Ok(rows.into_iter().map(|r| {
             let principal_type_str: String = r.get("principal_type");
             let principal_type = match principal_type_str.as_str() {
-                "ServiceAccount" => SubjectType::ServiceAccount,
+                "Operator" => SubjectType::Operator,
                 _ => SubjectType::Subject,
             };
             
