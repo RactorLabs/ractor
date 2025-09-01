@@ -91,10 +91,20 @@ Create a JWT token for any principal. Admin-only endpoint for creating tokens fo
 **Authentication**: Required (Admin only)
 
 **Request Body**:
+
+Create token for a User:
 ```json
 {
   "principal": "user@example.com",
   "principal_type": "User"
+}
+```
+
+Create token for a ServiceAccount:
+```json
+{
+  "principal": "api-service",
+  "principal_type": "ServiceAccount"
 }
 ```
 
