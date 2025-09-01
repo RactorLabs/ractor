@@ -35,6 +35,8 @@ pub struct SessionResponse {
     pub published_at: Option<String>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
+    pub timeout_seconds: i32,
+    pub auto_close_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +61,8 @@ impl SessionResponse {
             published_at: session.published_at.map(|dt| dt.to_rfc3339()),
             published_by: session.published_by,
             publish_permissions: session.publish_permissions,
+            timeout_seconds: session.timeout_seconds,
+            auto_close_at: session.auto_close_at.map(|dt| dt.to_rfc3339()),
         })
     }
 }
@@ -711,4 +715,56 @@ pub async fn get_published_session(
     }
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
+}
+
+pub async fn update_session_to_busy(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Only the host container should be able to call this
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    
+    // Find session (host token should match session ownership)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    
+    // Update session to busy using the new method that clears auto_close_at
+    Session::update_session_to_busy(&state.db, &session.id).await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session to busy: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "state": "busy",
+        "timeout_status": "paused"
+    })))
+}
+
+pub async fn update_session_to_idle(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Only the host container should be able to call this
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    
+    // Find session (host token should match session ownership)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    
+    // Update session to idle using the new method that sets auto_close_at
+    Session::update_session_to_idle(&state.db, &session.id).await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session to idle: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "state": "idle", 
+        "timeout_status": "active"
+    })))
 }

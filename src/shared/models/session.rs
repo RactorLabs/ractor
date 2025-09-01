@@ -20,6 +20,8 @@ pub struct Session {
     pub published_at: Option<DateTime<Utc>>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
+    pub timeout_seconds: i32,
+    pub auto_close_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +38,8 @@ pub struct CreateSessionRequest {
     pub setup: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
+    #[serde(default = "default_timeout")]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +83,8 @@ pub struct UpdateSessionRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -95,6 +101,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_timeout() -> Option<i32> {
+    Some(60) // Default 60 seconds (1 minute) timeout
+}
+
 
 
 // Database queries
@@ -105,7 +115,8 @@ impl Session {
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
-                   is_published, published_at, published_by, publish_permissions
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
             FROM sessions
             WHERE state != 'deleted'
             ORDER BY created_at DESC
@@ -121,7 +132,8 @@ impl Session {
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
-                   is_published, published_at, published_by, publish_permissions
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
             FROM sessions
             WHERE id = ? AND state != 'deleted'
             "#
@@ -137,7 +149,8 @@ impl Session {
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
-                   is_published, published_at, published_by, publish_permissions
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
             FROM sessions
             WHERE name = ? AND created_by = ? AND state != 'deleted'
             ORDER BY created_at DESC
@@ -158,17 +171,23 @@ impl Session {
         // Generate UUID for the session
         let session_id = Uuid::new_v4();
         
+        // Calculate timeout - auto_close_at will be set when session becomes idle
+        let timeout = req.timeout_seconds.unwrap_or(60); // Default 60 seconds
+        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
+
         // Insert the session
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, created_by, name, metadata)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO sessions (id, created_by, name, metadata, timeout_seconds, auto_close_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
         .bind(created_by)
         .bind(&req.name)
         .bind(&req.metadata)
+        .bind(timeout)
+        .bind(auto_close_at)
         .execute(pool)
         .await?;
         
@@ -189,16 +208,17 @@ impl Session {
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
-        // Create new session based on parent
+        // Create new session based on parent (inherit timeout)
         let session_id = Uuid::new_v4();
+        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
         
         sqlx::query(
             r#"
             INSERT INTO sessions (
                 id, created_by, name,
-                parent_session_id, metadata
+                parent_session_id, metadata, timeout_seconds, auto_close_at
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
@@ -206,6 +226,8 @@ impl Session {
         .bind(&req.name)
         .bind(parent_id)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
+        .bind(parent.timeout_seconds) // Inherit timeout from parent
+        .bind(auto_close_at)
         .execute(pool)
         .await?;
         
@@ -292,6 +314,11 @@ impl Session {
             updates.push(" metadata = ?".to_string());
         }
 
+        if req.timeout_seconds.is_some() {
+            updates.push(" timeout_seconds = ?".to_string());
+            updates.push(" auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL ? SECOND)".to_string());
+        }
+
         if updates.is_empty() {
             return Err(sqlx::Error::Protocol("No fields to update".to_string()));
         }
@@ -308,6 +335,11 @@ impl Session {
 
         if let Some(metadata) = req.metadata {
             query = query.bind(metadata);
+        }
+
+        if let Some(timeout_seconds) = req.timeout_seconds {
+            query = query.bind(timeout_seconds);
+            query = query.bind(timeout_seconds); // For the DATE_ADD calculation
         }
 
         query = query.bind(id);
@@ -396,7 +428,8 @@ impl Session {
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
-                   is_published, published_at, published_by, publish_permissions
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
             FROM sessions
             WHERE is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
@@ -404,6 +437,83 @@ impl Session {
         )
         .fetch_all(pool)
         .await
+    }
+
+    pub async fn find_sessions_to_auto_close(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, created_by, name, state,
+                   container_id, persistent_volume_id, parent_session_id,
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
+            FROM sessions
+            WHERE auto_close_at <= NOW() 
+              AND state IN ('init', 'idle', 'busy')
+              AND state != 'deleted'
+            ORDER BY auto_close_at ASC
+            LIMIT 50
+            "#
+        )
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn extend_session_timeout(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
+        // Extend timeout based on last activity or current time
+        let result = sqlx::query(
+            r#"
+            UPDATE sessions 
+            SET auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
+                last_activity_at = NOW()
+            WHERE id = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
+            "#
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Self::find_by_id(pool, id).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn update_session_to_idle(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
+        // Set session to idle and calculate auto_close_at from now
+        sqlx::query(
+            r#"
+            UPDATE sessions 
+            SET state = 'idle',
+                last_activity_at = NOW(),
+                auto_close_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
+            WHERE id = ? AND state != 'deleted'
+            "#
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_session_to_busy(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
+        // Set session to busy and clear auto_close_at (no timeout while active)
+        sqlx::query(
+            r#"
+            UPDATE sessions 
+            SET state = 'busy',
+                last_activity_at = NOW(),
+                auto_close_at = NULL
+            WHERE id = ? AND state != 'deleted'
+            "#
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        Ok(())
     }
 
 }

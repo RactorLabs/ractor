@@ -121,8 +121,8 @@ impl MessageHandler {
         unprocessed_user_messages.sort_by(|a, b| a.created_at.cmp(&b.created_at));
         
         
-        // Update session state to BUSY
-        if let Err(e) = self.api_client.update_session_state(SESSION_STATE_BUSY.to_string()).await {
+        // Update session state to BUSY (pauses timeout)
+        if let Err(e) = self.api_client.update_session_to_busy().await {
             warn!("Failed to update session state to BUSY: {}", e);
         }
         
@@ -149,8 +149,8 @@ impl MessageHandler {
             processed_ids.insert(message.id.clone());
         }
         
-        // Update session state back to IDLE
-        if let Err(e) = self.api_client.update_session_state(SESSION_STATE_IDLE.to_string()).await {
+        // Update session state back to IDLE (starts timeout)
+        if let Err(e) = self.api_client.update_session_to_idle().await {
             warn!("Failed to update session state to IDLE: {}", e);
         }
         

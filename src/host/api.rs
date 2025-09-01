@@ -152,7 +152,7 @@ impl RaworcClient {
         }
     }
     
-    /// Update session state
+    /// Update session state (generic)
     pub async fn update_session_state(&self, state: String) -> Result<()> {
         let url = format!(
             "{}/api/v0/sessions/{}/state",
@@ -185,6 +185,70 @@ impl RaworcClient {
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!("Failed to update state ({}): {}", status, error_text)))
+            }
+        }
+    }
+
+    /// Update session to busy (clears auto_close_at)
+    pub async fn update_session_to_busy(&self) -> Result<()> {
+        let url = format!(
+            "{}/api/v0/sessions/{}/busy",
+            self.config.api_url,
+            self.config.session_id
+        );
+        
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        
+        match response.status() {
+            StatusCode::OK | StatusCode::NO_CONTENT => {
+                info!("Session state updated to: busy (timeout paused)");
+                Ok(())
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => {
+                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to update to busy ({}): {}", status, error_text)))
+            }
+        }
+    }
+
+    /// Update session to idle (sets auto_close_at)
+    pub async fn update_session_to_idle(&self) -> Result<()> {
+        let url = format!(
+            "{}/api/v0/sessions/{}/idle",
+            self.config.api_url,
+            self.config.session_id
+        );
+        
+        let response = self.client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        
+        match response.status() {
+            StatusCode::OK | StatusCode::NO_CONTENT => {
+                info!("Session state updated to: idle (timeout started)");
+                Ok(())
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => {
+                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to update to idle ({}): {}", status, error_text)))
             }
         }
     }

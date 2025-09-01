@@ -28,12 +28,14 @@ module.exports = (program) => {
     .option('-sf, --setup-file <file>', 'Path to setup script file')
     .option('-p, --prompt <text>', 'Prompt to send after session creation')
     .option('-n, --name <name>', 'Name for the session')
+    .option('-t, --timeout <seconds>', 'Session timeout in seconds (default: 60)')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session                           # Start a new session\n' +
       '  $ raworc session start -n "my-session"    # Start with name\n' +
       '  $ raworc session start -S \'{"DB_URL":"postgres://..."}\' # Start with user secrets\n' +
-      '  $ raworc session start -p "Hello" -n "test" # Start with prompt and name\n')
+      '  $ raworc session start -p "Hello" -n "test" # Start with prompt and name\n' +
+      '  $ raworc session start -t 120             # Start with 2 minute timeout\n')
     .action(async (options) => {
       await sessionStartCommand(options);
     });
@@ -191,6 +193,17 @@ async function sessionStartCommand(options) {
     // Add name if provided
     if (options.name) {
       sessionPayload.name = options.name;
+    }
+
+    // Add timeout if provided
+    if (options.timeout) {
+      const timeoutSeconds = parseInt(options.timeout);
+      if (isNaN(timeoutSeconds) || timeoutSeconds <= 0) {
+        spinner.fail('Invalid timeout value');
+        console.error(chalk.red('Error:'), 'Timeout must be a positive number in seconds');
+        process.exit(1);
+      }
+      sessionPayload.timeout_seconds = timeoutSeconds;
     }
 
     const createResponse = await api.post('/sessions', sessionPayload);

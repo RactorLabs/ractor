@@ -71,19 +71,30 @@ impl SessionManager {
     }
 
     pub async fn run(&self) -> Result<()> {
-        info!("Session Manager started, polling for tasks...");
+        info!("Session Manager started, polling for tasks and auto-close monitoring...");
 
         loop {
-            match self.process_pending_tasks().await {
-                Ok(processed) => {
-                    if processed == 0 {
-                        sleep(Duration::from_secs(2)).await;
-                    }
-                }
+            // Process pending tasks
+            let tasks_processed = match self.process_pending_tasks().await {
+                Ok(processed) => processed,
                 Err(e) => {
                     error!("Error processing tasks: {}", e);
-                    sleep(Duration::from_secs(5)).await;
+                    0
                 }
+            };
+
+            // Process auto-close monitoring
+            let sessions_closed = match self.process_auto_close().await {
+                Ok(closed) => closed,
+                Err(e) => {
+                    error!("Error processing auto-close: {}", e);
+                    0
+                }
+            };
+
+            // If no work was done, sleep before next iteration
+            if tasks_processed == 0 && sessions_closed == 0 {
+                sleep(Duration::from_secs(2)).await;
             }
         }
     }
@@ -91,6 +102,53 @@ impl SessionManager {
     /// Generate a session-specific API key for Anthropic
     async fn generate_session_api_key(&self, session_id: &str) -> Result<String> {
         self.key_manager.generate_session_api_key(session_id).await
+    }
+
+    /// Process sessions that need auto-closing due to timeout
+    async fn process_auto_close(&self) -> Result<usize> {
+        // Find idle sessions that have passed their auto_close_at time
+        let sessions_to_close: Vec<(String,)> = sqlx::query_as(
+            r#"
+            SELECT id
+            FROM sessions
+            WHERE auto_close_at <= NOW() 
+              AND auto_close_at IS NOT NULL
+              AND state = 'idle'
+              AND state != 'deleted'
+            ORDER BY auto_close_at ASC
+            LIMIT 50
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-close: {}", e))?;
+        
+        let mut closed_count = 0;
+        
+        for (session_id,) in sessions_to_close {
+            info!("Auto-closing session {} due to timeout", session_id);
+            
+            // Create close task for the session
+            let task_id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(r#"
+                INSERT INTO session_tasks (id, session_id, task_type, created_by, payload, status)
+                VALUES (?, ?, 'close_session', 'system', '{"reason": "auto_close_timeout"}', 'pending')
+                "#)
+            .bind(&task_id)
+            .bind(&session_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-close task for session {}: {}", session_id, e))?;
+            
+            info!("Created auto-close task {} for session {}", task_id, session_id);
+            closed_count += 1;
+        }
+        
+        if closed_count > 0 {
+            info!("Scheduled {} sessions for auto-close", closed_count);
+        }
+        
+        Ok(closed_count)
     }
 
     /// Generate a session-specific RAWORC token for the given principal
@@ -446,6 +504,14 @@ impl SessionManager {
         
         // Close the Docker container but keep the persistent volume
         self.docker_manager.close_container(&session_id).await?;
+        
+        // Update session state to closed
+        sqlx::query(r#"UPDATE sessions SET state = 'closed' WHERE id = ?"#)
+            .bind(&session_id)
+            .execute(&self.pool)
+            .await?;
+        
+        info!("Session {} state updated to closed", session_id);
         
         Ok(())
     }

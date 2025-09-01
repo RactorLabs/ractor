@@ -35,6 +35,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}", get(handlers::sessions::get_session))
         .route("/sessions/{id}", put(handlers::sessions::update_session))
         .route("/sessions/{id}/state", put(handlers::sessions::update_session_state))
+        .route("/sessions/{id}/busy", post(handlers::sessions::update_session_to_busy))
+        .route("/sessions/{id}/idle", post(handlers::sessions::update_session_to_idle))
         .route("/sessions/{id}/close", post(handlers::sessions::close_session))
         .route("/sessions/{id}/restore", post(handlers::sessions::restore_session))
         .route("/sessions/{id}/remix", post(handlers::sessions::remix_session))
