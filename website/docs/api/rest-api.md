@@ -73,7 +73,7 @@ Get API version and health information.
 
 ## Authentication
 
-### POST /operators/{name}/login
+### POST /operators/\{name\}/login
 
 Authenticate with operator credentials and receive a JWT token.
 
