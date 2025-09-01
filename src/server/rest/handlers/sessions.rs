@@ -463,24 +463,38 @@ pub async fn update_session(
 pub async fn update_session_state(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Extension(_auth): Extension<AuthContext>,
+    Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // For operator service accounts, allow state updates without permission checks
-    // This is needed for the Host to update session states
+    // Get session and verify ownership (same pattern as other session endpoints)
+    let session = Session::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    // Only allow access to own sessions (ownership-based access control)
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::ServiceAccount(sa) => &sa.user,
+    };
     
-    // Just update the state directly - operators manage containers and need this access
+    if session.created_by != *username {
+        return Err(ApiError::Forbidden("Can only update your own sessions".to_string()));
+    }
+    
+    // Update the state with ownership verification
     let result = sqlx::query(
-        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ?"
+        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
     .bind(&id)
+    .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound("Session not found".to_string()));
+        return Err(ApiError::NotFound("Session not found or access denied".to_string()));
     }
 
     Ok(Json(serde_json::json!({

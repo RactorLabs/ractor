@@ -95,12 +95,12 @@ const config: Config = {
               to: '/docs/',
             },
             {
-              label: 'Why Use Agent Runtime?',
-              to: '/docs/concepts/agent-runtime#why-use-agent-runtime',
+              label: 'Computer Use Agents',
+              to: '/docs/concepts/computer-use-agents',
             },
             {
-              label: 'Runtime Architecture',
-              to: '/docs/concepts/agent-runtime',
+              label: 'Sessions',
+              to: '/docs/concepts/sessions',
             },
             {
               label: 'API Reference',
@@ -129,8 +129,8 @@ const config: Config = {
               to: '/docs/guides/cli-usage',
             },
             {
-              label: 'Architecture Overview',
-              to: '/docs/concepts/architecture',
+              label: 'Dev Mode',
+              to: '/docs/guides/dev-mode',
             },
             {
               label: 'REST API',

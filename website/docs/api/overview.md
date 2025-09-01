@@ -35,6 +35,7 @@ Content-Type: application/json
 ```
 
 Response:
+
 ```json
 {
   "token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
@@ -46,6 +47,7 @@ Response:
 ### Using the Token
 
 Include the token in the Authorization header:
+
 ```
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 ```
@@ -95,12 +97,12 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/sessions/{id}/messages/count`](./rest-api#get-sessionsidmessagescount) | GET | Get message count |
 | [`/sessions/{id}/messages`](./rest-api#delete-sessionsidmessages) | DELETE | Clear all messages |
 
-
 ## Request Format
 
 ### Headers
 
 Required headers for authenticated requests:
+
 ```
 Authorization: Bearer <token>
 Content-Type: application/json
@@ -109,6 +111,7 @@ Content-Type: application/json
 ### Request Body
 
 All POST and PUT requests accept JSON:
+
 ```json
 {
   "field1": "value1",
@@ -157,6 +160,7 @@ All POST and PUT requests accept JSON:
 ## Rate Limiting
 
 Currently, Raworc does not enforce rate limiting, but this may change in future versions. Best practices:
+
 - Cache responses when possible
 - Use pagination for list operations
 - Implement exponential backoff for retries
@@ -164,16 +168,19 @@ Currently, Raworc does not enforce rate limiting, but this may change in future 
 ## Pagination
 
 List endpoints support pagination:
+
 ```
 GET /sessions?limit=20&offset=0
 GET /service-accounts?limit=50&offset=100
 ```
 
 **Parameters**:
+
 - `limit` - Maximum number of items to return (default: 100, max: 1000)
 - `offset` - Number of items to skip (default: 0)
 
 **Response Headers**:
+
 ```
 X-Total-Count: 250
 X-Page-Offset: 100
@@ -183,6 +190,7 @@ X-Page-Limit: 50
 ## Filtering
 
 Some endpoints support filtering:
+
 ```
 GET /sessions?state=IDLE
 ```
@@ -190,6 +198,7 @@ GET /sessions?state=IDLE
 ## SDK Support
 
 Official SDKs are planned for:
+
 - Python
 - JavaScript/TypeScript
 - Go
@@ -198,6 +207,7 @@ Official SDKs are planned for:
 ## Webhooks
 
 Webhook support is planned for future releases to enable:
+
 - Real-time notifications
 - Event-driven workflows
 - Third-party integrations
@@ -205,6 +215,7 @@ Webhook support is planned for future releases to enable:
 ## API Versioning
 
 The API uses URL versioning:
+
 - Current version: `v0`
 - Format: `/api/v{version}/endpoint`
 

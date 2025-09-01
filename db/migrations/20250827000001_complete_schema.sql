@@ -96,14 +96,6 @@ VALUES (
     true
 );
 
--- Operator service account for Hosts
-INSERT IGNORE INTO service_accounts (name, password_hash, description, active) 
-VALUES (
-    'operator',
-    '$2b$12$xJxdkbovt0jOPDz54RrAeufRUuWRCEJRhClksgUmN9uKKUbG.I8Ly',
-    'Operator account for Hosts',
-    true
-);
 
 -- Default roles
 INSERT IGNORE INTO roles (name, description, rules) VALUES
@@ -125,10 +117,5 @@ VALUES
 (
     'admin',
     'ServiceAccount',
-    'admin'
-),
-(
-    'operator',
-    'ServiceAccount', 
     'admin'
 );

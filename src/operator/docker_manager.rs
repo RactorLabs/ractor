@@ -663,7 +663,6 @@ echo 'Session directories created'
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
             format!("RAWORC_SESSION_ID={}", session_id),
-            format!("RAWORC_API_KEY={}", user_token),
             format!("RAWORC_SESSION_DIR=/session"),
         ];
         
@@ -691,8 +690,6 @@ echo 'Session directories created'
             "http://raworc_server:9000".to_string(),
             "--session-id".to_string(),
             session_id.to_string(),
-            "--api-key".to_string(),
-            user_token.clone(),
         ];
 
         let config = Config {

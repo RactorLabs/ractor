@@ -3,18 +3,18 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
-const { 
-  SESSION_STATE_IDLE, 
-  SESSION_STATE_BUSY, 
+const {
+  SESSION_STATE_IDLE,
+  SESSION_STATE_BUSY,
   SESSION_STATE_CLOSED,
   MESSAGE_ROLE_USER,
-  MESSAGE_ROLE_AGENT
+  MESSAGE_ROLE_HOST
 } = require('../lib/constants');
 
 module.exports = (program) => {
   program
     .command('session')
-    .description('Start an interactive AI agent session')
+    .description('Start an interactive session')
     .option('--restore <session-id>', 'Restore an existing session by ID')
     .option('--remix <session-id>', 'Create a new session remixing an existing session')
     .option('--data <boolean>', 'Include data files in remix (default: true)')
@@ -53,7 +53,7 @@ async function sessionCommand(options) {
   if (options.remix) {
     console.log(chalk.gray('Mode:'), 'Remix');
     console.log(chalk.gray('Source:'), options.remix);
-    
+
     // Show remix parameters if specified
     if (options.data !== undefined) {
       console.log(chalk.gray('Copy Data:'), options.data === 'true' || options.data === true ? 'Yes' : 'No');
@@ -68,7 +68,7 @@ async function sessionCommand(options) {
     console.log(chalk.gray('Mode:'), 'New Session');
   }
   console.log(chalk.gray('User:'), authData.user?.username || 'Unknown');
-  
+
   // Show session creation parameters if provided
   if (options.secrets && !options.remix && !options.restore) {
     console.log(chalk.gray('Secrets:'), 'Provided');
@@ -82,22 +82,22 @@ async function sessionCommand(options) {
   console.log();
 
   let sessionId = null;
-  
+
   try {
     // Check if we're remixing an existing session
     if (options.remix) {
       const sourceSessionId = options.remix;
       const spinner = ora('Remixing session...').start();
-      
+
       // Check if source session exists
       const sourceSessionResponse = await api.get(`/sessions/${sourceSessionId}`);
-      
+
       if (!sourceSessionResponse.success) {
         spinner.fail('Source session not found');
         console.error(chalk.red('Error:'), sourceSessionResponse.error || 'Source session does not exist');
         process.exit(1);
       }
-      
+
       // Prepare remix payload with selective parameters
       const remixPayload = {
         metadata: {
@@ -105,63 +105,63 @@ async function sessionCommand(options) {
           remix_timestamp: new Date().toISOString()
         }
       };
-      
+
       // Parse selective copy parameters
       if (options.data !== undefined) {
         remixPayload.data = options.data === 'true' || options.data === true;
       }
-      
+
       if (options.code !== undefined) {
         remixPayload.code = options.code === 'true' || options.code === true;
       }
-      
-      
+
+
       // Create remix session
       const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
-      
+
       if (!remixResponse.success) {
         spinner.fail('Failed to remix session');
         console.error(chalk.red('Error:'), remixResponse.error);
         process.exit(1);
       }
-      
+
       sessionId = remixResponse.data.id;
       spinner.succeed(`Session remixed: ${sessionId}`);
-      
+
     } else if (options.restore) {
       // Check if we're restoring an existing session
       sessionId = options.restore;
       const spinner = ora('Restoring session...').start();
-      
+
       // Check if session exists
       const sessionResponse = await api.get(`/sessions/${sessionId}`);
-      
+
       if (!sessionResponse.success) {
         spinner.fail('Session not found');
         console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
         process.exit(1);
       }
-      
+
       const session = sessionResponse.data;
-      
+
       // Show session info
       console.log(chalk.gray('Session state:'), session.state);
-      
+
       // If session is closed or idle, restore it
       if (session.state === SESSION_STATE_CLOSED || session.state === SESSION_STATE_IDLE) {
         const restoreResponse = await api.post(`/sessions/${sessionId}/restore`);
-        
+
         if (!restoreResponse.success) {
           spinner.fail('Failed to restore session');
           console.error(chalk.red('Error:'), restoreResponse.error);
           process.exit(1);
         }
-        
+
         spinner.succeed(`Session restored: ${sessionId}`);
-        
+
         // Brief delay to allow container initialization
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
+
         // Wait for session to become idle (ready for messages)
         let attempts = 0;
         while (attempts < 15) { // Wait up to 15 seconds
@@ -172,12 +172,12 @@ async function sessionCommand(options) {
           }
           attempts++;
         }
-        
+
       } else if (session.state === SESSION_STATE_IDLE) {
         spinner.succeed(`Session already ready: ${sessionId}`);
       } else if (session.state === SESSION_STATE_BUSY) {
         spinner.succeed(`Session is being restored: ${sessionId}`);
-        
+
         // Wait for session to become idle (ready for messages)
         let attempts = 0;
         while (attempts < 15) { // Wait up to 15 seconds
@@ -192,36 +192,36 @@ async function sessionCommand(options) {
         spinner.fail(`Cannot restore session in state: ${session.state}`);
         process.exit(1);
       }
-      
+
       // Get and display recent messages if any
       const messagesResponse = await api.get(`/sessions/${sessionId}/messages?limit=10`);
       if (messagesResponse.success && messagesResponse.data) {
         const messages = Array.isArray(messagesResponse.data) ? messagesResponse.data : messagesResponse.data.messages || [];
-        
+
         if (messages.length > 0) {
           console.log();
           console.log(chalk.gray('--- Recent messages ---'));
-          
+
           // Show last few messages for context
           const recentMessages = messages.slice(-5);
           recentMessages.forEach(msg => {
             if (msg.role === MESSAGE_ROLE_USER) {
               console.log(chalk.gray('You:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
-            } else if (msg.role === MESSAGE_ROLE_AGENT) {
-              console.log(chalk.cyan('Agent:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
+            } else if (msg.role === MESSAGE_ROLE_HOST) {
+              console.log(chalk.cyan('Host:'), msg.content.substring(0, 80) + (msg.content.length > 80 ? '...' : ''));
             }
           });
           console.log(chalk.gray('--- End of history ---'));
         }
       }
-      
+
     } else {
       // Create a new session
       const spinner = ora('Creating session...').start();
-      
+
       // Prepare session creation payload
       const sessionPayload = {};
-      
+
       // Add secrets if provided
       if (options.secrets) {
         try {
@@ -232,7 +232,7 @@ async function sessionCommand(options) {
           process.exit(1);
         }
       }
-      
+
       // Validate that ANTHROPIC_API_KEY is provided for new sessions
       if (!sessionPayload.secrets || !sessionPayload.secrets.ANTHROPIC_API_KEY) {
         spinner.fail('Anthropic API key required');
@@ -242,7 +242,7 @@ async function sessionCommand(options) {
         console.log(chalk.yellow('💡 Usage:'), 'raworc session --secrets \'{"ANTHROPIC_API_KEY":"sk-ant-your-key"}\'');
         process.exit(1);
       }
-      
+
       // Add instructions if provided (direct text or from file)
       if (options.instructions) {
         sessionPayload.instructions = options.instructions;
@@ -256,7 +256,7 @@ async function sessionCommand(options) {
           process.exit(1);
         }
       }
-      
+
       // Add setup script if provided (direct text or from file)
       if (options.setup) {
         sessionPayload.setup = options.setup;
@@ -270,37 +270,37 @@ async function sessionCommand(options) {
           process.exit(1);
         }
       }
-      
+
       const createResponse = await api.post('/sessions', sessionPayload);
-      
+
       if (!createResponse.success) {
         spinner.fail('Failed to create session');
         console.error(chalk.red('Error:'), createResponse.error);
-        
+
         if (createResponse.status === 400) {
           console.log();
           console.log(chalk.yellow('💡 Check if your session parameters are valid'));
         }
-        
+
         process.exit(1);
       }
-      
+
       sessionId = createResponse.data.id;
       spinner.succeed(`Session created: ${sessionId}`);
     }
-    
+
     console.log();
     console.log(chalk.green('✅ Session active! Type your messages below.'));
     console.log(chalk.gray('Commands: /status, /quit'));
     console.log(chalk.gray('Session ID:'), sessionId);
     console.log();
-    
+
     // Start synchronous chat loop
     await chatLoop(sessionId);
-    
+
   } catch (error) {
     console.error(chalk.red('❌ Error:'), error.message);
-    
+
     // Clean up session if it was created
     if (sessionId) {
       try {
@@ -309,16 +309,16 @@ async function sessionCommand(options) {
         // Ignore cleanup errors
       }
     }
-    
+
     process.exit(1);
   }
 }
 
-async function waitForAgentResponse(sessionId, userMessageTime, timeoutMs = 60000) {
+async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastCheckedCount = 0;
-  
+
   // Get initial message count to detect new messages
   try {
     const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
@@ -329,35 +329,35 @@ async function waitForAgentResponse(sessionId, userMessageTime, timeoutMs = 6000
   } catch (error) {
     // Continue with 0 count
   }
-  
+
   while (Date.now() - startTime < timeoutMs) {
     try {
       const response = await api.get(`/sessions/${sessionId}/messages`);
-      
+
       if (response.success && response.data) {
         const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
-        
+
         // Check if we have new messages
         if (messages.length > lastCheckedCount) {
-          // Look for the newest agent message
+          // Look for the newest host message
           for (let i = messages.length - 1; i >= 0; i--) {
             const message = messages[i];
-            if (message.role === MESSAGE_ROLE_AGENT) {
+            if (message.role === MESSAGE_ROLE_HOST) {
               return message;
             }
           }
         }
-        
+
         lastCheckedCount = messages.length;
       }
     } catch (error) {
       // Continue polling on error
     }
-    
+
     // Wait before polling again
     await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
-  
+
   throw new Error('Timeout waiting for host response');
 }
 
@@ -379,15 +379,15 @@ async function chatLoop(sessionId) {
           }
         }
       ]);
-      
+
       const message = answers.message.trim();
-      
+
       // Handle special commands
       if (message === '/quit' || message === '/q' || message === '/exit') {
         console.log(chalk.yellow('👋 Ending session...'));
         break;
       }
-      
+
       if (message === '/status') {
         console.log();
         console.log(chalk.blue('📊 Session Status'));
@@ -396,42 +396,42 @@ async function chatLoop(sessionId) {
         console.log();
         continue;
       }
-      
-      // Send message to agent
+
+      // Send message to host
       const userMessageTime = Date.now();
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
         role: MESSAGE_ROLE_USER,
         content: message
       });
-      
+
       if (!sendResponse.success) {
         console.error(chalk.red('❌ Failed to send message:'), sendResponse.error);
-        
+
         if (sendResponse.status === 404) {
           console.log(chalk.red('❌ Session may have expired. Please start a new session.'));
           break;
         }
         continue;
       }
-      
+
       // Wait for host response
       const spinner = ora('Waiting for host response...').start();
-      
+
       try {
-        const agentMessage = await waitForAgentResponse(sessionId, userMessageTime);
+        const hostMessage = await waitForHostResponse(sessionId, userMessageTime);
         spinner.stop();
-        
+
         // Display host response
-        console.log(chalk.cyan('Agent:'), agentMessage.content);
+        console.log(chalk.cyan('Host:'), hostMessage.content);
         console.log();
-        
+
       } catch (error) {
-        spinner.fail('Agent response timeout');
+        spinner.fail('Host response timeout');
         console.log(chalk.yellow('⚠️ No response received within 60 seconds'));
         console.log();
       }
     }
-    
+
   } finally {
     // Close session for later restore
     try {

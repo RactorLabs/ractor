@@ -8,7 +8,7 @@ const SESSION_STATE_DELETED = 'deleted';
 
 // Message role constants
 const MESSAGE_ROLE_USER = 'user';
-const MESSAGE_ROLE_AGENT = 'agent';
+const MESSAGE_ROLE_HOST = 'host';
 const MESSAGE_ROLE_SYSTEM = 'system';
 
 module.exports = {
@@ -19,9 +19,9 @@ module.exports = {
   SESSION_STATE_CLOSED,
   SESSION_STATE_ERRORED,
   SESSION_STATE_DELETED,
-  
+
   // Message roles
   MESSAGE_ROLE_USER,
-  MESSAGE_ROLE_AGENT,
+  MESSAGE_ROLE_HOST,
   MESSAGE_ROLE_SYSTEM
 };

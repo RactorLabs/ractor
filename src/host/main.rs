@@ -18,9 +18,6 @@ struct Args {
     #[arg(long, env = "RAWORC_SESSION_ID")]
     session_id: String,
     
-    /// API Key for authentication
-    #[arg(long, env = "RAWORC_API_KEY")]
-    api_key: String,
 }
 
 #[tokio::main]
@@ -31,5 +28,5 @@ async fn main() -> Result<()> {
     let _ = logging::init_service_logging("/app/logs", "raworc_host");
     
     // Run the Host (Computer Use Agent)
-    host::run(&args.api_url, &args.session_id, &args.api_key).await
+    host::run(&args.api_url, &args.session_id).await
 }

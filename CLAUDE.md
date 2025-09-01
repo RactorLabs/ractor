@@ -539,8 +539,6 @@ Computer sessions support the following operations:
 # Get admin token
 raworc api auth/login --method POST --body '{"user":"admin","pass":"admin"}'
 
-# Get operator token
-raworc api auth/login --method POST --body '{"user":"operator","pass":"admin"}'
 
 # Check current authentication
 raworc api auth/me

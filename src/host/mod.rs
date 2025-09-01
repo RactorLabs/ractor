@@ -10,7 +10,7 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{info, error, warn};
 
-pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
+pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     tracing::info!("Starting Raworc Host...");
     tracing::info!("Connecting to API: {}", api_url);
     tracing::info!("Session ID: {}", session_id);
@@ -19,12 +19,11 @@ pub async fn run(api_url: &str, session_id: &str, api_key: &str) -> Result<()> {
     if let Ok(principal) = std::env::var("RAWORC_PRINCIPAL") {
         let principal_type = std::env::var("RAWORC_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
         tracing::info!("Running as principal: {} ({})", principal, principal_type);
-    } else {
-        tracing::info!("Running as operator principal");
     }
     
-    // Use RAWORC_API_TOKEN from environment if available (set by operator), otherwise use provided api_key
-    let api_token = std::env::var("RAWORC_API_TOKEN").unwrap_or_else(|_| api_key.to_string());
+    // Use RAWORC_TOKEN from environment (user's token set as secret)
+    let api_token = std::env::var("RAWORC_TOKEN")
+        .map_err(|_| anyhow::anyhow!("RAWORC_TOKEN environment variable is required"))?;
     
     // Get Claude API key from environment - ANTHROPIC_API_KEY is required
     let claude_api_key = std::env::var("ANTHROPIC_API_KEY")

@@ -66,7 +66,7 @@ impl ClaudeClient {
             .map(|(role, content)| ClaudeMessage {
                 role: match role.as_str() {
                     "user" | "USER" => "user".to_string(),
-                    "assistant" | "AGENT" => "assistant".to_string(),
+                    "assistant" | "HOST" => "assistant".to_string(),
                     _ => "user".to_string(),
                 },
                 content: content.trim().to_string(),
