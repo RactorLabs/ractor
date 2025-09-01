@@ -71,6 +71,35 @@ module.exports = (program) => {
     .action(async (sessionId, options) => {
       await sessionRemixCommand(sessionId, options);
     });
+
+  // Publish subcommand
+  sessionCmd
+    .command('publish <session-id>')
+    .description('Publish a session for public access')
+    .option('-d, --data <boolean>', 'Allow data remix (default: true)')
+    .option('-c, --code <boolean>', 'Allow code remix (default: true)')
+    .option('-s, --secrets <boolean>', 'Allow secrets remix (default: true)')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session publish abc123           # Publish with all permissions\n' +
+      '  $ raworc session publish my-session       # Publish by name\n' +
+      '  $ raworc session publish abc123 --secrets false # Publish without secrets remix\n' +
+      '  $ raworc session publish abc123 --data false --secrets false # Only allow code remix\n')
+    .action(async (sessionId, options) => {
+      await sessionPublishCommand(sessionId, options);
+    });
+
+  // Unpublish subcommand
+  sessionCmd
+    .command('unpublish <session-id>')
+    .description('Remove session from public access')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session unpublish abc123         # Unpublish by ID\n' +
+      '  $ raworc session unpublish my-session     # Unpublish by name\n')
+    .action(async (sessionId, options) => {
+      await sessionUnpublishCommand(sessionId, options);
+    });
 };
 
 async function sessionStartCommand(options) {
@@ -579,5 +608,104 @@ async function chatLoop(sessionId) {
 
   } catch (error) {
     console.error(chalk.red('❌ Chat error:'), error.message);
+  }
+}
+
+async function sessionPublishCommand(sessionId, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('❌ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('📢 Publishing Raworc Session'));
+  console.log(chalk.gray('Session:'), sessionId);
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
+
+  // Show publishing permissions (same logic as remix)
+  const data = options.data === undefined ? true : (options.data === 'true' || options.data === true);
+  const code = options.code === undefined ? true : (options.code === 'true' || options.code === true);
+  const secrets = options.secrets === undefined ? true : (options.secrets === 'true' || options.secrets === true);
+  
+  console.log();
+  console.log(chalk.yellow('📋 Remix Permissions:'));
+  console.log(chalk.gray('  Data:'), data ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
+  console.log(chalk.gray('  Code:'), code ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
+  console.log(chalk.gray('  Secrets:'), secrets ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
+  console.log();
+
+  try {
+    const spinner = ora('Publishing session...').start();
+
+    const publishPayload = {
+      data: data,
+      code: code,
+      secrets: secrets
+    };
+
+    const response = await api.post(`/sessions/${sessionId}/publish`, publishPayload);
+
+    if (!response.success) {
+      spinner.fail('Failed to publish session');
+      console.error(chalk.red('Error:'), response.error);
+      process.exit(1);
+    }
+
+    spinner.succeed(`Session published: ${sessionId}`);
+    
+    console.log();
+    console.log(chalk.green('🎉 Session is now publicly accessible!'));
+    console.log();
+    console.log(chalk.blue('📋 Public Access:'));
+    console.log(chalk.gray('  • View:'), `raworc api published/sessions/${sessionId}`);
+    console.log(chalk.gray('  • List all:'), 'raworc api published/sessions');
+    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
+    console.log();
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+async function sessionUnpublishCommand(sessionId, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('❌ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('🔒 Unpublishing Raworc Session'));
+  console.log(chalk.gray('Session:'), sessionId);
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
+  console.log();
+
+  try {
+    const spinner = ora('Unpublishing session...').start();
+
+    const response = await api.post(`/sessions/${sessionId}/unpublish`);
+
+    if (!response.success) {
+      spinner.fail('Failed to unpublish session');
+      console.error(chalk.red('Error:'), response.error);
+      process.exit(1);
+    }
+
+    spinner.succeed(`Session unpublished: ${sessionId}`);
+    
+    console.log();
+    console.log(chalk.green('🔒 Session is now private again'));
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
   }
 }

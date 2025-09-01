@@ -13,7 +13,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
     let public_routes = Router::new()
         .route("/version", get(version))
-        .route("/operators/{name}/login", post(auth::login));
+        .route("/operators/{name}/login", post(auth::login))
+        // Public session endpoints (no auth required)
+        .route("/published/sessions", get(handlers::sessions::list_published_sessions))
+        .route("/published/sessions/{id}", get(handlers::sessions::get_published_session));
     
     // Protected routes
     let protected_routes = Router::new()
@@ -35,6 +38,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/sessions/{id}/close", post(handlers::sessions::close_session))
         .route("/sessions/{id}/restore", post(handlers::sessions::restore_session))
         .route("/sessions/{id}/remix", post(handlers::sessions::remix_session))
+        .route("/sessions/{id}/publish", post(handlers::sessions::publish_session))
+        .route("/sessions/{id}/unpublish", post(handlers::sessions::unpublish_session))
         .route("/sessions/{id}", delete(handlers::sessions::delete_session))
         // Message endpoints
         .route("/sessions/{id}/messages", get(handlers::messages::list_messages))

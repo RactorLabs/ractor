@@ -16,6 +16,10 @@ pub struct Session {
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
+    pub is_published: bool,
+    pub published_at: Option<DateTime<Utc>>,
+    pub published_by: Option<String>,
+    pub publish_permissions: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +52,16 @@ pub struct RemixSessionRequest {
     pub secrets: bool,
     #[serde(default)]
     pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishSessionRequest {
+    #[serde(default = "default_true")]
+    pub data: bool,
+    #[serde(default = "default_true")]
+    pub code: bool,
+    #[serde(default = "default_true")]
+    pub secrets: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,8 +104,8 @@ impl Session {
             r#"
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
-                   created_at,  last_activity_at,
-                   metadata
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions
             FROM sessions
             WHERE state != 'deleted'
             ORDER BY created_at DESC
@@ -106,8 +120,8 @@ impl Session {
             r#"
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
-                   created_at,  last_activity_at,
-                   metadata
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions
             FROM sessions
             WHERE id = ? AND state != 'deleted'
             "#
@@ -122,8 +136,8 @@ impl Session {
             r#"
             SELECT id, created_by, name, state,
                    container_id, persistent_volume_id, parent_session_id,
-                   created_at,  last_activity_at,
-                   metadata
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions
             FROM sessions
             WHERE name = ? AND created_by = ? AND state != 'deleted'
             ORDER BY created_at DESC
@@ -168,6 +182,7 @@ impl Session {
         pool: &sqlx::MySqlPool,
         parent_id: &str,
         req: RemixSessionRequest,
+        created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Get parent session
         let parent = Self::find_by_id(pool, parent_id)
@@ -187,7 +202,7 @@ impl Session {
             "#
         )
         .bind(session_id.to_string())
-        .bind(&parent.created_by) // Inherit created_by from parent
+        .bind(created_by) // Use actual remixer as owner
         .bind(&req.name)
         .bind(parent_id)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
@@ -316,6 +331,79 @@ impl Session {
         .await?;
 
         Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn publish(
+        pool: &sqlx::MySqlPool,
+        id: &str,
+        published_by: &str,
+        req: PublishSessionRequest,
+    ) -> Result<Option<Session>, sqlx::Error> {
+        let publish_permissions = serde_json::json!({
+            "data": req.data,
+            "code": req.code,
+            "secrets": req.secrets
+        });
+
+        let result = sqlx::query(
+            r#"
+            UPDATE sessions 
+            SET is_published = true, 
+                published_at = NOW(), 
+                published_by = ?,
+                publish_permissions = ?
+            WHERE id = ? AND state != 'deleted'
+            "#
+        )
+        .bind(published_by)
+        .bind(&publish_permissions)
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Self::find_by_id(pool, id).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn unpublish(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+            UPDATE sessions 
+            SET is_published = false, 
+                published_at = NULL, 
+                published_by = NULL,
+                publish_permissions = JSON_OBJECT('data', true, 'code', true, 'secrets', true)
+            WHERE id = ? AND state != 'deleted'
+            "#
+        )
+        .bind(id)
+        .execute(pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            Self::find_by_id(pool, id).await
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, created_by, name, state,
+                   container_id, persistent_volume_id, parent_session_id,
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions
+            FROM sessions
+            WHERE is_published = true AND state != 'deleted'
+            ORDER BY published_at DESC
+            "#
+        )
+        .fetch_all(pool)
+        .await
     }
 
 }

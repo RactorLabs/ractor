@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::query;
 use std::sync::Arc;
 
-use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest, RestoreSessionRequest};
+use crate::shared::models::{AppState, Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest, RestoreSessionRequest, PublishSessionRequest};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
@@ -31,6 +31,10 @@ pub struct SessionResponse {
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
+    pub is_published: bool,
+    pub published_at: Option<String>,
+    pub published_by: Option<String>,
+    pub publish_permissions: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +55,10 @@ impl SessionResponse {
             created_at: session.created_at.to_rfc3339(),
             last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
             metadata: session.metadata,
+            is_published: session.is_published,
+            published_at: session.published_at.map(|dt| dt.to_rfc3339()),
+            published_by: session.published_by,
+            publish_permissions: session.publish_permissions,
         })
     }
 }
@@ -223,9 +231,37 @@ pub async fn remix_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find parent session by ID or name (admin can remix any session)
+    // Find parent session by ID or name (admin can remix any session, users can remix published sessions)
     let is_admin = is_admin_user(&auth);
-    let parent = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let parent = find_session_by_id_or_name(&state, &id, username, true).await?; // Allow finding any session for remix (permission check below)
+
+    // Check remix permissions for non-owners
+    if parent.created_by != *username && !is_admin {
+        // Non-owner, non-admin can only remix if session is published
+        if !parent.is_published {
+            return Err(ApiError::Forbidden("You can only remix your own sessions or published sessions".to_string()));
+        }
+        
+        // Check published remix permissions
+        let publish_perms = parent.publish_permissions.as_object()
+            .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid publish permissions format")))?;
+        
+        if req.data && !publish_perms.get("data").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return Err(ApiError::Forbidden("Data remix not permitted for this published session".to_string()));
+        }
+        if req.code && !publish_perms.get("code").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return Err(ApiError::Forbidden("Code remix not permitted for this published session".to_string()));
+        }
+        if req.secrets && !publish_perms.get("secrets").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return Err(ApiError::Forbidden("Secrets remix not permitted for this published session".to_string()));
+        }
+    }
+
+    // Get the principal name for task creation (remixer becomes owner)
+    let created_by = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
 
     // Store the remix options before moving req into Session::remix
     let copy_data = req.data;
@@ -233,15 +269,9 @@ pub async fn remix_session(
     let copy_secrets = req.secrets;
     let initial_prompt = req.prompt.clone();
     
-    let session = Session::remix(&state.db, &parent.id, req)
+    let session = Session::remix(&state.db, &parent.id, req, created_by)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e)))?;
-
-    // Get the principal name for task creation
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
 
     // Add task to queue for session manager to create container with remix options
     let task_payload = serde_json::json!({
@@ -576,4 +606,109 @@ pub async fn delete_session(
     }
 
     Ok(())
+}
+
+pub async fn publish_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<PublishSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
+    // Check permission for updating sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to publish session".to_string()))?;
+    
+    // Get username for ownership check
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    
+    // Find session by ID or name (admin can publish any session)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+
+    // Check ownership (only owner or admin can publish)
+    if !is_admin && session.created_by != *username {
+        return Err(ApiError::Forbidden("You can only publish your own sessions".to_string()));
+    }
+
+    // Publish the session
+    let published_session = Session::publish(&state.db, &session.id, username, req)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to publish session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    Ok(Json(SessionResponse::from_session(published_session, &state.db).await?))
+}
+
+pub async fn unpublish_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<SessionResponse>> {
+    // Check permission for updating sessions
+    check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to unpublish session".to_string()))?;
+    
+    // Get username for ownership check
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    
+    // Find session by ID or name (admin can unpublish any session)
+    let is_admin = is_admin_user(&auth);
+    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+
+    // Check ownership (only owner or admin can unpublish)
+    if !is_admin && session.created_by != *username {
+        return Err(ApiError::Forbidden("You can only unpublish your own sessions".to_string()));
+    }
+
+    // Unpublish the session
+    let unpublished_session = Session::unpublish(&state.db, &session.id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to unpublish session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    Ok(Json(SessionResponse::from_session(unpublished_session, &state.db).await?))
+}
+
+pub async fn list_published_sessions(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<Vec<SessionResponse>>> {
+    // No authentication required for listing published sessions (public access)
+    
+    let sessions = Session::find_published(&state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list published sessions: {}", e)))?;
+
+    let mut response = Vec::new();
+    for session in sessions {
+        response.push(SessionResponse::from_session(session, &state.db).await?);
+    }
+
+    Ok(Json(response))
+}
+
+pub async fn get_published_session(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<SessionResponse>> {
+    // No authentication required for getting published sessions (public access)
+    
+    let session = Session::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    // Check if session is published
+    if !session.is_published {
+        return Err(ApiError::NotFound("Session not found or not published".to_string()));
+    }
+
+    Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
