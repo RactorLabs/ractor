@@ -634,7 +634,11 @@ echo 'Session directories created'
             }
         };
         
-        let container_name = self.create_container_internal(session_id, secrets, None, None).await?;
+        // Read existing instructions and setup from volume
+        let instructions = self.read_file_from_volume(&volume_name, "code/instructions.md").await.ok();
+        let setup = self.read_file_from_volume(&volume_name, "code/setup.sh").await.ok();
+        
+        let container_name = self.create_container_internal(session_id, secrets, instructions, setup).await?;
         Ok(container_name)
     }
 
@@ -747,7 +751,7 @@ echo 'Session directories created'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize session structure if needed
+        // Initialize session structure after starting container so host can execute setup script
         if !self.session_initialized(&session_volume).await? {
             let empty_secrets = HashMap::new();
             let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);

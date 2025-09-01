@@ -66,8 +66,18 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
         }
     }
     
-    // Execute setup script if it exists
+    // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/session/code/setup.sh");
+    
+    // Wait up to 10 seconds for the setup script to be written by operator
+    let mut attempts = 0;
+    let max_attempts = 20; // 10 seconds with 500ms intervals
+    
+    while !setup_script.exists() && attempts < max_attempts {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        attempts += 1;
+    }
+    
     if setup_script.exists() {
         info!("Executing setup script: /session/code/setup.sh");
         match std::process::Command::new("bash")
