@@ -605,7 +605,7 @@ List all published sessions available for public access.
 ]
 ```
 
-### GET /published/sessions/\\{name\\}
+### GET /published/sessions/{name}
 
 Get a specific published session by ID or name.
 

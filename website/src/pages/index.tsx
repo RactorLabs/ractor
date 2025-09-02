@@ -148,62 +148,62 @@ export default function Home(): ReactNode {
             </div>
           </div>
         </section>
-        <section style={{"backgroundColor": "#f8f9fa", "padding": "4rem 0"}}>
+        <section style={{"backgroundColor": "#000000", "padding": "4rem 0"}}>
           <div className="container">
             <div style={{"textAlign": "center", "marginBottom": "3rem"}}>
-              <Heading as="h2">What Computer Use Agents Can Do</Heading>
-              <p style={{"fontSize": "1.2rem", "color": "#6c757d", "maxWidth": "800px", "margin": "0 auto"}}>
+              <Heading as="h2" style={{"color": "#ffffff"}}>What Computer Use Agents Can Do</Heading>
+              <p style={{"fontSize": "1.2rem", "color": "#cccccc", "maxWidth": "800px", "margin": "0 auto"}}>
                 Computer Use Agents can automate any manual work that involves using a computer
               </p>
             </div>
             <div style={{"display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(300px, 1fr))", "gap": "2rem", "maxWidth": "1200px", "margin": "0 auto"}}>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🤖 Build Agentic AI Products</h3>
-                <p>Develop intelligent agents using LangGraph, CrewAI, AutoGen with conversational interfaces</p>
+                <p style={{"color": "#cccccc"}}>Develop intelligent agents using LangGraph, CrewAI, AutoGen with conversational interfaces</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>⚡ Supercharge Make/n8n Workflows</h3>
-                <p>Extend automation platforms with computer use capabilities for complex tasks</p>
+                <p style={{"color": "#cccccc"}}>Extend automation platforms with computer use capabilities for complex tasks</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📊 Generate Stunning Reports</h3>
-                <p>Create professional reports with charts, analysis, and formatted presentations</p>
+                <p style={{"color": "#cccccc"}}>Create professional reports with charts, analysis, and formatted presentations</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🎨 Create Great Presentations</h3>
-                <p>Build compelling slide decks, infographics, and visual content automatically</p>
+                <p style={{"color": "#cccccc"}}>Build compelling slide decks, infographics, and visual content automatically</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🌐 Operate Remote Browsers</h3>
-                <p>Control web browsers for testing, data extraction, and web automation</p>
+                <p style={{"color": "#cccccc"}}>Control web browsers for testing, data extraction, and web automation</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🔍 Research Any Topic</h3>
-                <p>Deep web research, fact-checking, and comprehensive information gathering</p>
+                <p style={{"color": "#cccccc"}}>Deep web research, fact-checking, and comprehensive information gathering</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📈 Conduct Market Research</h3>
-                <p>Analyze competitors, track trends, and generate market intelligence reports</p>
+                <p style={{"color": "#cccccc"}}>Analyze competitors, track trends, and generate market intelligence reports</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>💻 Write Better Code</h3>
-                <p>Generate, review, and optimize code with AI-powered development assistance</p>
+                <p style={{"color": "#cccccc"}}>Generate, review, and optimize code with AI-powered development assistance</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>🧪 Perform Quality Assurance Testing</h3>
-                <p>Automated testing of applications, websites, and user workflows</p>
+                <p style={{"color": "#cccccc"}}>Automated testing of applications, websites, and user workflows</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📱 Generate Content for Social Media</h3>
-                <p>Create posts, images, videos, and manage social media content pipelines</p>
+                <p style={{"color": "#cccccc"}}>Create posts, images, videos, and manage social media content pipelines</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>💰 Handle Financial Operations</h3>
-                <p>Process invoices, reconcile accounts, and manage financial data workflows</p>
+                <p style={{"color": "#cccccc"}}>Process invoices, reconcile accounts, and manage financial data workflows</p>
               </div>
-              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "white", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.1)"}}>
+              <div style={{"textAlign": "center", "padding": "1.5rem", "backgroundColor": "#1a1a1a", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(255,255,255,0.1)", "border": "1px solid #333"}}>
                 <h3 style={{"color": "#007bff", "marginBottom": "1rem"}}>📝 Fill Out Boring Forms</h3>
-                <p>Automate form filling, data entry, and repetitive administrative tasks</p>
+                <p style={{"color": "#cccccc"}}>Automate form filling, data entry, and repetitive administrative tasks</p>
               </div>
             </div>
           </div>
@@ -295,9 +295,9 @@ export default function Home(): ReactNode {
             </div>
           </div>
         </section>
-        <section style={{"backgroundColor": "#f8f9fa", "padding": "2rem 0", "textAlign": "center", "borderTop": "1px solid #e9ecef"}}>
+        <section style={{"backgroundColor": "#000000", "padding": "2rem 0", "textAlign": "center", "borderTop": "1px solid #333"}}>
           <div className="container">
-            <p style={{"margin": "0", "color": "#6c757d", "fontSize": "0.9rem"}}>
+            <p style={{"margin": "0", "color": "#cccccc", "fontSize": "0.9rem"}}>
               Made with ❤️ by <a href="https://remoteagent.com" target="_blank" rel="noopener noreferrer" style={{"color": "#007bff", "textDecoration": "none"}}>RemoteAgent team</a>
             </p>
           </div>
