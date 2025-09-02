@@ -207,7 +207,7 @@ Now that you have Raworc running:
 - **[Common Use Cases](/docs/guides/cli-usage#common-use-cases)** - Practical examples for different automation scenarios
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all CLI commands and features
 - **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture and lifecycle
-- **[API Reference](/docs/api/rest-api)** - Complete REST API documentation
+- **[API Reference](/docs/api/rest-api-reference)** - Complete REST API documentation
 
 ## Support
 

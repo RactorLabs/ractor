@@ -604,5 +604,5 @@ raworc session \
 ## Next Steps
 
 - [Sessions Concepts](/docs/concepts/sessions) - Understanding session architecture
-- [Complete API Reference](/docs/api/rest-api) - Full REST API documentation  
+- [Complete API Reference](/docs/api/rest-api-reference) - Full REST API documentation  
 - [Troubleshooting](/docs/guides/troubleshooting) - Solve common issues

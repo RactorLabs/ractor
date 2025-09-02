@@ -336,4 +336,4 @@ raworc session remix "ml-model-v2" --name "ml-model-production"
 - **[Sessions Concepts](/docs/concepts/sessions)** - Core session architecture
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Complete command reference
 - **[Getting Started](/docs/getting-started)** - Basic session setup
-- **[API Reference](/docs/api/rest-api)** - REST API for session management
+- **[API Reference](/docs/api/rest-api-reference)** - REST API for session management

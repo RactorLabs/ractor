@@ -64,7 +64,7 @@ Raworc provides Computer Use Agents with dedicated computers to automate any man
 - [Architecture Overview](/docs/concepts/architecture) - System architecture and design patterns
 - [Computer Use Agents](/docs/concepts/computer-use-agents) - Understand Host capabilities and automation potential
 - [Sessions](/docs/concepts/sessions) - Core data models and workflow management
-- [REST API Reference](/docs/api/rest-api) - Complete REST API documentation
+- [REST API Reference](/docs/api/rest-api-reference) - Complete REST API documentation
 - [Dev Mode](/docs/guides/dev-mode) - Enable Coding Agent to develop scripts, APIs, tools, and agents
 
 ## Getting Help

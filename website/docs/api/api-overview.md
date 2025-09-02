@@ -81,55 +81,55 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/version`](./rest-api#get-version) | GET | API version and health info |
-| [`/auth/login`](./rest-api#post-authlogin) | POST | Authenticate and get token |
-| [`/auth`](./rest-api#get-auth) | GET | Get current user info |
-| [`/auth/token`](./rest-api#post-authtoken) | POST | Create token for any principal (admin only) |
+| [`/version`](./rest-api-reference#get-version) | GET | API version and health info |
+| [`/auth/login`](./rest-api-reference#post-authlogin) | POST | Authenticate and get token |
+| [`/auth`](./rest-api-reference#get-auth) | GET | Get current user info |
+| [`/auth/token`](./rest-api-reference#post-authtoken) | POST | Create token for any principal (admin only) |
 
 ### Operators
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/operators`](./rest-api#get-operators) | GET | List all operators |
-| [`/operators`](./rest-api#post-operators) | POST | Create new operator |
-| [`/operators/{name}`](./rest-api#get-operatorsname) | GET | Get specific operator |
-| [`/operators/{name}`](./rest-api#put-operatorsname) | PUT | Update operator |
-| [`/operators/{name}`](./rest-api#delete-operatorsname) | DELETE | Delete operator |
-| [`/operators/{name}/password`](./rest-api#put-operatorsnamepassword) | PUT | Update operator password |
+| [`/operators`](./rest-api-reference#get-operators) | GET | List all operators |
+| [`/operators`](./rest-api-reference#post-operators) | POST | Create new operator |
+| [`/operators/{name}`](./rest-api-reference#get-operatorsname) | GET | Get specific operator |
+| [`/operators/{name}`](./rest-api-reference#put-operatorsname) | PUT | Update operator |
+| [`/operators/{name}`](./rest-api-reference#delete-operatorsname) | DELETE | Delete operator |
+| [`/operators/{name}/password`](./rest-api-reference#put-operatorsnamepassword) | PUT | Update operator password |
 
 ### Host Sessions
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions`](./rest-api#get-sessions) | GET | List Host sessions |
-| [`/sessions`](./rest-api#post-sessions) | POST | Create new Host session |
-| [`/sessions/{id}`](./rest-api#get-sessionsid) | GET | Get specific session |
-| [`/sessions/{id}`](./rest-api#put-sessionsid) | PUT | Update session details |
-| [`/sessions/{id}/state`](./rest-api#put-sessionsidstate) | PUT | Update session state |
-| [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close Host session |
-| [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore Host session |
-| [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork Host session |
-| [`/sessions/{id}/publish`](./rest-api#post-sessionsidpublish) | POST | Publish session |
-| [`/sessions/{id}/unpublish`](./rest-api#post-sessionsidunpublish) | POST | Unpublish session |
-| [`/sessions/{id}/busy`](./rest-api#post-sessionsidbusy) | POST | Mark session busy |
-| [`/sessions/{id}/idle`](./rest-api#post-sessionsididle) | POST | Mark session idle |
-| [`/sessions/{id}`](./rest-api#delete-sessionsid) | DELETE | Delete session |
+| [`/sessions`](./rest-api-reference#get-sessions) | GET | List Host sessions |
+| [`/sessions`](./rest-api-reference#post-sessions) | POST | Create new Host session |
+| [`/sessions/{id}`](./rest-api-reference#get-sessionsid) | GET | Get specific session |
+| [`/sessions/{id}`](./rest-api-reference#put-sessionsid) | PUT | Update session details |
+| [`/sessions/{id}/state`](./rest-api-reference#put-sessionsidstate) | PUT | Update session state |
+| [`/sessions/{id}/close`](./rest-api-reference#post-sessionsidclose) | POST | Close Host session |
+| [`/sessions/{id}/restore`](./rest-api-reference#post-sessionsidrestore) | POST | Restore Host session |
+| [`/sessions/{id}/remix`](./rest-api-reference#post-sessionsidremix) | POST | Fork Host session |
+| [`/sessions/{id}/publish`](./rest-api-reference#post-sessionsidpublish) | POST | Publish session |
+| [`/sessions/{id}/unpublish`](./rest-api-reference#post-sessionsidunpublish) | POST | Unpublish session |
+| [`/sessions/{id}/busy`](./rest-api-reference#post-sessionsidbusy) | POST | Mark session busy |
+| [`/sessions/{id}/idle`](./rest-api-reference#post-sessionsididle) | POST | Mark session idle |
+| [`/sessions/{id}`](./rest-api-reference#delete-sessionsid) | DELETE | Delete session |
 
 ### Public Sessions
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/published/sessions`](./rest-api#get-publishedsessions) | GET | List published sessions |
-| [`/published/sessions/{id}`](./rest-api#get-publishedsessionsid) | GET | Get published session |
+| [`/published/sessions`](./rest-api-reference#get-publishedsessions) | GET | List published sessions |
+| [`/published/sessions/{id}`](./rest-api-reference#get-publishedsessionsid) | GET | Get published session |
 
 ### Host Communication
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions/{id}/messages`](./rest-api#get-sessionsidmessages) | GET | List Host messages |
-| [`/sessions/{id}/messages`](./rest-api#post-sessionsidmessages) | POST | Send message to Host |
-| [`/sessions/{id}/messages/count`](./rest-api#get-sessionsidmessagescount) | GET | Get message count |
-| [`/sessions/{id}/messages`](./rest-api#delete-sessionsidmessages) | DELETE | Clear all messages |
+| [`/sessions/{id}/messages`](./rest-api-reference#get-sessionsidmessages) | GET | List Host messages |
+| [`/sessions/{id}/messages`](./rest-api-reference#post-sessionsidmessages) | POST | Send message to Host |
+| [`/sessions/{id}/messages/count`](./rest-api-reference#get-sessionsidmessagescount) | GET | Get message count |
+| [`/sessions/{id}/messages`](./rest-api-reference#delete-sessionsidmessages) | DELETE | Clear all messages |
 
 ## Request Format
 
@@ -266,9 +266,9 @@ Breaking changes will result in a new API version.
 
 ## Available API Documentation
 
-- [REST API Reference](rest-api.md) - HTTP REST API documentation
+- [REST API Reference](rest-api-reference.md) - HTTP REST API documentation
 
 ## Next Steps
 
-- Explore the [REST API Reference](rest-api.md) for detailed endpoint documentation  
-- Review [RBAC System](/docs/concepts/rbac-system) for API access control
+- Explore the [REST API Reference](rest-api-reference.md) for detailed endpoint documentation  
+- Review [RBAC System](/docs/concepts/authentication-users) for API access control

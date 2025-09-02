@@ -208,4 +208,4 @@ raworc login --user admin --pass admin
 - **[Getting Started](/docs/getting-started)** - Set up authentication and first session
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Complete authentication command reference  
 - **[Sessions](/docs/concepts/sessions)** - Understand session management and access
-- **[API Reference](/docs/api/rest-api)** - REST API authentication details
+- **[API Reference](/docs/api/rest-api-reference)** - REST API authentication details

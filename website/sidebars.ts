@@ -38,7 +38,7 @@ const sidebars: SidebarsConfig = {
         'concepts/sessions',
         'concepts/session-names-and-publishing',
         'concepts/computer-use-landscape',
-        'concepts/rbac-system',
+        'concepts/authentication-users',
       ],
     },
     {
@@ -64,8 +64,8 @@ const sidebars: SidebarsConfig = {
         description: 'Complete REST API documentation for Raworc',
       },
       items: [
-        'api/overview',
-        'api/rest-api',
+        'api/api-overview',
+        'api/rest-api-reference',
       ],
     },
   ],

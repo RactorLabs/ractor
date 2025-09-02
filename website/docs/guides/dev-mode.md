@@ -275,4 +275,4 @@ You: "Teach me how to use LangGraph to build conversational AI agents"
 - **[Getting Started](/docs/getting-started)** - Set up your first development session
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master session management commands
 - **[Sessions](/docs/concepts/sessions)** - Understand session persistence and lifecycle
-- **[API Reference](/docs/api/rest-api)** - Integrate development workflows with APIs
+- **[API Reference](/docs/api/rest-api-reference)** - Integrate development workflows with APIs

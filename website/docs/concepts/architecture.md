@@ -174,5 +174,5 @@ Each session provides a dedicated computer use agent with full computer access:
 
 - [Sessions](/docs/concepts/sessions) - Deep dive into session lifecycle and management
 - [Computer Use Agents](/docs/concepts/computer-use-agents) - Understanding Host capabilities
-- [RBAC System](/docs/concepts/rbac-system) - Security and access control
-- [API Reference](/docs/api/rest-api) - Complete REST API documentation
+- [RBAC System](/docs/concepts/authentication-users) - Security and access control
+- [API Reference](/docs/api/rest-api-reference) - Complete REST API documentation

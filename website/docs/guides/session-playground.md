@@ -324,5 +324,5 @@ raworc api sessions/{id}/restore -m post
 
 - [CLI Usage Guide](/docs/guides/cli-usage) - Complete CLI command reference
 - [Sessions](/docs/concepts/sessions) - Technical architecture details
-- [API Reference](/docs/api/rest-api) - Full REST API documentation
+- [API Reference](/docs/api/rest-api-reference) - Full REST API documentation
 - [Troubleshooting](/docs/guides/troubleshooting) - Common issues and solutions
