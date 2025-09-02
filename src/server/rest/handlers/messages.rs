@@ -46,11 +46,12 @@ pub async fn create_message(
         });
         
         sqlx::query(r#"
-            INSERT INTO session_tasks (session_id, task_type, payload, status)
-            VALUES (?, 'restore_session', ?, 'pending')
+            INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+            VALUES (?, 'restore_session', ?, ?, 'pending')
             "#
         )
         .bind(&session_id)
+        .bind("system")  // Auto-restore triggered by system
         .bind(payload.to_string())
         .execute(&*state.db)
         .await
