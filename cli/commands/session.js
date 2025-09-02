@@ -594,7 +594,7 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 
 function showPrompt() {
   console.log(chalk.green('idle'));
-  console.log(chalk.gray('----------'));
+  console.log(chalk.gray('————————————————————'));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
