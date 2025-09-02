@@ -5,6 +5,19 @@ title: Changelog
 
 # Changelog
 
+## v0.3.2
+
+- **API Input Validation**: Added comprehensive input validation with strict type checking and clear error messages
+- **Boolean Parameter Validation**: Session remix/publish parameters now reject non-boolean values (strings, numbers) 
+- **Message Role Validation**: Message roles restricted to valid values (user, host, system) with automatic default to "user"
+- **Numeric Parameter Validation**: Query parameters (limit/offset) and session timeouts validated with range checks
+- **Session Performance Optimization**: Eliminated 10-second startup delay by adding RAWORC_HAS_SETUP environment hint
+- **CLI Session Management**: Added `raworc session close <session-id>` command with state checking and user feedback
+- **Admin Security Enhancement**: Restricted token creation API to admin users only with explicit role checking
+- **Query Parameter Fixes**: Resolved deserialization issues while maintaining type safety for optional parameters
+- **Enhanced Error Messages**: All validation errors now provide specific, actionable error messages
+- **Setup Script Optimization**: Reduced setup script wait from 10s to 2s when expected, skip entirely when not needed
+
 ## v0.3.1
 
 - **CLI ANTHROPIC_API_KEY Validation**: Added validation for required ANTHROPIC_API_KEY environment variable in `raworc start` command

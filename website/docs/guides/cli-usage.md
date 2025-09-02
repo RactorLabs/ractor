@@ -128,6 +128,9 @@ raworc session publish <session-id-or-name> [options]
 
 # Remove session from public access
 raworc session unpublish <session-id-or-name>
+
+# Close active session
+raworc session close <session-id-or-name>
 ```
 
 ### Starting New Sessions
@@ -238,6 +241,22 @@ raworc session publish my-session \
 
 # Unpublish session
 raworc session unpublish my-session
+
+# Close active session
+raworc session close my-session
+raworc session close abc-123-def
+```
+
+### Session Close Management
+
+Closing sessions saves system resources while preserving all data. Closed sessions can be restored later:
+
+```bash
+# Close any active session
+raworc session close my-session
+
+# Close shows current state before closing
+# Provides instructions for restore/remix operations
 ```
 
 ### Session Publish Options
