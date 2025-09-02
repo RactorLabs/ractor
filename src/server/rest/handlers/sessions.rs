@@ -83,9 +83,15 @@ async fn find_session_by_id_or_name(
         }
     }
     
-    // If not found by ID, try by name (only for owned sessions unless admin)
+    // If not found by ID, try by name (owned sessions first)
     if let Some(session) = Session::find_by_name(&state.db, id_or_name, created_by).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session by name: {}", e)))? {
+        return Ok(session);
+    }
+    
+    // If still not found, try searching published sessions by name (for non-owners)
+    if let Some(session) = Session::find_published_by_name(&state.db, id_or_name).await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch published session by name: {}", e)))? {
         return Ok(session);
     }
     

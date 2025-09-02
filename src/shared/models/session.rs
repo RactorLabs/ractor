@@ -439,6 +439,25 @@ impl Session {
         .await
     }
 
+    pub async fn find_published_by_name(pool: &sqlx::MySqlPool, name: &str) -> Result<Option<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, created_by, name, state,
+                   container_id, persistent_volume_id, parent_session_id,
+                   created_at, last_activity_at, metadata,
+                   is_published, published_at, published_by, publish_permissions,
+                   timeout_seconds, auto_close_at
+            FROM sessions
+            WHERE name = ? AND is_published = true AND state != 'deleted'
+            ORDER BY published_at DESC
+            LIMIT 1
+            "#
+        )
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+    }
+
     pub async fn find_sessions_to_auto_close(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
