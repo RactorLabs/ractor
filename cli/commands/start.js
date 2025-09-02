@@ -28,6 +28,19 @@ module.exports = (program) => {
           process.exit(1);
         }
 
+        // Check for required environment variables when starting operator
+        if (components.length === 0 || components.includes('operator')) {
+          if (!process.env.ANTHROPIC_API_KEY) {
+            console.error(chalk.red('❌ ANTHROPIC_API_KEY environment variable is required for the operator'));
+            console.log('');
+            console.log(chalk.yellow('💡 The operator needs an Anthropic API key to provide to session containers.'));
+            console.log('   Set the environment variable and try again:');
+            console.log('');
+            console.log('   ' + chalk.white('export ANTHROPIC_API_KEY=sk-ant-api03-...'));
+            console.log('   ' + chalk.white('raworc start'));
+            process.exit(1);
+          }
+        }
 
         // Map component names to service names
         const serviceMap = {
@@ -71,8 +84,8 @@ module.exports = (program) => {
           
           console.log();
           console.log(chalk.cyan('Next steps:'));
-          console.log('  • Authenticate: ' + chalk.white('raworc auth login --user admin --pass admin'));
-          console.log('  • Check health: ' + chalk.white('raworc api health'));
+          console.log('  • Authenticate: ' + chalk.white('raworc login --user admin --pass admin'));
+          console.log('  • Check health: ' + chalk.white('raworc api version'));
           console.log('  • Start session: ' + chalk.white('raworc session'));
           console.log();
           console.log(chalk.gray('API Server: http://localhost:9000'));

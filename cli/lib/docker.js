@@ -159,6 +159,7 @@ class DockerManager {
           '-v', 'operator_data:/var/lib/raworc/volumes',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
+          '-e', `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
           '-e', `HOST_IMAGE=${this.images.host}`,
           '-e', 'HOST_CPU_LIMIT=0.5',
           '-e', 'HOST_MEMORY_LIMIT=536870912',

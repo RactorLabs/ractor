@@ -109,7 +109,7 @@ async function sessionStartCommand(options) {
   const authData = config.getAuth();
   if (!authData) {
     console.log(chalk.red('❌ Authentication required'));
-    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
@@ -236,7 +236,7 @@ async function sessionRestoreCommand(sessionId, options) {
   const authData = config.getAuth();
   if (!authData) {
     console.log(chalk.red('❌ Authentication required'));
-    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
@@ -322,7 +322,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
   const authData = config.getAuth();
   if (!authData) {
     console.log(chalk.red('❌ Authentication required'));
-    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
@@ -629,7 +629,7 @@ async function sessionPublishCommand(sessionId, options) {
   const authData = config.getAuth();
   if (!authData) {
     console.log(chalk.red('❌ Authentication required'));
-    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
@@ -690,7 +690,7 @@ async function sessionUnpublishCommand(sessionId, options) {
   const authData = config.getAuth();
   if (!authData) {
     console.log(chalk.red('❌ Authentication required'));
-    console.log('Run: ' + chalk.white('raworc auth login') + ' to authenticate first');
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
