@@ -425,7 +425,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
 async function startInteractiveSession(sessionId, options) {
   console.log();
   console.log(chalk.green('✅ Session active! Type your messages below.'));
-  console.log(chalk.gray('Commands: /status, /quit'));
+  console.log(chalk.gray('Commands: /status, /t <seconds>, /n <name>, /quit, /help'));
   console.log(chalk.gray('Session ID:'), sessionId);
   
   // Show recent conversation history for restored sessions
@@ -577,15 +577,81 @@ async function chatLoop(sessionId) {
         break;
       }
 
+      if (userInput.trim() === '/help' || userInput.trim() === '/?') {
+        console.log(chalk.blue('📋 Session Commands:'));
+        console.log(chalk.gray('  /status') + ' - Show session status');
+        console.log(chalk.gray('  /t <seconds>') + ' - Set session timeout (e.g., /t 120)');
+        console.log(chalk.gray('  timeout <seconds>') + ' - Set session timeout (e.g., timeout 120)');
+        console.log(chalk.gray('  /n <name>') + ' - Set session name (e.g., /n "my session")');
+        console.log(chalk.gray('  name <name>') + ' - Set session name (e.g., name "my session")');
+        console.log(chalk.gray('  /quit, /q, /exit') + ' - End session');
+        console.log(chalk.gray('  /help, /?') + ' - Show this help');
+        continue;
+      }
+
       if (userInput.trim() === '/status') {
         const statusResponse = await api.get(`/sessions/${sessionId}`);
         if (statusResponse.success) {
           console.log(chalk.blue('Session Status:'));
           console.log(chalk.gray('  ID:'), statusResponse.data.id);
+          console.log(chalk.gray('  Name:'), statusResponse.data.name || 'No name set');
           console.log(chalk.gray('  State:'), statusResponse.data.state);
+          console.log(chalk.gray('  Timeout:'), statusResponse.data.timeout_seconds ? `${statusResponse.data.timeout_seconds}s` : 'Default');
           console.log(chalk.gray('  Created:'), statusResponse.data.created_at);
         } else {
           console.log(chalk.red('Failed to get session status:'), statusResponse.error);
+        }
+        continue;
+      }
+
+      // Handle timeout commands (/t <seconds> or timeout <seconds>)
+      const timeoutMatch = userInput.trim().match(/^(?:\/t|timeout)\s+(\d+)$/);
+      if (timeoutMatch) {
+        const timeoutSeconds = parseInt(timeoutMatch[1]);
+        if (timeoutSeconds > 0 && timeoutSeconds <= 3600) { // Max 1 hour
+          const spinner = ora('Updating session timeout...').start();
+          try {
+            const updateResponse = await api.put(`/sessions/${sessionId}`, {
+              timeout_seconds: timeoutSeconds
+            });
+            if (updateResponse.success) {
+              spinner.succeed(`Session timeout updated to ${timeoutSeconds} seconds`);
+            } else {
+              spinner.fail('Failed to update timeout');
+              console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
+            }
+          } catch (error) {
+            spinner.fail('Failed to update timeout');
+            console.log(chalk.red('Error:'), error.message);
+          }
+        } else {
+          console.log(chalk.red('Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).'));
+        }
+        continue;
+      }
+
+      // Handle name commands (/n <name> or name <name>)
+      const nameMatch = userInput.trim().match(/^(?:\/n|name)\s+(.+)$/);
+      if (nameMatch) {
+        const newName = nameMatch[1].replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
+        if (newName.length > 0 && newName.length <= 100) {
+          const spinner = ora('Updating session name...').start();
+          try {
+            const updateResponse = await api.put(`/sessions/${sessionId}`, {
+              name: newName
+            });
+            if (updateResponse.success) {
+              spinner.succeed(`Session name updated to: "${newName}"`);
+            } else {
+              spinner.fail('Failed to update name');
+              console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
+            }
+          } catch (error) {
+            spinner.fail('Failed to update name');
+            console.log(chalk.red('Error:'), error.message);
+          }
+        } else {
+          console.log(chalk.red('Invalid name. Must be between 1 and 100 characters.'));
         }
         continue;
       }
