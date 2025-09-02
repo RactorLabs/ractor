@@ -595,9 +595,9 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 
 function showPrompt(state = 'idle') {
   const stateLabels = {
-    'init': 'initializing...',
+    'init': 'initializing',
     'idle': 'idle',
-    'busy': 'working...',
+    'busy': 'working',
     'waiting': 'idle',
     'error': 'error',
     'closed': 'slept'
@@ -612,7 +612,14 @@ function showPrompt(state = 'idle') {
     'closed': chalk.gray
   };
   
-  const label = stateLabels[state] || state;
+  let label = stateLabels[state] || state;
+  
+  // Add animated dots for init and busy states
+  if (state === 'init' || state === 'busy') {
+    const dots = Math.floor(Date.now() / 500) % 3 + 1;
+    label += '.'.repeat(dots);
+  }
+  
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(label));
@@ -622,9 +629,9 @@ function showPrompt(state = 'idle') {
 
 function showPromptWithInput(state = 'idle', userInput = '') {
   const stateLabels = {
-    'init': 'initializing...',
+    'init': 'initializing',
     'idle': 'idle',
-    'busy': 'working...',
+    'busy': 'working',
     'waiting': 'idle',
     'error': 'error',
     'closed': 'slept'
@@ -639,7 +646,14 @@ function showPromptWithInput(state = 'idle', userInput = '') {
     'closed': chalk.gray
   };
   
-  const label = stateLabels[state] || state;
+  let label = stateLabels[state] || state;
+  
+  // Add animated dots for init and busy states
+  if (state === 'init' || state === 'busy') {
+    const dots = Math.floor(Date.now() / 500) % 3 + 1;
+    label += '.'.repeat(dots);
+  }
+  
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(label));
