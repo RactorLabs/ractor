@@ -32,7 +32,7 @@ Your Computer Use Agent with Coding Agent enabled can handle complex development
 
 ```bash
 # Start Dev Mode session  
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+raworc session start
 
 You: "I need to build a customer service agent using LangGraph"
 
@@ -54,7 +54,7 @@ Your Host with Coding Agent can build using any framework through conversation:
 
 ```bash
 # Start Dev Mode session
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+raworc session start
 
 You: "Create a Python script that scrapes product data from Amazon and analyzes pricing trends"
 
@@ -185,7 +185,7 @@ The Coding Agent can work with existing codebases:
 
 ```bash
 # Start Dev Mode 
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+raworc session start
 
 You: "Clone the LangGraph repository and show me how to build a customer service agent"
 Host: I'll clone the LangGraph repo and guide you through building a customer service agent...
@@ -218,7 +218,7 @@ One of Raworc's key advantages is persistent sessions:
 
 ```bash
 # Start development session
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}' 
+raworc session start 
 
 # Work on your project...
 You: Build a data analysis pipeline
@@ -228,7 +228,7 @@ You: Build a data analysis pipeline
 raworc api sessions/{session-id}/close -m POST
 
 # Restore later to continue work
-raworc session --restore {session-id}
+raworc session restore {session-id}
 
 # Your files and environment are preserved!
 ```
@@ -239,10 +239,10 @@ Create variations of your work:
 
 ```bash
 # Remix existing session with modifications
-raworc session --remix {parent-session-id}
+raworc session remix {parent-session-id}
 
 # Selective remix (copy only specific content)
-raworc session --remix {parent-session-id} --data false --code true
+raworc session remix {parent-session-id} --data false --code true
 ```
 
 ## Best Practices

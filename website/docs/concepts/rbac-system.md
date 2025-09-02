@@ -87,7 +87,8 @@ pub async fn create_jwt_token(&self, principal: &str, sub_type: SubjectType) -> 
 
 **User Login:**
 ```bash
-raworc auth login --user admin --pass admin
+raworc login --user admin --pass admin
+raworc auth -t <jwt-token-from-login>
 ```
 
 **Response:**

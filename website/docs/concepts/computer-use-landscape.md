@@ -151,7 +151,7 @@ npm install -g @raworc/cli
 raworc start
 
 # Get your first Host session
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+raworc session start
 
 # Describe any manual work you want automated
 You: "Help me organize these files and create a summary report"

@@ -182,7 +182,7 @@ The Host can automate any manual work that involves using a computer. Here are t
 ### Basic Host Session
 ```bash
 # Start a general-purpose Host session
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+raworc session start
 
 You: "Help me organize these files and create a summary report"
 Host: I'll help you organize your files and create a professional summary report...
@@ -191,12 +191,12 @@ Host: I'll help you organize your files and create a professional summary report
 ### Specialized Host Setup
 ```bash
 # Host for web automation
-raworc session \
+raworc session start \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in web automation and data extraction."
 
 # Host for content creation
-raworc session \
+raworc session start \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in content creation and social media management."
 ```

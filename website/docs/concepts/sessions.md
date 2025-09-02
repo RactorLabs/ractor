@@ -223,7 +223,7 @@ raworc api sessions/{session-id}/close -m post
 raworc api sessions/{session-id}/restore -m post
 
 # Continue with new messages
-raworc session --restore {session-id}
+raworc session restore {session-id}
 ```
 
 **Key Features:**
@@ -341,8 +341,7 @@ Sessions can be named for easier identification and access:
 
 ```bash
 # Create session with name
-raworc session start --name "my-analysis" --secrets '{"ANTHROPIC_API_KEY":"key"}'
-
+raworc session start --name "my-analysis" 
 # Use name in all operations
 raworc session restore my-analysis
 raworc session remix my-analysis --name "experiment-1"
@@ -364,13 +363,12 @@ Automatic resource management through configurable timeouts:
 ### Timeout Configuration
 
 ```bash
-# Set timeout during creation
-raworc session start --timeout 300 --secrets '{"ANTHROPIC_API_KEY":"key"}'
-
+# Set timeout during creation (uses ANTHROPIC_API_KEY from environment)
+raworc session start --timeout 300
 # API with timeout
 raworc api sessions -m post -b '{
   "timeout_seconds": 1800,
-  "secrets": {"ANTHROPIC_API_KEY": "key"}
+  "secrets": {"DATABASE_URL": "mysql://user:pass@host/db"}
 }'
 ```
 
@@ -470,10 +468,10 @@ Sessions start quickly because:
 Use the interactive session interface for real-time Host interaction:
 
 ```bash
-# All new sessions require ANTHROPIC_API_KEY
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'    # Start new Host session
-raworc session --restore abc123                                         # Continue existing Host session
-raworc session --remix def456                                           # Create remix (inherits key if secrets=true)
+# All new sessions require ANTHROPIC_API_KEY environment variable
+raworc session start                                                    # Start new Host session
+raworc session restore abc123                                           # Continue existing Host session
+raworc session remix def456                                             # Create remix
 
 # In session interface:
 You: Hello, how can you help me?

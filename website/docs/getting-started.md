@@ -69,23 +69,16 @@ raworc session
 ### Session with Instructions
 
 ```bash
-raworc session --instructions ./my-instructions.md
+raworc session start --instructions-file ./my-instructions.md
 ```
 
 ### Session with Setup Script
 
 ```bash
-raworc session --setup ./setup.sh
+raworc session start --setup-file ./setup.sh
 ```
 
-### Full Configuration
-
-```bash
-raworc session \
-  --secrets '{"DATABASE_URL":"mysql://user:pass@host/db"}' \
-  --instructions "You are a helpful data analysis Host." \
-  --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
-```
+For more advanced session configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#session-configuration-options).
 
 ## Interactive Session Usage
 
@@ -128,18 +121,18 @@ raworc api sessions
 ### Restore Previous Session
 
 ```bash
-raworc session --restore abc123-def456-789
+raworc session restore abc123-def456-789
 ```
 
 ### Create Session Remix
 
 ```bash
 # Remix from existing session
-raworc session --remix abc123-def456-789
+raworc session remix abc123-def456-789
 
 # Selective remix options
-raworc session --remix abc123-def456-789 --data false    # Don't copy data files
-raworc session --remix abc123-def456-789 --code false    # Don't copy code files
+raworc session remix abc123-def456-789 --data false    # Don't copy data files
+raworc session remix abc123-def456-789 --code false    # Don't copy code files
 ```
 
 ## Direct API Usage
@@ -212,8 +205,7 @@ raworc reset --yes
 
 ```bash
 # Create a web automation Host session
-raworc session \
- \
+raworc session start \
   --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites."
 ```
 
@@ -221,8 +213,7 @@ raworc session \
 
 ```bash
 # Create a document processing Host session
-raworc session \
- \
+raworc session start \
   --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
   --setup "pip install pandas openpyxl python-docx"
 ```
@@ -231,8 +222,7 @@ raworc session \
 
 ```bash
 # Create a system automation Host session
-raworc session \
- \
+raworc session start \
   --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems."
 ```
 
