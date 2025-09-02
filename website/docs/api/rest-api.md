@@ -65,7 +65,7 @@ Get API version and health information.
 **Response**: `200 OK`
 ```json
 {
-  "version": "0.3.1",
+  "version": "0.3.2",
   "api": "v0"
 }
 ```
