@@ -100,14 +100,25 @@ pub async fn me(
 
 pub async fn create_token(
     State(state): State<Arc<AppState>>,
-    Extension(_auth): Extension<crate::server::rest::middleware::AuthContext>,
+    Extension(auth): Extension<crate::server::rest::middleware::AuthContext>,
     Json(req): Json<CreateTokenRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
-    use crate::shared::rbac::{SubjectType, RbacClaims};
+    use crate::shared::rbac::{SubjectType, RbacClaims, AuthPrincipal};
     use jsonwebtoken::{encode, EncodingKey, Header};
     use chrono::{Duration, Utc};
 
-    // Only admin can create tokens (implied by auth middleware)
+    // Explicitly check that only admin operators can create tokens
+    match &auth.principal {
+        AuthPrincipal::Operator(op) => {
+            if op.user != "admin" {
+                return Err(ApiError::Forbidden("Only admin can create tokens".to_string()));
+            }
+        }
+        AuthPrincipal::Subject(_) => {
+            return Err(ApiError::Forbidden("Only admin can create tokens".to_string()));
+        }
+    }
+
     tracing::info!("Creating token for principal: {} type: {}", req.principal, req.principal_type);
 
     // Parse principal type

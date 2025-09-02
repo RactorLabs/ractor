@@ -27,9 +27,80 @@ pub struct UpdatePasswordRequest {
     pub new_password: String,
 }
 
+// Custom deserializer for strict optional boolean validation
+fn deserialize_strict_option_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+    
+    struct StrictOptionBoolVisitor;
+
+    impl<'de> Visitor<'de> for StrictOptionBoolVisitor {
+        type Value = Option<bool>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a boolean value (true or false) or null")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(Some(value))
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        // Reject all other types
+        fn visit_str<E>(self, _: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected boolean or null, found string"))
+        }
+
+        fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected boolean or null, found integer"))
+        }
+
+        fn visit_u64<E>(self, _: u64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected boolean or null, found integer"))
+        }
+
+        fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected boolean or null, found number"))
+        }
+    }
+
+    deserializer.deserialize_option(StrictOptionBoolVisitor)
+}
+
 #[derive(Debug, Deserialize)]
 pub struct UpdateOperatorRequest {
     pub description: Option<String>,
+    #[serde(deserialize_with = "deserialize_strict_option_bool")]
     pub active: Option<bool>,
 }
 

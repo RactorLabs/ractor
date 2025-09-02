@@ -102,6 +102,18 @@ module.exports = (program) => {
     .action(async (sessionId, options) => {
       await sessionUnpublishCommand(sessionId, options);
     });
+
+  // Close subcommand
+  sessionCmd
+    .command('close <session-id>')
+    .description('Close an active session')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc session close abc123            # Close by ID\n' +
+      '  $ raworc session close my-session        # Close by name\n')
+    .action(async (sessionId, options) => {
+      await sessionCloseCommand(sessionId, options);
+    });
 };
 
 async function sessionStartCommand(options) {
@@ -716,6 +728,69 @@ async function sessionUnpublishCommand(sessionId, options) {
     
     console.log();
     console.log(chalk.green('🔒 Session is now private again'));
+
+  } catch (error) {
+    console.error(chalk.red('❌ Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+async function sessionCloseCommand(sessionId, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('❌ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  console.log(chalk.blue('🛑 Closing Raworc Session'));
+  console.log(chalk.gray('Session:'), sessionId);
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  console.log(chalk.gray('User:'), userName + userType);
+  console.log();
+
+  try {
+    const spinner = ora('Closing session...').start();
+
+    // Get session details first to show current state
+    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+    
+    if (!sessionResponse.success) {
+      spinner.fail('Failed to fetch session details');
+      console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
+      process.exit(1);
+    }
+
+    const session = sessionResponse.data;
+    console.log(chalk.gray('Current state:'), session.state);
+
+    // Check if session is already closed
+    if (session.state === SESSION_STATE_CLOSED) {
+      spinner.succeed('Session is already closed');
+      console.log(chalk.yellow('💡 Session was already in closed state'));
+      return;
+    }
+
+    // Close the session
+    const closeResponse = await api.post(`/sessions/${sessionId}/close`);
+
+    if (!closeResponse.success) {
+      spinner.fail('Failed to close session');
+      console.error(chalk.red('Error:'), closeResponse.error);
+      process.exit(1);
+    }
+
+    spinner.succeed(`Session closed: ${sessionId}`);
+    
+    console.log();
+    console.log(chalk.green('🛑 Session has been closed and resources cleaned up'));
+    console.log();
+    console.log(chalk.blue('💡 Session Operations:'));
+    console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionId}`);
+    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
+    console.log();
 
   } catch (error) {
     console.error(chalk.red('❌ Error:'), error.message);

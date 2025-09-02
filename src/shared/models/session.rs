@@ -38,7 +38,7 @@ pub struct CreateSessionRequest {
     pub setup: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
-    #[serde(default = "default_timeout")]
+    #[serde(default = "default_timeout", deserialize_with = "deserialize_strict_option_i32")]
     pub timeout_seconds: Option<i32>,
 }
 
@@ -48,11 +48,11 @@ pub struct RemixSessionRequest {
     pub metadata: Option<serde_json::Value>,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub data: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub code: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub secrets: bool,
     #[serde(default)]
     pub prompt: Option<String>,
@@ -60,11 +60,11 @@ pub struct RemixSessionRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishSessionRequest {
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub data: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub code: bool,
-    #[serde(default = "default_true")]
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub secrets: bool,
 }
 
@@ -83,7 +83,7 @@ pub struct UpdateSessionRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_strict_option_i32")]
     pub timeout_seconds: Option<i32>,
 }
 
@@ -101,8 +101,155 @@ fn default_true() -> bool {
     true
 }
 
+// Custom deserializer for strict boolean validation
+fn deserialize_strict_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct StrictBoolVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for StrictBoolVisitor {
+        type Value = bool;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a boolean value (true or false)")
+        }
+
+        fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(value)
+        }
+
+        // Reject all other types
+        fn visit_str<E>(self, _: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Err(E::custom("expected boolean, found string"))
+        }
+
+        fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Err(E::custom("expected boolean, found integer"))
+        }
+
+        fn visit_u64<E>(self, _: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Err(E::custom("expected boolean, found integer"))
+        }
+
+        fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Err(E::custom("expected boolean, found number"))
+        }
+    }
+
+    deserializer.deserialize_bool(StrictBoolVisitor)
+}
+
+// Custom deserializer for strict boolean validation with default true
+fn deserialize_strict_bool_default_true<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_strict_bool(deserializer)
+}
+
 fn default_timeout() -> Option<i32> {
     Some(60) // Default 60 seconds (1 minute) timeout
+}
+
+// Custom deserializer for strict optional i32 validation
+fn deserialize_strict_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+    
+    struct StrictOptionI32Visitor;
+
+    impl<'de> Visitor<'de> for StrictOptionI32Visitor {
+        type Value = Option<i32>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an integer value or null")
+        }
+
+        fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(Some(value))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            if value >= i32::MIN as i64 && value <= i32::MAX as i64 {
+                Ok(Some(value as i32))
+            } else {
+                Err(E::custom("integer value out of range for i32"))
+            }
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            if value <= i32::MAX as u64 {
+                Ok(Some(value as i32))
+            } else {
+                Err(E::custom("integer value too large for i32"))
+            }
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        // Reject all other types
+        fn visit_str<E>(self, _: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected integer or null, found string"))
+        }
+
+        fn visit_bool<E>(self, _: bool) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected integer or null, found boolean"))
+        }
+
+        fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected integer or null, found number"))
+        }
+    }
+
+    deserializer.deserialize_option(StrictOptionI32Visitor)
 }
 
 

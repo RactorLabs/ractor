@@ -85,13 +85,22 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/session/code/setup.sh");
     
-    // Wait up to 10 seconds for the setup script to be written by operator
-    let mut attempts = 0;
-    let max_attempts = 20; // 10 seconds with 500ms intervals
+    // Check if a setup script is expected based on environment variable
+    let has_setup_script = std::env::var("RAWORC_HAS_SETUP").is_ok();
     
-    while !setup_script.exists() && attempts < max_attempts {
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        attempts += 1;
+    if has_setup_script {
+        // Setup script is expected, wait up to 2 seconds for it to be written by operator
+        info!("Setup script expected, waiting for it to be created...");
+        let mut attempts = 0;
+        let max_attempts = 4; // 2 seconds with 500ms intervals
+        
+        while !setup_script.exists() && attempts < max_attempts {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            attempts += 1;
+        }
+    } else {
+        // No setup script expected, check once and proceed
+        info!("No setup script expected, checking once...");
     }
     
     if setup_script.exists() {

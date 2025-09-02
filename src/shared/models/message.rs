@@ -15,6 +15,7 @@ pub struct SessionMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateMessageRequest {
+    #[serde(default = "default_role", deserialize_with = "deserialize_strict_role")]
     pub role: String,
     pub content: String,
     #[serde(default = "default_metadata")]
@@ -33,7 +34,9 @@ pub struct MessageResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct ListMessagesQuery {
+    #[serde(default)]
     pub limit: Option<i64>,
+    #[serde(default)]
     pub offset: Option<i64>,
     #[allow(dead_code)]
     pub role: Option<String>,
@@ -44,6 +47,69 @@ pub struct ListMessagesQuery {
 fn default_metadata() -> serde_json::Value {
     serde_json::json!({})
 }
+
+fn default_role() -> String {
+    "user".to_string()
+}
+
+// Custom deserializer for strict role validation
+fn deserialize_strict_role<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+    use crate::shared::models::constants::{MESSAGE_ROLE_USER, MESSAGE_ROLE_HOST, MESSAGE_ROLE_SYSTEM};
+    
+    struct StrictRoleVisitor;
+
+    impl<'de> Visitor<'de> for StrictRoleVisitor {
+        type Value = String;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a valid role: 'user', 'host', or 'system'")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            match value {
+                MESSAGE_ROLE_USER | MESSAGE_ROLE_HOST | MESSAGE_ROLE_SYSTEM => {
+                    Ok(value.to_string())
+                }
+                _ => Err(E::custom(format!(
+                    "invalid role '{}', must be 'user', 'host', or 'system'", 
+                    value
+                )))
+            }
+        }
+
+        // Reject all other types
+        fn visit_bool<E>(self, _: bool) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected role string, found boolean"))
+        }
+
+        fn visit_i64<E>(self, _: i64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected role string, found integer"))
+        }
+
+        fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Err(E::custom("expected role string, found number"))
+        }
+    }
+
+    deserializer.deserialize_str(StrictRoleVisitor)
+}
+
 
 impl SessionMessage {
     pub async fn create(

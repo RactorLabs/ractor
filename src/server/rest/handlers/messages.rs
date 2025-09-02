@@ -100,6 +100,22 @@ pub async fn list_messages(
     Query(query): Query<ListMessagesQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<MessageResponse>>> {
+    // Validate query parameters
+    if let Some(limit) = query.limit {
+        if limit < 0 {
+            return Err(ApiError::BadRequest("limit must be non-negative".to_string()));
+        }
+        if limit > 1000 {
+            return Err(ApiError::BadRequest("limit must not exceed 1000".to_string()));
+        }
+    }
+    
+    if let Some(offset) = query.offset {
+        if offset < 0 {
+            return Err(ApiError::BadRequest("offset must be non-negative".to_string()));
+        }
+    }
+
     // Verify session exists
     let _session = crate::shared::models::Session::find_by_id(&state.db, &session_id)
         .await

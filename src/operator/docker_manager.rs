@@ -946,6 +946,11 @@ echo 'Session directories created'
             format!("RAWORC_SESSION_ID={}", session_id),
             format!("RAWORC_SESSION_DIR=/session"),
         ];
+
+        // Add hint about setup script availability to avoid unnecessary waiting
+        if setup.is_some() {
+            env.push("RAWORC_HAS_SETUP=true".to_string());
+        }
         
         // Add principal information as environment variables
         if let Some(secrets_map) = &secrets {
@@ -1073,6 +1078,11 @@ echo 'Session directories created'
             format!("RAWORC_PRINCIPAL={}", principal),
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
+
+        // Add hint about setup script availability to avoid unnecessary waiting
+        if setup.is_some() {
+            env.push("RAWORC_HAS_SETUP=true".to_string());
+        }
         
         info!("Set system-generated ANTHROPIC_API_KEY and RAWORC_TOKEN as environment variables");
         
