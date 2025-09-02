@@ -1039,7 +1039,6 @@ async function sessionPublishCommand(sessionId, options) {
   console.log();
 
   try {
-    const spinner = ora('Publishing session...').start();
 
     const publishPayload = {
       data: data,
@@ -1050,12 +1049,11 @@ async function sessionPublishCommand(sessionId, options) {
     const response = await api.post(`/sessions/${sessionId}/publish`, publishPayload);
 
     if (!response.success) {
-      spinner.fail('Failed to publish session');
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    spinner.succeed(`Session published: ${sessionId}`);
+    console.log(chalk.green('✓') + ` Session published: ${sessionId}`);
 
     console.log();
     console.log(chalk.green('✓') + ' Session is now publicly accessible!');
@@ -1089,17 +1087,15 @@ async function sessionUnpublishCommand(sessionId, options) {
   console.log();
 
   try {
-    const spinner = ora('Unpublishing session...').start();
 
     const response = await api.post(`/sessions/${sessionId}/unpublish`);
 
     if (!response.success) {
-      spinner.fail('Failed to unpublish session');
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    spinner.succeed(`Session unpublished: ${sessionId}`);
+    console.log(chalk.green('✓') + ` Session unpublished: ${sessionId}`);
 
     console.log();
     console.log(chalk.green('✓') + ' Session is now private again');
@@ -1127,13 +1123,11 @@ async function sessionCloseCommand(sessionId, options) {
   console.log();
 
   try {
-    const spinner = ora('Closing session...').start();
 
     // Get session details first to show current state
     const sessionResponse = await api.get(`/sessions/${sessionId}`);
 
     if (!sessionResponse.success) {
-      spinner.fail('Failed to fetch session details');
       console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
       process.exit(1);
     }
@@ -1143,7 +1137,6 @@ async function sessionCloseCommand(sessionId, options) {
 
     // Check if session is already closed
     if (session.state === SESSION_STATE_CLOSED) {
-      spinner.succeed('Session is already closed');
       console.log(chalk.yellow('ℹ') + ' Session was already in closed state');
       return;
     }
@@ -1152,12 +1145,11 @@ async function sessionCloseCommand(sessionId, options) {
     const closeResponse = await api.post(`/sessions/${sessionId}/close`);
 
     if (!closeResponse.success) {
-      spinner.fail('Failed to close session');
       console.error(chalk.red('✗ Error:'), closeResponse.error);
       process.exit(1);
     }
 
-    spinner.succeed(`Session closed: ${sessionId}`);
+    console.log(chalk.green('✓') + ` Session closed: ${sessionId}`);
 
     console.log();
     console.log(chalk.green('✓') + ' Session has been closed and resources cleaned up');
