@@ -771,6 +771,14 @@ async function chatLoop(sessionId) {
 
   // Monitor session state changes every 2 seconds
   const stateMonitorInterval = setInterval(updateSessionState, 2000);
+  
+  // Animation interval for dots (every 500ms)
+  const dotAnimationInterval = setInterval(() => {
+    if (promptVisible && (currentSessionState === 'init' || currentSessionState === 'busy')) {
+      clearPromptLine();
+      showPromptWithInput(currentSessionState, currentUserInput);
+    }
+  }, 500);
 
   showPrompt(currentSessionState);
   promptVisible = true;
@@ -850,6 +858,7 @@ async function chatLoop(sessionId) {
 
   function cleanup() {
     clearInterval(stateMonitorInterval);
+    clearInterval(dotAnimationInterval);
     rl.close();
     api.post(`/sessions/${sessionId}/close`).catch(() => {});
     process.exit(0);
