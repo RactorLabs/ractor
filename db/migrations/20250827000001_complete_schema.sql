@@ -1,5 +1,5 @@
--- Raworc simplified database schema
--- Date: 2025-08-31
+-- Raworc complete database schema with publishing and timeout features  
+-- Date: 2025-09-02
 
 -- Operators
 CREATE TABLE IF NOT EXISTS operators (
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS role_bindings (
     INDEX idx_role_bindings_role_name (role_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Sessions
+-- Sessions with publishing and timeout functionality
 CREATE TABLE IF NOT EXISTS sessions (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     created_by VARCHAR(255) NOT NULL,
@@ -46,12 +46,33 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,
     metadata JSON DEFAULT ('{}'),
+    
+    -- Publishing functionality
+    is_published BOOLEAN NOT NULL DEFAULT false,
+    published_at TIMESTAMP NULL,
+    published_by VARCHAR(255) NULL,
+    publish_permissions JSON DEFAULT ('{"data": true, "code": true, "secrets": true}'),
+    
+    -- Timeout functionality  
+    timeout_seconds INT NOT NULL DEFAULT 60,
+    auto_close_at TIMESTAMP NULL,
+    
+    -- Constraints
     CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
+    CONSTRAINT sessions_publish_check CHECK (
+        (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
+        (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)
+    ),
+    CONSTRAINT sessions_timeout_check CHECK (timeout_seconds > 0 AND timeout_seconds <= 604800),
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
+    
+    -- Indexes
     INDEX idx_sessions_created_by (created_by),
     INDEX idx_sessions_name (name),
     INDEX idx_sessions_state (state),
-    INDEX idx_sessions_parent_session_id (parent_session_id)
+    INDEX idx_sessions_parent_session_id (parent_session_id),
+    INDEX idx_sessions_published (is_published, published_at),
+    INDEX idx_sessions_auto_close (auto_close_at, state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Session Messages
