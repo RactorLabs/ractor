@@ -706,13 +706,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
               toolType = toolNameMap[toolType] || toolType;
               console.log();
               console.log(chalk.gray(`● ${toolType}`));
-              // Remove common tool execution prefixes
-              let content = message.content;
-              content = content.replace(/^Text editor create:\s*/, '');
-              content = content.replace(/^Executing bash command:\s*/, '');
-              content = content.replace(/^Computer use:\s*/, '');
-              content = content.replace(/^File operation:\s*/, '');
-              console.log(chalk.dim('└─ ') + chalk.gray(content));
+              console.log(chalk.dim('└─ ') + chalk.gray(message.content));
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
