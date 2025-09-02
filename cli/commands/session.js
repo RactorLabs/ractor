@@ -869,7 +869,7 @@ async function chatLoop(sessionId) {
 
   async function sendMessage(sessionId, userInput) {
     console.log();
-    console.log(chalk.green('User:'), userInput);
+    console.log(chalk.green('User:'), chalk.white(userInput));
     
     // Show prompt with current actual state
     showPrompt(currentSessionState);
