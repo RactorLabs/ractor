@@ -190,6 +190,16 @@ pub async fn create_session(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create session: {:?}", e);
+            
+            // Check for unique constraint violation on session name
+            if let sqlx::Error::Database(db_err) = &e {
+                if let Some(code) = db_err.code() {
+                    if (code == "23000" || code == "1062") && db_err.message().contains("unique_session_name") {
+                        return ApiError::BadRequest(format!("Session name '{}' is already taken. Please choose a different name.", req.name.as_deref().unwrap_or("unnamed")));
+                    }
+                }
+            }
+            
             ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
         })?;
 

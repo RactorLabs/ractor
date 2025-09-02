@@ -68,11 +68,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     
     -- Indexes
     INDEX idx_sessions_created_by (created_by),
-    INDEX idx_sessions_name (name),
     INDEX idx_sessions_state (state),
     INDEX idx_sessions_parent_session_id (parent_session_id),
     INDEX idx_sessions_published (is_published, published_at),
-    INDEX idx_sessions_auto_close (auto_close_at, state)
+    INDEX idx_sessions_auto_close (auto_close_at, state),
+    
+    -- Unique constraints
+    UNIQUE KEY unique_session_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Session Messages
