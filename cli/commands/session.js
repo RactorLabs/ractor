@@ -4,7 +4,7 @@ const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
 const { marked } = require('marked');
-const markedTerminal = require('marked-terminal');
+const markedTerminal = require('marked-terminal').markedTerminal;
 
 // Configure marked for terminal output
 marked.setOptions({
