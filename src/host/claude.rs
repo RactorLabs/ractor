@@ -86,6 +86,56 @@ impl ClaudeClient {
             }),
         }
     }
+
+    fn get_text_editor_tool() -> Tool {
+        // Text editor tool implementation following Anthropic specification text_editor_20250728
+        Tool {
+            name: "text_editor".to_string(),
+            description: "Edit text files by viewing, creating, and making targeted changes. Supports viewing file contents, creating new files, and making precise edits using string replacement.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "enum": ["view", "create", "str_replace", "insert"],
+                        "description": "The editing command to execute"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file (relative to /session/)"
+                    },
+                    "file_text": {
+                        "type": "string",
+                        "description": "Content for new file (create command only)"
+                    },
+                    "old_str": {
+                        "type": "string",
+                        "description": "Text to replace (str_replace command only)"
+                    },
+                    "new_str": {
+                        "type": "string",
+                        "description": "Replacement text (str_replace and insert commands)"
+                    },
+                    "insert_line": {
+                        "type": "integer",
+                        "description": "Line number to insert at (insert command only)"
+                    },
+                    "view_range": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "description": "Line range [start, end] for viewing (view command only)"
+                    },
+                    "max_characters": {
+                        "type": "integer",
+                        "description": "Maximum number of characters to display in view command output"
+                    }
+                },
+                "required": ["command", "path"]
+            }),
+        }
+    }
     
     pub async fn complete(
         &self,
@@ -149,10 +199,14 @@ impl ClaudeClient {
             }
             iteration_count += 1;
 
-            let tools = if enable_tools { Some(vec![Self::get_bash_tool()]) } else { None };
+            let tools = if enable_tools { 
+                Some(vec![Self::get_bash_tool(), Self::get_text_editor_tool()]) 
+            } else { 
+                None 
+            };
             
             let request = ClaudeRequest {
-                model: "claude-3-5-sonnet-20241022".to_string(),
+                model: "claude-3-5-sonnet-4-20250107".to_string(),
                 max_tokens: 4096,
                 messages: conversation_messages.clone(),
                 system: system_prompt.clone(),
@@ -235,6 +289,7 @@ impl ClaudeClient {
                 
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
+                    "text_editor" => self.execute_text_editor_tool(&tool_input).await,
                     _ => Err(HostError::Claude(format!("Unknown tool: {}", tool_name))),
                 };
                 
@@ -363,6 +418,258 @@ impl ClaudeClient {
         }
 
         Ok(())
+    }
+
+    async fn execute_text_editor_tool(&self, input: &Value) -> Result<String> {
+        let command = input
+            .get("command")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing or invalid 'command' parameter for text_editor tool".to_string()))?;
+
+        let path = input
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing or invalid 'path' parameter for text_editor tool".to_string()))?;
+
+        // Validate and normalize path (must be within /session/)
+        let full_path = self.validate_and_normalize_path(path)?;
+
+        info!("Executing text_editor command: {} on path: {}", command, full_path.display());
+
+        match command {
+            "view" => self.text_editor_view(&full_path, input).await,
+            "create" => self.text_editor_create(&full_path, input).await,
+            "str_replace" => self.text_editor_str_replace(&full_path, input).await,
+            "insert" => self.text_editor_insert(&full_path, input).await,
+            _ => Err(HostError::Claude(format!("Unknown text_editor command: {}", command))),
+        }
+    }
+
+    fn validate_and_normalize_path(&self, path: &str) -> Result<std::path::PathBuf> {
+        use std::path::Path;
+
+        // Security: prevent path traversal attacks
+        if path.contains("..") || path.starts_with('/') {
+            return Err(HostError::Claude(format!("Invalid path: path traversal not allowed ({})", path)));
+        }
+
+        // Normalize path relative to /session/
+        let session_root = Path::new("/session");
+        let full_path = session_root.join(path);
+
+        // Ensure the resolved path is still within /session/
+        if !full_path.starts_with(session_root) {
+            return Err(HostError::Claude(format!("Invalid path: must be within /session/ ({})", path)));
+        }
+
+        Ok(full_path)
+    }
+
+    async fn text_editor_view(&self, path: &std::path::Path, input: &Value) -> Result<String> {
+        use tokio::fs;
+
+        // Get max_characters parameter if specified
+        let max_characters = input.get("max_characters")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
+
+        // Check if path is a directory
+        if path.is_dir() {
+            // List directory contents
+            let mut entries = fs::read_dir(path).await
+                .map_err(|e| HostError::Claude(format!("Failed to read directory {}: {}", path.display(), e)))?;
+            
+            let mut items = Vec::new();
+            while let Some(entry) = entries.next_entry().await
+                .map_err(|e| HostError::Claude(format!("Failed to read directory entry: {}", e)))? {
+                let name = entry.file_name().to_string_lossy().to_string();
+                let file_type = if entry.file_type().await.map_err(|e| HostError::Claude(format!("Failed to get file type: {}", e)))?.is_dir() {
+                    "directory"
+                } else {
+                    "file"
+                };
+                items.push(format!("{} ({})", name, file_type));
+            }
+
+            if items.is_empty() {
+                return Ok(format!("Directory {} is empty", path.display()));
+            }
+
+            items.sort();
+            let result = format!("Directory contents of {}:\n{}", path.display(), items.join("\n"));
+            
+            // Apply max_characters truncation if specified
+            if let Some(max_chars) = max_characters {
+                if result.len() > max_chars {
+                    return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+                }
+            }
+            
+            return Ok(result);
+        }
+
+        // Read file contents
+        let content = fs::read_to_string(path).await
+            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+
+        // Handle view_range if specified
+        if let Some(view_range) = input.get("view_range") {
+            if let Some(range_array) = view_range.as_array() {
+                if range_array.len() == 2 {
+                    let start = range_array[0].as_u64().unwrap_or(1) as usize;
+                    let end = range_array[1].as_u64().unwrap_or(1) as usize;
+                    
+                    let lines: Vec<&str> = content.lines().collect();
+                    let start_idx = start.saturating_sub(1);
+                    let end_idx = std::cmp::min(end, lines.len());
+                    
+                    if start_idx < lines.len() {
+                        let selected_lines = &lines[start_idx..end_idx];
+                        let numbered_lines: Vec<String> = selected_lines.iter()
+                            .enumerate()
+                            .map(|(i, line)| format!("{:4}: {}", start_idx + i + 1, line))
+                            .collect();
+                        let result = format!("File: {} (lines {}-{})\n{}", path.display(), start, end_idx, numbered_lines.join("\n"));
+                        
+                        // Apply max_characters truncation if specified
+                        if let Some(max_chars) = max_characters {
+                            if result.len() > max_chars {
+                                return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+                            }
+                        }
+                        
+                        return Ok(result);
+                    } else {
+                        return Ok(format!("File: {} - line range {}-{} is beyond file length ({})", path.display(), start, end, lines.len()));
+                    }
+                }
+            }
+        }
+
+        // Return full file with line numbers
+        let lines: Vec<&str> = content.lines().collect();
+        let numbered_lines: Vec<String> = lines.iter()
+            .enumerate()
+            .map(|(i, line)| format!("{:4}: {}", i + 1, line))
+            .collect();
+        
+        let result = format!("File: {} ({} lines)\n{}", path.display(), lines.len(), numbered_lines.join("\n"));
+        
+        // Apply max_characters truncation if specified
+        if let Some(max_chars) = max_characters {
+            if result.len() > max_chars {
+                return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+            }
+        }
+        
+        Ok(result)
+    }
+
+    async fn text_editor_create(&self, path: &std::path::Path, input: &Value) -> Result<String> {
+        use tokio::fs;
+
+        let file_text = input
+            .get("file_text")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing 'file_text' parameter for create command".to_string()))?;
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await
+                .map_err(|e| HostError::Claude(format!("Failed to create parent directories for {}: {}", path.display(), e)))?;
+        }
+
+        // Check if file already exists
+        if path.exists() {
+            return Err(HostError::Claude(format!("File {} already exists. Use str_replace to modify existing files.", path.display())));
+        }
+
+        // Write the file
+        fs::write(path, file_text).await
+            .map_err(|e| HostError::Claude(format!("Failed to create file {}: {}", path.display(), e)))?;
+
+        let line_count = file_text.lines().count();
+        Ok(format!("Created file {} with {} lines", path.display(), line_count))
+    }
+
+    async fn text_editor_str_replace(&self, path: &std::path::Path, input: &Value) -> Result<String> {
+        use tokio::fs;
+
+        let old_str = input
+            .get("old_str")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing 'old_str' parameter for str_replace command".to_string()))?;
+
+        let new_str = input
+            .get("new_str")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing 'new_str' parameter for str_replace command".to_string()))?;
+
+        // Read current file content
+        let content = fs::read_to_string(path).await
+            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+
+        // Check if old_str exists in the file
+        if !content.contains(old_str) {
+            return Err(HostError::Claude(format!("String not found in file {}: {:?}", path.display(), old_str)));
+        }
+
+        // Check for multiple occurrences
+        let occurrences = content.matches(old_str).count();
+        if occurrences > 1 {
+            return Err(HostError::Claude(format!("Multiple occurrences ({}) of string found in file {}. Please use a more specific string to ensure unique replacement.", occurrences, path.display())));
+        }
+
+        // Perform replacement
+        let new_content = content.replace(old_str, new_str);
+
+        // Write the modified content back
+        fs::write(path, &new_content).await
+            .map_err(|e| HostError::Claude(format!("Failed to write modified file {}: {}", path.display(), e)))?;
+
+        let old_lines = content.lines().count();
+        let new_lines = new_content.lines().count();
+        Ok(format!("Replaced 1 occurrence in {} (lines: {} -> {})", path.display(), old_lines, new_lines))
+    }
+
+    async fn text_editor_insert(&self, path: &std::path::Path, input: &Value) -> Result<String> {
+        use tokio::fs;
+
+        let insert_line = input
+            .get("insert_line")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| HostError::Claude("Missing or invalid 'insert_line' parameter for insert command".to_string()))? as usize;
+
+        let new_str = input
+            .get("new_str")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| HostError::Claude("Missing 'new_str' parameter for insert command".to_string()))?;
+
+        // Read current file content
+        let content = fs::read_to_string(path).await
+            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+
+        let mut lines: Vec<&str> = content.lines().collect();
+        
+        // Validate insert position
+        if insert_line == 0 || insert_line > lines.len() + 1 {
+            return Err(HostError::Claude(format!("Invalid insert line {}. File has {} lines (valid range: 1-{})", insert_line, lines.len(), lines.len() + 1)));
+        }
+
+        // Insert new content at the specified line (1-based)
+        let insert_idx = insert_line - 1;
+        lines.insert(insert_idx, new_str);
+
+        // Reconstruct file content
+        let new_content = lines.join("\n");
+
+        // Write the modified content back
+        fs::write(path, &new_content).await
+            .map_err(|e| HostError::Claude(format!("Failed to write modified file {}: {}", path.display(), e)))?;
+
+        let old_line_count = content.lines().count();
+        let new_line_count = new_content.lines().count();
+        Ok(format!("Inserted text at line {} in {} (lines: {} -> {})", insert_line, path.display(), old_line_count, new_line_count))
     }
     
 }
