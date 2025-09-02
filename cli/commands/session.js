@@ -514,7 +514,7 @@ async function startInteractiveSession(sessionId, options) {
       if (hostResponse) {
         responseSpinner.succeed('Host responded');
         console.log();
-        console.log(chalk.cyan('Host:'), chalk.white(hostResponse.content));
+        console.log(chalk.cyan('Host:'), chalk.whiteBright(hostResponse.content));
         console.log();
       } else {
         responseSpinner.warn('No host response received within timeout');
@@ -598,19 +598,32 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 
 function displayToolMessage(message) {
   const toolType = message.metadata?.tool_type || 'unknown';
-  const toolIcon = {
-    'bash': '⚡',
-    'text_editor': '📝', 
-    'web_search': '🔍'
-  }[toolType] || '🔧';
+  const toolIcon = '•';
   
-  console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
+  console.log(chalk.gray(`${toolIcon} ${toolType}`));
   console.log(chalk.dim('├─ ') + chalk.gray(message.content));
 }
 
 function displayHostMessage(message) {
-  console.log(chalk.cyan('Host: ') + chalk.white(message.content));
-  console.log();
+  console.log(chalk.cyan('Host: ') + chalk.whiteBright(message.content));
+  
+  // After host message, show status and prompt
+  showStatusAndPrompt();
+}
+
+function showStatusAndPrompt() {
+  const stateIcon = '💤';
+  const stateColor = chalk.green;
+  
+  console.log(chalk.gray('────────────────────'));
+  console.log(`${stateIcon} Session: ${stateColor('idle')}`);
+  console.log(chalk.gray('────────────────────'));
+  process.stdout.write(chalk.cyanBright('User: '));
+}
+
+function clearStatusAndPrompt() {
+  // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
+  process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
 }
 
 function startAnimatedIndicator() {
@@ -635,9 +648,9 @@ function startAnimatedIndicator() {
   return interval;
 }
 
-async function monitorForResponses(sessionId, userMessageTime, clearSpinner = null) {
+async function monitorForResponses(sessionId, userMessageTime, clearStatus = null) {
   let lastMessageCount = 0;
-  let spinnerCleared = false;
+  let statusCleared = false;
 
   // Get initial message count
   try {
@@ -658,10 +671,10 @@ async function monitorForResponses(sessionId, userMessageTime, clearSpinner = nu
         
         for (const message of newMessages) {
           if (message.role === 'host') {
-            // Clear spinner on first host message if not already cleared
-            if (!spinnerCleared && clearSpinner) {
-              clearSpinner();
-              spinnerCleared = true;
+            // Clear status on first host message if not already cleared
+            if (!statusCleared && clearStatus) {
+              clearStatus();
+              statusCleared = true;
             }
             
             // Check if this is a tool execution message or final response
@@ -761,9 +774,8 @@ async function handleNameCommand(sessionId, newName) {
 
 async function chatLoop(sessionId) {
   const readline = require('readline');
-  let currentState = 'init';
+  let currentState = 'idle';
   let isProcessing = false;
-  let statusInterval = null;
 
   // Set up non-blocking input
   const rl = readline.createInterface({
@@ -772,53 +784,13 @@ async function chatLoop(sessionId) {
     prompt: chalk.cyanBright('User: ')
   });
 
-  // Real-time status display
-  function updateStatusLine() {
-    const stateIcon = {
-      'idle': '💤',
-      'busy': '⚡', 
-      'waiting': '🤖',
-      'init': '🔄',
-      'error': '❌'
-    }[currentState] || '❓';
-    
-    const stateColor = {
-      'idle': chalk.green,
-      'busy': chalk.yellow,
-      'waiting': chalk.blue,
-      'init': chalk.cyan,
-      'error': chalk.red
-    }[currentState] || chalk.white;
-
-    // Only update if we're not currently processing input
-    if (!isProcessing) {
-      process.stdout.write('\r\x1b[K'); // Clear line
-      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)}\n\n`);
-      rl.prompt();
-    }
-  }
-
-  // Start status monitoring
-  statusInterval = setInterval(async () => {
-    if (!isProcessing) {
-      try {
-        const statusResponse = await api.get(`/sessions/${sessionId}`);
-        if (statusResponse.success) {
-          const newState = statusResponse.data.state || 'idle';
-          if (newState !== currentState) {
-            currentState = newState;
-            updateStatusLine();
-          }
-        }
-      } catch (error) {
-        // Silently handle status check errors
-      }
-    }
-  }, 2000); // Check status every 2 seconds
 
   // Handle user input
   rl.on('line', async (input) => {
     const userInput = input.trim();
+    
+    // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
+    process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
     
     if (!userInput) {
       rl.prompt();
@@ -826,7 +798,7 @@ async function chatLoop(sessionId) {
     }
 
     // Handle quit command
-    if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === 'exit') {
+    if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
       console.log(chalk.blue('👋 Ending session. Goodbye!'));
       cleanup();
       return;
@@ -868,9 +840,6 @@ async function chatLoop(sessionId) {
   });
 
   function cleanup() {
-    if (statusInterval) {
-      clearInterval(statusInterval);
-    }
     rl.close();
     
     // Close session on exit
@@ -889,7 +858,12 @@ async function chatLoop(sessionId) {
     isProcessing = true;
     currentState = 'waiting';
     
-    process.stdout.write('\r\x1b[K'); // Clear line
+    // Show the user message
+    console.log(chalk.green('User:'), userInput);
+    console.log();
+    
+    // Show status and prompt after user message
+    showStatusAndPrompt();
 
     try {
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
@@ -906,25 +880,8 @@ async function chatLoop(sessionId) {
 
       currentState = 'busy';
       
-      // Start animated indicator
-      const animationInterval = startAnimatedIndicator();
-      let spinnerCleared = false;
-      
-      const clearSpinner = () => {
-        if (!spinnerCleared) {
-          clearInterval(animationInterval);
-          process.stdout.write('\r\x1b[K\n'); // Clear the animation line and move to next line
-          spinnerCleared = true;
-        }
-      };
-      
-      try {
-        // Start monitoring for responses with spinner clearing callback
-        await monitorForResponses(sessionId, Date.now(), clearSpinner);
-      } finally {
-        // Ensure animation is cleared if not already done
-        clearSpinner();
-      }
+      // Start monitoring for responses with status clearing callback
+      await monitorForResponses(sessionId, Date.now(), clearStatusAndPrompt);
 
     } catch (error) {
       console.log(chalk.red('❌ Error sending message:'), error.message);
@@ -936,8 +893,7 @@ async function chatLoop(sessionId) {
   }
 
   // Initialize the interface
-  console.log();
-  updateStatusLine();
+  showStatusAndPrompt();
 
   // Keep the process alive
   return new Promise((resolve, reject) => {
