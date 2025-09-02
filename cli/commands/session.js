@@ -695,7 +695,14 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
                 clearPromptLine();
                 setPromptVisible(false);
               }
-              const toolType = message.metadata?.tool_type || 'unknown';
+              let toolType = message.metadata?.tool_type || 'unknown';
+              // Map tool types to friendly names
+              const toolNameMap = {
+                'text_editor': 'Edit',
+                'bash': 'Run',
+                'web_search': 'Search'
+              };
+              toolType = toolNameMap[toolType] || toolType;
               console.log();
               console.log(chalk.gray(`● ${toolType}`));
               // Remove common tool execution prefixes
