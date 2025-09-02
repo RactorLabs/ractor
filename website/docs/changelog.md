@@ -12,7 +12,16 @@ title: Changelog
 - **Host Nomenclature**: Updated terminology - Host is Raworc's Computer Use Agent, CUA abbreviation removed
 - **Selective Session Remix**: Enhanced remix functionality with selective copying of data and code files
 - **Improved Session Restore**: Reliable session persistence with no message reprocessing
-- **Documentation Updates**: Updated all documentation to reflect session-based architecture and Host terminology
+- **Documentation Overhaul**: Comprehensive CLI command syntax fixes throughout all documentation
+- **Session Command Corrections**: Fixed incorrect session commands (removed `raworc session start start` patterns)
+- **Environment Variable Migration**: Moved ANTHROPIC_API_KEY from secrets to environment variable prerequisite
+- **Session Management Guide**: Added comprehensive session names and publishing documentation
+- **Authentication Simplification**: Streamlined RBAC documentation to focus on Operators vs Users
+- **Dev Mode Rewrite**: Removed "Coding Agent" terminology, focused on `/session/code` folder access
+- **Session Playground Fixes**: Updated all examples to use correct CLI syntax and environment variables
+- **Command Reference Updates**: Synchronized CLI documentation with actual implementation
+- **Security Improvements**: Removed inline API key examples, promoted environment variable usage
+- **Homepage Styling**: Changed white backgrounds to black for visual consistency
 
 ## v0.2.10
 
