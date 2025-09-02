@@ -831,7 +831,7 @@ async function chatLoop(sessionId) {
       shouldSendMessage = false;
     }
     // Handle help command
-    else if (userInput === '/help') {
+    else if (userInput === '/help' || userInput === '/h') {
       clearPromptLine(); // Short command, no enter to clear
       promptVisible = false;
       showHelp();
