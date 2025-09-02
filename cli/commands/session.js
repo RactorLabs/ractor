@@ -509,7 +509,7 @@ async function startInteractiveSession(sessionId, options) {
       if (hostResponse) {
         responseSpinner.succeed('Host responded');
         console.log();
-        console.log(chalk.cyan('Host:'), hostResponse.content);
+        console.log(chalk.cyan('Host:'), chalk.white(hostResponse.content));
         console.log();
       } else {
         responseSpinner.warn('No host response received within timeout');
@@ -779,7 +779,6 @@ async function chatLoop(sessionId) {
     currentState = 'waiting';
     
     process.stdout.write('\r\x1b[K'); // Clear line
-    console.log(chalk.blue('🔄 Sending: ') + userInput);
 
     try {
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
@@ -795,7 +794,7 @@ async function chatLoop(sessionId) {
       }
 
       currentState = 'busy';
-      console.log(chalk.yellow('⚡ Host is working...'));
+      console.log(chalk.gray('...'));
       
       // Start monitoring for responses
       await monitorForResponses(sessionId, Date.now());
@@ -810,8 +809,6 @@ async function chatLoop(sessionId) {
   }
 
   async function monitorForResponses(sessionId, userMessageTime) {
-    const startTime = Date.now();
-    const maxWaitTime = 120000; // 2 minutes max
     let lastMessageCount = 0;
 
     // Get initial message count
@@ -825,7 +822,7 @@ async function chatLoop(sessionId) {
       return;
     }
 
-    while (Date.now() - startTime < maxWaitTime) {
+    while (true) {
       try {
         const response = await api.get(`/sessions/${sessionId}/messages`);
         if (response.success && response.data.length > lastMessageCount) {
@@ -854,8 +851,6 @@ async function chatLoop(sessionId) {
         break;
       }
     }
-    
-    console.log(chalk.yellow('⚠️  Response monitoring timed out'));
   }
 
   function displayToolMessage(message) {
@@ -868,7 +863,7 @@ async function chatLoop(sessionId) {
     
     console.log();
     console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
-    console.log(chalk.dim('├─ ') + chalk.white(message.content));
+    console.log(chalk.dim('├─ ') + chalk.gray(message.content));
   }
 
   function displayHostMessage(message) {
