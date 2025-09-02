@@ -94,7 +94,7 @@ impl SessionManager {
 
             // If no work was done, sleep before next iteration
             if tasks_processed == 0 && sessions_closed == 0 {
-                sleep(Duration::from_secs(2)).await;
+                sleep(Duration::from_secs(10)).await;
             }
         }
     }
@@ -533,8 +533,8 @@ impl SessionManager {
         info!("Session {} was closed, restoring container with persistent volume and fresh tokens", session_id);
         self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone(), "User".to_string()).await?;
         
-        // Update last_activity_at to track when session was restored
-        sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW() WHERE id = ?"#)
+        // Update last_activity_at and clear auto_close_at since session is being restored
+        sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW(), auto_close_at = NULL WHERE id = ?"#)
             .bind(&session_id)
             .execute(&self.pool)
             .await?;
