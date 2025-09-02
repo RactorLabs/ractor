@@ -120,7 +120,7 @@ async function sessionStartCommand(options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -248,7 +248,7 @@ async function sessionStartCommand(options) {
     await startInteractiveSession(sessionId, options);
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
@@ -257,7 +257,7 @@ async function sessionRestoreCommand(sessionId, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -339,7 +339,7 @@ async function sessionRestoreCommand(sessionId, options) {
     await startInteractiveSession(sessionId, { ...options, isRestore: true, sessionState: session.state });
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
@@ -348,7 +348,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -444,7 +444,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
     await startInteractiveSession(sessionId, options);
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
@@ -899,7 +899,7 @@ async function chatLoop(sessionId) {
         clearPromptLine();
         promptVisible = false;
         console.log();
-        console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
+        console.log(chalk.red('✗ Failed to send message:'), sendResponse.error);
         // Update state from server after error
         await updateSessionState();
         showPrompt(currentSessionState);
@@ -913,7 +913,7 @@ async function chatLoop(sessionId) {
       clearPromptLine();
       promptVisible = false;
       console.log();
-      console.log(chalk.red('❌ Error sending message:'), error.message);
+      console.log(chalk.red('✗ Error sending message:'), error.message);
       // Update state from server after error
       await updateSessionState();
       showPrompt(currentSessionState);
@@ -940,10 +940,10 @@ async function showSessionStatus(sessionId) {
       console.log();
     } else {
       console.log();
-      console.log(chalk.red('❌ Failed to get session status:'), statusResponse.error);
+      console.log(chalk.red('✗ Failed to get session status:'), statusResponse.error);
     }
   } catch (error) {
-    console.log(chalk.red('❌ Error getting session status:'), error.message);
+    console.log(chalk.red('✗ Error getting session status:'), error.message);
   }
 }
 
@@ -968,11 +968,11 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
         console.log(`✓ Session timeout updated to ${timeoutSeconds} seconds`);
       } else {
         console.log();
-        console.log(chalk.red('❌ Failed to update timeout:'), updateResponse.error || 'Unknown error');
+        console.log(chalk.red('✗ Failed to update timeout:'), updateResponse.error || 'Unknown error');
       }
     } catch (error) {
       console.log();
-      console.log(chalk.red('❌ Failed to update timeout:'), error.message);
+      console.log(chalk.red('✗ Failed to update timeout:'), error.message);
     }
   } else {
     console.log(chalk.red('Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).'));
@@ -990,11 +990,11 @@ async function handleNameCommand(sessionId, newName) {
         console.log(`✓ Session name updated to: "${cleanName}"`);
       } else {
         console.log();
-        console.log(chalk.red('❌ Failed to update name:'), updateResponse.error || 'Unknown error');
+        console.log(chalk.red('✗ Failed to update name:'), updateResponse.error || 'Unknown error');
       }
     } catch (error) {
       console.log();
-      console.log(chalk.red('❌ Failed to update name:'), error.message);
+      console.log(chalk.red('✗ Failed to update name:'), error.message);
     }
   } else {
     console.log(chalk.red('Invalid session name'));
@@ -1007,7 +1007,7 @@ async function sessionPublishCommand(sessionId, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -1059,7 +1059,7 @@ async function sessionPublishCommand(sessionId, options) {
     console.log();
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
@@ -1068,7 +1068,7 @@ async function sessionUnpublishCommand(sessionId, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -1097,7 +1097,7 @@ async function sessionUnpublishCommand(sessionId, options) {
     console.log(chalk.green('🔒 Session is now private again'));
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
@@ -1106,7 +1106,7 @@ async function sessionCloseCommand(sessionId, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    console.log(chalk.red('✗ Authentication required'));
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
@@ -1160,7 +1160,7 @@ async function sessionCloseCommand(sessionId, options) {
     console.log();
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    console.error(chalk.red('✗ Error:'), error.message);
     process.exit(1);
   }
 }
