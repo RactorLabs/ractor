@@ -520,7 +520,7 @@ Common error responses and solutions:
 - Sessions persist until explicitly deleted
 - Interactive sessions auto-cleanup on exit (`/quit`)
 - Use close/restore for long-running Host sessions to save resources
-- **Always include `ANTHROPIC_API_KEY` secret for Host functionality** - this is required for all new sessions
+- **Set `ANTHROPIC_API_KEY` environment variable** - required for all new sessions
 
 ### Performance Tips
 - Use `raworc start --pull` to ensure latest images
@@ -534,39 +534,71 @@ Common error responses and solutions:
 - Use selective remix to avoid copying unnecessary files
 - Regularly clean up old sessions
 
-## Common Workflows
+## Common Use Cases
 
-### Development Environment Setup
+Here are practical examples for different automation scenarios using Computer Use Agents:
+
+### Web Automation
 
 ```bash
-# Start services
-raworc start
-
-# Authenticate
-raworc login --user admin --pass admin
-
-# Create coding Host session
+# Create a web automation Host session
 raworc session start \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
-  --instructions "You are a senior developer Host" \
-  --setup "pip install black flake8 pytest"
+  --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites." \
+  --setup "pip install selenium beautifulsoup4 requests"
 ```
 
-### Data Analysis Session
+### Document Processing
 
 ```bash
-# Create data science Host session
+# Create a document processing Host session
 raworc session start \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key","DATABASE_URL":"your-db"}' \
-  --instructions "You are a data scientist Host" \
-  --setup "pip install pandas numpy matplotlib seaborn jupyter"
+  --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
+  --setup "pip install pandas openpyxl python-docx pdfplumber"
 ```
 
-### Quick Testing
+### System Administration
 
 ```bash
-# Minimal Host session for quick tasks (ANTHROPIC_API_KEY is required)
-raworc session start --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+# Create a system automation Host session
+raworc session start \
+  --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems." \
+  --setup "apt-get update && apt-get install -y curl jq && pip install fabric paramiko"
+```
+
+### Data Analysis & Visualization
+
+```bash
+# Create a data science Host session
+raworc session start \
+  --secrets '{"DATABASE_URL":"postgresql://user:pass@host/db"}' \
+  --instructions "You are a data scientist Host. Analyze data, create visualizations, and generate insights." \
+  --setup "pip install pandas numpy matplotlib seaborn jupyter plotly"
+```
+
+### Development & Coding
+
+```bash
+# Create a development Host session
+raworc session start \
+  --instructions "You are a senior developer Host. Write code, debug issues, and manage repositories." \
+  --setup "pip install black flake8 pytest mypy && npm install -g typescript"
+```
+
+### Quick Testing & Experimentation
+
+```bash
+# Minimal Host session for quick tasks
+raworc session start \
+  --instructions "You help with quick tasks and experimentation."
+```
+
+### AI Agent Development
+
+```bash
+# Create an AI agent development session
+raworc session start \
+  --instructions "You develop AI agents and automation tools using frameworks like LangGraph, CrewAI, and AutoGen." \
+  --setup "pip install langgraph crewai autogen langchain openai"
 ```
 
 ## Next Steps

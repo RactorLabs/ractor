@@ -78,7 +78,7 @@ raworc session start --instructions-file ./my-instructions.md
 raworc session start --setup-file ./setup.sh
 ```
 
-For more advanced session configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#session-configuration-options).
+For more advanced session configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#4-session-configuration-options).
 
 ## Interactive Session Usage
 
@@ -199,37 +199,12 @@ docker logs raworc_mysql
 raworc reset --yes
 ```
 
-## Common Use Cases
-
-### Web Automation
-
-```bash
-# Create a web automation Host session
-raworc session start \
-  --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites."
-```
-
-### Document Processing
-
-```bash
-# Create a document processing Host session
-raworc session start \
-  --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
-  --setup "pip install pandas openpyxl python-docx"
-```
-
-### System Administration
-
-```bash
-# Create a system automation Host session
-raworc session start \
-  --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems."
-```
 
 ## Next Steps
 
 Now that you have Raworc running:
 
+- **[Common Use Cases](/docs/guides/cli-usage#common-use-cases)** - Practical examples for different automation scenarios
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all CLI commands and features
 - **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture and lifecycle
 - **[API Reference](/docs/api/rest-api)** - Complete REST API documentation
