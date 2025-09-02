@@ -731,7 +731,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
 
 async function chatLoop(sessionId) {
   const readline = require('readline');
-  let currentSessionState = 'idle';
+  let currentSessionState = 'init';
   let currentUserInput = '';
   let promptVisible = false; // Track if prompt is currently displayed
 
