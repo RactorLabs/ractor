@@ -245,7 +245,8 @@ async function sessionStartCommand(options) {
     }
 
     sessionId = createResponse.data.id;
-    console.log();\n    console.log(chalk.gray('Session Id:'), sessionId);
+    console.log();
+    console.log(chalk.gray('Session Id:'), sessionId);
 
     await startInteractiveSession(sessionId, options);
 
