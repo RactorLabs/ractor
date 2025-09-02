@@ -7,13 +7,21 @@ title: Session Playground
 
 Master the full power of Raworc sessions with interactive examples and advanced features. This guide demonstrates session management capabilities with Host (Computer Use Agent) through practical, hands-on examples.
 
+## Prerequisites
+
+- **ANTHROPIC_API_KEY**: Required environment variable for all new sessions
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+```
+
 ## Interactive Sessions
 
 The simplest way to work with sessions is through the interactive CLI:
 
 ```bash
-# Start a new interactive session with Host (requires ANTHROPIC_API_KEY)
-raworc session --secrets '{"ANTHROPIC_API_KEY":"your-key"}'
+# Start a new interactive session with Host (uses ANTHROPIC_API_KEY from environment)
+raworc session
 ```
 
 In the interactive session interface:
@@ -40,7 +48,7 @@ raworc api sessions/{session-id}/close -m post
 raworc api sessions/{session-id}/restore -m post
 
 # Continue working with restored session
-raworc session --restore {session-id}
+raworc session restore {session-id}
 ```
 
 ### Restore Features
@@ -66,7 +74,7 @@ raworc api sessions/abc-123/close -m post
 
 # After your meeting, restore and continue
 raworc api sessions/abc-123/restore -m post
-raworc session --restore abc-123
+raworc session restore abc-123
 > Continue with the regional breakdown analysis
 ```
 
@@ -78,7 +86,7 @@ Remix creates a new session based on an existing one, allowing you to branch you
 
 ```bash
 # Create a remix from existing session
-raworc session --remix {source-session-id}
+raworc session remix {source-session-id}
 
 # The new session starts with:
 # - All files from the source session
@@ -96,7 +104,7 @@ raworc session
 # Session ID: main-456
 
 # Create branch to try different approach
-raworc session --remix main-456
+raworc session remix main-456
 > Now implement the same using merge sort instead
 # New session with quicksort as starting point
 ```
@@ -109,11 +117,11 @@ raworc session
 # Session ID: template-789
 
 # Remix for each new project
-raworc session --remix template-789 
+raworc session remix template-789 
 > Add FastAPI with PostgreSQL setup
 # Starts with all the base tools already configured
 
-raworc session --remix template-789
+raworc session remix template-789
 > Add Django with MySQL setup  
 # Another project from the same template
 ```
@@ -126,10 +134,10 @@ raworc session
 # Session ID: base-321
 
 # Test different ML models
-raworc session --remix base-321
+raworc session remix base-321
 > Train a random forest classifier
 
-raworc session --remix base-321
+raworc session remix base-321
 > Train a gradient boosting classifier
 
 # Compare results from both sessions
@@ -143,10 +151,10 @@ raworc session
 # Session ID: checkpoint-1
 
 # Branch from checkpoint for different scenarios
-raworc session --remix checkpoint-1
+raworc session remix checkpoint-1
 > Continue with the aggressive optimization approach
 
-raworc session --remix checkpoint-1  
+raworc session remix checkpoint-1  
 > Continue with the conservative safety-first approach
 ```
 
@@ -222,7 +230,7 @@ raworc api sessions/{id}/messages -m delete
 ### Multi-Turn Conversations
 ```bash
 # Interactive session handles this automatically
-raworc session --restore {id}
+raworc session restore {id}
 > First question
 # Wait for response...
 > Follow-up question based on previous answer
@@ -280,7 +288,7 @@ docker exec raworc_session_{id} cat /session/logs/host_*.log
 
 ### Session Won't Start
 ```bash
-# Check that ANTHROPIC_API_KEY was provided and session state
+# Check session state and configuration
 raworc api sessions/{id}
 
 # Check operator logs
