@@ -453,7 +453,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
 async function startInteractiveSession(sessionId, options) {
   console.log();
   console.log(chalk.gray('Commands: /status, /timeout <s>, /name <name>, /quit, /help'));
-  console.log(chalk.gray('Session ID:'), sessionId);
 
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
