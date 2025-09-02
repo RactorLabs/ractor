@@ -286,6 +286,7 @@ async function sessionRestoreCommand(sessionId, options) {
 
     const session = sessionResponse.data;
     console.log(chalk.gray('Session state:'), session.state);
+    console.log();
     
     // Update sessionId to actual UUID for consistent display
     sessionId = session.id;
@@ -603,19 +604,40 @@ function displayToolMessage(message) {
     'web_search': '🔍'
   }[toolType] || '🔧';
   
-  console.log();
   console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
   console.log(chalk.dim('├─ ') + chalk.gray(message.content));
 }
 
 function displayHostMessage(message) {
-  console.log();
   console.log(chalk.cyan('Host: ') + chalk.white(message.content));
   console.log();
 }
 
-async function monitorForResponses(sessionId, userMessageTime) {
+function startAnimatedIndicator() {
+  const frames = [
+    chalk.gray('⣾'),
+    chalk.blue('⣽'),
+    chalk.cyan('⣻'),
+    chalk.green('⢿'),
+    chalk.yellow('⡿'),
+    chalk.red('⣟'),
+    chalk.magenta('⣯'),
+    chalk.gray('⣷')
+  ];
+  
+  let frameIndex = 0;
+  
+  const interval = setInterval(() => {
+    process.stdout.write('\r' + frames[frameIndex % frames.length]);
+    frameIndex++;
+  }, 150); // Change frame every 150ms
+  
+  return interval;
+}
+
+async function monitorForResponses(sessionId, userMessageTime, clearSpinner = null) {
   let lastMessageCount = 0;
+  let spinnerCleared = false;
 
   // Get initial message count
   try {
@@ -636,6 +658,12 @@ async function monitorForResponses(sessionId, userMessageTime) {
         
         for (const message of newMessages) {
           if (message.role === 'host') {
+            // Clear spinner on first host message if not already cleared
+            if (!spinnerCleared && clearSpinner) {
+              clearSpinner();
+              spinnerCleared = true;
+            }
+            
             // Check if this is a tool execution message or final response
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
@@ -765,7 +793,7 @@ async function chatLoop(sessionId) {
     // Only update if we're not currently processing input
     if (!isProcessing) {
       process.stdout.write('\r\x1b[K'); // Clear line
-      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)}\n`);
+      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)}\n\n`);
       rl.prompt();
     }
   }
@@ -877,10 +905,26 @@ async function chatLoop(sessionId) {
       }
 
       currentState = 'busy';
-      console.log(chalk.gray('...'));
       
-      // Start monitoring for responses
-      await monitorForResponses(sessionId, Date.now());
+      // Start animated indicator
+      const animationInterval = startAnimatedIndicator();
+      let spinnerCleared = false;
+      
+      const clearSpinner = () => {
+        if (!spinnerCleared) {
+          clearInterval(animationInterval);
+          process.stdout.write('\r\x1b[K\n'); // Clear the animation line and move to next line
+          spinnerCleared = true;
+        }
+      };
+      
+      try {
+        // Start monitoring for responses with spinner clearing callback
+        await monitorForResponses(sessionId, Date.now(), clearSpinner);
+      } finally {
+        // Ensure animation is cleared if not already done
+        clearSpinner();
+      }
 
     } catch (error) {
       console.log(chalk.red('❌ Error sending message:'), error.message);
