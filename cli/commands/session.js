@@ -453,6 +453,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
 async function startInteractiveSession(sessionId, options) {
   console.log();
+  console.log();
   console.log(chalk.green('✅ Session active! Type your messages below.'));
   console.log(chalk.gray('Commands: /status, /timeout <s>, /name <name>, /quit, /help'));
   console.log(chalk.gray('Session ID:'), sessionId);
@@ -901,6 +902,7 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
         timeout_seconds: timeoutSeconds
       });
       if (updateResponse.success) {
+        console.log();
         console.log(chalk.green('✅ Session timeout updated to'), `${timeoutSeconds} seconds`);
       } else {
         console.log(chalk.red('❌ Failed to update timeout:'), updateResponse.error || 'Unknown error');
@@ -921,6 +923,7 @@ async function handleNameCommand(sessionId, newName) {
         name: cleanName
       });
       if (updateResponse.success) {
+        console.log();
         console.log(chalk.green('✅ Session name updated to:'), `"${cleanName}"`);
       } else {
         console.log(chalk.red('❌ Failed to update name:'), updateResponse.error || 'Unknown error');
