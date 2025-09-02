@@ -34,13 +34,17 @@ For complete project overview, features, and architecture, see [README.md](READM
 # Install CLI from npm 
 npm install -g @raworc/cli
 
+# Set required environment variable
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+
 # Start services (automatically pulls Docker images from Docker Hub)
 raworc start
 
 # Authenticate and use the system
-raworc auth login --user admin --pass admin
+raworc login -u admin -p admin
+raworc auth -t <jwt-token-from-login>
 raworc session
-raworc api health
+raworc api version
 ```
 
 **Key Points:**
@@ -124,7 +128,9 @@ raworc/
 export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 ./scripts/build.sh
 ./scripts/start.sh
+./scripts/link.sh
 raworc login -u admin -p admin
+raworc auth -t <jwt-token-from-login>
 raworc session
 ```
 
@@ -185,8 +191,10 @@ The Raworc CLI provides complete control over the orchestrator. Install globally
 **End Users (Production)**
 ```bash
 npm install -g @raworc/cli
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
 raworc start
 raworc login -u admin -p admin
+raworc auth -t <jwt-token-from-login>
 ```
 
 **Contributors (Development)**  
@@ -209,19 +217,20 @@ git clone <this-repo>
 | Command | Description | Example |
 |---------|-------------|---------|
 | `raworc start` | Start Docker services | `raworc start server mysql` |
-| `raworc stop` | Stop Docker services | `raworc stop -y` |
+| `raworc stop` | Stop Docker services | `raworc stop` |
 | `raworc clean` | Clean containers and images | `raworc clean --all` |
-| `raworc reset` | **Nuclear option**: Clean everything | `raworc reset -y` |
+| `raworc reset` | **Nuclear option**: Clean everything | `raworc reset` |
 | `raworc pull` | Update CLI and Docker images | `raworc pull` |
 
 ### Session Management
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `raworc session` | Start interactive session | `raworc session` |
-| `raworc session -r <id>` | Restore session | `raworc session -r abc123` |
-| `raworc session -R <id>` | Remix session | `raworc session -R abc123` |
-| `raworc session -S <json>` | Session with secrets | `raworc session -S '{"API_KEY":"value"}'` |
+| `raworc session` | Start interactive session | `raworc session start` |
+| `raworc session restore <id>` | Restore session | `raworc session restore abc123` |
+| `raworc session remix <id>` | Remix session | `raworc session remix abc123` |
+| `raworc session publish <id>` | Publish session | `raworc session publish abc123` |
+| `raworc session unpublish <id>` | Unpublish session | `raworc session unpublish abc123` |
 
 ### API Access
 
@@ -243,16 +252,19 @@ git clone <this-repo>
 - `raworc token -p/--principal -t/--type`
 
 **Service Management:**
-- `raworc start -r/--restart`
-- `raworc stop -y/--yes`
-- `raworc clean -y/--yes -a/--all`
-- `raworc reset -y/--yes -s/--services-only`
-- `raworc pull -c/--cli-only -i/--images-only`
+- `raworc start [components...]` - Start services
+- `raworc stop [-c/--cleanup] [components...]` - Stop services
+- `raworc clean` - Clean session containers
+- `raworc reset` - Complete cleanup
+- `raworc pull` - Update CLI and images
 
 **Session Management:**
-- `raworc session -r/--restore -R/--remix -d/--data -c/--code`
-- `raworc session -S/--secrets -i/--instructions -if/--instructions-file`
-- `raworc session -s/--setup -sf/--setup-file -p/--prompt`
+- `raworc session start [-n/--name] [-t/--timeout] [-S/--secrets]`
+- `raworc session restore <session-id>`
+- `raworc session remix <session-id>`
+- `raworc session publish <session-id>`
+- `raworc session unpublish <session-id>`
+- Session options: `-i/--instructions`, `-if/--instructions-file`, `-s/--setup`, `-sf/--setup-file`, `-p/--prompt`
 
 **API Access:**
 - `raworc api -m/--method -b/--body -H/--headers -p/--pretty -s/--status`
@@ -345,7 +357,7 @@ Content-Type: application/json
   "instructions": "Analyze this data file",
   "setup": "pip install pandas",
   "secrets": {
-    "API_KEY": "sk-123"
+    "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "prompt": "Hello, analyze this data"
 }

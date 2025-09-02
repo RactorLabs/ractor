@@ -13,6 +13,14 @@ Get started with the Remote Agentic Work Orchestrator in just a few commands. Ra
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+ 
 - **Anthropic API Key**: Required for AI functionality - get one at [console.anthropic.com](https://console.anthropic.com)
 
+### Environment Setup
+
+Set your Anthropic API key as an environment variable:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+```
+
 ## Quick Start (30 seconds)
 
 ### 1. Install Raworc CLI
@@ -30,29 +38,33 @@ raworc start
 ### 3. Authenticate
 
 ```bash
-raworc auth login --user admin --pass admin
+# Step 1: Get authentication token
+raworc login --user admin --pass admin
+
+# Step 2: Authenticate CLI with the token
+raworc auth -t <jwt-token-from-step-1>
 ```
 
-### 4. Start Your First Session (with API Key)
+### 4. Start Your First Session
 
 ```bash
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-actual-key"}'
+raworc session
 ```
 
-**⚠️ Important**: You must provide an Anthropic API key to start a new session. Get your key from [console.anthropic.com](https://console.anthropic.com).
+**Note**: Make sure you have set the `ANTHROPIC_API_KEY` environment variable as shown in the prerequisites.
 
 That's it! You now have a running Host session.
 
 ## Session Configuration
 
-### Basic Session (Requires API Key)
+### Basic Session
 
 ```bash
-# New sessions always require an Anthropic API key
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-actual-key"}'
+# Create new session (uses ANTHROPIC_API_KEY from environment)
+raworc session
 ```
 
-**Note**: The Anthropic API key is required for all new sessions. You cannot start a session without it unless you're remixing from an existing session that already has the key.
+**Note**: The Anthropic API key environment variable is required for all new sessions.
 
 ### Session with Instructions
 
@@ -70,7 +82,7 @@ raworc session --setup ./setup.sh
 
 ```bash
 raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --secrets '{"DATABASE_URL":"mysql://user:pass@host/db"}' \
   --instructions "You are a helpful data analysis Host." \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
 ```
@@ -141,7 +153,6 @@ raworc api sessions -m POST -b '{}'
 # Session with configuration
 raworc api sessions -m POST -b '{
   "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful Host specialized in data analysis.",
@@ -202,7 +213,7 @@ raworc reset --yes
 ```bash
 # Create a web automation Host session
 raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+ \
   --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites."
 ```
 
@@ -211,7 +222,7 @@ raworc session \
 ```bash
 # Create a document processing Host session
 raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+ \
   --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
   --setup "pip install pandas openpyxl python-docx"
 ```
@@ -221,7 +232,7 @@ raworc session \
 ```bash
 # Create a system automation Host session
 raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
+ \
   --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems."
 ```
 

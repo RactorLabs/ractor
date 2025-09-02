@@ -13,6 +13,14 @@ The Raworc CLI provides complete command-line access to all functionality for ma
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+
 - **Anthropic API Key**: Required - get one at [console.anthropic.com](https://console.anthropic.com)
 
+### Environment Setup
+
+Set your Anthropic API key as an environment variable:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+```
+
 ## Installation
 
 ```bash
@@ -105,31 +113,28 @@ raworc session unpublish <session-id-or-name>
 ### Starting New Sessions
 
 ```bash
-# Basic session (ANTHROPIC_API_KEY required for all new sessions)
-raworc session start --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
-
+# Basic session
+raworc session start 
 # Session with name and timeout
 raworc session start \\
   --name "my-analysis-session" \\
   --timeout 300 \\
-  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
-
+  
 # Session with instructions and setup
 raworc session start \\
   --instructions "You are a helpful coding Host" \\
   --setup "pip install pandas numpy matplotlib" \\
-  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
-
+  
 # Instructions from file
-raworc session start --instructions-file ./instructions.md --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key"}'
+raworc session start --instructions-file ./instructions.md --secrets '{}'
 
 # Setup from file
-raworc session start --setup-file ./setup.sh --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key"}'
+raworc session start --setup-file ./setup.sh --secrets '{}'
 
 # Full configuration with prompt
 raworc session start \
   --name "data-project" \
-  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --secrets '{,"DATABASE_URL":"mysql://user:pass@host/db"}' \
   --instructions "You are a data analyst Host" \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy" \
   --prompt "Hello, let's start analyzing the customer data" \
@@ -198,7 +203,7 @@ raworc session unpublish my-session
 
 ```bash
 # Create new session (requires ANTHROPIC_API_KEY)
-raworc api sessions -m post -b '{"secrets":{"ANTHROPIC_API_KEY":"sk-ant-your-key"}}'
+raworc api sessions -m post -b '{"secrets":{}}'
 
 # Create session with full configuration
 raworc api sessions -m post -b '{
@@ -276,8 +281,7 @@ Pass environment variables and API keys to Host sessions:
 
 ```bash
 # Single secret
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
-
+raworc session 
 # Multiple secrets
 raworc session --secrets '{
   "ANTHROPIC_API_KEY": "sk-ant-your-key",
@@ -444,7 +448,7 @@ Common error responses and solutions:
 - Default server: `http://localhost:9000` (for local development)
 - Use `--server` flag to connect to remote Raworc instances
 - Check auth status anytime with `raworc auth`
-- Re-authenticate if tokens expire: `raworc auth login`
+- Re-authenticate if tokens expire: `raworc login`
 
 ### Session Management
 - Sessions persist until explicitly deleted
@@ -473,7 +477,7 @@ Common error responses and solutions:
 raworc start
 
 # Authenticate
-raworc auth login --user admin --pass admin
+raworc login --user admin --pass admin
 
 # Create coding Host session
 raworc session \
