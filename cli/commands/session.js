@@ -125,7 +125,7 @@ async function sessionStartCommand(options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🤖 Starting New Raworc AI Session'));
+  console.log();
   console.log(chalk.gray('Mode:'), 'New Session');
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
