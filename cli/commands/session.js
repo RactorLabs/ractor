@@ -710,7 +710,8 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
                 setPromptVisible(false);
               }
               console.log();
-              console.log(chalk.cyan('Host:'), chalk.whiteBright(message.content));
+              console.log(chalk.cyan('Host:'));
+              console.log(chalk.whiteBright(message.content));
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
@@ -869,7 +870,8 @@ async function chatLoop(sessionId) {
 
   async function sendMessage(sessionId, userInput) {
     console.log();
-    console.log(chalk.green('User:'), chalk.white(userInput));
+    console.log(chalk.green('User:'));
+    console.log(chalk.white(userInput));
     
     // Show prompt with current actual state
     showPrompt(currentSessionState);
