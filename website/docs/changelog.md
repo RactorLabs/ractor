@@ -5,6 +5,14 @@ title: Changelog
 
 # Changelog
 
+## v0.3.1
+
+- **CLI ANTHROPIC_API_KEY Validation**: Added validation for required ANTHROPIC_API_KEY environment variable in `raworc start` command
+- **Operator Container Fix**: Fixed CLI to properly pass ANTHROPIC_API_KEY to operator container, resolving startup failures
+- **CLI Help Consistency**: Fixed inconsistent help messages across all CLI commands, replacing incorrect `raworc auth login` references with `raworc login`
+- **API Endpoint Fix**: Corrected help text to reference correct `raworc api version` endpoint instead of non-existent `health` endpoint
+- **User Experience**: Enhanced error messages with clear instructions for setting up ANTHROPIC_API_KEY
+
 ## v0.3.0
 
 - **Session-Based Architecture**: Simplified to session-based system with Host as Raworc's Computer Use Agent implementation
