@@ -802,11 +802,9 @@ async function chatLoop(sessionId) {
     const userInput = input.trim();
     currentUserInput = ''; // Reset after line submitted
 
-    // Clear both newline from Enter and the prompt line
-    clearPromptAfterEnter();
-    promptVisible = false;
-
     if (!userInput) {
+      clearPromptAfterEnter();
+      promptVisible = false;
       showPrompt(currentSessionState);
       promptVisible = true;
       return;
@@ -814,6 +812,8 @@ async function chatLoop(sessionId) {
 
     // Handle quit command
     if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
+      clearPromptAfterEnter();
+      promptVisible = false;
       console.log();
       console.log('Ending session. Goodbye!');
       cleanup();
@@ -825,11 +825,15 @@ async function chatLoop(sessionId) {
     
     // Handle status command
     if (userInput === '/status') {
+      clearPromptLine(); // Short command, no enter to clear
+      promptVisible = false;
       await showSessionStatus(sessionId);
       shouldSendMessage = false;
     }
     // Handle help command
     else if (userInput === '/help') {
+      clearPromptLine(); // Short command, no enter to clear
+      promptVisible = false;
       showHelp();
       shouldSendMessage = false;
     }
@@ -837,6 +841,8 @@ async function chatLoop(sessionId) {
     else {
       const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
       if (timeoutMatch) {
+        clearPromptLine(); // Short command, no enter to clear
+        promptVisible = false;
         await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
         shouldSendMessage = false;
       }
@@ -844,6 +850,8 @@ async function chatLoop(sessionId) {
       else {
         const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
         if (nameMatch) {
+          clearPromptLine(); // Short command, no enter to clear
+          promptVisible = false;
           await handleNameCommand(sessionId, nameMatch[1]);
           shouldSendMessage = false;
         }
@@ -855,7 +863,9 @@ async function chatLoop(sessionId) {
       showPrompt(currentSessionState);
       promptVisible = true;
     } else {
-      // Send message to session
+      // Send message to session - clear with enter since it's regular input
+      clearPromptAfterEnter();
+      promptVisible = false;
       await sendMessage(sessionId, userInput);
     }
   });
