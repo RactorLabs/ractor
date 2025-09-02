@@ -475,7 +475,7 @@ async function startInteractiveSession(sessionId, options) {
         recentMessages.forEach((msg, index) => {
           const timestamp = new Date(msg.created_at).toLocaleTimeString();
           const roleColor = msg.role === 'user' ? chalk.green : chalk.cyan;
-          const roleLabel = msg.role === 'user' ? 'You' : 'Host';
+          const roleLabel = msg.role === 'user' ? 'User' : 'Host';
 
           console.log();
           console.log(roleColor(`${roleLabel} (${timestamp}):`));
@@ -592,49 +592,15 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   throw new Error('Timeout waiting for host response');
 }
 
-function displayToolMessage(message) {
-  const toolType = message.metadata?.tool_type || 'unknown';
-  const toolIcon = '•';
-
-  console.log(chalk.gray(`${toolIcon} ${toolType}`));
-  console.log(chalk.dim('├─ ') + chalk.gray(message.content));
-}
-
-function displayHostMessage(message) {
-  console.log(chalk.cyan('Host: ') + chalk.whiteBright(message.content));
-  console.log();
-
-  // After host message, show status and prompt
-  showStatusAndPrompt();
-}
-
-function showStatusAndPrompt() {
-  const stateIcon = '💤';
-  const stateColor = chalk.green;
-
-  console.log(chalk.gray('────────────────────'));
-  console.log(`${stateIcon} ${stateColor('idle')}`);
-  console.log(chalk.gray('────────────────────'));
-  process.stdout.write(chalk.cyanBright('User: '));
-}
-
-function clearStatusAndPrompt() {
-  // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
-  process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
-}
-
-async function monitorForResponses(sessionId, userMessageTime, clearStatus = null) {
+async function monitorForResponses(sessionId, userMessageTime) {
   let lastMessageCount = 0;
-  let statusCleared = false;
 
-  // Get initial message count
   try {
     const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
     if (initialResponse.success) {
       lastMessageCount = initialResponse.data.length;
     }
   } catch (error) {
-    console.log(chalk.red('❌ Error getting initial message count'));
     return;
   }
 
@@ -646,33 +612,121 @@ async function monitorForResponses(sessionId, userMessageTime, clearStatus = nul
 
         for (const message of newMessages) {
           if (message.role === 'host') {
-            // Clear status on first host message if not already cleared
-            if (!statusCleared && clearStatus) {
-              clearStatus();
-              statusCleared = true;
-            }
-
-            // Check if this is a tool execution message or final response
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
-              displayToolMessage(message);
+              const toolType = message.metadata?.tool_type || 'unknown';
+              console.log(chalk.gray(`• ${toolType}`));
+              console.log(chalk.dim('├─ ') + chalk.gray(message.content));
             } else {
-              displayHostMessage(message);
-              // Final response received - exit monitoring
+              console.log(chalk.cyan('Host:'), chalk.whiteBright(message.content));
+              console.log();
               return;
             }
           }
         }
-
         lastMessageCount = response.data.length;
       }
-
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Check every 1.5 seconds
+      await new Promise(resolve => setTimeout(resolve, 1500));
     } catch (error) {
-      console.log(chalk.red('❌ Error monitoring responses:'), error.message);
       break;
     }
   }
+}
+
+async function chatLoop(sessionId) {
+  const readline = require('readline');
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  process.stdout.write(chalk.cyanBright('User: '));
+
+  rl.on('line', async (input) => {
+    const userInput = input.trim();
+
+    if (!userInput) {
+      process.stdout.write(chalk.cyanBright('User: '));
+      return;
+    }
+
+    // Handle quit command
+    if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
+      console.log(chalk.blue('👋 Ending session. Goodbye!'));
+      cleanup();
+      return;
+    }
+
+    // Handle status command
+    if (userInput === '/status') {
+      await showSessionStatus(sessionId);
+      process.stdout.write(chalk.cyanBright('User: '));
+      return;
+    }
+
+    // Handle help command
+    if (userInput === '/help') {
+      showHelp();
+      process.stdout.write(chalk.cyanBright('User: '));
+      return;
+    }
+
+    // Handle timeout commands
+    const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
+    if (timeoutMatch) {
+      await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
+      process.stdout.write(chalk.cyanBright('User: '));
+      return;
+    }
+
+    // Handle name commands
+    const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
+    if (nameMatch) {
+      await handleNameCommand(sessionId, nameMatch[1]);
+      process.stdout.write(chalk.cyanBright('User: '));
+      return;
+    }
+
+    // Send message to session
+    await sendMessage(sessionId, userInput);
+    process.stdout.write(chalk.cyanBright('User: '));
+  });
+
+  function cleanup() {
+    rl.close();
+    api.post(`/sessions/${sessionId}/close`).catch(() => {});
+    process.exit(0);
+  }
+
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  async function sendMessage(sessionId, userInput) {
+    console.log(chalk.green('User:'), userInput);
+    console.log();
+
+    try {
+      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+        content: userInput,
+        role: 'user'
+      });
+
+      if (!sendResponse.success) {
+        console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
+        return;
+      }
+
+      await monitorForResponses(sessionId, Date.now());
+
+    } catch (error) {
+      console.log(chalk.red('❌ Error sending message:'), error.message);
+    }
+  }
+
+  return new Promise((resolve) => {
+    rl.on('close', resolve);
+  });
 }
 
 async function showSessionStatus(sessionId) {
@@ -726,7 +780,7 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
 }
 
 async function handleNameCommand(sessionId, newName) {
-  const cleanName = newName.replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
+  const cleanName = newName.replace(/^["']|["']$/g, '');
   if (cleanName.length > 0 && cleanName.length <= 100 && /^[a-zA-Z0-9-]+$/.test(cleanName)) {
     try {
       const updateResponse = await api.put(`/sessions/${sessionId}`, {
@@ -745,135 +799,6 @@ async function handleNameCommand(sessionId, newName) {
     console.log(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
     console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
   }
-}
-
-async function chatLoop(sessionId) {
-  const readline = require('readline');
-  let currentState = 'idle';
-  let isProcessing = false;
-
-  // Set up non-blocking input
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: chalk.cyanBright('User: ')
-  });
-
-
-  // Handle user input
-  rl.on('line', async (input) => {
-    const userInput = input.trim();
-
-    // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
-    process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
-
-    if (!userInput) {
-      rl.prompt();
-      return;
-    }
-
-    // Handle quit command
-    if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
-      console.log(chalk.blue('👋 Ending session. Goodbye!'));
-      cleanup();
-      return;
-    }
-
-    // Handle status command
-    if (userInput === '/status') {
-      await showSessionStatus(sessionId);
-      rl.prompt();
-      return;
-    }
-
-    // Handle help command
-    if (userInput === '/help') {
-      showHelp();
-      rl.prompt();
-      return;
-    }
-
-    // Handle timeout commands
-    const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
-    if (timeoutMatch) {
-      await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
-      rl.prompt();
-      return;
-    }
-
-    // Handle name commands
-    const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
-    if (nameMatch) {
-      await handleNameCommand(sessionId, nameMatch[1]);
-      rl.prompt();
-      return;
-    }
-
-    // Send message to session
-    await sendMessage(sessionId, userInput);
-    rl.prompt();
-  });
-
-  function cleanup() {
-    rl.close();
-
-    // Close session on exit
-    api.post(`/sessions/${sessionId}/close`).catch(() => {
-      // Ignore cleanup errors
-    });
-
-    process.exit(0);
-  }
-
-  // Handle cleanup on exit
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
-
-  async function sendMessage(sessionId, userInput) {
-    isProcessing = true;
-    currentState = 'waiting';
-
-    // Show the user message
-    console.log(chalk.green('User:'), userInput);
-    console.log();
-
-    // Show status and prompt after user message
-    showStatusAndPrompt();
-
-    try {
-      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
-        content: userInput,
-        role: 'user'
-      });
-
-      if (!sendResponse.success) {
-        console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
-        currentState = 'error';
-        isProcessing = false;
-        return;
-      }
-
-      currentState = 'busy';
-
-      // Start monitoring for responses with status clearing callback
-      await monitorForResponses(sessionId, Date.now(), clearStatusAndPrompt);
-
-    } catch (error) {
-      console.log(chalk.red('❌ Error sending message:'), error.message);
-      currentState = 'error';
-    }
-
-    isProcessing = false;
-    currentState = 'idle';
-  }
-
-  // Initialize the interface
-  showStatusAndPrompt();
-
-  // Keep the process alive
-  return new Promise((resolve, reject) => {
-    rl.on('close', resolve);
-  });
 }
 
 async function sessionPublishCommand(sessionId, options) {
@@ -1036,4 +961,16 @@ async function sessionCloseCommand(sessionId, options) {
     console.error(chalk.red('❌ Error:'), error.message);
     process.exit(1);
   }
+}
+
+function getStateDisplay(state) {
+  const stateColors = {
+    'idle': chalk.green,
+    'busy': chalk.yellow, 
+    'closed': chalk.red,
+    'errored': chalk.red
+  };
+  
+  const color = stateColors[state] || chalk.gray;
+  return color(state);
 }
