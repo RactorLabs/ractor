@@ -321,12 +321,12 @@ impl ClaudeClient {
                 let tool_description = match tool_name.as_str() {
                     "bash" => {
                         let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        format!("Executing bash command: {}", cmd)
+                        cmd.to_string()
                     },
                     "text_editor" => {
                         let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
                         let path = tool_input.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        format!("Text editor {}: {}", cmd, path)
+                        path.to_string()
                     },
                     "web_search" => {
                         let query = tool_input.get("query").and_then(|v| v.as_str()).unwrap_or("unknown");
