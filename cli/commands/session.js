@@ -592,23 +592,49 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   throw new Error('Timeout waiting for host response');
 }
 
-function showPrompt() {
-  console.log(chalk.green('idle'));
+function showPrompt(state = 'idle') {
+  const stateColors = {
+    'idle': chalk.green,
+    'busy': chalk.yellow,
+    'waiting': chalk.blue,
+    'error': chalk.red,
+    'closed': chalk.red
+  };
+  
+  const color = stateColors[state] || chalk.gray;
+  console.log();
+  console.log(color(state));
   console.log(chalk.gray('————————————————————'));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
+function showPromptWithInput(state = 'idle', userInput = '') {
+  const stateColors = {
+    'idle': chalk.green,
+    'busy': chalk.yellow,
+    'waiting': chalk.blue,
+    'error': chalk.red,
+    'closed': chalk.red
+  };
+  
+  const color = stateColors[state] || chalk.gray;
+  console.log();
+  console.log(color(state));
+  console.log(chalk.gray('————————————————————'));
+  process.stdout.write(chalk.cyanBright('> ') + userInput);
+}
+
 function clearPromptLine() {
-  // Clear 3 lines of prompt (for host messages)
-  process.stdout.write('\r\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
+  // Clear 4 lines of prompt (for host messages)
+  process.stdout.write('\r\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
 }
 
 function clearPromptAfterEnter() {
-  // Clear newline from Enter + 3 lines of prompt (for user input)
-  process.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
+  // Clear newline from Enter + 4 lines of prompt (for user input)
+  process.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
 }
 
-async function monitorForResponses(sessionId, userMessageTime) {
+async function monitorForResponses(sessionId, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
   let lastMessageCount = 0;
 
   try {
@@ -630,16 +656,27 @@ async function monitorForResponses(sessionId, userMessageTime) {
           if (message.role === 'host') {
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
-              clearPromptLine();
+              if (getPromptVisible()) {
+                clearPromptLine();
+                setPromptVisible(false);
+              }
               const toolType = message.metadata?.tool_type || 'unknown';
+              console.log();
               console.log(chalk.gray(`• ${toolType}`));
               console.log(chalk.dim('├─ ') + chalk.gray(message.content));
-              showPrompt();
+              await updateState();
+              showPrompt(getCurrentState());
+              setPromptVisible(true);
             } else {
-              clearPromptLine();
-              console.log(chalk.cyan('Host:'), chalk.whiteBright(message.content));
+              if (getPromptVisible()) {
+                clearPromptLine();
+                setPromptVisible(false);
+              }
               console.log();
-              showPrompt();
+              console.log(chalk.cyan('Host:'), chalk.whiteBright(message.content));
+              await updateState();
+              showPrompt(getCurrentState());
+              setPromptVisible(true);
               return;
             }
           }
@@ -655,22 +692,76 @@ async function monitorForResponses(sessionId, userMessageTime) {
 
 async function chatLoop(sessionId) {
   const readline = require('readline');
+  let currentSessionState = 'idle';
+  let currentUserInput = '';
+  let promptVisible = false; // Track if prompt is currently displayed
+
+  // Function to fetch and update session state
+  async function updateSessionState() {
+    try {
+      const sessionResponse = await api.get(`/sessions/${sessionId}`);
+      if (sessionResponse.success) {
+        const newState = sessionResponse.data.state;
+        if (newState !== currentSessionState) {
+          currentSessionState = newState;
+          // Only redraw if prompt is currently visible
+          if (promptVisible) {
+            clearPromptLine();
+            showPromptWithInput(currentSessionState, currentUserInput);
+          }
+        }
+        return currentSessionState;
+      }
+    } catch (error) {
+      // Keep current state if API fails
+    }
+    return currentSessionState;
+  }
+
+  // Get initial session state
+  await updateSessionState();
+
+  // Enable keypress events
+  readline.emitKeypressEvents(process.stdin);
+  if (process.stdin.setRawMode) {
+    process.stdin.setRawMode(true);
+  }
 
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
 
-  showPrompt();
+  // Monitor session state changes every 2 seconds
+  const stateMonitorInterval = setInterval(updateSessionState, 2000);
+
+  showPrompt(currentSessionState);
+  promptVisible = true;
+
+  // Track user input as they type
+  process.stdin.on('keypress', (str, key) => {
+    if (!key) return;
+    
+    if (key.name === 'backspace' || key.name === 'delete') {
+      currentUserInput = currentUserInput.slice(0, -1);
+    } else if (key.name === 'return') {
+      currentUserInput = '';
+    } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
+      currentUserInput += str;
+    }
+  });
 
   rl.on('line', async (input) => {
     const userInput = input.trim();
+    currentUserInput = ''; // Reset after line submitted
 
     // Clear both newline from Enter and the prompt line
     clearPromptAfterEnter();
+    promptVisible = false;
 
     if (!userInput) {
-      showPrompt();
+      showPrompt(currentSessionState);
+      promptVisible = true;
       return;
     }
 
@@ -684,14 +775,16 @@ async function chatLoop(sessionId) {
     // Handle status command
     if (userInput === '/status') {
       await showSessionStatus(sessionId);
-      showPrompt();
+      showPrompt(currentSessionState);
+      promptVisible = true;
       return;
     }
 
     // Handle help command
     if (userInput === '/help') {
       showHelp();
-      showPrompt();
+      showPrompt(currentSessionState);
+      promptVisible = true;
       return;
     }
 
@@ -699,7 +792,8 @@ async function chatLoop(sessionId) {
     const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
     if (timeoutMatch) {
       await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
-      showPrompt();
+      showPrompt(currentSessionState);
+      promptVisible = true;
       return;
     }
 
@@ -707,7 +801,8 @@ async function chatLoop(sessionId) {
     const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
     if (nameMatch) {
       await handleNameCommand(sessionId, nameMatch[1]);
-      showPrompt();
+      showPrompt(currentSessionState);
+      promptVisible = true;
       return;
     }
 
@@ -716,6 +811,7 @@ async function chatLoop(sessionId) {
   });
 
   function cleanup() {
+    clearInterval(stateMonitorInterval);
     rl.close();
     api.post(`/sessions/${sessionId}/close`).catch(() => {});
     process.exit(0);
@@ -727,9 +823,10 @@ async function chatLoop(sessionId) {
   async function sendMessage(sessionId, userInput) {
     console.log();
     console.log(chalk.green('User:'), userInput);
-    console.log();
     
-    showPrompt();
+    // Show prompt with current actual state
+    showPrompt(currentSessionState);
+    promptVisible = true;
 
     try {
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
@@ -739,17 +836,25 @@ async function chatLoop(sessionId) {
 
       if (!sendResponse.success) {
         clearPromptLine();
+        promptVisible = false;
         console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
-        showPrompt();
+        // Update state from server after error
+        await updateSessionState();
+        showPrompt(currentSessionState);
+        promptVisible = true;
         return;
       }
 
-      await monitorForResponses(sessionId, Date.now());
+      await monitorForResponses(sessionId, Date.now(), () => currentSessionState, updateSessionState, () => promptVisible, (visible) => { promptVisible = visible; });
 
     } catch (error) {
       clearPromptLine();
+      promptVisible = false;
       console.log(chalk.red('❌ Error sending message:'), error.message);
-      showPrompt();
+      // Update state from server after error
+      await updateSessionState();
+      showPrompt(currentSessionState);
+      promptVisible = true;
     }
   }
 
