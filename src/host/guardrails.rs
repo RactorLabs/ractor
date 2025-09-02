@@ -12,40 +12,6 @@ impl Guardrails {
         }
     }
     
-    /// Check if content contains sensitive information
-    pub fn check_sensitive_content(&self, content: &str) -> Result<()> {
-        // Simplified checks without regex for now
-        let lower = content.to_lowercase();
-        
-        let sensitive_keywords = vec![
-            "api_key", "apikey", "api-key",
-            "secret", "token", "password", "passwd",
-            "private_key", "private key",
-        ];
-        
-        for keyword in sensitive_keywords {
-            if lower.contains(keyword) {
-                // Check if it looks like an actual secret (long string after keyword)
-                if let Some(idx) = lower.find(keyword) {
-                    let after = &content[idx + keyword.len()..];
-                    let has_value = after.chars()
-                        .skip_while(|c| c.is_whitespace() || *c == ':' || *c == '=')
-                        .take(20)
-                        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
-                        .count() > 15;
-                    
-                    if has_value {
-                        warn!("Sensitive content detected in message");
-                        return Err(HostError::Guardrail(
-                            "Message contains potentially sensitive information".to_string()
-                        ));
-                    }
-                }
-            }
-        }
-        
-        Ok(())
-    }
     
     /// Check if content is within size limits
     pub fn check_message_size(&self, content: &str) -> Result<()> {
@@ -62,14 +28,14 @@ impl Guardrails {
     pub fn sanitize_output(&self, content: &str) -> String {
         let mut sanitized = content.to_string();
         
-        // Enhanced redaction patterns
+        // Only redact critical sensitive information
         let sensitive_keywords = vec![
-            "api_key", "apikey", "api-key",
-            "secret", "token", "password", "passwd",
-            "session_id", "session-id", "sessionid",
-            "container_id", "container-id", "containerid",
-            "bearer", "jwt", "mysql://", "database_url",
             "anthropic_api_key",
+            "api_key",
+            "raworc_token",
+            "jwt",
+            "bearer",
+            "mysql://",
         ];
         
         for keyword in sensitive_keywords {
@@ -111,13 +77,6 @@ impl Guardrails {
             }
         }
         
-        // Trim excessive whitespace
-        sanitized = sanitized
-            .lines()
-            .map(|line| line.trim_end())
-            .collect::<Vec<_>>()
-            .join("\n");
-        
         // Ensure reasonable length
         if sanitized.len() > self.max_message_length {
             sanitized.truncate(self.max_message_length);
@@ -133,23 +92,14 @@ impl Guardrails {
         
         let prompt_exposure_patterns = [
             "system prompt",
-            "system message",
+            "system message", 
             "your instructions",
             "your prompt",
-            "initial prompt",
-            "tell me your",
-            "what are your instructions",
-            "show me your prompt",
             "repeat your instructions",
-            "what were you told",
-            "your system",
-            "internal instructions",
-            "configuration details",
-            "api key",
-            "token",
-            "secret",
-            "password",
-            "credentials",
+            "show me your prompt",
+            "anthropic_api_key",
+            "api_key",
+            "raworc_token",
         ];
         
         for pattern in prompt_exposure_patterns {
@@ -164,57 +114,23 @@ impl Guardrails {
         Ok(())
     }
     
-    /// Check for inappropriate content requests
-    pub fn check_inappropriate_content(&self, content: &str) -> Result<()> {
-        let lower_content = content.to_lowercase();
-        
-        let inappropriate_patterns = [
-            // Violence and harmful content
-            "how to make", "bomb", "weapon", "poison", "suicide",
-            "self harm", "hurt someone", "kill", "murder",
-            // Illegal activities
-            "hack", "crack", "piracy", "steal", "fraud",
-            "illegal", "drugs", "trafficking",
-            // Inappropriate content
-            "sexual", "explicit", "adult content", "nsfw",
-            // Personal information
-            "social security", "ssn", "credit card", "bank account",
-        ];
-        
-        for pattern in inappropriate_patterns {
-            if lower_content.contains(pattern) {
-                warn!("Inappropriate content request detected: {}", pattern);
-                return Err(HostError::Guardrail(
-                    "Cannot assist with inappropriate, illegal, or harmful requests".to_string()
-                ));
-            }
-        }
-        
-        Ok(())
-    }
-    
-    /// Check if the input is asking for harmful actions
-    pub fn check_harmful_intent(&self, content: &str) -> Result<()> {
+    /// Check for critical system-level destructive commands only
+    pub fn check_system_safety(&self, content: &str) -> Result<()> {
         let harmful_patterns = [
             "rm -rf /",
             "format c:",
-            "delete system32",
             ":(){:|:&};:",  // Fork bomb
-            "sudo rm",
-            "chmod 777",
-            "dd if=/dev/zero",
-            "mkfs",
-            "fdisk",
-            ">/dev/sda",
+            "dd if=/dev/zero of=/dev/sda",
+            "mkfs /dev/sda",
         ];
         
         let lower_content = content.to_lowercase();
         
         for pattern in harmful_patterns {
             if lower_content.contains(pattern) {
-                warn!("Potentially harmful command detected: {}", pattern);
+                warn!("Critical system destructive command detected: {}", pattern);
                 return Err(HostError::Guardrail(
-                    "Request contains potentially harmful commands".to_string()
+                    "Request contains system-destructive commands".to_string()
                 ));
             }
         }
@@ -224,40 +140,33 @@ impl Guardrails {
     
     /// Validate all guardrails for input
     pub fn validate_input(&self, content: &str) -> Result<()> {
-        debug!("Validating input with guardrails");
+        debug!("Validating input with minimal guardrails");
         
         self.check_message_size(content)?;
         self.check_system_prompt_exposure(content)?;
-        self.check_inappropriate_content(content)?;
-        self.check_harmful_intent(content)?;
+        self.check_system_safety(content)?;
         
         Ok(())
     }
     
-    /// Check if output contains system information that should be filtered
+    /// Check if output contains critical system information that should be filtered
     pub fn check_system_info_leakage(&self, content: &str) -> Result<()> {
         let lower_content = content.to_lowercase();
         
         let system_info_patterns = [
-            // "raworc session", // Commented out - too restrictive for normal responses
-            // "session id", // Commented out - too restrictive
-            "api token",
-            "bearer token", 
-            "container id",
-            "docker container",
-            "host environment",
-            "system configuration",
-            "internal api",
-            "database url",
-            "mysql://",
+            "anthropic_api_key",
+            "api_key",
+            "raworc_token",
             "jwt secret",
+            "bearer token",
+            "mysql://",
         ];
         
         for pattern in system_info_patterns {
             if lower_content.contains(pattern) {
-                warn!("System information leakage detected: {}", pattern);
+                warn!("Critical system information leakage detected: {}", pattern);
                 return Err(HostError::Guardrail(
-                    "Response contains internal system information".to_string()
+                    "Response contains sensitive system information".to_string()
                 ));
             }
         }
@@ -267,10 +176,9 @@ impl Guardrails {
     
     /// Validate all guardrails for output
     pub fn validate_output(&self, content: &str) -> Result<String> {
-        debug!("Validating output with guardrails");
+        debug!("Validating output with minimal guardrails");
         
         self.check_message_size(content)?;
-        self.check_sensitive_content(content)?;
         self.check_system_info_leakage(content)?;
         
         let sanitized = self.sanitize_output(content);
