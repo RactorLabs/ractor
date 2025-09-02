@@ -650,7 +650,7 @@ async function handleNameCommand(sessionId, newName) {
 
 async function chatLoop(sessionId) {
   const readline = require('readline');
-  let currentState = 'idle';
+  let currentState = 'init';
   let isProcessing = false;
   let statusInterval = null;
 
@@ -667,6 +667,7 @@ async function chatLoop(sessionId) {
       'idle': '💤',
       'busy': '⚡', 
       'waiting': '🤖',
+      'init': '🔄',
       'error': '❌'
     }[currentState] || '❓';
     
@@ -674,6 +675,7 @@ async function chatLoop(sessionId) {
       'idle': chalk.green,
       'busy': chalk.yellow,
       'waiting': chalk.blue,
+      'init': chalk.cyan,
       'error': chalk.red
     }[currentState] || chalk.white;
 
