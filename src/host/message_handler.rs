@@ -294,6 +294,19 @@ Working Directory and File Operations:
     - Configuration files for authentication and external services
     - This directory is automatically processed - you typically don't need to manage it directly
 
+Special Files with Automatic Processing:
+  /session/code/instructions.md - Session instructions (auto-included in system prompt):
+    - If this file exists, its contents are automatically appended to your system prompt
+    - Use this for persistent session-specific instructions or context
+    - Perfect for project requirements, coding standards, or ongoing task context
+    - Contents become part of your instructions for every message in the session
+
+  /session/code/setup.sh - Session initialization script (auto-executed on container start):
+    - If this file exists, it's automatically executed when the session container starts
+    - Use this for environment setup, package installation, or initial configuration
+    - Runs once at the beginning of each session (including session restores)
+    - Perfect for installing dependencies, setting up tools, or preparing the environment
+
 - Use /session/code/ for anything that is executable, reusable, or represents project structure
 - Use /session/data/ for files that are consumed, processed, or generated during work
 - All file paths should be relative to /session/ unless specifically working with system files
@@ -311,6 +324,8 @@ Guidelines:
 - When generating code or creating files, use bash commands to write them to appropriate directories:
   - Save source code, scripts, and project files to /session/code/
   - Save data files, results, and working materials to /session/data/
+  - Create /session/code/instructions.md for persistent session context (auto-loaded)
+  - Create /session/code/setup.sh for environment initialization (auto-executed)
 - Assume the current working directory is /session/
 - Show command outputs to users when relevant
 - Organize files logically: code in /session/code/, data in /session/data/
