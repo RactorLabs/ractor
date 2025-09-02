@@ -57,13 +57,17 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     let api_client = Arc::new(api::RaworcClient::new(config.clone()));
     
     // Initialize Claude client
-    let claude_client = match claude::ClaudeClient::new(&claude_api_key) {
-        Ok(client) => Arc::new(client),
+    let mut claude_client = match claude::ClaudeClient::new(&claude_api_key) {
+        Ok(client) => client,
         Err(e) => {
             tracing::error!("Failed to initialize Claude client: {}", e);
             return Err(anyhow::anyhow!("Failed to initialize Claude client: {}", e));
         }
     };
+    
+    // Set the API client for tool message sending
+    claude_client.set_api_client(api_client.clone());
+    let claude_client = Arc::new(claude_client);
     
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());

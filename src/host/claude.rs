@@ -1,7 +1,9 @@
+use super::api::RaworcClient;
 use super::error::{HostError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 use tracing::{debug, info, warn};
 
 #[derive(Debug, Serialize)]
@@ -49,6 +51,7 @@ struct Tool {
 pub struct ClaudeClient {
     client: Client,
     api_key: String,
+    api_client: Option<Arc<RaworcClient>>,
 }
 
 impl ClaudeClient {
@@ -61,7 +64,12 @@ impl ClaudeClient {
         Ok(Self {
             client,
             api_key: api_key.to_string(),
+            api_client: None,
         })
+    }
+
+    pub fn set_api_client(&mut self, api_client: Arc<RaworcClient>) {
+        self.api_client = Some(api_client);
     }
 
     fn get_bash_tool() -> Tool {
@@ -303,6 +311,23 @@ impl ClaudeClient {
             // Execute tool calls and add results to conversation
             for (tool_id, tool_name, tool_input) in tool_calls {
                 debug!("Executing tool: {} with id: {}", tool_name, tool_id);
+                
+                // Send tool execution notification to user
+                let tool_description = match tool_name.as_str() {
+                    "bash" => {
+                        let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        format!("Executing bash command: {}", cmd)
+                    },
+                    "text_editor" => {
+                        let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let path = tool_input.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        format!("Text editor {}: {}", cmd, path)
+                    },
+                    "web_search" => "Searching the web for current information".to_string(),
+                    _ => format!("Executing {} tool", tool_name),
+                };
+
+                self.send_tool_message(&tool_description, &tool_name).await?;
                 
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
@@ -822,6 +847,23 @@ impl ClaudeClient {
         let old_line_count = content.lines().count();
         let new_line_count = new_content.lines().count();
         Ok(format!("Inserted text at line {} in {} (lines: {} -> {})", insert_line, path.display(), old_line_count, new_line_count))
+    }
+
+    async fn send_tool_message(&self, description: &str, tool_name: &str) -> Result<()> {
+        // Log tool execution notification to Docker logs
+        println!("TOOL_EXECUTION: {}: {}", tool_name, description);
+
+        // Send tool execution message to user if api client is available
+        if let Some(api_client) = &self.api_client {
+            let metadata = serde_json::json!({
+                "type": "tool_execution",
+                "tool_type": tool_name
+            });
+            
+            api_client.send_message(description.to_string(), Some(metadata)).await?;
+        }
+        
+        Ok(())
     }
     
 }

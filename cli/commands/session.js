@@ -576,156 +576,313 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   throw new Error('Timeout waiting for host response');
 }
 
-async function chatLoop(sessionId) {
+async function showSessionStatus(sessionId) {
   try {
-    while (true) {
-      // Get user input
-      const rl = require('readline').createInterface({
-        input: process.stdin,
-        output: process.stdout
+    const statusResponse = await api.get(`/sessions/${sessionId}`);
+    if (statusResponse.success) {
+      console.log();
+      console.log(chalk.blue('📊 Session Status:'));
+      console.log(chalk.gray('  ID:'), statusResponse.data.id);
+      console.log(chalk.gray('  Name:'), statusResponse.data.name || 'Unnamed');
+      console.log(chalk.gray('  State:'), getStateDisplay(statusResponse.data.state));
+      console.log(chalk.gray('  Created:'), new Date(statusResponse.data.created_at).toLocaleString());
+      console.log(chalk.gray('  Updated:'), new Date(statusResponse.data.updated_at).toLocaleString());
+      console.log();
+    } else {
+      console.log(chalk.red('❌ Failed to get session status:'), statusResponse.error);
+    }
+  } catch (error) {
+    console.log(chalk.red('❌ Error getting session status:'), error.message);
+  }
+}
+
+function showHelp() {
+  console.log();
+  console.log(chalk.blue('🤖 Available Commands:'));
+  console.log(chalk.gray('  /help       '), 'Show this help message');
+  console.log(chalk.gray('  /status     '), 'Show session status');
+  console.log(chalk.gray('  /timeout <s>'), 'Change session timeout (1-3600 seconds)');
+  console.log(chalk.gray('  /name <name>'), 'Change session name (alphanumeric and hyphens)');
+  console.log(chalk.gray('  /quit       '), 'End the session');
+  console.log();
+}
+
+async function handleTimeoutCommand(sessionId, timeoutSeconds) {
+  if (timeoutSeconds >= 1 && timeoutSeconds <= 3600) {
+    try {
+      const updateResponse = await api.put(`/sessions/${sessionId}`, {
+        timeout_seconds: timeoutSeconds
       });
+      if (updateResponse.success) {
+        console.log(chalk.green('✅ Session timeout updated to'), `${timeoutSeconds} seconds`);
+      } else {
+        console.log(chalk.red('❌ Failed to update timeout:'), updateResponse.error || 'Unknown error');
+      }
+    } catch (error) {
+      console.log(chalk.red('❌ Failed to update timeout:'), error.message);
+    }
+  } else {
+    console.log(chalk.red('Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).'));
+  }
+}
 
-      const userInput = await new Promise(resolve => {
-        rl.question(chalk.white('You: '), resolve);
+async function handleNameCommand(sessionId, newName) {
+  const cleanName = newName.replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
+  if (cleanName.length > 0 && cleanName.length <= 100 && /^[a-zA-Z0-9-]+$/.test(cleanName)) {
+    try {
+      const updateResponse = await api.put(`/sessions/${sessionId}`, {
+        name: cleanName
       });
-      
-      rl.close();
-
-      if (!userInput.trim()) {
-        continue;
+      if (updateResponse.success) {
+        console.log(chalk.green('✅ Session name updated to:'), `"${cleanName}"`);
+      } else {
+        console.log(chalk.red('❌ Failed to update name:'), updateResponse.error || 'Unknown error');
       }
+    } catch (error) {
+      console.log(chalk.red('❌ Failed to update name:'), error.message);
+    }
+  } else {
+    console.log(chalk.red('Invalid session name'));
+    console.log(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+    console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
+  }
+}
 
-      // Handle special commands
-      if (userInput.trim() === '/quit' || userInput.trim() === '/q' || userInput.trim() === '/exit') {
-        console.log(chalk.blue('👋 Ending session...'));
-        break;
-      }
+async function chatLoop(sessionId) {
+  const readline = require('readline');
+  let currentState = 'idle';
+  let isProcessing = false;
+  let statusInterval = null;
 
-      if (userInput.trim() === '/help' || userInput.trim() === '/?') {
-        console.log(chalk.blue('📋 Session Commands:'));
-        console.log(chalk.gray('  /status') + ' - Show session status');
-        console.log(chalk.gray('  /t <seconds>') + ' - Set session timeout (e.g., /t 120)');
-        console.log(chalk.gray('  /timeout <seconds>') + ' - Set session timeout (e.g., /timeout 120)');
-        console.log(chalk.gray('  timeout <seconds>') + ' - Set session timeout (e.g., timeout 120)');
-        console.log(chalk.gray('  /n <name>') + ' - Set session name (e.g., /n "my-session")');
-        console.log(chalk.gray('  /name <name>') + ' - Set session name (e.g., /name "my-session")');
-        console.log(chalk.gray('  name <name>') + ' - Set session name (e.g., name "my-session")');
-        console.log(chalk.gray('  /quit, /q, /exit') + ' - End session');
-        console.log(chalk.gray('  /help, /?') + ' - Show this help');
-        continue;
-      }
+  // Set up non-blocking input
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: chalk.white('You: ')
+  });
 
-      if (userInput.trim() === '/status') {
+  // Real-time status display
+  function updateStatusLine() {
+    const stateIcon = {
+      'idle': '💤',
+      'busy': '⚡', 
+      'waiting': '🤖',
+      'error': '❌'
+    }[currentState] || '❓';
+    
+    const stateColor = {
+      'idle': chalk.green,
+      'busy': chalk.yellow,
+      'waiting': chalk.blue,
+      'error': chalk.red
+    }[currentState] || chalk.white;
+
+    // Only update if we're not currently processing input
+    if (!isProcessing) {
+      process.stdout.write('\r\x1b[K'); // Clear line
+      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)} | Type your message (or /help for commands)\n`);
+      rl.prompt();
+    }
+  }
+
+  // Start status monitoring
+  statusInterval = setInterval(async () => {
+    if (!isProcessing) {
+      try {
         const statusResponse = await api.get(`/sessions/${sessionId}`);
         if (statusResponse.success) {
-          console.log(chalk.blue('Session Status:'));
-          console.log(chalk.gray('  ID:'), statusResponse.data.id);
-          console.log(chalk.gray('  Name:'), statusResponse.data.name || 'No name set');
-          console.log(chalk.gray('  State:'), statusResponse.data.state);
-          console.log(chalk.gray('  Timeout:'), statusResponse.data.timeout_seconds ? `${statusResponse.data.timeout_seconds}s` : 'Default');
-          console.log(chalk.gray('  Created:'), statusResponse.data.created_at);
-        } else {
-          console.log(chalk.red('Failed to get session status:'), statusResponse.error);
-        }
-        continue;
-      }
-
-      // Handle timeout commands (/t <seconds>, /timeout <seconds>, or timeout <seconds>)
-      const timeoutMatch = userInput.trim().match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
-      if (timeoutMatch) {
-        const timeoutSeconds = parseInt(timeoutMatch[1]);
-        if (timeoutSeconds > 0 && timeoutSeconds <= 3600) { // Max 1 hour
-          const spinner = ora('Updating session timeout...').start();
-          try {
-            const updateResponse = await api.put(`/sessions/${sessionId}`, {
-              timeout_seconds: timeoutSeconds
-            });
-            if (updateResponse.success) {
-              spinner.succeed(`Session timeout updated to ${timeoutSeconds} seconds`);
-            } else {
-              spinner.fail('Failed to update timeout');
-              console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
-            }
-          } catch (error) {
-            spinner.fail('Failed to update timeout');
-            console.log(chalk.red('Error:'), error.message);
+          const newState = statusResponse.data.state || 'idle';
+          if (newState !== currentState) {
+            currentState = newState;
+            updateStatusLine();
           }
-        } else {
-          console.log(chalk.red('Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).'));
         }
-        continue;
-      }
-
-      // Handle name commands (/n <name>, /name <name>, or name <name>)
-      const nameMatch = userInput.trim().match(/^(?:\/n|\/name|name)\s+(.+)$/);
-      if (nameMatch) {
-        const newName = nameMatch[1].replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
-        if (newName.length > 0 && newName.length <= 100 && /^[a-zA-Z0-9-]+$/.test(newName)) {
-          const spinner = ora('Updating session name...').start();
-          try {
-            const updateResponse = await api.put(`/sessions/${sessionId}`, {
-              name: newName
-            });
-            if (updateResponse.success) {
-              spinner.succeed(`Session name updated to: "${newName}"`);
-            } else {
-              spinner.fail('Failed to update name');
-              console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
-            }
-          } catch (error) {
-            spinner.fail('Failed to update name');
-            console.log(chalk.red('Error:'), error.message);
-          }
-        } else {
-          console.log(chalk.red('Invalid name. Must be 1-100 characters, alphanumeric and hyphens only.'));
-        }
-        continue;
-      }
-
-      // Send message to session
-      const userMessageTime = Date.now();
-      const spinner = ora('Waiting for host response...').start();
-
-      try {
-        const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
-          content: userInput,
-          role: 'user'
-        });
-
-        if (!sendResponse.success) {
-          spinner.fail('Failed to send message');
-          console.error(chalk.red('Error:'), sendResponse.error);
-          continue;
-        }
-
-        // Wait for host response
-        const hostMessage = await waitForHostResponse(sessionId, userMessageTime);
-        
-        if (hostMessage) {
-          spinner.succeed('Host responded');
-          console.log();
-          console.log(chalk.cyan('Host:'), hostMessage.content);
-          console.log();
-        } else {
-          spinner.warn('No response received');
-        }
-
       } catch (error) {
-        spinner.fail('Error');
-        console.error(chalk.red('Error:'), error.message);
+        // Silently handle status check errors
       }
     }
+  }, 2000); // Check status every 2 seconds
 
-    // Close session on exit
-    try {
-      await api.post(`/sessions/${sessionId}/close`);
-    } catch (error) {
-      // Ignore cleanup errors
+  // Handle user input
+  rl.on('line', async (input) => {
+    const userInput = input.trim();
+    
+    if (!userInput) {
+      rl.prompt();
+      return;
     }
 
-  } catch (error) {
-    console.error(chalk.red('❌ Chat error:'), error.message);
+    // Handle quit command
+    if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === 'exit') {
+      console.log(chalk.blue('👋 Ending session. Goodbye!'));
+      cleanup();
+      return;
+    }
+
+    // Handle status command
+    if (userInput === '/status') {
+      await showSessionStatus(sessionId);
+      rl.prompt();
+      return;
+    }
+
+    // Handle help command
+    if (userInput === '/help') {
+      showHelp();
+      rl.prompt();
+      return;
+    }
+
+    // Handle timeout commands
+    const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
+    if (timeoutMatch) {
+      await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
+      rl.prompt();
+      return;
+    }
+
+    // Handle name commands
+    const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
+    if (nameMatch) {
+      await handleNameCommand(sessionId, nameMatch[1]);
+      rl.prompt();
+      return;
+    }
+
+    // Send message to session
+    await sendMessage(sessionId, userInput);
+    rl.prompt();
+  });
+
+  function cleanup() {
+    if (statusInterval) {
+      clearInterval(statusInterval);
+    }
+    rl.close();
+    
+    // Close session on exit
+    api.post(`/sessions/${sessionId}/close`).catch(() => {
+      // Ignore cleanup errors
+    });
+    
+    process.exit(0);
   }
+
+  // Handle cleanup on exit
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
+  async function sendMessage(sessionId, userInput) {
+    isProcessing = true;
+    currentState = 'waiting';
+    
+    process.stdout.write('\r\x1b[K'); // Clear line
+    console.log(chalk.blue('🔄 Sending: ') + userInput);
+
+    try {
+      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+        content: userInput,
+        role: 'user'
+      });
+
+      if (!sendResponse.success) {
+        console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
+        currentState = 'error';
+        isProcessing = false;
+        return;
+      }
+
+      currentState = 'busy';
+      console.log(chalk.yellow('⚡ Host is working...'));
+      
+      // Start monitoring for responses
+      await monitorForResponses(sessionId, Date.now());
+
+    } catch (error) {
+      console.log(chalk.red('❌ Error sending message:'), error.message);
+      currentState = 'error';
+    }
+    
+    isProcessing = false;
+    currentState = 'idle';
+  }
+
+  async function monitorForResponses(sessionId, userMessageTime) {
+    const startTime = Date.now();
+    const maxWaitTime = 120000; // 2 minutes max
+    let lastMessageCount = 0;
+
+    // Get initial message count
+    try {
+      const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+      if (initialResponse.success) {
+        lastMessageCount = initialResponse.data.length;
+      }
+    } catch (error) {
+      console.log(chalk.red('❌ Error getting initial message count'));
+      return;
+    }
+
+    while (Date.now() - startTime < maxWaitTime) {
+      try {
+        const response = await api.get(`/sessions/${sessionId}/messages`);
+        if (response.success && response.data.length > lastMessageCount) {
+          const newMessages = response.data.slice(lastMessageCount);
+          
+          for (const message of newMessages) {
+            if (message.role === 'host') {
+              // Check if this is a tool execution message or final response
+              const metadata = message.metadata;
+              if (metadata && metadata.type === 'tool_execution') {
+                displayToolMessage(message);
+              } else {
+                displayHostMessage(message);
+                // Final response received - exit monitoring
+                return;
+              }
+            }
+          }
+          
+          lastMessageCount = response.data.length;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1500)); // Check every 1.5 seconds
+      } catch (error) {
+        console.log(chalk.red('❌ Error monitoring responses:'), error.message);
+        break;
+      }
+    }
+    
+    console.log(chalk.yellow('⚠️  Response monitoring timed out'));
+  }
+
+  function displayToolMessage(message) {
+    const toolType = message.metadata?.tool_type || 'unknown';
+    const toolIcon = {
+      'bash': '⚡',
+      'text_editor': '📝', 
+      'web_search': '🔍'
+    }[toolType] || '🔧';
+    
+    console.log();
+    console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
+    console.log(chalk.dim('├─ ') + chalk.white(message.content));
+  }
+
+  function displayHostMessage(message) {
+    console.log();
+    console.log(chalk.cyan('Host: ') + chalk.white(message.content));
+    console.log();
+  }
+
+  // Initialize the interface
+  console.log();
+  updateStatusLine();
+
+  // Keep the process alive
+  return new Promise((resolve, reject) => {
+    rl.on('close', resolve);
+  });
 }
 
 async function sessionPublishCommand(sessionId, options) {
