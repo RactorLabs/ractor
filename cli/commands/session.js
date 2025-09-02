@@ -613,7 +613,7 @@ function showStatusAndPrompt() {
   const stateColor = chalk.green;
 
   console.log(chalk.gray('────────────────────'));
-  console.log(`${stateIcon} Session: ${stateColor('idle')}`);
+  console.log(`${stateIcon} ${stateColor('idle')}`);
   console.log(chalk.gray('────────────────────'));
   process.stdout.write(chalk.cyanBright('User: '));
 }
