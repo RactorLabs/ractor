@@ -285,7 +285,7 @@ List Host sessions. Regular users see only their own sessions, admin users see a
 **Authentication**: Required
 
 **Query Parameters**:
-- `state` (optional) - Filter sessions by state (INIT, IDLE, BUSY, CLOSED, ERRORED)
+- `state` (optional) - Filter sessions by state (init, idle, busy, closed, errored)
 
 **Response**: `200 OK`
 ```json
@@ -294,7 +294,7 @@ List Host sessions. Regular users see only their own sessions, admin users see a
     "id": "61549530-3095-4cbf-b379-cd32416f626d",
     "created_by": "admin",
     "name": "my-session",
-    "state": "IDLE",
+    "state": "idle",
     "container_id": "container-id",
     "persistent_volume_id": "volume-id",
     "parent_session_id": null,
@@ -346,7 +346,7 @@ Create a new Host session.
   "id": "61549530-3095-4cbf-b379-cd32416f626d",
   "created_by": "admin",
   "name": "my-session",
-  "state": "INIT",
+  "state": "init",
   "container_id": null,
   "persistent_volume_id": null,
   "parent_session_id": null,
@@ -554,7 +554,7 @@ Create a new Host session based on an existing session with selective content co
 {
   "id": "new-session-id",
   "name": "my-new-session",
-  "state": "INIT",
+  "state": "init",
   "parent_session_id": "61549530-3095-4cbf-b379-cd32416f626d",
   "created_at": "2025-01-20T10:00:00Z",
   "created_by": "admin",
@@ -591,7 +591,7 @@ List all published sessions available for public access.
     "id": "61549530-3095-4cbf-b379-cd32416f626d",
     "created_by": "admin",
     "name": "public-data-analysis",
-    "state": "IDLE",
+    "state": "idle",
     "created_at": "2025-01-20T10:00:00Z",
     "published_at": "2025-01-20T10:30:00Z",
     "published_by": "admin",

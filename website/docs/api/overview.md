@@ -226,7 +226,7 @@ X-Page-Limit: 50
 Some endpoints support filtering:
 
 ```
-GET /sessions?state=IDLE
+GET /sessions?state=idle
 ```
 
 ## SDK Support
