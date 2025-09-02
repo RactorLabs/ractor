@@ -341,7 +341,7 @@ Sessions can be named for easier identification and access:
 
 ```bash
 # Create session with name
-raworc session start --name "my-analysis" 
+raworc session --name "my-analysis" 
 # Use name in all operations
 raworc session restore my-analysis
 raworc session remix my-analysis --name "experiment-1"
@@ -364,7 +364,7 @@ Automatic resource management through configurable timeouts:
 
 ```bash
 # Set timeout during creation (uses ANTHROPIC_API_KEY from environment)
-raworc session start --timeout 300
+raworc session --timeout 300
 # API with timeout
 raworc api sessions -m post -b '{
   "timeout_seconds": 1800,
@@ -469,7 +469,7 @@ Use the interactive session interface for real-time Host interaction:
 
 ```bash
 # All new sessions require ANTHROPIC_API_KEY environment variable
-raworc session start                                                    # Start new Host session
+raworc session                                                    # Start new Host session
 raworc session restore abc123                                           # Continue existing Host session
 raworc session remix def456                                             # Create remix
 

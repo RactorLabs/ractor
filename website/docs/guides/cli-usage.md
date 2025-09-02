@@ -110,50 +110,50 @@ raworc api version
 
 Create and manage Host sessions:
 
-### Session Subcommands
+### Session Commands
 
 ```bash
 # Start new session (default subcommand)
-raworc session start start [options]
-raworc session start [options]              # Shorthand for 'start'
+raworc session [options]
+raworc session start [options]              # Explicit 'start' command
 
 # Restore existing session
-raworc session start restore <session-id-or-name>
+raworc session restore <session-id-or-name>
 
 # Create remix from existing session
-raworc session start remix <session-id-or-name> [options]
+raworc session remix <session-id-or-name> [options]
 
 # Publish session for public access
-raworc session start publish <session-id-or-name> [options]
+raworc session publish <session-id-or-name> [options]
 
 # Remove session from public access
-raworc session start unpublish <session-id-or-name>
+raworc session unpublish <session-id-or-name>
 ```
 
 ### Starting New Sessions
 
 ```bash
 # Basic session (uses ANTHROPIC_API_KEY from environment)
-raworc session start start
+raworc session
 
 # Session with name and timeout
-raworc session start start \
+raworc session \
   --name "my-analysis-session" \
   --timeout 300
 
 # Session with instructions and setup
-raworc session start start \
+raworc session \
   --instructions "You are a helpful coding Host" \
   --setup "pip install pandas numpy matplotlib"
 
 # Instructions from file
-raworc session start start --instructions-file ./instructions.md
+raworc session --instructions-file ./instructions.md
 
 # Setup from file
-raworc session start start --setup-file ./setup.sh
+raworc session --setup-file ./setup.sh
 
 # Full configuration with prompt
-raworc session start start \
+raworc session \
   --name "data-project" \
   --secrets '{"DATABASE_URL":"mysql://user:pass@host/db"}' \
   --instructions "You are a data analyst Host" \
@@ -179,11 +179,11 @@ raworc session start start \
 
 ```bash
 # Restore by ID or name
-raworc session start restore abc123-def456-789
-raworc session start restore my-session-name
+raworc session restore abc123-def456-789
+raworc session restore my-session-name
 
 # Restore with immediate prompt
-raworc session start restore my-session --prompt "Continue the analysis from yesterday"
+raworc session restore my-session --prompt "Continue the analysis from yesterday"
 ```
 
 ### Session Restore Options
@@ -196,20 +196,20 @@ raworc session start restore my-session --prompt "Continue the analysis from yes
 
 ```bash
 # Basic remix (copies everything by default)
-raworc session start remix abc123-def456-789
+raworc session remix abc123-def456-789
 
 # Remix by name with new name
-raworc session start remix my-session --name "experiment-1"
+raworc session remix my-session --name "experiment-1"
 
 # Selective copying
-raworc session start remix my-session \
+raworc session remix my-session \
   --name "data-only-version" \
   --data true \
   --code false \
   --secrets false
 
 # Remix with immediate prompt
-raworc session start remix my-session \
+raworc session remix my-session \
   --name "alternative-approach" \
   --prompt "Try a different analysis method"
 ```
@@ -228,16 +228,16 @@ raworc session start remix my-session \
 
 ```bash
 # Publish with all remix permissions
-raworc session start publish my-session
+raworc session publish my-session
 
 # Publish with selective permissions
-raworc session start publish my-session \
+raworc session publish my-session \
   --data true \
   --code true \
   --secrets false
 
 # Unpublish session
-raworc session start unpublish my-session
+raworc session unpublish my-session
 ```
 
 ### Session Publish Options
@@ -339,9 +339,9 @@ Pass environment variables and API keys to Host sessions:
 
 ```bash
 # Session with environment variables only
-raworc session start
+raworc session
 # Multiple secrets
-raworc session start --secrets '{
+raworc session --secrets '{
   "DATABASE_URL": "mysql://user:pass@host/db",
   "OPENAI_API_KEY": "sk-your-openai-key"
 }'
@@ -353,10 +353,10 @@ Provide system instructions for the Host:
 
 ```bash
 # Inline instructions
-raworc session start --instructions "You are a helpful coding Host specialized in Python"
+raworc session --instructions "You are a helpful coding Host specialized in Python"
 
 # Instructions from file
-raworc session start --instructions-file ./my-instructions.md
+raworc session --instructions-file ./my-instructions.md
 ```
 
 ### Setup Script Configuration
@@ -365,17 +365,17 @@ Run initialization commands in the Host session container:
 
 ```bash
 # Inline setup
-raworc session start --setup "pip install pandas numpy matplotlib"
+raworc session --setup "pip install pandas numpy matplotlib"
 
 # Multi-line setup
-raworc session start --setup "#!/bin/bash
+raworc session --setup "#!/bin/bash
 echo 'Setting up development environment'
 apt-get update
 apt-get install -y curl git
 pip install pandas numpy matplotlib jupyter"
 
 # Setup from file
-raworc session start --setup-file ./setup.sh
+raworc session --setup-file ./setup.sh
 ```
 
 ## 5. Session Remix (Advanced)
@@ -542,7 +542,7 @@ Here are practical examples for different automation scenarios using Computer Us
 
 ```bash
 # Create a web automation Host session
-raworc session start \
+raworc session \
   --instructions "You automate web tasks. Use browsers to fill forms, extract data, and navigate websites." \
   --setup "pip install selenium beautifulsoup4 requests"
 ```
@@ -551,7 +551,7 @@ raworc session start \
 
 ```bash
 # Create a document processing Host session
-raworc session start \
+raworc session \
   --instructions "You process documents and files. Generate reports, manipulate spreadsheets, and handle data workflows." \
   --setup "pip install pandas openpyxl python-docx pdfplumber"
 ```
@@ -560,7 +560,7 @@ raworc session start \
 
 ```bash
 # Create a system automation Host session
-raworc session start \
+raworc session \
   --instructions "You automate system administration tasks. Manage servers, deploy applications, and monitor systems." \
   --setup "apt-get update && apt-get install -y curl jq && pip install fabric paramiko"
 ```
@@ -569,7 +569,7 @@ raworc session start \
 
 ```bash
 # Create a data science Host session
-raworc session start \
+raworc session \
   --secrets '{"DATABASE_URL":"postgresql://user:pass@host/db"}' \
   --instructions "You are a data scientist Host. Analyze data, create visualizations, and generate insights." \
   --setup "pip install pandas numpy matplotlib seaborn jupyter plotly"
@@ -579,7 +579,7 @@ raworc session start \
 
 ```bash
 # Create a development Host session
-raworc session start \
+raworc session \
   --instructions "You are a senior developer Host. Write code, debug issues, and manage repositories." \
   --setup "pip install black flake8 pytest mypy && npm install -g typescript"
 ```
@@ -588,7 +588,7 @@ raworc session start \
 
 ```bash
 # Minimal Host session for quick tasks
-raworc session start \
+raworc session \
   --instructions "You help with quick tasks and experimentation."
 ```
 
@@ -596,7 +596,7 @@ raworc session start \
 
 ```bash
 # Create an AI agent development session
-raworc session start \
+raworc session \
   --instructions "You develop AI agents and automation tools using frameworks like LangGraph, CrewAI, and AutoGen." \
   --setup "pip install langgraph crewai autogen langchain openai"
 ```

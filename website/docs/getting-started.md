@@ -69,13 +69,13 @@ raworc session
 ### Session with Instructions
 
 ```bash
-raworc session start --instructions-file ./my-instructions.md
+raworc session --instructions "You are a helpful coding assistant specialized in Python"
 ```
 
 ### Session with Setup Script
 
 ```bash
-raworc session start --setup-file ./setup.sh
+raworc session --setup "pip install pandas numpy matplotlib"
 ```
 
 For more advanced session configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#4-session-configuration-options).

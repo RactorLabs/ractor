@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'concepts/computer-use-agents',
         'concepts/sessions',
+        'concepts/session-names-and-publishing',
         'concepts/computer-use-landscape',
         'concepts/rbac-system',
       ],

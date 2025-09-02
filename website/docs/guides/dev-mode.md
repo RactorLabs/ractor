@@ -3,258 +3,276 @@ sidebar_position: 2
 title: Dev Mode
 ---
 
-# Dev Mode - Coding Agent
+# Dev Mode - Code Development Environment
 
-Dev Mode enables the **Coding Agent** within the Raworc Computer Use Agent. This specialized mode allows your Host to write code, execute programs, and build agents using frameworks like LangGraph, CrewAI, AutoGen through conversational interfaces.
+Dev Mode provides direct access to the `/session/code` folder in your Host sessions, enabling you to write code, create scripts, build agents, perform analysis, and develop applications using any programming language or framework.
 
 ## What is Dev Mode?
 
-Dev Mode enables the Coding Agent within your Computer Use Agent, providing specialized development capabilities:
+Dev Mode gives you access to a persistent code development environment within your Host sessions:
 
-### **Computer Use Agent (Base)**
-- Controls the computer, manages files, runs software
-- Handles all computer interface operations
-- Manages development environment and tools
-- Maintains session state and persistence
+### **Code Folder Access**
+- Full read/write access to `/session/code` directory
+- Persistent storage across session close/restore cycles  
+- Create files, scripts, applications, and projects
+- Install packages and dependencies as needed
 
-### **Coding Agent (Dev Mode)**
-When Dev Mode is enabled, the Host gains coding capabilities to develop anything:
-- **Scripts and automation tools** - Create custom scripts for any task
-- **API integrations** - Build connections to external services
-- **Agent development** - Build specialized agents using LangGraph, CrewAI, AutoGen, LangChain
-- **Web applications** - Create websites, dashboards, and web services
-- **Data processing tools** - Build custom analysis and reporting tools
-- **Repository integration** - Clone and extend existing codebases
+### **Development Capabilities**
+- **Agent Development** - Build AI agents using LangGraph, CrewAI, AutoGen
+- **Script Creation** - Write automation scripts and utilities
+- **Data Analysis** - Create analysis notebooks and visualization scripts
+- **Application Development** - Build web apps, APIs, and tools
+- **Project Management** - Organize code into structured projects
 
-## How Dev Mode Works
+## Code Folder Structure
 
-Your Computer Use Agent with Coding Agent enabled can handle complex development workflows:
+Your session's code folder is available at `/session/code` with full development access:
 
-```bash
-# Start Dev Mode session  
-raworc session start
-
-You: "I need to build a customer service agent using LangGraph"
-
-Host (with Coding Agent): I'll handle this development task:
-1. [Host] Setting up development environment
-2. [Coding Agent] Cloning LangGraph repository and analyzing examples
-3. [Coding Agent] Writing customer service agent code
-4. [Host] Installing dependencies and testing the agent
-5. [Coding Agent] Creating deployment configuration
-
-[Host manages computer operations while Coding Agent handles all development work]
+```
+/session/code/
+├── scripts/          # Automation scripts and utilities
+├── agents/           # AI agent implementations  
+├── analysis/         # Data analysis and notebooks
+├── apps/             # Web applications and APIs
+├── projects/         # Larger development projects
+├── libs/             # Shared libraries and utilities
+├── config/           # Configuration files
+└── docs/             # Project documentation
 ```
 
-## Dev Mode Capabilities
+## Getting Started with Dev Mode
 
-### Conversational Framework Development
-
-Your Host with Coding Agent can build using any framework through conversation:
+### Enable Dev Mode
 
 ```bash
-# Start Dev Mode session
-raworc session start
-
-You: "Create a Python script that scrapes product data from Amazon and analyzes pricing trends"
-
-Host (with Coding Agent): I'll handle this development task:
-1. [Host] Setting up Python environment and installing libraries
-2. [Coding Agent] Writing web scraping script with error handling
-3. [Coding Agent] Creating data analysis and trend visualization
-4. [Host] Testing the complete pipeline and saving results
-
-[Host manages computer while Coding Agent writes the code]
+# Start session with development focus
+raworc session
 ```
 
-#### **Framework Development Examples**
-```bash
-You: "Clone the LangGraph examples repo and help me build a customer service agent"
+All sessions have access to the code folder - there's no special "dev mode" to enable. Simply start working with files in `/session/code`.
 
-Host (with Coding Agent): I'll build this for you:
-1. [Host] Cloning LangGraph repository and analyzing documentation
-2. [Coding Agent] Setting up development environment and dependencies
-3. [Coding Agent] Writing customer service agent using LangGraph patterns
-4. [Host] Testing the agent and validating functionality
-
-You: "Add memory capabilities to remember customer interactions"
-[Coding Agent] Implementing persistent memory using LangGraph state management
-[Host] Testing memory functionality and validating persistence
-```
-
-#### **API Integration Development**
-```bash
-You: "Create a script that posts our daily sales report to Slack automatically"
-
-Host (with Coding Agent): I'll build this script:
-1. [Host] Setting up Python environment and Slack API access
-2. [Coding Agent] Writing script to generate sales report from database
-3. [Coding Agent] Adding Slack API integration to post formatted reports
-4. [Host] Testing the script and saving it for scheduled execution
-
-Result: Script ready to run on your servers or automation platform
-```
-
-#### **Data Processing Script Development**
-```bash
-You: "Create a script that scrapes competitor prices and generates a pricing analysis report"
-
-Host (with Coding Agent): I'll build this data processing script:
-1. [Host] Setting up development environment and web scraping tools
-2. [Coding Agent] Writing web scraping scripts for competitor websites
-3. [Coding Agent] Creating price comparison and analysis logic
-4. [Coding Agent] Building report generation with charts and insights
-5. [Host] Testing the complete script and saving output files
-
-Result: Script that generates pricing analysis reports on demand
-```
-
-## Dev Mode Development Types
-
-### **What You Can Develop with Coding Agent**
-
-The Coding Agent within your Host can develop anything:
-
-- **Custom Scripts** - Python, JavaScript, Bash scripts for data processing and automation
-- **API Integration Scripts** - Scripts that connect to external services and APIs
-- **Static Web Applications** - Websites, dashboards, documentation sites
-- **Agent Development** - Build agents using LangGraph, CrewAI, AutoGen, LangChain for deployment elsewhere
-- **Data Analysis Tools** - Scripts for analysis, reporting, and data processing
-- **Development Tools** - Code generators, testing utilities, deployment scripts
-
-## Available Development Environments
-
-Raworc sessions provide pre-configured environments with common tools and runtimes:
-
-### Python Environment
-
-**What's included**:
-- Python 3.11 with pip, venv
-- Common data science libraries can be installed
-- Full filesystem access for file operations
-- Web browsing capabilities via requests/selenium
-
-**Example Usage**:
-```bash
-# Start Python development session
-raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
-  --setup "pip install langchain openai pandas numpy matplotlib jupyter"
-
-# In session:  
-You: Create a LangChain RAG pipeline for document analysis
-Assistant: I'll help you create a RAG pipeline...
-[Assistant creates and runs the code]
-```
-
-### Node.js Environment  
-
-**What's included**:
-- Node.js LTS with npm, yarn
-- Access to full npm ecosystem
-- File system and network access
-- Browser automation capabilities
-
-**Example Usage**:
-```bash
-# Start Node.js development session
-raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key","OPENAI_API_KEY":"your-openai-key"}' \
-  --setup "npm install -g typescript && npm init -y && npm install langchain openai"
-
-# In session:
-You: Build a ChatGPT-style chatbot using LangChain
-Assistant: I'll create a chatbot for you...
-[Assistant builds the Node.js application]
-```
-
-### System Tools
-
-**What's available**:
-- Git for version control
-- curl, wget for API calls
-- Text editors (nano, vim)
-- Process management tools
-- Docker client (for containerized workflows)
-
-## Framework Examples
-
-#### **Repository Integration**
-
-The Coding Agent can work with existing codebases:
+### Basic Development Commands
 
 ```bash
-# Start Dev Mode 
-raworc session start
+# In any Host session, navigate to code folder
+You: "Let's work in the code folder. Show me what's there."
 
-You: "Clone the LangGraph repository and show me how to build a customer service agent"
-Host: I'll clone the LangGraph repo and guide you through building a customer service agent...
-[Agent clones repo, analyzes structure, creates example]
+# Create a new Python script
+You: "Create a Python script in /session/code/scripts/data_processor.py"
 
-You: "Now deploy this as a REST API"
-Host: I'll create a FastAPI wrapper for your LangGraph agent...
-[Agent builds deployment code]
+# Install packages for development  
+You: "Install pandas, numpy, and matplotlib in this session"
+
+# Run your code
+You: "Execute the data_processor.py script with the sample data"
 ```
 
-#### **Framework Exploration**
+## Development Use Cases
 
-Explore and learn frameworks interactively:
+### 1. AI Agent Development
+
+Build intelligent agents using popular frameworks:
 
 ```bash
-You: "Check out the CrewAI repository and build a content creation team"
-Host: I'll explore CrewAI and build a content creation team for you...
-[Agent clones CrewAI, studies examples, builds custom team]
+# Create LangGraph agent
+You: "Create a LangGraph agent in /session/code/agents/ that processes customer emails and routes them to appropriate teams"
 
-You: "Compare this approach with AutoGen for the same task"
-Host: Let me clone AutoGen and show you how to accomplish the same task...
-[Agent compares frameworks and shows differences]
+# Build CrewAI system
+You: "Set up a CrewAI project in /session/code/projects/content-crew that has agents for research, writing, and editing"
+
+# AutoGen multi-agent system
+You: "Create an AutoGen multi-agent conversation system for code review in /session/code/agents/code-review"
 ```
 
-## Session Persistence & Remix
+### 2. Script Development
 
-One of Raworc's key advantages is persistent sessions:
-
-### Session Lifecycle
+Create automation scripts and utilities:
 
 ```bash
-# Start development session
-raworc session start 
+# Data processing script
+You: "Write a Python script that processes CSV files and generates summary reports"
 
-# Work on your project...
-You: Build a data analysis pipeline
-# Session creates files in /session/code and /session/data
+# Web scraping utility
+You: "Create a web scraping script that extracts product data from e-commerce sites"
 
-# Close session to save resources (optional)
-raworc api sessions/{session-id}/close -m POST
-
-# Restore later to continue work
-raworc session restore {session-id}
-
-# Your files and environment are preserved!
+# System automation
+You: "Build a bash script that monitors logs and sends alerts when errors occur"
 ```
 
-### Session Remix
+### 3. Data Analysis Projects
 
-Create variations of your work:
+Develop analysis tools and notebooks:
 
 ```bash
-# Remix existing session with modifications
-raworc session remix {parent-session-id}
+# Analysis notebook
+You: "Create a Jupyter notebook for sales data analysis with visualizations"
 
-# Selective remix (copy only specific content)
-raworc session remix {parent-session-id} --data false --code true
+# Statistical analysis
+You: "Build a Python script that performs statistical analysis on survey data"
+
+# Machine learning project
+You: "Create an ML project for customer churn prediction using scikit-learn"
 ```
 
-## Best Practices
+### 4. Web Application Development
 
-1. **Environment Setup**: Use setup scripts for reproducible environments
-2. **File Organization**: Keep code in `/session/code`, data in `/session/data`
-3. **Secret Management**: Pass secrets via the `--secrets` parameter
-4. **Session Remix**: Use remix to branch and experiment with different approaches
-5. **Instructions**: Provide clear instructions to guide the Host
+Build web applications and APIs:
+
+```bash
+# Flask web app
+You: "Create a Flask web application with user authentication and data dashboard"
+
+# FastAPI service
+You: "Build a FastAPI service that provides REST endpoints for our data processing pipeline"
+
+# React frontend
+You: "Create a React application that consumes our API and displays interactive charts"
+```
+
+## Code Persistence and Management
+
+### Session Persistence
+- **Code survives session close/restore** - Your code folder persists when you close and restore sessions
+- **Version control ready** - Initialize git repositories in your code folder
+- **Package installations persist** - Installed packages remain available after restore
+
+### Project Organization
+```bash
+# Organize your development work
+You: "Create a project structure for a customer analytics platform with separate folders for backend, frontend, and data processing"
+
+# Set up development environment
+You: "Initialize a Python virtual environment and install all dependencies from requirements.txt"
+
+# Version control setup
+You: "Initialize a git repository in the project folder and create initial commit"
+```
+
+## Working with Different Languages
+
+### Python Development
+```bash
+You: "Set up a Python development environment with pytest, black, and flake8"
+You: "Create a Python package structure with __init__.py files and setup.py"
+You: "Install and configure pre-commit hooks for code quality"
+```
+
+### JavaScript/Node.js Development  
+```bash
+You: "Initialize a Node.js project with package.json and install Express framework"
+You: "Set up a TypeScript configuration with proper build pipeline"
+You: "Create a Next.js application with API routes and database integration"
+```
+
+### Other Languages
+```bash
+You: "Set up a Rust development environment and create a CLI application"
+You: "Install Go and create a microservice with HTTP endpoints"
+You: "Set up a Java Spring Boot project with Maven dependencies"
+```
+
+## Development Workflows
+
+### Agent Development Workflow
+1. **Design** - Plan your agent architecture and capabilities
+2. **Setup** - Install frameworks (LangGraph, CrewAI, AutoGen)
+3. **Implement** - Create agent classes and conversation flows
+4. **Test** - Run agents with sample inputs and scenarios
+5. **Deploy** - Package agents for production use
+
+### Application Development Workflow  
+1. **Planning** - Define requirements and architecture
+2. **Environment** - Set up development environment and dependencies
+3. **Development** - Implement features iteratively
+4. **Testing** - Create and run test suites
+5. **Documentation** - Write API docs and usage guides
+
+### Analysis Project Workflow
+1. **Data exploration** - Load and examine datasets
+2. **Preprocessing** - Clean and prepare data for analysis
+3. **Analysis** - Perform statistical analysis and modeling
+4. **Visualization** - Create charts and interactive dashboards
+5. **Reporting** - Generate summary reports and insights
+
+## Advanced Development Features
+
+### Package Management
+```bash
+# Python packages
+You: "Create a requirements.txt with all our project dependencies"
+
+# Node.js packages  
+You: "Set up package.json with development and production dependencies"
+
+# System packages
+You: "Install system-level tools needed for our development environment"
+```
+
+### Code Quality Tools
+```bash
+# Python code quality
+You: "Set up black, flake8, and mypy for code formatting and type checking"
+
+# JavaScript code quality
+You: "Configure ESLint and Prettier for consistent code style"
+
+# Testing frameworks
+You: "Set up pytest for Python testing with coverage reports"
+```
+
+### Development Utilities
+```bash
+# Database tools
+You: "Install and configure database clients for PostgreSQL and MongoDB"
+
+# API testing
+You: "Set up Postman collections for testing our API endpoints"
+
+# Performance monitoring
+You: "Install monitoring tools to track application performance"
+```
+
+## Tips for Effective Development
+
+### Project Organization
+- **Use clear folder structures** - Organize code by functionality
+- **Follow naming conventions** - Use consistent file and variable naming
+- **Document your code** - Add README files and inline documentation
+- **Version control** - Use git for tracking changes
+
+### Development Best Practices  
+- **Start with small iterations** - Build and test incrementally
+- **Use virtual environments** - Isolate project dependencies
+- **Write tests early** - Create tests alongside your code
+- **Handle errors gracefully** - Implement proper error handling
+
+### Session Management
+- **Use descriptive session names** - Name sessions by project or purpose
+- **Close unused sessions** - Free up resources when not actively developing
+- **Backup important work** - Export code or push to external repositories
+- **Use session remixing** - Create variants for experimentation
+
+## Getting Help
+
+Your Host is an expert developer that can help with:
+
+```bash
+# Code review and suggestions
+You: "Review this Python code and suggest improvements for performance and readability"
+
+# Debugging assistance  
+You: "Help me debug this error in my Flask application"
+
+# Architecture advice
+You: "What's the best way to structure this multi-agent system for scalability?"
+
+# Learning new technologies
+You: "Teach me how to use LangGraph to build conversational AI agents"
+```
 
 ## Next Steps
 
-- **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all session commands
-- **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture  
-- **[API Reference](/docs/api/rest-api)** - Direct API access for automation
+- **[Getting Started](/docs/getting-started)** - Set up your first development session
+- **[CLI Usage Guide](/docs/guides/cli-usage)** - Master session management commands
+- **[Sessions](/docs/concepts/sessions)** - Understand session persistence and lifecycle
+- **[API Reference](/docs/api/rest-api)** - Integrate development workflows with APIs

@@ -226,7 +226,7 @@ git clone <this-repo>
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `raworc session` | Start interactive session | `raworc session start` |
+| `raworc session` | Start interactive session | `raworc session` |
 | `raworc session restore <id>` | Restore session | `raworc session restore abc123` |
 | `raworc session remix <id>` | Remix session | `raworc session remix abc123` |
 | `raworc session publish <id>` | Publish session | `raworc session publish abc123` |
@@ -260,7 +260,7 @@ git clone <this-repo>
 - `raworc pull [-c/--cli-only] [-i/--images-only]` - Update CLI and images
 
 **Session Management:**
-- `raworc session start [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new session
+- `raworc session [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new session
 - `raworc session restore <session-id> [-p/--prompt]` - Restore existing session
 - `raworc session remix <session-id> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix session
 - `raworc session publish <session-id> [-d/--data] [-c/--code] [-s/--secrets]` - Publish session
