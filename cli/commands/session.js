@@ -596,11 +596,11 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 function showPrompt(state = 'idle') {
   const stateLabels = {
     'init': 'initializing...',
-    'idle': 'waiting',
+    'idle': 'idle',
     'busy': 'working...',
-    'waiting': 'waiting',
+    'waiting': 'idle',
     'error': 'error',
-    'closed': 'sleeping'
+    'closed': 'slept'
   };
   
   const stateColors = {
@@ -623,11 +623,11 @@ function showPrompt(state = 'idle') {
 function showPromptWithInput(state = 'idle', userInput = '') {
   const stateLabels = {
     'init': 'initializing...',
-    'idle': 'waiting',
+    'idle': 'idle',
     'busy': 'working...',
-    'waiting': 'waiting',
+    'waiting': 'idle',
     'error': 'error',
-    'closed': 'sleeping'
+    'closed': 'slept'
   };
   
   const stateColors = {
