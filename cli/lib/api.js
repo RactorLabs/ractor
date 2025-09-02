@@ -42,11 +42,6 @@ class ApiClient {
     
     const client = this.createClient();
     
-    // Debug logging for PUT requests
-    if (method === 'PUT' && data) {
-      console.log('DEBUG: PUT request data:', JSON.stringify(data, null, 2));
-    }
-    
     // Ensure endpoint starts with /api/v0
     if (!endpoint.startsWith('/api/v0')) {
       endpoint = `/api/v0${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;

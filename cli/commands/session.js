@@ -613,7 +613,6 @@ async function chatLoop(sessionId) {
         if (timeoutSeconds > 0 && timeoutSeconds <= 3600) { // Max 1 hour
           const spinner = ora('Updating session timeout...').start();
           try {
-            console.log(chalk.gray('Debug: Sending timeout update:', timeoutSeconds)); // Debug log
             const updateResponse = await api.put(`/sessions/${sessionId}`, {
               timeout_seconds: timeoutSeconds
             });
@@ -622,8 +621,6 @@ async function chatLoop(sessionId) {
             } else {
               spinner.fail('Failed to update timeout');
               console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
-              console.log(chalk.red('Status:'), updateResponse.status); // Debug log
-              console.log(chalk.red('Response:'), JSON.stringify(updateResponse, null, 2)); // Debug log
             }
           } catch (error) {
             spinner.fail('Failed to update timeout');
@@ -642,7 +639,6 @@ async function chatLoop(sessionId) {
         if (newName.length > 0 && newName.length <= 100) {
           const spinner = ora('Updating session name...').start();
           try {
-            console.log(chalk.gray('Debug: Sending name update:', newName)); // Debug log
             const updateResponse = await api.put(`/sessions/${sessionId}`, {
               name: newName
             });
@@ -651,8 +647,6 @@ async function chatLoop(sessionId) {
             } else {
               spinner.fail('Failed to update name');
               console.log(chalk.red('Error:'), updateResponse.error || 'Unknown error');
-              console.log(chalk.red('Status:'), updateResponse.status); // Debug log
-              console.log(chalk.red('Response:'), JSON.stringify(updateResponse, null, 2)); // Debug log
             }
           } catch (error) {
             spinner.fail('Failed to update name');
