@@ -886,6 +886,7 @@ async function chatLoop(sessionId) {
       if (!sendResponse.success) {
         clearPromptLine();
         promptVisible = false;
+        console.log();
         console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
         // Update state from server after error
         await updateSessionState();
@@ -899,6 +900,7 @@ async function chatLoop(sessionId) {
     } catch (error) {
       clearPromptLine();
       promptVisible = false;
+      console.log();
       console.log(chalk.red('❌ Error sending message:'), error.message);
       // Update state from server after error
       await updateSessionState();
@@ -925,6 +927,7 @@ async function showSessionStatus(sessionId) {
       console.log(chalk.gray('  Updated:'), new Date(statusResponse.data.updated_at).toLocaleString());
       console.log();
     } else {
+      console.log();
       console.log(chalk.red('❌ Failed to get session status:'), statusResponse.error);
     }
   } catch (error) {
@@ -953,9 +956,11 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
         console.log();
         console.log(`✅ Session timeout updated to ${timeoutSeconds} seconds`);
       } else {
+        console.log();
         console.log(chalk.red('❌ Failed to update timeout:'), updateResponse.error || 'Unknown error');
       }
     } catch (error) {
+      console.log();
       console.log(chalk.red('❌ Failed to update timeout:'), error.message);
     }
   } else {
@@ -974,9 +979,11 @@ async function handleNameCommand(sessionId, newName) {
         console.log();
         console.log(`✅ Session name updated to: "${cleanName}"`);
       } else {
+        console.log();
         console.log(chalk.red('❌ Failed to update name:'), updateResponse.error || 'Unknown error');
       }
     } catch (error) {
+      console.log();
       console.log(chalk.red('❌ Failed to update name:'), error.message);
     }
   } else {
