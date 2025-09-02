@@ -245,7 +245,7 @@ async function sessionStartCommand(options) {
     }
 
     sessionId = createResponse.data.id;
-    spinner.succeed(`Session created: ${sessionId}`);
+    console.log();\n    console.log(chalk.gray('Session Id:'), sessionId);
 
     await startInteractiveSession(sessionId, options);
 
