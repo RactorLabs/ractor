@@ -81,6 +81,26 @@ raworc token -p myuser -t User
 raworc token -p newoperator -t Operator
 ```
 
+### Authentication Command Options
+
+| Command | Options | Description |
+|---------|---------|-------------|
+| `raworc login` | `[-u/--user] [-p/--pass] [-s/--server]` | Generate operator authentication token |
+| `raworc auth` | `[-t/--token] [-s/--server]` | Authenticate with token or show status |
+| `raworc logout` | | Clear authentication credentials |
+| `raworc token` | `[-p/--principal] [-t/--type]` | Create token for principal (User/Operator) |
+
+### Authentication Options Details
+
+| Option | Description | Default | Example |
+|--------|-------------|---------|---------|
+| `-u, --user <user>` | Operator username | Required | `--user admin` |
+| `-p, --pass <pass>` | Password for authentication | Required | `--pass admin` |
+| `-s, --server <url>` | Server URL | `http://localhost:9000` | `--server https://my-raworc.com` |
+| `-t, --token <token>` | JWT token for authentication | Required for auth | `--token eyJ0eXAi...` |
+| `-p, --principal <name>` | Principal name for token creation | Required | `--principal myuser` |
+| `-t, --type <type>` | Principal type (User/Operator) | `User` | `--type Operator` |
+
 ### Check Server Status
 ```bash
 raworc api version
@@ -113,33 +133,47 @@ raworc session unpublish <session-id-or-name>
 ### Starting New Sessions
 
 ```bash
-# Basic session
-raworc session start 
+# Basic session (uses ANTHROPIC_API_KEY from environment)
+raworc session start
+
 # Session with name and timeout
-raworc session start \\
-  --name "my-analysis-session" \\
-  --timeout 300 \\
-  
+raworc session start \
+  --name "my-analysis-session" \
+  --timeout 300
+
 # Session with instructions and setup
-raworc session start \\
-  --instructions "You are a helpful coding Host" \\
-  --setup "pip install pandas numpy matplotlib" \\
-  
+raworc session start \
+  --instructions "You are a helpful coding Host" \
+  --setup "pip install pandas numpy matplotlib"
+
 # Instructions from file
-raworc session start --instructions-file ./instructions.md --secrets '{}'
+raworc session start --instructions-file ./instructions.md
 
 # Setup from file
-raworc session start --setup-file ./setup.sh --secrets '{}'
+raworc session start --setup-file ./setup.sh
 
 # Full configuration with prompt
 raworc session start \
   --name "data-project" \
-  --secrets '{,"DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --secrets '{"DATABASE_URL":"mysql://user:pass@host/db"}' \
   --instructions "You are a data analyst Host" \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy" \
   --prompt "Hello, let's start analyzing the customer data" \
   --timeout 600
 ```
+
+### Session Start Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-n, --name <name>` | Name for the session | `--name "my-session"` |
+| `-t, --timeout <seconds>` | Session timeout in seconds (default: 60) | `--timeout 300` |
+| `-S, --secrets <json>` | JSON secrets for session environment | `--secrets '{"DB_URL":"..."}'` |
+| `-i, --instructions <text>` | Direct instructions text | `--instructions "You are a data analyst"` |
+| `-if, --instructions-file <file>` | Path to instructions file | `--instructions-file ./instructions.md` |
+| `-s, --setup <text>` | Direct setup script text | `--setup "pip install pandas"` |
+| `-sf, --setup-file <file>` | Path to setup script file | `--setup-file ./setup.sh` |
+| `-p, --prompt <text>` | Prompt to send after creation | `--prompt "Hello, let's start"` |
 
 ### Restoring Sessions
 
@@ -151,6 +185,12 @@ raworc session restore my-session-name
 # Restore with immediate prompt
 raworc session restore my-session --prompt "Continue the analysis from yesterday"
 ```
+
+### Session Restore Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-p, --prompt <text>` | Prompt to send after restoring | `--prompt "Continue work"` |
 
 ### Remixing Sessions
 
@@ -174,6 +214,16 @@ raworc session remix my-session \
   --prompt "Try a different analysis method"
 ```
 
+### Session Remix Options
+
+| Option | Description | Default | Example |
+|--------|-------------|---------|---------|
+| `-n, --name <name>` | Name for the new session | Auto-generated | `--name "experiment-1"` |
+| `-d, --data <boolean>` | Include data files | `true` | `--data false` |
+| `-c, --code <boolean>` | Include code files | `true` | `--code false` |
+| `-s, --secrets <boolean>` | Include secrets | `true` | `--secrets false` |
+| `-p, --prompt <text>` | Prompt to send after creation | None | `--prompt "Try new approach"` |
+
 ### Publishing Sessions
 
 ```bash
@@ -189,6 +239,14 @@ raworc session publish my-session \
 # Unpublish session
 raworc session unpublish my-session
 ```
+
+### Session Publish Options
+
+| Option | Description | Default | Example |
+|--------|-------------|---------|---------|
+| `-d, --data <boolean>` | Allow data remix | `true` | `--data false` |
+| `-c, --code <boolean>` | Allow code remix | `true` | `--code false` |
+| `-s, --secrets <boolean>` | Allow secrets remix | `true` | `--secrets false` |
 
 ### Interactive Session Interface
 
@@ -358,24 +416,26 @@ raworc api sessions/{source-session-id}/remix -m post -b '{
 ### Cleanup Operations
 
 ```bash
-# Clean containers only
+# Clean session containers only (preserves core services and volumes)
 raworc clean
 
-# Clean containers and images (preserves volumes)
-raworc clean --all
-
-# Auto-confirm cleanup
-raworc clean -y
-
 # Complete Docker reset (nuclear option)
-raworc reset -y
-
-# Services-only cleanup (skip Docker cleanup)
-raworc reset -s
+raworc reset
+raworc reset --yes                    # Auto-confirm without prompting
+raworc reset --services-only          # Only stop services, don't clean Docker
 
 # Stop services with cleanup
 raworc stop --cleanup
 ```
+
+### Service Management Options
+
+| Command | Options | Description |
+|---------|---------|-------------|
+| `raworc start` | `[-r/--restart] [components...]` | Start services, optionally restart existing |
+| `raworc stop` | `[-c/--cleanup] [components...]` | Stop services, optionally clean session containers |
+| `raworc clean` | | Clean session containers (preserves core services) |
+| `raworc reset` | `[-y/--yes] [-s/--services-only]` | Complete cleanup with optional confirmation |
 
 ### Update Operations
 
@@ -389,6 +449,13 @@ raworc pull --cli-only
 # Only pull Docker images
 raworc pull --images-only
 ```
+
+### Pull Command Options
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `-c, --cli-only` | Only update CLI, skip Docker images | `raworc pull --cli-only` |
+| `-i, --images-only` | Only pull Docker images, skip CLI update | `raworc pull --images-only` |
 
 ### Troubleshooting
 
