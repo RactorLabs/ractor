@@ -204,6 +204,18 @@ async function sessionStartCommand(options) {
 
     // Add name if provided
     if (options.name) {
+      // Validate name format
+      if (options.name.length === 0 || options.name.length > 100) {
+        spinner.fail('Invalid session name');
+        console.error(chalk.red('Error:'), 'Session name must be 1-100 characters long');
+        process.exit(1);
+      }
+      if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
+        spinner.fail('Invalid session name');
+        console.error(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+        console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
+        process.exit(1);
+      }
       sessionPayload.name = options.name;
     }
 
@@ -385,6 +397,18 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
     // Add name if provided
     if (options.name) {
+      // Validate name format
+      if (options.name.length === 0 || options.name.length > 100) {
+        spinner.fail('Invalid session name');
+        console.error(chalk.red('Error:'), 'Session name must be 1-100 characters long');
+        process.exit(1);
+      }
+      if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
+        spinner.fail('Invalid session name');
+        console.error(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+        console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
+        process.exit(1);
+      }
       remixPayload.name = options.name;
     }
 
