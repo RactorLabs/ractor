@@ -150,7 +150,6 @@ async function sessionStartCommand(options) {
 
   try {
     // Create a new session
-    const spinner = ora('Creating session...').start();
 
     // Prepare session creation payload
     const sessionPayload = {};
@@ -233,7 +232,6 @@ async function sessionStartCommand(options) {
     const createResponse = await api.post('/sessions', sessionPayload);
 
     if (!createResponse.success) {
-      spinner.fail('Failed to create session');
       console.error(chalk.red('Error:'), createResponse.error);
 
       if (createResponse.status === 400) {
