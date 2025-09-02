@@ -820,42 +820,44 @@ async function chatLoop(sessionId) {
       return;
     }
 
+    // Handle commands - don't return early, just set a flag
+    let shouldSendMessage = true;
+    
     // Handle status command
     if (userInput === '/status') {
       await showSessionStatus(sessionId);
-      showPrompt(currentSessionState);
-      promptVisible = true;
-      return;
+      shouldSendMessage = false;
     }
-
     // Handle help command
-    if (userInput === '/help') {
+    else if (userInput === '/help') {
       showHelp();
-      showPrompt(currentSessionState);
-      promptVisible = true;
-      return;
+      shouldSendMessage = false;
     }
-
     // Handle timeout commands
-    const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
-    if (timeoutMatch) {
-      await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
+    else {
+      const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
+      if (timeoutMatch) {
+        await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
+        shouldSendMessage = false;
+      }
+      // Handle name commands
+      else {
+        const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
+        if (nameMatch) {
+          await handleNameCommand(sessionId, nameMatch[1]);
+          shouldSendMessage = false;
+        }
+      }
+    }
+    
+    // Show prompt after command execution or send message
+    if (!shouldSendMessage) {
       showPrompt(currentSessionState);
       promptVisible = true;
-      return;
+    } else {
+      // Send message to session
+      await sendMessage(sessionId, userInput);
     }
-
-    // Handle name commands
-    const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
-    if (nameMatch) {
-      await handleNameCommand(sessionId, nameMatch[1]);
-      showPrompt(currentSessionState);
-      promptVisible = true;
-      return;
-    }
-
-    // Send message to session
-    await sendMessage(sessionId, userInput);
   });
 
   function cleanup() {
