@@ -160,7 +160,7 @@ async function sessionStartCommand(options) {
         sessionPayload.secrets = JSON.parse(options.secrets);
       } catch (error) {
         spinner.fail('Invalid secrets JSON format');
-        console.error(chalk.red('Error:'), 'Secrets must be valid JSON');
+        console.error(chalk.red('✗ Error:'), 'Secrets must be valid JSON');
         process.exit(1);
       }
     }
@@ -177,7 +177,7 @@ async function sessionStartCommand(options) {
         sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
       } catch (error) {
         spinner.fail('Failed to read instructions file');
-        console.error(chalk.red('Error:'), error.message);
+        console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
       }
     }
@@ -191,7 +191,7 @@ async function sessionStartCommand(options) {
         sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
       } catch (error) {
         spinner.fail('Failed to read setup script');
-        console.error(chalk.red('Error:'), error.message);
+        console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
       }
     }
@@ -206,12 +206,12 @@ async function sessionStartCommand(options) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
         spinner.fail('Invalid session name');
-        console.error(chalk.red('Error:'), 'Session name must be 1-100 characters long');
+        console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
         spinner.fail('Invalid session name');
-        console.error(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+        console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
         console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
         process.exit(1);
       }
@@ -223,7 +223,7 @@ async function sessionStartCommand(options) {
       const timeoutSeconds = parseInt(options.timeout);
       if (isNaN(timeoutSeconds) || timeoutSeconds <= 0) {
         spinner.fail('Invalid timeout value');
-        console.error(chalk.red('Error:'), 'Timeout must be a positive number in seconds');
+        console.error(chalk.red('✗ Error:'), 'Timeout must be a positive number in seconds');
         process.exit(1);
       }
       sessionPayload.timeout_seconds = timeoutSeconds;
@@ -232,11 +232,11 @@ async function sessionStartCommand(options) {
     const createResponse = await api.post('/sessions', sessionPayload);
 
     if (!createResponse.success) {
-      console.error(chalk.red('Error:'), createResponse.error);
+      console.error(chalk.red('✗ Error:'), createResponse.error);
 
       if (createResponse.status === 400) {
         console.log();
-        console.log(chalk.yellow('💡 Check if your session parameters are valid'));
+        console.log(chalk.yellow('ℹ') + ' Check if your session parameters are valid');
       }
 
       process.exit(1);
@@ -262,7 +262,7 @@ async function sessionRestoreCommand(sessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🤖 Restoring Raworc AI Session'));
+  console.log(chalk.blue('ℹ') + ' Restoring Raworc AI Session');
   console.log(chalk.gray('Mode:'), 'Restore');
   console.log(chalk.gray('Session:'), sessionId);
   const userName = authData.user?.user || authData.user || 'Unknown';
@@ -278,7 +278,7 @@ async function sessionRestoreCommand(sessionId, options) {
 
     if (!sessionResponse.success) {
       spinner.fail('Failed to fetch session');
-      console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
+      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
       process.exit(1);
     }
 
@@ -300,7 +300,7 @@ async function sessionRestoreCommand(sessionId, options) {
 
       if (!restoreResponse.success) {
         spinner.fail('Failed to restore session');
-        console.error(chalk.red('Error:'), restoreResponse.error);
+        console.error(chalk.red('✗ Error:'), restoreResponse.error);
         process.exit(1);
       }
 
@@ -318,7 +318,7 @@ async function sessionRestoreCommand(sessionId, options) {
           });
 
           if (messageResponse.success) {
-            console.log(chalk.green('Prompt sent successfully'));
+            console.log(chalk.green('✓') + ' Prompt sent successfully');
           } else {
             console.log(chalk.yellow('Warning: Failed to send prompt:'), messageResponse.error);
           }
@@ -329,7 +329,7 @@ async function sessionRestoreCommand(sessionId, options) {
       }
     } else if (session.state === SESSION_STATE_BUSY) {
       spinner.succeed(`Session connected (currently busy): ${sessionId}`);
-      console.log(chalk.yellow('💡 Session is currently processing. You can observe ongoing activity.'));
+      console.log(chalk.yellow('ℹ') + ' Session is currently processing. You can observe ongoing activity.');
       console.log();
     } else {
       spinner.fail(`Cannot restore session in state: ${session.state}`);
@@ -353,7 +353,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🤖 Remixing Raworc AI Session'));
+  console.log(chalk.blue('ℹ') + ' Remixing Raworc AI Session');
   console.log(chalk.gray('Mode:'), 'Remix');
   console.log(chalk.gray('Source:'), sourceSessionId);
   if (options.name) {
@@ -403,12 +403,12 @@ async function sessionRemixCommand(sourceSessionId, options) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
         spinner.fail('Invalid session name');
-        console.error(chalk.red('Error:'), 'Session name must be 1-100 characters long');
+        console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
         spinner.fail('Invalid session name');
-        console.error(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+        console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
         console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
         process.exit(1);
       }
@@ -420,7 +420,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
     if (!remixResponse.success) {
       spinner.fail('Failed to remix session');
-      console.error(chalk.red('Error:'), remixResponse.error);
+      console.error(chalk.red('✗ Error:'), remixResponse.error);
       process.exit(1);
     }
 
@@ -521,7 +521,7 @@ async function startInteractiveSession(sessionId, options) {
 
   // If connecting to a busy session, start monitoring for ongoing activity
   if (options.sessionState === SESSION_STATE_BUSY) {
-    console.log(chalk.blue('🔄 Monitoring ongoing session activity...'));
+    console.log(chalk.blue('ℹ') + ' Monitoring ongoing session activity...');
     console.log();
 
     // Start monitoring without a user message time (will show any new messages)
@@ -929,7 +929,7 @@ async function showSessionStatus(sessionId) {
     const statusResponse = await api.get(`/sessions/${sessionId}`);
     if (statusResponse.success) {
       console.log();
-      console.log(chalk.blue('📊 Session Status:'));
+      console.log(chalk.blue('ℹ') + ' Session Status:');
       console.log(chalk.gray('  ID:'), statusResponse.data.id);
       console.log(chalk.gray('  Name:'), statusResponse.data.name || 'Unnamed');
       console.log(chalk.gray('  State:'), getStateDisplay(statusResponse.data.state));
@@ -946,7 +946,7 @@ async function showSessionStatus(sessionId) {
 
 function showHelp() {
   console.log();
-  console.log(chalk.blue('🤖 Available Commands:'));
+  console.log(chalk.blue('ℹ') + ' Available Commands:');
   console.log(chalk.gray('  /help       '), 'Show this help message');
   console.log(chalk.gray('  /status     '), 'Show session status');
   console.log(chalk.gray('  /timeout <s>'), 'Change session timeout (1-3600 seconds)');
@@ -970,7 +970,7 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
       console.log(chalk.red('✗ Failed to update timeout:'), error.message);
     }
   } else {
-    console.log(chalk.red('Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).'));
+    console.log(chalk.red('✗') + ' Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).');
   }
 }
 
@@ -990,8 +990,8 @@ async function handleNameCommand(sessionId, newName) {
       console.log(chalk.red('✗ Failed to update name:'), error.message);
     }
   } else {
-    console.log(chalk.red('Invalid session name'));
-    console.log(chalk.red('Error:'), 'Session name must contain only alphanumeric characters and hyphens');
+    console.log(chalk.red('✗') + ' Invalid session name');
+    console.log(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
     console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
   }
 }
@@ -1036,14 +1036,14 @@ async function sessionPublishCommand(sessionId, options) {
 
     if (!response.success) {
       spinner.fail('Failed to publish session');
-      console.error(chalk.red('Error:'), response.error);
+      console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
     spinner.succeed(`Session published: ${sessionId}`);
 
     console.log();
-    console.log(chalk.green('🎉 Session is now publicly accessible!'));
+    console.log(chalk.green('✓') + ' Session is now publicly accessible!');
     console.log();
     console.log(chalk.blue('📋 Public Access:'));
     console.log(chalk.gray('  • View:'), `raworc api published/sessions/${sessionId}`);
@@ -1080,14 +1080,14 @@ async function sessionUnpublishCommand(sessionId, options) {
 
     if (!response.success) {
       spinner.fail('Failed to unpublish session');
-      console.error(chalk.red('Error:'), response.error);
+      console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
     spinner.succeed(`Session unpublished: ${sessionId}`);
 
     console.log();
-    console.log(chalk.green('🔒 Session is now private again'));
+    console.log(chalk.green('✓') + ' Session is now private again');
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -1119,7 +1119,7 @@ async function sessionCloseCommand(sessionId, options) {
 
     if (!sessionResponse.success) {
       spinner.fail('Failed to fetch session details');
-      console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
+      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
       process.exit(1);
     }
 
@@ -1129,7 +1129,7 @@ async function sessionCloseCommand(sessionId, options) {
     // Check if session is already closed
     if (session.state === SESSION_STATE_CLOSED) {
       spinner.succeed('Session is already closed');
-      console.log(chalk.yellow('💡 Session was already in closed state'));
+      console.log(chalk.yellow('ℹ') + ' Session was already in closed state');
       return;
     }
 
@@ -1138,16 +1138,16 @@ async function sessionCloseCommand(sessionId, options) {
 
     if (!closeResponse.success) {
       spinner.fail('Failed to close session');
-      console.error(chalk.red('Error:'), closeResponse.error);
+      console.error(chalk.red('✗ Error:'), closeResponse.error);
       process.exit(1);
     }
 
     spinner.succeed(`Session closed: ${sessionId}`);
 
     console.log();
-    console.log(chalk.green('🛑 Session has been closed and resources cleaned up'));
+    console.log(chalk.green('✓') + ' Session has been closed and resources cleaned up');
     console.log();
-    console.log(chalk.blue('💡 Session Operations:'));
+    console.log(chalk.blue('ℹ') + ' Session Operations:');
     console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionId}`);
     console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
     console.log();
