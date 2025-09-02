@@ -592,6 +592,10 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   throw new Error('Timeout waiting for host response');
 }
 
+function showPrompt() {
+  process.stdout.write(chalk.cyanBright('> '));
+}
+
 async function monitorForResponses(sessionId, userMessageTime) {
   let lastMessageCount = 0;
 
@@ -641,13 +645,13 @@ async function chatLoop(sessionId) {
     output: process.stdout
   });
 
-  process.stdout.write(chalk.cyanBright('User: '));
+  showPrompt();
 
   rl.on('line', async (input) => {
     const userInput = input.trim();
 
     if (!userInput) {
-      process.stdout.write(chalk.cyanBright('User: '));
+      showPrompt();
       return;
     }
 
@@ -661,14 +665,14 @@ async function chatLoop(sessionId) {
     // Handle status command
     if (userInput === '/status') {
       await showSessionStatus(sessionId);
-      process.stdout.write(chalk.cyanBright('User: '));
+      showPrompt();
       return;
     }
 
     // Handle help command
     if (userInput === '/help') {
       showHelp();
-      process.stdout.write(chalk.cyanBright('User: '));
+      showPrompt();
       return;
     }
 
@@ -676,7 +680,7 @@ async function chatLoop(sessionId) {
     const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
     if (timeoutMatch) {
       await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
-      process.stdout.write(chalk.cyanBright('User: '));
+      showPrompt();
       return;
     }
 
@@ -684,13 +688,13 @@ async function chatLoop(sessionId) {
     const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
     if (nameMatch) {
       await handleNameCommand(sessionId, nameMatch[1]);
-      process.stdout.write(chalk.cyanBright('User: '));
+      showPrompt();
       return;
     }
 
     // Send message to session
     await sendMessage(sessionId, userInput);
-    process.stdout.write(chalk.cyanBright('User: '));
+    showPrompt();
   });
 
   function cleanup() {
