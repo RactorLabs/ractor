@@ -27,9 +27,9 @@ pub async fn create_message(
     
     // Check if session is closed and needs reactivation
     if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
-        tracing::info!("Reactivating {} session {} due to new message", session.state, session_id);
+        tracing::info!("Auto-restoring closed session {} due to new message", session_id);
         
-        // Update session state to IDLE first
+        // Update session state to IDLE (container will be restored)
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
         )
         .bind(SESSION_STATE_IDLE)
@@ -39,26 +39,24 @@ pub async fn create_message(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
         
-        // Add task to reactivate container (restore_session recreates container)
+        // Add task to reactivate container with this message queued
+        let payload = serde_json::json!({
+            "auto_restore": true,
+            "triggered_by_message": true
+        });
+        
         sqlx::query(r#"
             INSERT INTO session_tasks (session_id, task_type, payload, status)
-            VALUES (?, 'restore_session', '{}', 'pending')
+            VALUES (?, 'restore_session', ?, 'pending')
             "#
         )
         .bind(&session_id)
+        .bind(payload.to_string())
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create restore task: {}", e)))?;
         
-        // Now transition to BUSY for message processing
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
-        )
-        .bind(SESSION_STATE_BUSY)
-        .bind(&session_id)
-        .bind(SESSION_STATE_IDLE)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
+        tracing::info!("Restore task created for session {} - container will be recreated", session_id);
     } else if session.state == crate::shared::models::constants::SESSION_STATE_IDLE {
         // Update session to BUSY when processing a message
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
