@@ -73,7 +73,7 @@ Get API version and health information.
 
 ## Authentication
 
-### POST /operators/\{name\}/login
+### POST /operators/`{name}`/login
 
 Authenticate with operator credentials and receive a JWT token.
 
@@ -257,7 +257,7 @@ Delete a operator.
 
 **Response**: `200 OK`
 
-### PUT /operators/\{name\}/password
+### PUT /operators/`{name}`/password
 
 Update operator password.
 
@@ -399,7 +399,7 @@ Update session details.
 **Response**: `200 OK`
 (Returns updated session)
 
-### PUT /sessions/\{name\}/state
+### PUT /sessions/`{name}`/state
 
 Update session state.
 
@@ -417,7 +417,7 @@ Update session state.
 
 **Response**: `200 OK`
 
-### POST /sessions/\{name\}/close
+### POST /sessions/`{name}`/close
 
 Close a Host session (saves resources by stopping the container while preserving state).
 
@@ -428,7 +428,7 @@ Close a Host session (saves resources by stopping the container while preserving
 
 **Response**: `200 OK`
 
-### POST /sessions/\{name\}/restore
+### POST /sessions/`{name}`/restore
 
 Restore a closed Host session (restarts the container with preserved state).
 
@@ -449,7 +449,7 @@ Restore a closed Host session (restarts the container with preserved state).
 
 **Response**: `200 OK`
 
-### POST /sessions/\{name\}/publish
+### POST /sessions/`{name}`/publish
 
 Publish a session for public access with configurable remix permissions.
 
@@ -480,7 +480,7 @@ Publish a session for public access with configurable remix permissions.
 }
 ```
 
-### POST /sessions/\{name\}/unpublish
+### POST /sessions/`{name}`/unpublish
 
 Remove session from public access.
 
@@ -497,7 +497,7 @@ Remove session from public access.
 }
 ```
 
-### POST /sessions/\{name\}/busy
+### POST /sessions/`{name}`/busy
 
 Mark session as busy (prevents timeout).
 
@@ -508,7 +508,7 @@ Mark session as busy (prevents timeout).
 
 **Response**: `200 OK`
 
-### POST /sessions/\{name\}/idle
+### POST /sessions/`{name}`/idle
 
 Mark session as idle (enables timeout counting).
 
@@ -519,7 +519,7 @@ Mark session as idle (enables timeout counting).
 
 **Response**: `200 OK`
 
-### POST /sessions/\{name\}/remix
+### POST /sessions/`{name}`/remix
 
 Create a new Host session based on an existing session with selective content copying.
 
@@ -605,7 +605,7 @@ List all published sessions available for public access.
 ]
 ```
 
-### GET /published/sessions/{name}
+### GET /published/sessions/\{name\}
 
 Get a specific published session by ID or name.
 
@@ -619,7 +619,7 @@ Get a specific published session by ID or name.
 
 ## Session Messages
 
-### GET /sessions/\{name\}/messages
+### GET /sessions/`{name}`/messages
 
 List messages in a Host session.
 
@@ -651,7 +651,7 @@ List messages in a Host session.
 ]
 ```
 
-### POST /sessions/\{name\}/messages
+### POST /sessions/`{name}`/messages
 
 Send a message to a Host session. If the session is closed, it will automatically be restored before processing the message.
 
@@ -680,7 +680,7 @@ Send a message to a Host session. If the session is closed, it will automaticall
 
 **Note**: When sending a message to a closed session, the API returns `200 OK` immediately and queues an auto-restore task. The session will be restored and then process the message.
 
-### GET /sessions/\{name\}/messages/count
+### GET /sessions/`{name}`/messages/count
 
 Get message count for Host session.
 
@@ -696,7 +696,7 @@ Get message count for Host session.
 }
 ```
 
-### DELETE /sessions/\{name\}/messages
+### DELETE /sessions/`{name}`/messages
 
 Clear all Host session messages.
 
