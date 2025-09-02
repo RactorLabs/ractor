@@ -29,6 +29,16 @@ The computer use market is emerging with several platforms offering different ap
   - **No integration required** - Ready to automate any computer-based work immediately
 - **Best For**: Anyone needing to automate manual computer work without technical setup
 
+### **BrowserUse (Browser Automation)**
+- **Purpose**: Browser-focused computer use for web automation
+- **Strengths**:
+  - **Specialized browser control** - Optimized for web-based tasks
+  - **Multi-agent orchestration** - Multiple agents working together
+  - **Vision-based interaction** - Uses visual understanding for web navigation
+  - **Python integration** - Easy to integrate with Python workflows
+- **Limitations**: Browser-only automation, requires setup and integration work
+- **Best For**: Developers needing browser automation with computer use capabilities
+
 ## Development-Focused Platforms
 
 ### **E2B (Code Execution Sandboxes)**
@@ -38,10 +48,14 @@ The computer use market is emerging with several platforms offering different ap
 - **Best For**: Developers building AI coding assistants
 
 ### **Daytona (Cloud Development Environments)**
-- **Purpose**: Cloud-based development environments
-- **Strengths**: Docker/Kubernetes automation, development tooling
+- **Purpose**: Cloud-based development environments and workspace management
+- **Strengths**: 
+  - Fast workspace creation and management
+  - Docker/Kubernetes automation
+  - Development environment standardization
+  - IDE integration (VS Code, JetBrains)
 - **Computer Use**: Development-focused only, not general computer automation
-- **Best For**: Development teams needing cloud IDEs
+- **Best For**: Development teams needing standardized cloud development environments
 
 ## Workflow Automation (Not Computer Use)
 

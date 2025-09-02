@@ -61,6 +61,7 @@ Raworc provides Computer Use Agents with dedicated computers to automate any man
 ## Quick Links
 
 - [Get Started](/docs/getting-started) - Get your first Computer Use Agent in 60 seconds
+- [Architecture Overview](/docs/concepts/architecture) - System architecture and design patterns
 - [Computer Use Agents](/docs/concepts/computer-use-agents) - Understand Host capabilities and automation potential
 - [Sessions](/docs/concepts/sessions) - Core data models and workflow management
 - [REST API Reference](/docs/api/rest-api) - Complete REST API documentation
