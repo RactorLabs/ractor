@@ -957,6 +957,7 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
       if (updateResponse.success) {
         console.log();
         console.log(`Session timeout updated to ${timeoutSeconds} seconds`);
+        console.log();
       } else {
         console.log();
         console.log(chalk.red('❌ Failed to update timeout:'), updateResponse.error || 'Unknown error');
@@ -980,6 +981,7 @@ async function handleNameCommand(sessionId, newName) {
       if (updateResponse.success) {
         console.log();
         console.log(`Session name updated to: "${cleanName}"`);
+        console.log();
       } else {
         console.log();
         console.log(chalk.red('❌ Failed to update name:'), updateResponse.error || 'Unknown error');
