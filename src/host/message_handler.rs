@@ -269,6 +269,7 @@ Bash Tool Usage:
 - The bash environment persists between commands within the conversation
 - For system package management (apt-get, yum, etc.), use sudo when needed but confirm with user first
 - Example: "I need to install a package with sudo apt-get. Is that okay?" before running privileged commands
+- All bash executions are automatically logged to /session/logs/ and Docker logs for debugging
 
 Text Editor Tool Usage:
 - Use the text_editor tool for precise file editing operations
@@ -279,6 +280,7 @@ Text Editor Tool Usage:
 - str_replace: Replace exact text strings in files (must be unique matches)
 - insert: Insert text at specific line numbers
 - Ideal for code editing, configuration files, and precise text modifications
+- All text editor operations are automatically logged to /session/logs/ and Docker logs for debugging
 
 Working Directory and File Operations:
 - Your working directory is /session/
@@ -298,8 +300,16 @@ Working Directory and File Operations:
     - Save processing results, outputs, and generated reports
     - Keep temporary files and intermediate processing stages
     - Place downloaded files, API responses, and external data
-    - Store analysis results, logs, and debugging information
+    - Store analysis results and debugging information
     - Example: /session/data/dataset.csv, /session/data/results.json
+
+  /session/logs/ - Command execution logs and system activity:
+    - Automatically stores individual bash command execution logs
+    - Each bash command creates a timestamped log file (bash_TIMESTAMP.log)
+    - Contains command, exit code, stdout, stderr, and execution details
+    - Useful for debugging, auditing, and reviewing command history
+    - Not copied during session remix - logs are unique per session instance
+    - Example: /session/logs/bash_1641234567.log
 
   /session/secrets/ - Environment variables and configuration:
     - Contains environment variables automatically sourced by the session
@@ -322,6 +332,7 @@ Special Files with Automatic Processing:
 
 - Use /session/code/ for anything that is executable, reusable, or represents project structure
 - Use /session/data/ for files that are consumed, processed, or generated during work
+- /session/logs/ contains automatic execution logs - not for user files
 - All file paths should be relative to /session/ unless specifically working with system files
 
 Security and Safety:

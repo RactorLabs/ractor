@@ -103,10 +103,10 @@ impl DockerManager {
     async fn initialize_session_structure(&self, session_id: &str, secrets: &HashMap<String, String>, instructions: Option<&str>, setup: Option<&str>) -> Result<()> {
         info!("Initializing session structure for session {}", session_id);
         
-        // Create base directories
-        let init_script = "mkdir -p /session/{code,data,secrets}
+        // Create base directories including logs
+        let init_script = "mkdir -p /session/{code,data,secrets,logs}
 chmod -R 755 /session
-echo 'Session directories created'
+echo 'Session directories created (including logs)'
 ";
 
         self.execute_command(session_id, init_script).await?;

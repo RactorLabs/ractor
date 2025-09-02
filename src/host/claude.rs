@@ -2,7 +2,7 @@ use super::error::{HostError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Debug, Serialize)]
 struct ClaudeRequest {
@@ -339,7 +339,13 @@ impl ClaudeClient {
         // Security validation
         self.validate_bash_command(command)?;
 
+        // Ensure logs directory exists
+        if let Err(e) = tokio::fs::create_dir_all("/session/logs").await {
+            warn!("Failed to create logs directory: {}", e);
+        }
+
         // Execute the command in the session directory
+        let start_time = std::time::SystemTime::now();
         let output = tokio::process::Command::new("bash")
             .arg("-c")
             .arg(command)
@@ -350,8 +356,10 @@ impl ClaudeClient {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let exit_code = output.status.code().unwrap_or(-1);
+        let success = output.status.success();
 
-        let result = if output.status.success() {
+        let result = if success {
             if stdout.is_empty() && stderr.is_empty() {
                 "Command executed successfully (no output)".to_string()
             } else if stderr.is_empty() {
@@ -360,13 +368,118 @@ impl ClaudeClient {
                 format!("{}\n[stderr]: {}", stdout, stderr)
             }
         } else {
-            let exit_code = output.status.code().unwrap_or(-1);
             format!("Command failed with exit code {}\n[stdout]: {}\n[stderr]: {}", 
                     exit_code, stdout, stderr)
         };
 
+        // Log to Docker logs with structured format
+        println!("BASH_EXECUTION: command={:?} exit_code={} success={} output_length={}", 
+                command, exit_code, success, result.len());
+
+        // Save individual log file
+        self.save_bash_log(command, &stdout, &stderr, exit_code, success, start_time).await;
+
         info!("Bash command result (length: {})", result.len());
         Ok(result)
+    }
+
+    async fn save_bash_log(&self, command: &str, stdout: &str, stderr: &str, exit_code: i32, success: bool, start_time: std::time::SystemTime) {
+        use std::time::UNIX_EPOCH;
+        
+        let timestamp = start_time.duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        
+        let log_filename = format!("/session/logs/bash_{}.log", timestamp);
+        
+        let log_content = format!(
+            "=== BASH COMMAND LOG ===\n\
+            Timestamp: {}\n\
+            Command: {}\n\
+            Exit Code: {}\n\
+            Success: {}\n\
+            \n\
+            === STDOUT ===\n\
+            {}\n\
+            \n\
+            === STDERR ===\n\
+            {}\n\
+            \n\
+            === END LOG ===\n",
+            chrono::DateTime::from_timestamp(timestamp as i64, 0)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| "Unknown".to_string()),
+            command,
+            exit_code,
+            success,
+            stdout,
+            stderr
+        );
+
+        if let Err(e) = tokio::fs::write(&log_filename, log_content).await {
+            warn!("Failed to save bash log to {}: {}", log_filename, e);
+        } else {
+            debug!("Saved bash log to {}", log_filename);
+        }
+    }
+
+    async fn save_text_editor_log(&self, command: &str, path: &str, result_msg: &str, success: bool, input: &Value, start_time: std::time::SystemTime) {
+        use std::time::UNIX_EPOCH;
+        
+        let timestamp = start_time.duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        
+        let log_filename = format!("/session/logs/text_editor_{}.log", timestamp);
+        
+        // Extract additional parameters for logging
+        let mut params = Vec::new();
+        if let Some(old_str) = input.get("old_str").and_then(|v| v.as_str()) {
+            params.push(format!("old_str: {:?}", old_str));
+        }
+        if let Some(new_str) = input.get("new_str").and_then(|v| v.as_str()) {
+            params.push(format!("new_str: {:?}", new_str));
+        }
+        if let Some(file_text) = input.get("file_text").and_then(|v| v.as_str()) {
+            params.push(format!("file_text_length: {}", file_text.len()));
+        }
+        if let Some(insert_line) = input.get("insert_line").and_then(|v| v.as_u64()) {
+            params.push(format!("insert_line: {}", insert_line));
+        }
+        if let Some(view_range) = input.get("view_range") {
+            params.push(format!("view_range: {:?}", view_range));
+        }
+        if let Some(max_chars) = input.get("max_characters").and_then(|v| v.as_u64()) {
+            params.push(format!("max_characters: {}", max_chars));
+        }
+
+        let log_content = format!(
+            "=== TEXT EDITOR COMMAND LOG ===\n\
+            Timestamp: {}\n\
+            Command: {}\n\
+            Path: {}\n\
+            Success: {}\n\
+            Parameters: {}\n\
+            \n\
+            === RESULT ===\n\
+            {}\n\
+            \n\
+            === END LOG ===\n",
+            chrono::DateTime::from_timestamp(timestamp as i64, 0)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_else(|| "Unknown".to_string()),
+            command,
+            path,
+            success,
+            if params.is_empty() { "None".to_string() } else { params.join(", ") },
+            result_msg
+        );
+
+        if let Err(e) = tokio::fs::write(&log_filename, log_content).await {
+            warn!("Failed to save text_editor log to {}: {}", log_filename, e);
+        } else {
+            debug!("Saved text_editor log to {}", log_filename);
+        }
     }
 
     fn validate_bash_command(&self, command: &str) -> Result<()> {
@@ -436,13 +549,35 @@ impl ClaudeClient {
 
         info!("Executing text_editor command: {} on path: {}", command, full_path.display());
 
-        match command {
+        // Ensure logs directory exists
+        if let Err(e) = tokio::fs::create_dir_all("/session/logs").await {
+            warn!("Failed to create logs directory: {}", e);
+        }
+
+        let start_time = std::time::SystemTime::now();
+        let result = match command {
             "view" => self.text_editor_view(&full_path, input).await,
             "create" => self.text_editor_create(&full_path, input).await,
             "str_replace" => self.text_editor_str_replace(&full_path, input).await,
             "insert" => self.text_editor_insert(&full_path, input).await,
             _ => Err(HostError::Claude(format!("Unknown text_editor command: {}", command))),
-        }
+        };
+
+        // Log the text editor operation
+        let success = result.is_ok();
+        let result_msg = match &result {
+            Ok(msg) => msg.clone(),
+            Err(e) => e.to_string(),
+        };
+
+        // Log to Docker logs with structured format
+        println!("TEXT_EDITOR_EXECUTION: command={:?} path={:?} success={} result_length={}", 
+                command, path, success, result_msg.len());
+
+        // Save individual log file
+        self.save_text_editor_log(command, path, &result_msg, success, input, start_time).await;
+
+        result
     }
 
     fn validate_and_normalize_path(&self, path: &str) -> Result<std::path::PathBuf> {
