@@ -697,7 +697,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
               }
               const toolType = message.metadata?.tool_type || 'unknown';
               console.log();
-              console.log(chalk.gray(`• ${toolType}`));
+              console.log(chalk.gray(`● ${toolType}`));
               console.log(chalk.dim('└─ ') + chalk.gray(message.content));
               await updateState();
               showPrompt(getCurrentState());
