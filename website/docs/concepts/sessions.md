@@ -13,6 +13,7 @@ Raworc organizes Host work through **Sessions** - isolated containerized environ
 interface Session {
   id: string;                    // UUID identifier
   created_by: string;            // Creator operator
+  name?: string;                 // Optional unique session name
   state: SessionState;           // Current lifecycle state
   container_id?: string;         // Docker container ID
   persistent_volume_id: string;  // Data volume ID
@@ -23,6 +24,12 @@ interface Session {
   terminated_at?: timestamp;     // Session termination
   termination_reason?: string;   // Why session ended
   metadata: object;              // JSON session metadata
+  is_published: boolean;         // Public access enabled
+  published_at?: timestamp;      // When session was published
+  published_by?: string;         // Who published the session
+  publish_permissions: object;   // Remix permissions (data/code/secrets)
+  timeout_seconds: number;       // Session timeout in seconds
+  auto_close_at?: timestamp;     // When session will auto-close
 }
 ```
 
@@ -106,27 +113,36 @@ raworc api sessions -m post -b '{
   }
 }'
 
-# Session with multiple secrets
+# Session with name and timeout
 raworc api sessions -m post -b '{
+  "name": "my-analysis-session",
+  "secrets": {
+    "ANTHROPIC_API_KEY": "sk-ant-your-key"
+  },
+  "timeout_seconds": 300
+}'
+
+# Session with full configuration
+raworc api sessions -m post -b '{
+  "name": "data-project",
   "secrets": {
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
-  }
-}'
-
-# Session with instructions
-raworc api sessions -m post -b '{
+  },
   "instructions": "You are a helpful Host specialized in data analysis.",
-  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
+  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy",
+  "timeout_seconds": 600
 }'
 ```
 
 ### Configuration Options
 
+- **`name`** - Optional unique name for the session (can be used instead of ID in all operations)
 - **`secrets`** - Environment variables/secrets for the session
 - **`instructions`** - Instructions for the Host (written to `/session/code/instructions.md`)
 - **`setup`** - Setup script to run in the container (written to `/session/code/setup.sh`)
 - **`metadata`** - Additional metadata object
+- **`timeout_seconds`** - Session timeout in seconds (default: 60, triggers auto-close when idle)
 
 ## Session Lifecycle Operations
 
@@ -222,22 +238,27 @@ Create new sessions based on existing ones with selective content copying:
 
 ```bash
 # CLI usage with selective copying
-raworc session --remix {source-session-id}
-raworc session --remix {source-session-id} --data false
-raworc session --remix {source-session-id} --code false
-raworc session --remix {source-session-id} --code false --data false
+raworc session remix {source-session-id}
+raworc session remix {source-session-id} --data false
+raworc session remix {source-session-id} --code false
+raworc session remix {source-session-id} --secrets false
+raworc session remix {source-session-id} --name "new-version" --secrets false --data true --code false
 
 # API usage
 raworc api sessions/{source-session-id}/remix -m post -b '{
+  "name": "experiment-1",
   "data": true,
-  "code": false
+  "code": false,
+  "secrets": true
 }'
 ```
 
 ### Selective Copying Options
 
+- **`name`** (optional) - Name for the new session
 - **`data`** (default: true) - Copy data files from parent session
 - **`code`** (default: true) - Copy code files from parent session
+- **`secrets`** (default: true) - Copy secrets from parent session
 
 **Use Cases:**
 - 🔄 **Experiment branching** - Try different approaches from the same starting point
@@ -259,9 +280,149 @@ interface SessionLineage {
   remix_options?: {           // What was copied in remix
     data: boolean;
     code: boolean;
+    secrets: boolean;
   };
 }
 ```
+
+## Session Publishing System
+
+Share sessions publicly with configurable remix permissions:
+
+### Publishing Sessions
+
+```bash
+# CLI - Publish session with all permissions
+raworc session publish my-session
+
+# CLI - Publish with selective permissions
+raworc session publish my-session \
+  --data true \
+  --code true \
+  --secrets false
+
+# API - Publish session
+raworc api sessions/my-session/publish -m post -b '{
+  "data": true,
+  "code": true,
+  "secrets": false
+}'
+
+# Unpublish session
+raworc session unpublish my-session
+raworc api sessions/my-session/unpublish -m post
+```
+
+### Accessing Published Sessions
+
+```bash
+# List all published sessions (no auth required)
+raworc api published/sessions
+
+# Get published session details (no auth required)
+raworc api published/sessions/session-name
+
+# Remix published session
+raworc session remix published-session-name --name "my-version"
+```
+
+### Publishing Features
+
+- **Public Access**: Published sessions can be viewed without authentication
+- **Granular Permissions**: Control what can be remixed (data/code/secrets)
+- **Cross-User Remixing**: Anyone can remix published sessions
+- **Name Resolution**: Published sessions findable by name globally
+
+## Session Naming & Resolution
+
+Sessions can be named for easier identification and access:
+
+### Session Names
+
+```bash
+# Create session with name
+raworc session start --name "my-analysis" --secrets '{"ANTHROPIC_API_KEY":"key"}'
+
+# Use name in all operations
+raworc session restore my-analysis
+raworc session remix my-analysis --name "experiment-1"
+raworc api sessions/my-analysis
+```
+
+### Name Resolution Rules
+
+1. **Unique Constraint**: Session names must be globally unique
+2. **ID Fallback**: If name not found, system tries to resolve as UUID
+3. **Owner Priority**: For owned sessions, search by name first
+4. **Published Search**: If not owned, search published sessions by name
+5. **Admin Access**: Admin users can access any session by ID or name
+
+## Session Timeouts & Auto-Close
+
+Automatic resource management through configurable timeouts:
+
+### Timeout Configuration
+
+```bash
+# Set timeout during creation
+raworc session start --timeout 300 --secrets '{"ANTHROPIC_API_KEY":"key"}'
+
+# API with timeout
+raworc api sessions -m post -b '{
+  "timeout_seconds": 1800,
+  "secrets": {"ANTHROPIC_API_KEY": "key"}
+}'
+```
+
+### Timeout States
+
+- **Busy State**: Session processing messages, timeout suspended
+- **Idle State**: Session waiting for messages, timeout counting down
+- **Auto-Close**: Session automatically closed when timeout reached
+
+### Manual State Control
+
+```bash
+# Mark session as busy (prevents timeout)
+raworc api sessions/my-session/busy -m post
+
+# Mark session as idle (enables timeout)  
+raworc api sessions/my-session/idle -m post
+```
+
+### Timeout Features
+
+- **Default Timeout**: 60 seconds unless specified
+- **Idle-Based**: Only counts down when session is idle
+- **Resource Saving**: Automatically closes unused sessions
+- **Restore Ready**: Auto-closed sessions can be restored instantly
+
+## Auto-Restore for Closed Sessions
+
+Seamless session resumption when sending messages to closed sessions:
+
+### Auto-Restore Behavior
+
+```bash
+# Send message to closed session - automatically restores
+raworc api sessions/closed-session/messages -m post -b '{"content":"Hello"}'
+# Returns 200 OK immediately, queues restore task
+```
+
+### Auto-Restore Flow
+
+1. **Message Detection**: API detects message sent to closed session
+2. **Immediate Response**: Returns 200 OK without delay
+3. **Background Restore**: Queues session restoration task
+4. **Message Processing**: Session processes message after restoration
+5. **Transparent Experience**: User sees no difference from active session
+
+### Key Benefits
+
+- **Zero Downtime**: No user-facing errors for closed sessions
+- **Resource Efficiency**: Sessions auto-close when idle, restore on demand
+- **Seamless UX**: Users don't need to manually restore sessions
+- **Background Processing**: Restoration happens asynchronously
 
 ## Performance and Optimization
 

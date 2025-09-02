@@ -280,20 +280,33 @@ Update operator password.
 
 ### GET /sessions
 
-List Host sessions.
+List Host sessions. Regular users see only their own sessions, admin users see all sessions.
 
 **Authentication**: Required
+
+**Query Parameters**:
+- `state` (optional) - Filter sessions by state (INIT, IDLE, BUSY, CLOSED, ERRORED)
 
 **Response**: `200 OK`
 ```json
 [
   {
     "id": "61549530-3095-4cbf-b379-cd32416f626d",
+    "created_by": "admin",
+    "name": "my-session",
     "state": "IDLE",
+    "container_id": "container-id",
+    "persistent_volume_id": "volume-id",
+    "parent_session_id": null,
     "created_at": "2025-01-20T10:00:00Z",
-    "started_at": "2025-01-20T10:01:00Z",
     "last_activity_at": "2025-01-20T10:05:00Z",
-    "created_by": "admin"
+    "metadata": {},
+    "is_published": false,
+    "published_at": null,
+    "published_by": null,
+    "publish_permissions": {},
+    "timeout_seconds": 300,
+    "auto_close_at": "2025-01-20T10:10:00Z"
   }
 ]
 ```
@@ -307,27 +320,32 @@ Create a new Host session.
 **Request Body**:
 ```json
 {
+  "name": "my-session",
   "metadata": {},
   "secrets": {
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful Host specialized in data analysis.",
-  "setup": "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
+  "setup": "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy",
+  "timeout_seconds": 300
 }
 ```
 
 **Fields**:
+- `name` (optional) - Unique name for the session
 - `metadata` (optional) - Additional metadata object (defaults to {})
 - `secrets` (optional) - Environment variables/secrets for the session
 - `instructions` (optional) - Instructions for the Host
 - `setup` (optional) - Setup script to run in the container
+- `timeout_seconds` (optional) - Session timeout in seconds (default: 60)
 
 **Response**: `200 OK`
 ```json
 {
   "id": "61549530-3095-4cbf-b379-cd32416f626d",
   "created_by": "admin",
+  "name": "my-session",
   "state": "INIT",
   "container_id": null,
   "persistent_volume_id": null,
@@ -337,18 +355,24 @@ Create a new Host session.
   "last_activity_at": null,
   "terminated_at": null,
   "termination_reason": null,
-  "metadata": {}
+  "metadata": {},
+  "is_published": false,
+  "published_at": null,
+  "published_by": null,
+  "publish_permissions": {},
+  "timeout_seconds": 300,
+  "auto_close_at": null
 }
 ```
 
 ### GET /sessions/\{name\}
 
-Get a specific session by ID.
+Get a specific session by ID or name. Users can access their own sessions and published sessions. Admin users can access any session.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Response**: `200 OK`
 (Same format as POST response)
@@ -411,7 +435,87 @@ Restore a closed Host session (restarts the container with preserved state).
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
+
+**Request Body** (optional):
+```json
+{
+  "prompt": "Continue working on the analysis from where we left off"
+}
+```
+
+**Fields**:
+- `prompt` (optional) - Message to send after restoring session
+
+**Response**: `200 OK`
+
+### POST /sessions/\{name\}/publish
+
+Publish a session for public access with configurable remix permissions.
+
+**Authentication**: Required
+
+**Parameters**:
+- `id` (path) - Session ID or name
+
+**Request Body**:
+```json
+{
+  "data": true,
+  "code": true,
+  "secrets": false
+}
+```
+
+**Fields**:
+- `data` (optional) - Allow data files to be remixed (default: true)
+- `code` (optional) - Allow code files to be remixed (default: true) 
+- `secrets` (optional) - Allow secrets to be remixed (default: false)
+
+**Response**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Session published successfully"
+}
+```
+
+### POST /sessions/\{name\}/unpublish
+
+Remove session from public access.
+
+**Authentication**: Required
+
+**Parameters**:
+- `id` (path) - Session ID or name
+
+**Response**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Session unpublished successfully"
+}
+```
+
+### POST /sessions/\{name\}/busy
+
+Mark session as busy (prevents timeout).
+
+**Authentication**: Required
+
+**Parameters**:
+- `id` (path) - Session ID or name
+
+**Response**: `200 OK`
+
+### POST /sessions/\{name\}/idle
+
+Mark session as idle (enables timeout counting).
+
+**Authentication**: Required
+
+**Parameters**:
+- `id` (path) - Session ID or name
 
 **Response**: `200 OK`
 
@@ -422,29 +526,34 @@ Create a new Host session based on an existing session with selective content co
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Parent session ID
+- `id` (path) - Parent session ID or name
 
 **Request Body**:
 ```json
 {
+  "name": "my-new-session",
   "metadata": {
     "remixed_from": "61549530-3095-4cbf-b379-cd32416f626d",
     "remix_timestamp": "2025-01-20T10:00:00Z"
   },
   "data": true,
-  "code": false
+  "code": false,
+  "secrets": true
 }
 ```
 
 **Fields**:
+- `name` (optional) - Name for the new session
 - `metadata` (optional) - Additional metadata for the new session
 - `data` (optional) - Copy data files from parent session (default: true)
 - `code` (optional) - Copy code files from parent session (default: true)
+- `secrets` (optional) - Copy secrets from parent session (default: true)
 
 **Response**: `200 OK`
 ```json
 {
   "id": "new-session-id",
+  "name": "my-new-session",
   "state": "INIT",
   "parent_session_id": "61549530-3095-4cbf-b379-cd32416f626d",
   "created_at": "2025-01-20T10:00:00Z",
@@ -463,9 +572,50 @@ Terminate a Host session.
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Response**: `200 OK`
+
+## Public Sessions
+
+### GET /published/sessions
+
+List all published sessions available for public access.
+
+**Authentication**: Not required
+
+**Response**: `200 OK`
+```json
+[
+  {
+    "id": "61549530-3095-4cbf-b379-cd32416f626d",
+    "created_by": "admin",
+    "name": "public-data-analysis",
+    "state": "IDLE",
+    "created_at": "2025-01-20T10:00:00Z",
+    "published_at": "2025-01-20T10:30:00Z",
+    "published_by": "admin",
+    "publish_permissions": {
+      "data": true,
+      "code": true,
+      "secrets": false
+    },
+    "metadata": {}
+  }
+]
+```
+
+### GET /published/sessions/\\{name\\}
+
+Get a specific published session by ID or name.
+
+**Authentication**: Not required
+
+**Parameters**:
+- `id` (path) - Session ID or name
+
+**Response**: `200 OK`
+(Same format as published sessions list)
 
 ## Session Messages
 
@@ -476,7 +626,7 @@ List messages in a Host session.
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Query Parameters**:
 - `limit` (optional) - Maximum number of messages to return
@@ -503,12 +653,12 @@ List messages in a Host session.
 
 ### POST /sessions/\{name\}/messages
 
-Send a message to a Host session.
+Send a message to a Host session. If the session is closed, it will automatically be restored before processing the message.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Request Body**:
 ```json
@@ -528,6 +678,8 @@ Send a message to a Host session.
 }
 ```
 
+**Note**: When sending a message to a closed session, the API returns `200 OK` immediately and queues an auto-restore task. The session will be restored and then process the message.
+
 ### GET /sessions/\{name\}/messages/count
 
 Get message count for Host session.
@@ -535,7 +687,7 @@ Get message count for Host session.
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Response**: `200 OK`
 ```json
@@ -551,7 +703,7 @@ Clear all Host session messages.
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Session ID or name
 
 **Response**: `200 OK`
 

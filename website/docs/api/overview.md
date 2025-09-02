@@ -20,7 +20,13 @@ All API endpoints (except `/version` and `/auth/login`) require authentication u
 
 ## Sessions
 
-Raworc uses sessions to provide Computer Use automation. Each session includes a dedicated computer with a Host for automating manual work. Access is controlled through session ownership where users can only access their own sessions and admins can access all sessions.
+Raworc uses sessions to provide Computer Use automation. Each session includes a dedicated computer with a Host for automating manual work. Sessions support:
+
+- **Named Sessions**: Use names instead of UUIDs for easier identification
+- **Session Publishing**: Share sessions publicly with configurable permissions
+- **Auto-Timeouts**: Automatic resource management with idle-based timeouts
+- **Auto-Restore**: Seamless session restoration when messaging closed sessions
+- **Cross-User Access**: Admin privileges and published session access
 
 ### Obtaining a Token
 
@@ -103,7 +109,18 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/sessions/{id}/close`](./rest-api#post-sessionsidclose) | POST | Close Host session |
 | [`/sessions/{id}/restore`](./rest-api#post-sessionsidrestore) | POST | Restore Host session |
 | [`/sessions/{id}/remix`](./rest-api#post-sessionsidremix) | POST | Fork Host session |
+| [`/sessions/{id}/publish`](./rest-api#post-sessionsidpublish) | POST | Publish session |
+| [`/sessions/{id}/unpublish`](./rest-api#post-sessionsidunpublish) | POST | Unpublish session |
+| [`/sessions/{id}/busy`](./rest-api#post-sessionsidbusy) | POST | Mark session busy |
+| [`/sessions/{id}/idle`](./rest-api#post-sessionsididle) | POST | Mark session idle |
 | [`/sessions/{id}`](./rest-api#delete-sessionsid) | DELETE | Delete session |
+
+### Public Sessions
+
+| Endpoint | Method | Description |
+|----------|--------|--------------|
+| [`/published/sessions`](./rest-api#get-publishedsessions) | GET | List published sessions |
+| [`/published/sessions/{id}`](./rest-api#get-publishedsessionsid) | GET | Get published session |
 
 ### Host Communication
 

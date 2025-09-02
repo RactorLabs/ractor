@@ -82,35 +82,113 @@ raworc api version
 
 Create and manage Host sessions:
 
-### Interactive Sessions (Recommended)
+### Session Subcommands
 
 ```bash
-# Start Host session with API key (REQUIRED for new sessions)
-raworc session --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
+# Start new session (default subcommand)
+raworc session start [options]
+raworc session [options]              # Shorthand for 'start'
 
-# Note: ANTHROPIC_API_KEY is required for all new Host sessions
-
-# Start Host session with instructions
-raworc session --instructions "You are a helpful coding Host"
-
-# Start Host session with setup script
-raworc session --setup "pip install pandas numpy matplotlib"
-
-# Full configuration
-raworc session \
-  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
-  --instructions "You are a data analyst Host" \
-  --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy"
-
-# Restore previous session
-raworc session --restore abc123-def456-789
+# Restore existing session
+raworc session restore <session-id-or-name>
 
 # Create remix from existing session
-raworc session --remix abc123-def456-789
-raworc session --remix abc123-def456-789 --data false    # Don't copy data files
-raworc session --remix abc123-def456-789 --code false    # Don't copy code files
+raworc session remix <session-id-or-name> [options]
 
-# In session interface:
+# Publish session for public access
+raworc session publish <session-id-or-name> [options]
+
+# Remove session from public access
+raworc session unpublish <session-id-or-name>
+```
+
+### Starting New Sessions
+
+```bash
+# Basic session (ANTHROPIC_API_KEY required for all new sessions)
+raworc session start --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
+
+# Session with name and timeout
+raworc session start \\
+  --name "my-analysis-session" \\
+  --timeout 300 \\
+  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
+
+# Session with instructions and setup
+raworc session start \\
+  --instructions "You are a helpful coding Host" \\
+  --setup "pip install pandas numpy matplotlib" \\
+  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-your-key"}'
+
+# Instructions from file
+raworc session start --instructions-file ./instructions.md --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key"}'
+
+# Setup from file
+raworc session start --setup-file ./setup.sh --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key"}'
+
+# Full configuration with prompt
+raworc session start \
+  --name "data-project" \
+  --secrets '{"ANTHROPIC_API_KEY":"sk-ant-key","DATABASE_URL":"mysql://user:pass@host/db"}' \
+  --instructions "You are a data analyst Host" \
+  --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy" \
+  --prompt "Hello, let's start analyzing the customer data" \
+  --timeout 600
+```
+
+### Restoring Sessions
+
+```bash
+# Restore by ID or name
+raworc session restore abc123-def456-789
+raworc session restore my-session-name
+
+# Restore with immediate prompt
+raworc session restore my-session --prompt "Continue the analysis from yesterday"
+```
+
+### Remixing Sessions
+
+```bash
+# Basic remix (copies everything by default)
+raworc session remix abc123-def456-789
+
+# Remix by name with new name
+raworc session remix my-session --name "experiment-1"
+
+# Selective copying
+raworc session remix my-session \
+  --name "data-only-version" \
+  --data true \
+  --code false \
+  --secrets false
+
+# Remix with immediate prompt
+raworc session remix my-session \
+  --name "alternative-approach" \
+  --prompt "Try a different analysis method"
+```
+
+### Publishing Sessions
+
+```bash
+# Publish with all remix permissions
+raworc session publish my-session
+
+# Publish with selective permissions
+raworc session publish my-session \
+  --data true \
+  --code true \
+  --secrets false
+
+# Unpublish session
+raworc session unpublish my-session
+```
+
+### Interactive Session Interface
+
+```bash
+# In any interactive session:
 # - Type messages directly: "Hello, help me write Python code"
 # - Use /status to show session info
 # - Use /quit to exit session
@@ -122,21 +200,23 @@ raworc session --remix abc123-def456-789 --code false    # Don't copy code files
 # Create new session (requires ANTHROPIC_API_KEY)
 raworc api sessions -m post -b '{"secrets":{"ANTHROPIC_API_KEY":"sk-ant-your-key"}}'
 
-# Create session with configuration
+# Create session with full configuration
 raworc api sessions -m post -b '{
+  "name": "my-session",
   "secrets": {
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful Host specialized in data analysis.",
-  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
+  "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy",
+  "timeout_seconds": 300
 }'
 
 # List all sessions
 raworc api sessions
 
-# Get specific session details
-raworc api sessions/{session-id}
+# Get specific session details (by ID or name)
+raworc api sessions/{session-id-or-name}
 
 # Send message to Host
 raworc api sessions/{session-id}/messages -m post -b '{"content":"Generate a Python script to calculate fibonacci numbers"}'
@@ -150,18 +230,42 @@ raworc api "sessions/{session-id}/messages?limit=10"
 # Close session (saves resources, preserves data)
 raworc api sessions/{session-id}/close -m post
 
-# Restore closed session
-raworc api sessions/{session-id}/restore -m post
+# Restore closed session (with optional prompt)
+raworc api sessions/{session-id-or-name}/restore -m post
+raworc api sessions/{session-id-or-name}/restore -m post -b '{"prompt":"Continue from where we left off"}'
+
+# Mark session as busy (prevents timeout)
+raworc api sessions/{session-id-or-name}/busy -m post
+
+# Mark session as idle (enables timeout)
+raworc api sessions/{session-id-or-name}/idle -m post
 
 # Create remix from session
-raworc api sessions/{session-id}/remix -m post -b '{
+raworc api sessions/{session-id-or-name}/remix -m post -b '{
+  "name": "experiment-1",
   "data": true,
   "code": true,
   "secrets": false
 }'
 
+# Publish session for public access
+raworc api sessions/{session-id-or-name}/publish -m post -b '{
+  "data": true,
+  "code": true,
+  "secrets": false
+}'
+
+# Unpublish session
+raworc api sessions/{session-id-or-name}/unpublish -m post
+
+# View published sessions (no auth required)
+raworc api published/sessions
+
+# Get published session (no auth required)
+raworc api published/sessions/{session-id-or-name}
+
 # Terminate session permanently
-raworc api sessions/{session-id} -m delete
+raworc api sessions/{session-id-or-name} -m delete
 ```
 
 ## 4. Session Configuration Options
