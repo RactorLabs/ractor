@@ -216,7 +216,7 @@ impl ClaudeClient {
         }
 
         // Tool execution loop - continue until we get a final text response
-        let max_tool_iterations = 20;
+        let max_tool_iterations = 100;
         let mut iteration_count = 0;
         
         loop {
@@ -363,6 +363,10 @@ impl ClaudeClient {
                 });
             }
         }
+    }
+    
+    // If we reach here without returning, something went wrong
+    Err(HostError::Claude("No response generated after maximum iterations".to_string()))
     }
 
     async fn execute_bash_tool(&self, input: &Value) -> Result<String> {

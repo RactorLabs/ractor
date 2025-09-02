@@ -682,7 +682,7 @@ async function chatLoop(sessionId) {
     // Only update if we're not currently processing input
     if (!isProcessing) {
       process.stdout.write('\r\x1b[K'); // Clear line
-      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)} | Type your message (or /help for commands)\n`);
+      process.stdout.write(`${stateIcon} Session: ${stateColor(currentState)}\n`);
       rl.prompt();
     }
   }
