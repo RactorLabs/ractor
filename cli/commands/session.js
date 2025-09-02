@@ -790,6 +790,7 @@ async function chatLoop(sessionId) {
 
     // Handle quit command
     if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
+      console.log();
       console.log(chalk.blue('👋 Ending session. Goodbye!'));
       cleanup();
       return;
