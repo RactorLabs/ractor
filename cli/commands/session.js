@@ -945,14 +945,12 @@ async function showSessionStatus(sessionId) {
 }
 
 function showHelp() {
-  console.log();
   console.log(chalk.blue('ℹ') + ' Available Commands:');
   console.log(chalk.gray('  /help       '), 'Show this help message');
   console.log(chalk.gray('  /status     '), 'Show session status');
   console.log(chalk.gray('  /timeout <s>'), 'Change session timeout (1-3600 seconds)');
   console.log(chalk.gray('  /name <name>'), 'Change session name (alphanumeric and hyphens)');
   console.log(chalk.gray('  /quit       '), 'End the session');
-  console.log();
 }
 
 async function handleTimeoutCommand(sessionId, timeoutSeconds) {
