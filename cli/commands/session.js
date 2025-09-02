@@ -3,6 +3,30 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const { marked } = require('marked');
+const TerminalRenderer = require('marked-terminal');
+
+// Configure marked for terminal output
+marked.setOptions({
+  renderer: new TerminalRenderer({
+    blockquote: chalk.gray.italic,
+    code: chalk.yellow,
+    codespan: chalk.cyan,
+    del: chalk.dim.gray.strikethrough,
+    em: chalk.italic,
+    heading: chalk.green.bold,
+    hr: chalk.reset,
+    html: chalk.gray,
+    link: chalk.blue,
+    list: chalk.reset,
+    listitem: chalk.reset,
+    paragraph: chalk.reset,
+    strong: chalk.bold,
+    table: chalk.reset,
+    tablerow: chalk.reset,
+    tablecell: chalk.reset
+  })
+});
 
 const {
   SESSION_STATE_IDLE,
