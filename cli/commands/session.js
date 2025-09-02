@@ -712,7 +712,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
                 setPromptVisible(false);
               }
               console.log();
-              console.log(chalk.whiteBright(message.content));
+              // Format markdown content for terminal display\n              const formattedContent = marked(message.content);\n              console.log(formattedContent.trim());
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
