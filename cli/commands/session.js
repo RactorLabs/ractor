@@ -246,7 +246,7 @@ async function sessionStartCommand(options) {
 
     sessionId = createResponse.data.id;
     spinner.succeed(`Session created: ${sessionId}`);
-    
+
     await startInteractiveSession(sessionId, options);
 
   } catch (error) {
@@ -287,7 +287,7 @@ async function sessionRestoreCommand(sessionId, options) {
     const session = sessionResponse.data;
     console.log(chalk.gray('Session state:'), session.state);
     console.log();
-    
+
     // Update sessionId to actual UUID for consistent display
     sessionId = session.id;
 
@@ -297,7 +297,7 @@ async function sessionRestoreCommand(sessionId, options) {
       if (options.prompt) {
         restorePayload.prompt = options.prompt;
       }
-      
+
       const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
 
       if (!restoreResponse.success) {
@@ -309,7 +309,7 @@ async function sessionRestoreCommand(sessionId, options) {
       spinner.succeed(`Session restored: ${sessionId}`);
     } else if (session.state === SESSION_STATE_IDLE) {
       spinner.succeed(`Session already ready: ${sessionId}`);
-      
+
       // If prompt provided for already-running session, send it as a message
       if (options.prompt) {
         console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
@@ -318,7 +318,7 @@ async function sessionRestoreCommand(sessionId, options) {
             content: options.prompt,
             role: 'user'
           });
-          
+
           if (messageResponse.success) {
             console.log(chalk.green('Prompt sent successfully'));
           } else {
@@ -428,14 +428,14 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
     const sessionId = remixResponse.data.id;
     const newSession = remixResponse.data;
-    
+
     // Show detailed remix success info
     if (newSession.name) {
       spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
     } else {
       spinner.succeed(`Session remixed: ${sessionId}`);
     }
-    
+
     console.log(chalk.gray('Source session:'), sourceSessionId);
     if (newSession.name) {
       console.log(chalk.gray('New session name:'), newSession.name);
@@ -456,38 +456,38 @@ async function startInteractiveSession(sessionId, options) {
   console.log(chalk.green('✅ Session active! Type your messages below.'));
   console.log(chalk.gray('Commands: /status, /timeout <s>, /name <name>, /quit, /help'));
   console.log(chalk.gray('Session ID:'), sessionId);
-  
+
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
     try {
       const historySpinner = ora('Loading conversation history...').start();
       const messagesResponse = await api.get(`/sessions/${sessionId}/messages`);
-      
+
       if (messagesResponse.success && messagesResponse.data && messagesResponse.data.length > 0) {
         const messages = messagesResponse.data;
         const recentMessages = messages.slice(-6); // Show last 6 messages (3 exchanges)
-        
+
         historySpinner.succeed('Conversation history loaded');
         console.log();
         console.log(chalk.blue('📜 Recent conversation history:'));
         console.log(chalk.gray('─'.repeat(50)));
-        
+
         recentMessages.forEach((msg, index) => {
           const timestamp = new Date(msg.created_at).toLocaleTimeString();
           const roleColor = msg.role === 'user' ? chalk.green : chalk.cyan;
           const roleLabel = msg.role === 'user' ? 'You' : 'Host';
-          
+
           console.log();
           console.log(roleColor(`${roleLabel} (${timestamp}):`));
-          
+
           // Truncate long messages for history display
-          const content = msg.content.length > 200 
+          const content = msg.content.length > 200
             ? msg.content.substring(0, 200) + '...'
             : msg.content;
-          
+
           console.log(chalk.white(content));
         });
-        
+
         console.log();
         console.log(chalk.gray('─'.repeat(50)));
         console.log(chalk.blue('💬 Continue the conversation below:'));
@@ -498,30 +498,26 @@ async function startInteractiveSession(sessionId, options) {
       console.log(chalk.yellow('Warning: Could not load conversation history'));
     }
   }
-  
+
   console.log();
 
   // Handle prompt if provided (for any session type)
   if (options.prompt) {
     console.log(chalk.blue('Prompt sent:'), options.prompt);
-    
-    const responseSpinner = ora('Waiting for host response...').start();
-    
+    console.log();
+
     try {
       // Wait for the host to respond to the prompt
       const hostResponse = await waitForHostResponse(sessionId, Date.now());
-      
+
       if (hostResponse) {
-        responseSpinner.succeed('Host responded');
-        console.log();
         console.log(chalk.cyan('Host:'), chalk.whiteBright(hostResponse.content));
         console.log();
       } else {
-        responseSpinner.warn('No host response received within timeout');
+        console.log(chalk.yellow('No host response received within timeout'));
         console.log();
       }
     } catch (error) {
-      responseSpinner.fail('Error waiting for host response');
       console.log(chalk.yellow('Warning:'), error.message);
       console.log();
     }
@@ -531,13 +527,13 @@ async function startInteractiveSession(sessionId, options) {
   if (options.sessionState === SESSION_STATE_BUSY) {
     console.log(chalk.blue('🔄 Monitoring ongoing session activity...'));
     console.log();
-    
+
     // Start monitoring without a user message time (will show any new messages)
     const monitoringPromise = monitorForResponses(sessionId, 0);
-    
+
     // Start chat loop concurrently so user can still interact
     const chatPromise = chatLoop(sessionId);
-    
+
     // Wait for either to complete (though monitoring should complete when host finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
@@ -599,14 +595,15 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 function displayToolMessage(message) {
   const toolType = message.metadata?.tool_type || 'unknown';
   const toolIcon = '•';
-  
+
   console.log(chalk.gray(`${toolIcon} ${toolType}`));
   console.log(chalk.dim('├─ ') + chalk.gray(message.content));
 }
 
 function displayHostMessage(message) {
   console.log(chalk.cyan('Host: ') + chalk.whiteBright(message.content));
-  
+  console.log();
+
   // After host message, show status and prompt
   showStatusAndPrompt();
 }
@@ -614,7 +611,7 @@ function displayHostMessage(message) {
 function showStatusAndPrompt() {
   const stateIcon = '💤';
   const stateColor = chalk.green;
-  
+
   console.log(chalk.gray('────────────────────'));
   console.log(`${stateIcon} Session: ${stateColor('idle')}`);
   console.log(chalk.gray('────────────────────'));
@@ -624,28 +621,6 @@ function showStatusAndPrompt() {
 function clearStatusAndPrompt() {
   // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
   process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
-}
-
-function startAnimatedIndicator() {
-  const frames = [
-    chalk.gray('⣾'),
-    chalk.blue('⣽'),
-    chalk.cyan('⣻'),
-    chalk.green('⢿'),
-    chalk.yellow('⡿'),
-    chalk.red('⣟'),
-    chalk.magenta('⣯'),
-    chalk.gray('⣷')
-  ];
-  
-  let frameIndex = 0;
-  
-  const interval = setInterval(() => {
-    process.stdout.write('\r' + frames[frameIndex % frames.length]);
-    frameIndex++;
-  }, 150); // Change frame every 150ms
-  
-  return interval;
 }
 
 async function monitorForResponses(sessionId, userMessageTime, clearStatus = null) {
@@ -668,7 +643,7 @@ async function monitorForResponses(sessionId, userMessageTime, clearStatus = nul
       const response = await api.get(`/sessions/${sessionId}/messages`);
       if (response.success && response.data.length > lastMessageCount) {
         const newMessages = response.data.slice(lastMessageCount);
-        
+
         for (const message of newMessages) {
           if (message.role === 'host') {
             // Clear status on first host message if not already cleared
@@ -676,7 +651,7 @@ async function monitorForResponses(sessionId, userMessageTime, clearStatus = nul
               clearStatus();
               statusCleared = true;
             }
-            
+
             // Check if this is a tool execution message or final response
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
@@ -688,10 +663,10 @@ async function monitorForResponses(sessionId, userMessageTime, clearStatus = nul
             }
           }
         }
-        
+
         lastMessageCount = response.data.length;
       }
-      
+
       await new Promise(resolve => setTimeout(resolve, 1500)); // Check every 1.5 seconds
     } catch (error) {
       console.log(chalk.red('❌ Error monitoring responses:'), error.message);
@@ -788,10 +763,10 @@ async function chatLoop(sessionId) {
   // Handle user input
   rl.on('line', async (input) => {
     const userInput = input.trim();
-    
+
     // Clear the last four lines: empty line, top dash line, status line, bottom dash line, user prompt
     process.stdout.write('\x1b[4A\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G\x1b[1B\x1b[2K\x1b[0G');
-    
+
     if (!userInput) {
       rl.prompt();
       return;
@@ -841,12 +816,12 @@ async function chatLoop(sessionId) {
 
   function cleanup() {
     rl.close();
-    
+
     // Close session on exit
     api.post(`/sessions/${sessionId}/close`).catch(() => {
       // Ignore cleanup errors
     });
-    
+
     process.exit(0);
   }
 
@@ -857,11 +832,11 @@ async function chatLoop(sessionId) {
   async function sendMessage(sessionId, userInput) {
     isProcessing = true;
     currentState = 'waiting';
-    
+
     // Show the user message
     console.log(chalk.green('User:'), userInput);
     console.log();
-    
+
     // Show status and prompt after user message
     showStatusAndPrompt();
 
@@ -879,7 +854,7 @@ async function chatLoop(sessionId) {
       }
 
       currentState = 'busy';
-      
+
       // Start monitoring for responses with status clearing callback
       await monitorForResponses(sessionId, Date.now(), clearStatusAndPrompt);
 
@@ -887,7 +862,7 @@ async function chatLoop(sessionId) {
       console.log(chalk.red('❌ Error sending message:'), error.message);
       currentState = 'error';
     }
-    
+
     isProcessing = false;
     currentState = 'idle';
   }
@@ -920,7 +895,7 @@ async function sessionPublishCommand(sessionId, options) {
   const data = options.data === undefined ? true : (options.data === 'true' || options.data === true);
   const code = options.code === undefined ? true : (options.code === 'true' || options.code === true);
   const secrets = options.secrets === undefined ? true : (options.secrets === 'true' || options.secrets === true);
-  
+
   console.log();
   console.log(chalk.yellow('📋 Remix Permissions:'));
   console.log(chalk.gray('  Data:'), data ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
@@ -946,7 +921,7 @@ async function sessionPublishCommand(sessionId, options) {
     }
 
     spinner.succeed(`Session published: ${sessionId}`);
-    
+
     console.log();
     console.log(chalk.green('🎉 Session is now publicly accessible!'));
     console.log();
@@ -990,7 +965,7 @@ async function sessionUnpublishCommand(sessionId, options) {
     }
 
     spinner.succeed(`Session unpublished: ${sessionId}`);
-    
+
     console.log();
     console.log(chalk.green('🔒 Session is now private again'));
 
@@ -1021,7 +996,7 @@ async function sessionCloseCommand(sessionId, options) {
 
     // Get session details first to show current state
     const sessionResponse = await api.get(`/sessions/${sessionId}`);
-    
+
     if (!sessionResponse.success) {
       spinner.fail('Failed to fetch session details');
       console.error(chalk.red('Error:'), sessionResponse.error || 'Session does not exist');
@@ -1048,7 +1023,7 @@ async function sessionCloseCommand(sessionId, options) {
     }
 
     spinner.succeed(`Session closed: ${sessionId}`);
-    
+
     console.log();
     console.log(chalk.green('🛑 Session has been closed and resources cleaned up'));
     console.log();
