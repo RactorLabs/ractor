@@ -28,7 +28,7 @@ pub struct Session {
 pub struct CreateSessionRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_valid_name")]
     pub name: Option<String>,
     #[serde(default)]
     pub secrets: std::collections::HashMap<String, String>,
@@ -46,7 +46,7 @@ pub struct CreateSessionRequest {
 pub struct RemixSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_valid_name")]
     pub name: Option<String>,
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub data: bool,
@@ -79,7 +79,7 @@ pub struct UpdateSessionStateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateSessionRequest {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_valid_name")]
     pub name: Option<String>,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
@@ -254,7 +254,60 @@ where
         }
     }
 
-    deserializer.deserialize_option(StrictOptionI32Visitor)
+    deserializer.deserialize_any(StrictOptionI32Visitor)
+}
+
+// Custom deserializer for name validation (alphanumeric and hyphens only)
+fn deserialize_valid_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+    
+    struct ValidNameVisitor;
+    
+    impl<'de> Visitor<'de> for ValidNameVisitor {
+        type Value = Option<String>;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a valid name (alphanumeric and hyphens only) or null")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            if value.is_empty() {
+                return Ok(None);
+            }
+            
+            if value.len() > 100 {
+                return Err(E::custom("name too long (max 100 characters)"));
+            }
+            
+            if !value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+                return Err(E::custom("name must contain only alphanumeric characters and hyphens"));
+            }
+            
+            Ok(Some(value.to_string()))
+        }
+        
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+        
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+    }
+    
+    deserializer.deserialize_any(ValidNameVisitor)
 }
 
 

@@ -583,9 +583,9 @@ async function chatLoop(sessionId) {
         console.log(chalk.gray('  /t <seconds>') + ' - Set session timeout (e.g., /t 120)');
         console.log(chalk.gray('  /timeout <seconds>') + ' - Set session timeout (e.g., /timeout 120)');
         console.log(chalk.gray('  timeout <seconds>') + ' - Set session timeout (e.g., timeout 120)');
-        console.log(chalk.gray('  /n <name>') + ' - Set session name (e.g., /n "my session")');
-        console.log(chalk.gray('  /name <name>') + ' - Set session name (e.g., /name "my session")');
-        console.log(chalk.gray('  name <name>') + ' - Set session name (e.g., name "my session")');
+        console.log(chalk.gray('  /n <name>') + ' - Set session name (e.g., /n "my-session")');
+        console.log(chalk.gray('  /name <name>') + ' - Set session name (e.g., /name "my-session")');
+        console.log(chalk.gray('  name <name>') + ' - Set session name (e.g., name "my-session")');
         console.log(chalk.gray('  /quit, /q, /exit') + ' - End session');
         console.log(chalk.gray('  /help, /?') + ' - Show this help');
         continue;
@@ -636,7 +636,7 @@ async function chatLoop(sessionId) {
       const nameMatch = userInput.trim().match(/^(?:\/n|\/name|name)\s+(.+)$/);
       if (nameMatch) {
         const newName = nameMatch[1].replace(/^["']|["']$/g, ''); // Remove surrounding quotes if present
-        if (newName.length > 0 && newName.length <= 100) {
+        if (newName.length > 0 && newName.length <= 100 && /^[a-zA-Z0-9-]+$/.test(newName)) {
           const spinner = ora('Updating session name...').start();
           try {
             const updateResponse = await api.put(`/sessions/${sessionId}`, {
@@ -653,7 +653,7 @@ async function chatLoop(sessionId) {
             console.log(chalk.red('Error:'), error.message);
           }
         } else {
-          console.log(chalk.red('Invalid name. Must be between 1 and 100 characters.'));
+          console.log(chalk.red('Invalid name. Must be 1-100 characters, alphanumeric and hyphens only.'));
         }
         continue;
       }
