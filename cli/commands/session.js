@@ -453,8 +453,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
 async function startInteractiveSession(sessionId, options) {
   console.log();
-  console.log();
-  console.log(chalk.green('✅ Session active! Type your messages below.'));
   console.log(chalk.gray('Commands: /status, /timeout <s>, /name <name>, /quit, /help'));
   console.log(chalk.gray('Session ID:'), sessionId);
 
