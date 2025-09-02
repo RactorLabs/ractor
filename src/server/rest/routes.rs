@@ -61,7 +61,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 
 async fn version() -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({
-        "version": "0.3.2",
+        "version": "0.3.3",
         "api": "v0"
     }))
 }
