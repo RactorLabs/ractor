@@ -183,7 +183,6 @@ async function sessionStartCommand(options) {
       try {
         sessionPayload.secrets = JSON.parse(options.secrets);
       } catch (error) {
-        spinner.fail('Invalid secrets JSON format');
         console.error(chalk.red('✗ Error:'), 'Secrets must be valid JSON');
         process.exit(1);
       }
@@ -200,7 +199,6 @@ async function sessionStartCommand(options) {
         const fs = require('fs');
         sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
       } catch (error) {
-        spinner.fail('Failed to read instructions file');
         console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
       }
@@ -214,7 +212,6 @@ async function sessionStartCommand(options) {
         const fs = require('fs');
         sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
       } catch (error) {
-        spinner.fail('Failed to read setup script');
         console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
       }
@@ -229,12 +226,10 @@ async function sessionStartCommand(options) {
     if (options.name) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
-        spinner.fail('Invalid session name');
         console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
-        spinner.fail('Invalid session name');
         console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
         console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
         process.exit(1);
@@ -246,7 +241,6 @@ async function sessionStartCommand(options) {
     if (options.timeout) {
       const timeoutSeconds = parseInt(options.timeout);
       if (isNaN(timeoutSeconds) || timeoutSeconds <= 0) {
-        spinner.fail('Invalid timeout value');
         console.error(chalk.red('✗ Error:'), 'Timeout must be a positive number in seconds');
         process.exit(1);
       }
@@ -295,13 +289,11 @@ async function sessionRestoreCommand(sessionId, options) {
   console.log();
 
   try {
-    const spinner = ora('Restoring session...').start();
 
     // Get session details first
     const sessionResponse = await api.get(`/sessions/${sessionId}`);
 
     if (!sessionResponse.success) {
-      spinner.fail('Failed to fetch session');
       console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
       process.exit(1);
     }
@@ -323,14 +315,13 @@ async function sessionRestoreCommand(sessionId, options) {
       const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
 
       if (!restoreResponse.success) {
-        spinner.fail('Failed to restore session');
         console.error(chalk.red('✗ Error:'), restoreResponse.error);
         process.exit(1);
       }
 
-      spinner.succeed(`Session restored: ${sessionId}`);
+      console.log(chalk.gray('Session Id:'), sessionId);
     } else if (session.state === SESSION_STATE_IDLE) {
-      spinner.succeed(`Session already ready: ${sessionId}`);
+      console.log(chalk.gray('Session Id:'), sessionId);
 
       // If prompt provided for already-running session, send it as a message
       if (options.prompt) {
@@ -352,11 +343,10 @@ async function sessionRestoreCommand(sessionId, options) {
         console.log();
       }
     } else if (session.state === SESSION_STATE_BUSY) {
-      spinner.succeed(`Session connected (currently busy): ${sessionId}`);
+      console.log(chalk.gray('Session Id:'), sessionId);
       console.log(chalk.yellow('ℹ') + ' Session is currently processing. You can observe ongoing activity.');
       console.log();
     } else {
-      spinner.fail(`Cannot restore session in state: ${session.state}`);
       process.exit(1);
     }
 
@@ -399,7 +389,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
   console.log();
 
   try {
-    const spinner = ora('Remixing session...').start();
 
     // Prepare remix payload
     const remixPayload = {};
@@ -425,12 +414,10 @@ async function sessionRemixCommand(sourceSessionId, options) {
     if (options.name) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
-        spinner.fail('Invalid session name');
         console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
-        spinner.fail('Invalid session name');
         console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
         console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
         process.exit(1);
@@ -442,7 +429,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
     const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
 
     if (!remixResponse.success) {
-      spinner.fail('Failed to remix session');
       console.error(chalk.red('✗ Error:'), remixResponse.error);
       process.exit(1);
     }
@@ -473,14 +459,12 @@ async function startInteractiveSession(sessionId, options) {
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
     try {
-      const historySpinner = ora('Loading conversation history...').start();
       const messagesResponse = await api.get(`/sessions/${sessionId}/messages`);
 
       if (messagesResponse.success && messagesResponse.data && messagesResponse.data.length > 0) {
         const messages = messagesResponse.data;
         const recentMessages = messages.slice(-6); // Show last 6 messages (3 exchanges)
 
-        historySpinner.succeed('Conversation history loaded');
         console.log();
         console.log(chalk.blue('📜 Recent conversation history:'));
         console.log(chalk.gray('─'.repeat(50)));
@@ -505,7 +489,6 @@ async function startInteractiveSession(sessionId, options) {
         console.log(chalk.gray('─'.repeat(50)));
         console.log(chalk.blue('💬 Continue the conversation below:'));
       } else {
-        historySpinner.succeed('No previous messages found');
       }
     } catch (error) {
       console.log(chalk.yellow('Warning: Could not load conversation history'));
