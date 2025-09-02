@@ -4,11 +4,11 @@ const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
 const { marked } = require('marked');
-const TerminalRenderer = require('marked-terminal');
+const markedTerminal = require('marked-terminal');
 
 // Configure marked for terminal output
 marked.setOptions({
-  renderer: new TerminalRenderer({
+  renderer: new markedTerminal({
     blockquote: chalk.gray.italic,
     code: chalk.yellow,
     codespan: chalk.cyan,
