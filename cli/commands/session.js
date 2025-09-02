@@ -328,12 +328,16 @@ async function sessionRestoreCommand(sessionId, options) {
         }
         console.log();
       }
+    } else if (session.state === SESSION_STATE_BUSY) {
+      spinner.succeed(`Session connected (currently busy): ${sessionId}`);
+      console.log(chalk.yellow('💡 Session is currently processing. You can observe ongoing activity.'));
+      console.log();
     } else {
       spinner.fail(`Cannot restore session in state: ${session.state}`);
       process.exit(1);
     }
 
-    await startInteractiveSession(sessionId, { ...options, isRestore: true });
+    await startInteractiveSession(sessionId, { ...options, isRestore: true, sessionState: session.state });
 
   } catch (error) {
     console.error(chalk.red('❌ Error:'), error.message);
@@ -522,8 +526,23 @@ async function startInteractiveSession(sessionId, options) {
     }
   }
 
-  // Start synchronous chat loop
-  await chatLoop(sessionId);
+  // If connecting to a busy session, start monitoring for ongoing activity
+  if (options.sessionState === SESSION_STATE_BUSY) {
+    console.log(chalk.blue('🔄 Monitoring ongoing session activity...'));
+    console.log();
+    
+    // Start monitoring without a user message time (will show any new messages)
+    const monitoringPromise = monitorForResponses(sessionId, 0);
+    
+    // Start chat loop concurrently so user can still interact
+    const chatPromise = chatLoop(sessionId);
+    
+    // Wait for either to complete (though monitoring should complete when host finishes)
+    await Promise.race([monitoringPromise, chatPromise]);
+  } else {
+    // Start synchronous chat loop
+    await chatLoop(sessionId);
+  }
 }
 
 async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000) {
@@ -574,6 +593,70 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   }
 
   throw new Error('Timeout waiting for host response');
+}
+
+function displayToolMessage(message) {
+  const toolType = message.metadata?.tool_type || 'unknown';
+  const toolIcon = {
+    'bash': '⚡',
+    'text_editor': '📝', 
+    'web_search': '🔍'
+  }[toolType] || '🔧';
+  
+  console.log();
+  console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
+  console.log(chalk.dim('├─ ') + chalk.gray(message.content));
+}
+
+function displayHostMessage(message) {
+  console.log();
+  console.log(chalk.cyan('Host: ') + chalk.white(message.content));
+  console.log();
+}
+
+async function monitorForResponses(sessionId, userMessageTime) {
+  let lastMessageCount = 0;
+
+  // Get initial message count
+  try {
+    const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+    if (initialResponse.success) {
+      lastMessageCount = initialResponse.data.length;
+    }
+  } catch (error) {
+    console.log(chalk.red('❌ Error getting initial message count'));
+    return;
+  }
+
+  while (true) {
+    try {
+      const response = await api.get(`/sessions/${sessionId}/messages`);
+      if (response.success && response.data.length > lastMessageCount) {
+        const newMessages = response.data.slice(lastMessageCount);
+        
+        for (const message of newMessages) {
+          if (message.role === 'host') {
+            // Check if this is a tool execution message or final response
+            const metadata = message.metadata;
+            if (metadata && metadata.type === 'tool_execution') {
+              displayToolMessage(message);
+            } else {
+              displayHostMessage(message);
+              // Final response received - exit monitoring
+              return;
+            }
+          }
+        }
+        
+        lastMessageCount = response.data.length;
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Check every 1.5 seconds
+    } catch (error) {
+      console.log(chalk.red('❌ Error monitoring responses:'), error.message);
+      break;
+    }
+  }
 }
 
 async function showSessionStatus(sessionId) {
@@ -806,70 +889,6 @@ async function chatLoop(sessionId) {
     
     isProcessing = false;
     currentState = 'idle';
-  }
-
-  async function monitorForResponses(sessionId, userMessageTime) {
-    let lastMessageCount = 0;
-
-    // Get initial message count
-    try {
-      const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
-      if (initialResponse.success) {
-        lastMessageCount = initialResponse.data.length;
-      }
-    } catch (error) {
-      console.log(chalk.red('❌ Error getting initial message count'));
-      return;
-    }
-
-    while (true) {
-      try {
-        const response = await api.get(`/sessions/${sessionId}/messages`);
-        if (response.success && response.data.length > lastMessageCount) {
-          const newMessages = response.data.slice(lastMessageCount);
-          
-          for (const message of newMessages) {
-            if (message.role === 'host') {
-              // Check if this is a tool execution message or final response
-              const metadata = message.metadata;
-              if (metadata && metadata.type === 'tool_execution') {
-                displayToolMessage(message);
-              } else {
-                displayHostMessage(message);
-                // Final response received - exit monitoring
-                return;
-              }
-            }
-          }
-          
-          lastMessageCount = response.data.length;
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 1500)); // Check every 1.5 seconds
-      } catch (error) {
-        console.log(chalk.red('❌ Error monitoring responses:'), error.message);
-        break;
-      }
-    }
-  }
-
-  function displayToolMessage(message) {
-    const toolType = message.metadata?.tool_type || 'unknown';
-    const toolIcon = {
-      'bash': '⚡',
-      'text_editor': '📝', 
-      'web_search': '🔍'
-    }[toolType] || '🔧';
-    
-    console.log();
-    console.log(chalk.gray(`${toolIcon} Tool: ${toolType}`));
-    console.log(chalk.dim('├─ ') + chalk.gray(message.content));
-  }
-
-  function displayHostMessage(message) {
-    console.log();
-    console.log(chalk.cyan('Host: ') + chalk.white(message.content));
-    console.log();
   }
 
   // Initialize the interface
