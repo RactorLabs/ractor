@@ -146,14 +146,19 @@ impl ClaudeClient {
     }
 
     fn get_web_search_tool() -> Tool {
-        // Web search tool implementation following Anthropic specification web_search_20250305
+        // Web search tool implementation following Anthropic specification
         Tool {
             name: "web_search".to_string(),
             description: "Search the web for real-time information beyond my knowledge cutoff. Automatically provides citations and sources.".to_string(),
             input_schema: serde_json::json!({
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 10
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query to execute"
+                    }
+                },
+                "required": ["query"]
             }),
         }
     }
@@ -323,7 +328,10 @@ impl ClaudeClient {
                         let path = tool_input.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
                         format!("Text editor {}: {}", cmd, path)
                     },
-                    "web_search" => "Searching the web for current information".to_string(),
+                    "web_search" => {
+                        let query = tool_input.get("query").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        format!("Searching the web for: {}", query)
+                    },
                     _ => format!("Executing {} tool", tool_name),
                 };
 

@@ -658,7 +658,7 @@ async function chatLoop(sessionId) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-    prompt: chalk.white('You: ')
+    prompt: chalk.cyanBright('User: ')
   });
 
   // Real-time status display
