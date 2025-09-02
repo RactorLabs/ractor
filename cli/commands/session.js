@@ -815,7 +815,7 @@ async function chatLoop(sessionId) {
       clearPromptAfterEnter();
       promptVisible = false;
       console.log();
-      console.log('✓ Ending session. Goodbye!');
+      console.log(chalk.green('✓') + ' Ending session. Goodbye!');
       cleanup();
       return;
     }
@@ -962,7 +962,7 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
         timeout_seconds: timeoutSeconds
       });
       if (updateResponse.success) {
-        console.log(`✓ Session timeout updated to ${timeoutSeconds} seconds`);
+        console.log(chalk.green('✓') + ` Session timeout updated to ${timeoutSeconds} seconds`);
       } else {
         console.log(chalk.red('✗ Failed to update timeout:'), updateResponse.error || 'Unknown error');
       }
@@ -982,7 +982,7 @@ async function handleNameCommand(sessionId, newName) {
         name: cleanName
       });
       if (updateResponse.success) {
-        console.log(`✓ Session name updated to: "${cleanName}"`);
+        console.log(chalk.green('✓') + ` Session name updated to: "${cleanName}"`);
       } else {
         console.log(chalk.red('✗ Failed to update name:'), updateResponse.error || 'Unknown error');
       }
