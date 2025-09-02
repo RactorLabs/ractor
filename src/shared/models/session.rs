@@ -241,11 +241,16 @@ where
             Err(E::custom("expected integer or null, found boolean"))
         }
 
-        fn visit_f64<E>(self, _: f64) -> Result<Self::Value, E>
+        fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
         where
             E: Error,
         {
-            Err(E::custom("expected integer or null, found number"))
+            // Accept whole numbers that fit in i32 range
+            if value.fract() == 0.0 && value >= i32::MIN as f64 && value <= i32::MAX as f64 {
+                Ok(Some(value as i32))
+            } else {
+                Err(E::custom("expected integer value within i32 range"))
+            }
         }
     }
 
