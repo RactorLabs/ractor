@@ -141,7 +141,16 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
         warn!("Failed to initialize processed tracking: {}, proceeding anyway", e);
     }
     
-    info!("Host initialized, starting message polling loop...");
+    info!("Host initialized, setting session to idle to start timeout...");
+    
+    // Set session to idle after initialization to start timeout
+    if let Err(e) = api_client.update_session_to_idle().await {
+        warn!("Failed to set session to idle after initialization: {}", e);
+    } else {
+        info!("Session set to idle - timeout started");
+    }
+    
+    info!("Starting message polling loop...");
     
     // Main polling loop
     loop {
