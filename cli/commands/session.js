@@ -455,7 +455,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
     if (newSession.name) {
       spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
     } else {
-      spinner.succeed(`Session remixed: ${sessionId}`);
+      console.log(chalk.gray('Session Id:'), sessionId);
     }
 
     console.log(chalk.gray('Source session:'), sourceSessionId);
