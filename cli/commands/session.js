@@ -377,7 +377,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('ℹ') + ' Remixing Raworc AI Session');
   console.log(chalk.gray('Mode:'), 'Remix');
   console.log(chalk.gray('Source:'), sourceSessionId);
   if (options.name) {
