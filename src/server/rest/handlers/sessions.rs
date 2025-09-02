@@ -532,8 +532,11 @@ pub async fn update_session(
     let updated_session = Session::update(&state.db, &session.id, req)
         .await
         .map_err(|e| {
-            if e.to_string().contains("No fields to update") {
-                ApiError::BadRequest(e.to_string())
+            let error_msg = e.to_string();
+            if error_msg.contains("No fields to update") {
+                ApiError::BadRequest(error_msg)
+            } else if error_msg.contains("unique_session_name") || error_msg.contains("Duplicate entry") {
+                ApiError::BadRequest("A session with this name already exists".to_string())
             } else {
                 ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e))
             }
