@@ -458,12 +458,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
       console.log(chalk.gray('Session Id:'), sessionId);
     }
 
-    console.log(chalk.gray('Source session:'), sourceSessionId);
-    if (newSession.name) {
-      console.log(chalk.gray('New session name:'), newSession.name);
-    }
-    console.log(chalk.gray('New session ID:'), sessionId);
-    console.log();
 
     await startInteractiveSession(sessionId, options);
 
