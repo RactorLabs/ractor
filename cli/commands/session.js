@@ -594,33 +594,55 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 }
 
 function showPrompt(state = 'idle') {
+  const stateLabels = {
+    'init': 'initializing...',
+    'idle': 'waiting...',
+    'busy': 'working...',
+    'waiting': 'waiting...',
+    'error': 'error',
+    'closed': 'sleeping...'
+  };
+  
   const stateColors = {
+    'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
     'waiting': chalk.blue,
     'error': chalk.red,
-    'closed': chalk.red
+    'closed': chalk.gray
   };
   
+  const label = stateLabels[state] || state;
   const color = stateColors[state] || chalk.gray;
   console.log();
-  console.log(color(state));
+  console.log(color(label));
   console.log(chalk.gray('————————————————————'));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
 function showPromptWithInput(state = 'idle', userInput = '') {
+  const stateLabels = {
+    'init': 'initializing...',
+    'idle': 'waiting...',
+    'busy': 'working...',
+    'waiting': 'waiting...',
+    'error': 'error',
+    'closed': 'sleeping...'
+  };
+  
   const stateColors = {
+    'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
     'waiting': chalk.blue,
     'error': chalk.red,
-    'closed': chalk.red
+    'closed': chalk.gray
   };
   
+  const label = stateLabels[state] || state;
   const color = stateColors[state] || chalk.gray;
   console.log();
-  console.log(color(state));
+  console.log(color(label));
   console.log(chalk.gray('————————————————————'));
   process.stdout.write(chalk.cyanBright('> ') + userInput);
 }
