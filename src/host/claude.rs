@@ -216,7 +216,7 @@ impl ClaudeClient {
         }
 
         // Tool execution loop - continue until we get a final text response
-        let max_tool_iterations = 10;
+        let max_tool_iterations = 20;
         let mut iteration_count = 0;
         
         loop {
