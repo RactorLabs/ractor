@@ -593,7 +593,19 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 }
 
 function showPrompt() {
+  console.log(chalk.green('idle'));
+  console.log(chalk.gray('----------'));
   process.stdout.write(chalk.cyanBright('> '));
+}
+
+function clearPromptLine() {
+  // Clear 3 lines of prompt (for host messages)
+  process.stdout.write('\r\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
+}
+
+function clearPromptAfterEnter() {
+  // Clear newline from Enter + 3 lines of prompt (for user input)
+  process.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
 }
 
 async function monitorForResponses(sessionId, userMessageTime) {
@@ -618,12 +630,16 @@ async function monitorForResponses(sessionId, userMessageTime) {
           if (message.role === 'host') {
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
+              clearPromptLine();
               const toolType = message.metadata?.tool_type || 'unknown';
               console.log(chalk.gray(`• ${toolType}`));
               console.log(chalk.dim('├─ ') + chalk.gray(message.content));
+              showPrompt();
             } else {
+              clearPromptLine();
               console.log(chalk.cyan('Host:'), chalk.whiteBright(message.content));
               console.log();
+              showPrompt();
               return;
             }
           }
@@ -649,6 +665,9 @@ async function chatLoop(sessionId) {
 
   rl.on('line', async (input) => {
     const userInput = input.trim();
+
+    // Clear both newline from Enter and the prompt line
+    clearPromptAfterEnter();
 
     if (!userInput) {
       showPrompt();
@@ -694,7 +713,6 @@ async function chatLoop(sessionId) {
 
     // Send message to session
     await sendMessage(sessionId, userInput);
-    showPrompt();
   });
 
   function cleanup() {
@@ -707,8 +725,11 @@ async function chatLoop(sessionId) {
   process.on('SIGTERM', cleanup);
 
   async function sendMessage(sessionId, userInput) {
+    console.log();
     console.log(chalk.green('User:'), userInput);
     console.log();
+    
+    showPrompt();
 
     try {
       const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
@@ -717,14 +738,18 @@ async function chatLoop(sessionId) {
       });
 
       if (!sendResponse.success) {
+        clearPromptLine();
         console.log(chalk.red('❌ Failed to send message:'), sendResponse.error);
+        showPrompt();
         return;
       }
 
       await monitorForResponses(sessionId, Date.now());
 
     } catch (error) {
+      clearPromptLine();
       console.log(chalk.red('❌ Error sending message:'), error.message);
+      showPrompt();
     }
   }
 
