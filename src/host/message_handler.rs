@@ -206,7 +206,7 @@ impl MessageHandler {
             response_text,
             Some(serde_json::json!({
                 "type": response_type,
-                "model": "claude-3-5-sonnet-4-20250107"
+                "model": "claude-sonnet-4-20250514"
             })),
         ).await?;
         

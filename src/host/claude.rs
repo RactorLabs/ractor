@@ -206,7 +206,7 @@ impl ClaudeClient {
             };
             
             let request = ClaudeRequest {
-                model: "claude-3-5-sonnet-4-20250107".to_string(),
+                model: "claude-sonnet-4-20250514".to_string(),
                 max_tokens: 4096,
                 messages: conversation_messages.clone(),
                 system: system_prompt.clone(),
