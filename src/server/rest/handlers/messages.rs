@@ -51,7 +51,7 @@ pub async fn create_message(
             "#
         )
         .bind(&session_id)
-        .bind("system")  // Auto-restore triggered by system
+        .bind(&session.created_by)  // Use session owner for proper token generation
         .bind(payload.to_string())
         .execute(&*state.db)
         .await
