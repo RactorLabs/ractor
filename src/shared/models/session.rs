@@ -83,7 +83,7 @@ pub struct UpdateSessionRequest {
     pub name: Option<String>,
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
-    #[serde(deserialize_with = "deserialize_strict_option_i32")]
+    #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
     pub timeout_seconds: Option<i32>,
 }
 
