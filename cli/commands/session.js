@@ -698,7 +698,13 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
               const toolType = message.metadata?.tool_type || 'unknown';
               console.log();
               console.log(chalk.gray(`● ${toolType}`));
-              console.log(chalk.dim('└─ ') + chalk.gray(message.content));
+              // Remove common tool execution prefixes
+              let content = message.content;
+              content = content.replace(/^Text editor create:\s*/, '');
+              content = content.replace(/^Executing bash command:\s*/, '');
+              content = content.replace(/^Computer use:\s*/, '');
+              content = content.replace(/^File operation:\s*/, '');
+              console.log(chalk.dim('└─ ') + chalk.gray(content));
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
