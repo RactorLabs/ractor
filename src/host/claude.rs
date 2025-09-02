@@ -136,6 +136,19 @@ impl ClaudeClient {
             }),
         }
     }
+
+    fn get_web_search_tool() -> Tool {
+        // Web search tool implementation following Anthropic specification web_search_20250305
+        Tool {
+            name: "web_search".to_string(),
+            description: "Search the web for real-time information beyond my knowledge cutoff. Automatically provides citations and sources.".to_string(),
+            input_schema: serde_json::json!({
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 10
+            }),
+        }
+    }
     
     pub async fn complete(
         &self,
@@ -200,7 +213,11 @@ impl ClaudeClient {
             iteration_count += 1;
 
             let tools = if enable_tools { 
-                Some(vec![Self::get_bash_tool(), Self::get_text_editor_tool()]) 
+                Some(vec![
+                    Self::get_bash_tool(), 
+                    Self::get_text_editor_tool(),
+                    Self::get_web_search_tool()
+                ]) 
             } else { 
                 None 
             };
