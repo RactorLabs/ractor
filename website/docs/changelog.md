@@ -5,6 +5,18 @@ title: Changelog
 
 # Changelog
 
+## v0.3.6
+
+- **Canvas HTTP Server Optimization**: Moved Canvas port allocation from container creation to session creation, eliminating timing issues where Canvas URL was unavailable immediately after session start
+- **Enhanced Tool Display Labels**: Updated CLI tool execution labels to be more descriptive ("Edit" → "Text Editor", "Run" → "Run Bash", "Search" → "Web Search") for better user experience
+- **Immediate Canvas URL Display**: Canvas HTTP server URLs now display immediately in both host container logs and CLI session command box upon session creation
+- **Canvas Workflow Improvements**: Added comprehensive Canvas folder workflow guidance with index.html as main entry point and relative URL linking best practices
+- **Session API Enhancements**: Added canvas_port field to session API responses and implemented get_session endpoint in host client for real-time Canvas information
+- **URL Hostname Resolution**: Enhanced Canvas URL generation to extract hostname from server configuration instead of hardcoding localhost, supporting remote deployments
+- **Database Schema Updates**: Sessions table now includes canvas_port field populated during session creation for consistent Canvas port management
+- **Container Integration Optimization**: Docker manager now fetches existing Canvas ports from session database instead of allocating new ports during container creation
+- **Technical Reliability**: Added url crate dependency for proper URL parsing, cleaned up unused imports, and resolved build warnings for improved code quality
+
 ## v0.3.5
 
 - **Website Documentation Overhaul**: Comprehensive update of all website documentation to reflect 100+ commits of CLI and feature improvements
