@@ -8,7 +8,7 @@ use sqlx;
 use crate::shared::models::{
     AppState, SessionMessage, CreateMessageRequest, MessageResponse, ListMessagesQuery
 };
-use crate::shared::models::constants::{SESSION_STATE_IDLE, SESSION_STATE_BUSY, SESSION_STATE_CLOSED};
+use crate::shared::models::constants::{SESSION_STATE_INIT, SESSION_STATE_IDLE, SESSION_STATE_BUSY, SESSION_STATE_CLOSED};
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 

@@ -11,7 +11,7 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::SESSION_STATE_IDLE;
+pub use constants::SESSION_STATE_INIT;
 
 // Import shared modules
 #[path = "../shared/anthropic.rs"]
@@ -421,7 +421,7 @@ impl SessionManager {
         
         // Set session state to INIT after container creation (host will set to IDLE when ready)
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#)
-        .bind(crate::shared::models::constants::SESSION_STATE_INIT)
+        .bind(SESSION_STATE_INIT)
         .bind(&session_id)
         .execute(&self.pool)
         .await?;

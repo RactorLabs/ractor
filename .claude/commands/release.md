@@ -56,10 +56,10 @@ git log --oneline <last-version>..HEAD
 ## Example workflow
 
 ```
-Current version: 0.3.2
+Current version: 0.3.5
 → Stage changes and commit
-→ Tag 0.3.2 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
-→ Bump to 0.3.2 for next development
+→ Tag 0.3.5 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
+→ Bump to 0.3.6 for next development
 → Push version bump
 ```
 
@@ -69,12 +69,12 @@ Current version: 0.3.2
 
 ```bash
 # 1. Update version in all files:
-#    - Cargo.toml: version = "0.3.2"
-#    - cli/package.json: "version": "0.3.2"  
-#    - website/package.json: "version": "0.3.2"
-#    - CLAUDE.md: Current version: 0.3.2
-#    - src/server/rest/routes.rs: "version": "0.3.2" (API response)
-#    - website/docs/api/rest-api.md: "version": "0.3.2" (documentation)
+#    - Cargo.toml: version = "0.3.5"
+#    - cli/package.json: "version": "0.3.5"  
+#    - website/package.json: "version": "0.3.5"
+#    - CLAUDE.md: Current version: 0.3.5
+#    - src/server/rest/routes.rs: "version": "0.3.5" (API response)
+#    - website/docs/api/rest-api.md: "version": "0.3.5" (documentation)
 #    - website/docs/changelog.md: Add new version entry with changes
 #    - .claude/commands/release.md: Update version examples
 
@@ -91,7 +91,7 @@ git add Cargo.toml cli/package.json website/package.json CLAUDE.md \
         src/server/rest/routes.rs website/docs/api/rest-api.md \
         website/docs/changelog.md .claude/commands/release.md \
         Cargo.lock cli/package-lock.json website/package-lock.json
-git commit -m "chore: bump version to 0.3.2"
+git commit -m "chore: bump version to 0.3.5"
 ```
 
 **Why this is required:**
