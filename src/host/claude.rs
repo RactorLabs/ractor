@@ -114,11 +114,11 @@ impl ClaudeClient {
                     },
                     "file_text": {
                         "type": "string",
-                        "description": "Content for new file. REQUIRED for 'create' command."
+                        "description": "Content for new file. Optional for 'create' command - if not provided, creates empty file."
                     },
                     "content": {
                         "type": "string",
-                        "description": "Alternative parameter name for file content. REQUIRED for 'create' command if file_text not provided."
+                        "description": "Alternative parameter name for file content. Optional for 'create' command."
                     },
                     "old_str": {
                         "type": "string",
@@ -770,16 +770,12 @@ impl ClaudeClient {
         debug!("text_editor_create called with input: {}", serde_json::to_string_pretty(input).unwrap_or_else(|_| "Invalid JSON".to_string()));
 
         // Try both 'file_text' (official spec) and 'content' (alternative) parameters
+        // If neither is provided, create an empty file
         let file_text = input
             .get("file_text")
             .and_then(|v| v.as_str())
             .or_else(|| input.get("content").and_then(|v| v.as_str()))
-            .ok_or_else(|| {
-                let available_keys: Vec<String> = input.as_object()
-                    .map(|obj| obj.keys().cloned().collect())
-                    .unwrap_or_default();
-                HostError::Claude(format!("Missing 'file_text' or 'content' parameter for create command. Available parameters: {:?}", available_keys))
-            })?;
+            .unwrap_or("");
 
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
