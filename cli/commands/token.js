@@ -1,7 +1,7 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -15,15 +15,20 @@ module.exports = (program) => {
 };
 
 async function createTokenCommand(options) {
+  // Show command box with token creation info
+  display.showCommandBox(`${display.icons.token} Create Token`, {
+    operation: `Create token for ${options.principal} (${options.type})`
+  });
+
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
-    console.log(chalk.red('❌ Authentication required'));
+    display.error('Authentication required');
     console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
     process.exit(1);
   }
 
-  const spinner = ora('Creating token...').start();
+  display.info('Creating token...');
   
   try {
     const api = require('../lib/api');
@@ -33,24 +38,24 @@ async function createTokenCommand(options) {
     });
 
     if (response.success) {
-      spinner.succeed('Token created successfully');
+      display.success('Token created successfully');
       console.log();
-      console.log(chalk.green('🎟️ Token Details'));
+      console.log(chalk.green(display.icons.token + ' Token Details'));
       console.log(chalk.gray('Principal:'), options.principal);
       console.log(chalk.gray('Type:'), options.type);
       console.log(chalk.gray('Token:'), response.data.token);
       console.log(chalk.gray('Expires:'), response.data.expires_at);
       console.log();
-      console.log(chalk.yellow('💡 Use this token:'));
+      display.info('Use this token:');
       console.log(`  raworc auth -t ${response.data.token}`);
     } else {
-      spinner.fail('Token creation failed');
-      console.error(chalk.red('Error:'), response.error?.message || 'Unknown error');
+      display.error('Token creation failed');
+      console.error(chalk.gray('Error:'), response.error?.message || 'Unknown error');
       process.exit(1);
     }
   } catch (error) {
-    spinner.fail('Token creation failed');
-    console.error(chalk.red('Error:'), error.message);
+    display.error('Token creation failed');
+    console.error(chalk.gray('Error:'), error.message);
     process.exit(1);
   }
 }

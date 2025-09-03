@@ -1,6 +1,7 @@
 const chalk = require('chalk');
 const api = require('../lib/api');
 const config = require('../config/config');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -12,14 +13,19 @@ module.exports = (program) => {
 };
 
 async function logoutCommand() {
+  // Show command box with logout info
+  display.showCommandBox(`${display.icons.user} Logout`, {
+    operation: 'Clear authentication credentials'
+  });
+
   const authData = config.getAuth();
   
   if (!authData) {
-    console.log(chalk.yellow('⚠️ Not currently authenticated'));
+    display.warning('Not currently authenticated');
     return;
   }
 
   api.logout();
-  console.log(chalk.green('✅ Logged out successfully'));
+  display.success('Logged out successfully');
   console.log(chalk.gray('Authentication credentials cleared'));
 }

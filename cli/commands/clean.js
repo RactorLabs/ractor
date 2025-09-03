@@ -1,8 +1,8 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
 const docker = require('../lib/docker');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -10,20 +10,22 @@ module.exports = (program) => {
     .description('Clean all session containers (preserves core services and volumes)')
     .action(async (options) => {
       try {
-        console.log(chalk.blue('🧹 Session Container Cleanup'));
-        console.log();
+        // Show command box with clean info
+        display.showCommandBox(`${display.icons.clean} Session Container Cleanup`, {
+          operation: 'Clean all session containers'
+        });
 
         // Check Docker availability
         const dockerAvailable = await docker.checkDocker();
         if (!dockerAvailable) {
-          console.error(chalk.red('❌ Docker is not available'));
+          display.error('Docker is not available');
           process.exit(1);
         }
 
         let containersToClean = [];
 
         // Get running containers
-        const listSpinner = ora('Finding session containers...').start();
+        display.info('Finding session containers...');
         
         try {
           // Find only raworc_session containers (running and stopped)
@@ -39,10 +41,8 @@ module.exports = (program) => {
             containersToClean = containers;
           }
 
-          listSpinner.stop();
-
           if (containersToClean.length === 0) {
-            console.log(chalk.green('✅ No session containers found'));
+            display.success('No session containers found');
             return;
           }
 
@@ -57,7 +57,7 @@ module.exports = (program) => {
 
           // Clean up session containers
           if (containersToClean.length > 0) {
-            const containerSpinner = ora(`Cleaning up ${containersToClean.length} session containers...`).start();
+            display.info(`Cleaning up ${containersToClean.length} session containers...`);
 
             for (const container of containersToClean) {
               try {
@@ -69,39 +69,37 @@ module.exports = (program) => {
                   totalCleaned++;
                 } else {
                   totalFailed++;
-                  console.log(chalk.yellow(`Warning: Failed to remove container ${container.name}`));
+                  display.warning(`Failed to remove container ${container.name}`);
                 }
               } catch (error) {
                 totalFailed++;
-                console.log(chalk.yellow(`Warning: Failed to clean container ${container.name}: ${error.message}`));
+                display.warning(`Failed to clean container ${container.name}: ${error.message}`);
               }
             }
 
-            containerSpinner.stop();
-            console.log(chalk.green(`✅ Cleaned up ${totalCleaned} session containers`));
+            display.success(`Cleaned up ${totalCleaned} session containers`);
           }
 
           // No image cleanup - sessions only
 
           if (totalFailed > 0) {
-            console.log(chalk.yellow(`⚠️ Failed to clean ${totalFailed} session containers`));
+            display.warning(`Failed to clean ${totalFailed} session containers`);
           }
 
           console.log();
           if (totalCleaned > 0) {
-            console.log(chalk.green('🎉 Session cleanup completed!'));
+            display.success('Session cleanup completed!');
           }
 
           console.log();
           console.log(chalk.gray('Note: Core services and volumes are preserved'));
 
         } catch (error) {
-          listSpinner.stop();
           throw error;
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error:'), error.message);
+        display.error('Error: ' + error.message);
         process.exit(1);
       }
     });

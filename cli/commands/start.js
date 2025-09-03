@@ -1,6 +1,6 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const docker = require('../lib/docker');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -10,12 +10,18 @@ module.exports = (program) => {
     .option('-r, --restart', 'Stop existing containers before starting (restart)')
     .action(async (components, options) => {
       try {
-        console.log(chalk.blue('🚀 Starting Raworc services...'));
+        // Show command box with start info
+        const operation = components.length > 0 ? 
+          `Start components: ${components.join(', ')}` : 
+          'Start all Raworc services';
+        display.showCommandBox(`${display.icons.start} Start Services`, {
+          operation: operation
+        });
         
         // Check Docker availability
         const dockerAvailable = await docker.checkDocker();
         if (!dockerAvailable) {
-          console.error(chalk.red('❌ Docker is not available. Please install Docker first.'));
+          display.error('Docker is not available. Please install Docker first.');
           process.exit(1);
         }
 
@@ -23,17 +29,17 @@ module.exports = (program) => {
         try {
           await docker.checkImages();
         } catch (error) {
-          console.error(chalk.red('❌ Docker images not available:'), error.message);
-          console.error(chalk.yellow('💡 Try running: raworc pull'));
+          display.error('Docker images not available: ' + error.message);
+          display.info('Try running: raworc pull');
           process.exit(1);
         }
 
         // Check for required environment variables when starting operator
         if (components.length === 0 || components.includes('operator')) {
           if (!process.env.ANTHROPIC_API_KEY) {
-            console.error(chalk.red('❌ ANTHROPIC_API_KEY environment variable is required for the operator'));
+            display.error('ANTHROPIC_API_KEY environment variable is required for the operator');
             console.log('');
-            console.log(chalk.yellow('💡 The operator needs an Anthropic API key to provide to session containers.'));
+            display.info('The operator needs an Anthropic API key to provide to session containers.');
             console.log('   Set the environment variable and try again:');
             console.log('');
             console.log('   ' + chalk.white('export ANTHROPIC_API_KEY=sk-ant-api03-...'));
@@ -56,24 +62,24 @@ module.exports = (program) => {
 
         // Stop existing containers if restart requested
         if (options.restart) {
-          const stopSpinner = ora('Stopping existing containers...').start();
+          display.info('Stopping existing containers...');
           try {
             await docker.stop(services);
-            stopSpinner.succeed('Existing containers stopped');
+            display.success('Existing containers stopped');
           } catch (error) {
-            stopSpinner.warn('Some containers may not have been running');
+            display.warning('Some containers may not have been running');
           }
         }
 
         // Start services
-        const startSpinner = ora('Starting services...').start();
+        display.info('Starting services...');
         try {
           await docker.start(services, false);
-          startSpinner.succeed('Services started successfully');
+          display.success('Services started successfully');
           
           // Show running services
           console.log();
-          console.log(chalk.green('✅ Raworc is now running!'));
+          display.success('Raworc is now running!');
           
           const status = await docker.status();
           if (status) {
@@ -92,11 +98,11 @@ module.exports = (program) => {
           console.log(chalk.gray('MySQL Port: 3307'));
 
         } catch (error) {
-          startSpinner.fail(`Failed to start services: ${error.message}`);
+          display.error(`Failed to start services: ${error.message}`);
           
           // Show troubleshooting tips
           console.log();
-          console.log(chalk.yellow('💡 Troubleshooting tips:'));
+          display.info('Troubleshooting tips:');
           console.log('  • Check if ports 9000 and 3307 are available');
           console.log('  • Ensure Docker daemon is running');
           console.log('  • Try pulling latest images: ' + chalk.white('raworc pull'));
@@ -106,7 +112,7 @@ module.exports = (program) => {
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error:'), error.message);
+        display.error('Error: ' + error.message);
         process.exit(1);
       }
     });

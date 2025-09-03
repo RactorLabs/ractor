@@ -722,3 +722,113 @@ Examples:
 - `feat/session-close-restore`
 - `fix/container-cleanup-race`
 - `docs/api-reference-update`
+
+## CLI Design System
+
+The Raworc CLI uses a consistent, professional design system with flat geometric icons and standardized layouts. All CLI commands follow this unified visual approach for a cohesive user experience.
+
+### Design Principles
+
+**Flat Icon System**: Uses simple geometric Unicode characters instead of emojis for terminal compatibility and professional appearance:
+- `◯` (clean) - Session container cleanup
+- `◎` (auth) - Authentication operations  
+- `◐` (user) - User/operator login/logout
+- `⬟` (token) - Token operations
+- `▶` (start) - Start services
+- `◼` (stop) - Stop services  
+- `⇣` (pull) - Pull/download operations
+- `⟲` (reset) - Reset/restart operations
+- `◈` (api) - API operations
+- `◊` (session) - Session operations
+- `≡` (history) - History/logs
+- `◉` (chat) - Chat/messaging
+
+**Status Icons**:
+- `✓` (success) - Successful operations
+- `✗` (error) - Error conditions
+- `⚠` (warning) - Warning conditions  
+- `ℹ` (info) - Information messages
+
+**Session State Visual Indicators**:
+- `●` (idle) - Session idle state
+- `◉` (busy) - Session processing  
+- `◎` (init) - Session initializing
+- `◼` (closed) - Session closed
+- `◇` (errored) - Session error state
+- `◼` (deleted) - Session deleted
+
+### Command Box Layout
+
+All CLI commands use a standardized command box format:
+
+```
+┌─────────────────────────────────────┐
+│ [icon] Command Title                │
+│ Server: http://localhost:9000       │
+│ User: admin (Operator)              │
+│ Operation: Brief operation desc     │
+└─────────────────────────────────────┘
+```
+
+**Box Structure**:
+- Title row with appropriate flat icon and command name
+- Server URL (when relevant)
+- Current authenticated user and type (when relevant)  
+- Operation description explaining what the command does
+- Optional target/session information for specific operations
+
+### Session Interface
+
+Interactive sessions use a clean command box with essential information:
+
+```
+┌─────────────────────────────────────┐
+│ ◊ Session Start                     │
+│ SessionId: abc123                   │
+│ User: admin (Operator)              │
+│ Commands: /help (for commands)      │
+└─────────────────────────────────────┘
+```
+
+**Session Commands**:
+- `/help` - Show all available commands
+- `/status` - Display session status with visual state indicators
+- `/timeout <s>` - Change session timeout (1-3600 seconds)
+- `/name <name>` - Change session name (alphanumeric and hyphens)
+- `/detach` or `/d` - Detach from session (keeps session running)
+- `/quit` or `/q` - End the session completely
+
+### Implementation
+
+**Display Utility** (`cli/lib/display.js`):
+- Centralized icon definitions and display functions
+- `showCommandBox()` - Creates standardized command boxes
+- `success()`, `error()`, `warning()`, `info()` - Consistent status messaging
+- `icons` object - All flat icon mappings
+
+**Usage Pattern**:
+```javascript
+const display = require('../lib/display');
+
+// Show command box
+display.showCommandBox(`${display.icons.start} Start Services`, {
+  operation: 'Start all Raworc services'
+});
+
+// Status messages
+display.success('Services started successfully');
+display.error('Failed to connect to Docker');
+display.info('Checking system status...');
+display.warning('Some containers may not be running');
+```
+
+**No Spinners or Animations**: All commands use simple, immediate feedback without loading spinners or animations for clean terminal output and better accessibility.
+
+### Visual Consistency Guidelines
+
+1. **Always use flat icons** from the design system instead of emojis
+2. **Consistent command boxes** for all operations showing context
+3. **Immediate feedback** with success/error/info/warning status messages
+4. **Professional terminal appearance** suitable for developer workflows
+5. **Session state indicators** use geometric shapes for clear status communication
+6. **Help-first approach** - commands show `/help (for commands)` to guide users

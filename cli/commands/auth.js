@@ -1,7 +1,7 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -19,18 +19,17 @@ module.exports = (program) => {
 };
 
 async function showAuthStatus() {
-  console.log(chalk.blue('🔐 Authentication Status'));
-  console.log();
+  // Show command box with auth info
+  display.showCommandBox(`${display.icons.auth} Authentication Status`, {
+    operation: 'Check authentication status'
+  });
 
   const authData = config.getAuth();
-  const serverUrl = config.getServerUrl();
-  
-  console.log(chalk.gray('Server:'), serverUrl);
   
   if (!authData) {
-    console.log(chalk.red('Status: Not authenticated'));
+    display.error('Not authenticated');
     console.log();
-    console.log(chalk.yellow('💡 To authenticate:'));
+    display.info('To authenticate:');
     console.log('  raworc login --user admin --pass admin');
     console.log('  raworc auth --token <your-jwt-token>');
     return;
@@ -38,15 +37,14 @@ async function showAuthStatus() {
 
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
-  console.log(chalk.gray('User:'), userName + userType);
+  console.log(chalk.gray('Current User:'), userName + userType);
   
   // Test if authentication is still valid
-  const spinner = ora('Checking authentication...').start();
+  display.info('Checking authentication...');
   const response = await api.checkAuth();
   
   if (response.success) {
-    spinner.succeed('Authentication valid');
-    console.log(chalk.green('Status: Authenticated'));
+    display.success('Authentication valid');
     
     if (authData.user) {
       console.log();
@@ -60,18 +58,19 @@ async function showAuthStatus() {
       }
     }
   } else {
-    spinner.fail('Authentication expired or invalid');
-    console.log(chalk.red('Status: Authentication expired'));
+    display.error('Authentication expired or invalid');
     console.log(chalk.gray('Error:'), response.error);
     console.log();
-    console.log(chalk.yellow('💡 Please re-authenticate:'));
+    display.info('Please re-authenticate:');
     console.log('  raworc login');
   }
 }
 
 async function useTokenCommand(options) {
-  console.log(chalk.blue('🔑 Authenticating with token...'));
-  console.log();
+  // Show command box with token auth info
+  display.showCommandBox(`${display.icons.token} Token Authentication`, {
+    operation: 'Authenticate with JWT token'
+  });
 
   // Update server URL if provided
   if (options.server && options.server !== config.getServerUrl()) {
@@ -80,15 +79,15 @@ async function useTokenCommand(options) {
   }
 
   try {
-    console.log(chalk.gray('Using token authentication...'));
-    const spinner = ora('Validating token...').start();
+    display.info('Using token authentication...');
+    display.info('Validating token...');
     
     const response = await api.loginWithToken(options.token, options.server);
     
     if (response.success) {
-      spinner.succeed('Token authentication successful');
+      display.success('Token authentication successful');
       console.log();
-      console.log(chalk.green('✅ Successfully authenticated'));
+      display.success('Successfully authenticated');
       
       const authData = config.getAuth();
       if (authData?.user) {
@@ -104,19 +103,19 @@ async function useTokenCommand(options) {
       console.log('  • List sessions: ' + chalk.white('raworc api sessions'));
       console.log('  • Start session: ' + chalk.white('raworc session'));
     } else {
-      spinner.fail('Token authentication failed');
+      display.error('Token authentication failed');
       console.log();
-      console.error(chalk.red('❌ Authentication failed'));
+      display.error('Authentication failed');
       console.error(chalk.gray('Error:'), response.error);
       
       if (response.status === 401) {
         console.log();
-        console.log(chalk.yellow('💡 Tips:'));
+        display.info('Tips:');
         console.log('  • Check that your token is valid and not expired');
         console.log('  • Ensure the token was created for this server');
       } else if (response.status === 0) {
         console.log();
-        console.log(chalk.yellow('💡 Connection failed:'));
+        display.info('Connection failed:');
         console.log('  • Check server URL: ' + chalk.white(config.getServerUrl()));
         console.log('  • Ensure services are running: ' + chalk.white('raworc start'));
       }
@@ -124,7 +123,7 @@ async function useTokenCommand(options) {
       process.exit(1);
     }
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    display.error('Error: ' + error.message);
     process.exit(1);
   }
 }

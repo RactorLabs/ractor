@@ -1,6 +1,6 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const docker = require('../lib/docker');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -10,12 +10,18 @@ module.exports = (program) => {
     .option('-c, --cleanup', 'Clean up session containers after stopping')
     .action(async (components, options) => {
       try {
-        console.log(chalk.blue('🛑 Stopping Raworc services...'));
+        // Show command box with stop info
+        const operation = components.length > 0 ? 
+          `Stop components: ${components.join(', ')}` : 
+          'Stop all Raworc services';
+        display.showCommandBox(`${display.icons.stop} Stop Services`, {
+          operation: operation
+        });
         
         // Check Docker availability
         const dockerAvailable = await docker.checkDocker();
         if (!dockerAvailable) {
-          console.error(chalk.red('❌ Docker is not available.'));
+          display.error('Docker is not available.');
           process.exit(1);
         }
 
@@ -34,29 +40,26 @@ module.exports = (program) => {
           : [];
 
         // Stop services
-        const stopSpinner = ora('Stopping services...').start();
+        display.info('Stopping services...');
         try {
           await docker.stop(services, options.cleanup);
           
           if (services.length > 0) {
-            stopSpinner.succeed(`Stopped services: ${services.join(', ')}`);
+            display.success(`Stopped services: ${services.join(', ')}`);
           } else {
-            stopSpinner.succeed('All Raworc services stopped');
+            display.success('All Raworc services stopped');
           }
           
         } catch (error) {
-          stopSpinner.fail(`Failed to stop services: ${error.message}`);
+          display.error(`Failed to stop services: ${error.message}`);
           process.exit(1);
         }
 
         // Note: Cleanup is now handled by the stop script if --cleanup was passed
-
-        console.log();
-        console.log(chalk.green('✅ Services stopped successfully'));
         
         if (!options.cleanup && !services.length) {
           console.log();
-          console.log(chalk.yellow('💡 Tip: Use --cleanup to also remove session containers'));
+          display.info('Tip: Use --cleanup to also remove session containers');
         }
 
         // Show final status
@@ -68,7 +71,7 @@ module.exports = (program) => {
         }
 
       } catch (error) {
-        console.error(chalk.red('❌ Error:'), error.message);
+        display.error('Error: ' + error.message);
         process.exit(1);
       }
     });

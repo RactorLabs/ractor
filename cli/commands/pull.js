@@ -1,7 +1,7 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const { execSync } = require('child_process');
 const docker = require('../lib/docker');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   program
@@ -11,48 +11,54 @@ module.exports = (program) => {
     .option('-i, --images-only', 'Only pull Docker images, skip CLI update')
     .action(async (options) => {
       try {
-        console.log(chalk.blue('📦 Pulling latest versions...'));
+        // Show command box with pull info
+        const operation = options.cliOnly ? 'Update CLI only' : 
+          options.imagesOnly ? 'Pull Docker images only' : 
+          'Update CLI and pull Docker images';
+        display.showCommandBox(`${display.icons.pull} Pull Latest`, {
+          operation: operation
+        });
         
         // Check Docker availability if we need to pull images
         if (!options.cliOnly) {
           const dockerAvailable = await docker.checkDocker();
           if (!dockerAvailable) {
-            console.error(chalk.red('❌ Docker is not available. Use --cli-only to update CLI only.'));
+            display.error('Docker is not available. Use --cli-only to update CLI only.');
             process.exit(1);
           }
         }
 
         // Update CLI unless images-only is specified
         if (!options.imagesOnly) {
-          const cliSpinner = ora('Updating CLI to latest version...').start();
+          display.info('Updating CLI to latest version...');
           try {
             // Update the CLI package globally
             execSync('npm update -g @raworc/cli', { 
               stdio: options.verbose ? 'inherit' : 'pipe',
               encoding: 'utf8'
             });
-            cliSpinner.succeed('CLI updated to latest version');
+            display.success('CLI updated to latest version');
           } catch (error) {
-            cliSpinner.fail('Failed to update CLI');
-            console.error(chalk.red('Error updating CLI:'), error.message);
-            console.log(chalk.yellow('💡 Try running: npm install -g @raworc/cli@latest'));
+            display.error('Failed to update CLI');
+            console.error(chalk.gray('Error updating CLI:'), error.message);
+            display.info('Try running: npm install -g @raworc/cli@latest');
           }
         }
 
         // Pull Docker images unless cli-only is specified
         if (!options.cliOnly) {
-          const imageSpinner = ora('Pulling latest Docker images...').start();
+          display.info('Pulling latest Docker images...');
           try {
             await docker.pull();
-            imageSpinner.succeed('Docker images pulled successfully');
+            display.success('Docker images pulled successfully');
           } catch (error) {
-            imageSpinner.fail('Failed to pull some Docker images');
-            console.error(chalk.red('Error pulling images:'), error.message);
+            display.error('Failed to pull some Docker images');
+            console.error(chalk.gray('Error pulling images:'), error.message);
           }
         }
 
         console.log();
-        console.log(chalk.green('✅ Pull completed!'));
+        display.success('Pull completed!');
         
         // Show next steps
         console.log();
@@ -61,7 +67,7 @@ module.exports = (program) => {
         console.log('  • Check version: ' + chalk.white('raworc --version'));
         
       } catch (error) {
-        console.error(chalk.red('❌ Error:'), error.message);
+        display.error('Error: ' + error.message);
         process.exit(1);
       }
     });

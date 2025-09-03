@@ -1,8 +1,8 @@
 const chalk = require('chalk');
 const inquirer = require('inquirer');
-const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const display = require('../lib/display');
 
 module.exports = (program) => {
   // Login command for operator login - generates token without saving
@@ -18,8 +18,10 @@ module.exports = (program) => {
 };
 
 async function operatorLogin(options) {
-  console.log(chalk.blue('🔑 Operator Login - Generating Authentication Token'));
-  console.log();
+  // Show command box with login info
+  display.showCommandBox(`${display.icons.user} Operator Login`, {
+    operation: 'Generate authentication token'
+  });
 
   // Update server URL if provided
   if (options.server && options.server !== config.getServerUrl()) {
@@ -56,7 +58,7 @@ async function operatorLogin(options) {
       pass = pass || answers.pass;
     }
 
-    const spinner = ora('Generating authentication token...').start();
+    display.info('Generating authentication token...');
     
     const response = await api.login({
       user: user,
@@ -64,31 +66,31 @@ async function operatorLogin(options) {
     });
     
     if (response.success) {
-      spinner.succeed('Token generated successfully');
+      display.success('Token generated successfully');
       console.log();
-      console.log(chalk.green('🎟️ Authentication Token Generated'));
+      console.log(chalk.green(display.icons.token + ' Authentication Token Generated'));
       console.log(chalk.gray('User:'), response.data.user);
       console.log(chalk.gray('Role:'), response.data.role || 'Unknown');
       console.log(chalk.gray('Token:'), response.data.token);
       console.log(chalk.gray('Expires:'), response.data.expires_at);
       console.log();
-      console.log(chalk.yellow('💡 Use this token to authenticate:'));
+      display.info('Use this token to authenticate:');
       console.log(`  raworc auth -t ${response.data.token}`);
     } else {
-      spinner.fail('Token generation failed');
+      display.error('Token generation failed');
       console.log();
-      console.error(chalk.red('❌ Token generation failed'));
+      display.error('Token generation failed');
       console.error(chalk.gray('Error:'), response.error);
       
       if (response.status === 401) {
         console.log();
-        console.log(chalk.yellow('💡 Tips:'));
+        display.info('Tips:');
         console.log('  • Check your operator credentials');
         console.log('  • Ensure Raworc server is running: ' + chalk.white('raworc start'));
         console.log('  • Default operator credentials: admin/admin');
       } else if (response.status === 0) {
         console.log();
-        console.log(chalk.yellow('💡 Connection failed:'));
+        display.info('Connection failed:');
         console.log('  • Check server URL: ' + chalk.white(config.getServerUrl()));
         console.log('  • Ensure services are running: ' + chalk.white('raworc start'));
       }
@@ -97,7 +99,7 @@ async function operatorLogin(options) {
     }
 
   } catch (error) {
-    console.error(chalk.red('❌ Error:'), error.message);
+    display.error('Error: ' + error.message);
     process.exit(1);
   }
 }

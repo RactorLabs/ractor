@@ -252,7 +252,7 @@ impl MessageHandler {
     
     async fn build_system_prompt(&self) -> String {
         let mut prompt = String::from(
-            r#"You are a helpful AI assistant operating within a Raworc session with bash command execution capabilities.
+            r#"You are a helpful AI assistant operating within a RemoteAgent session with bash command execution capabilities.
 
 Key capabilities:
 - You can help users with various tasks and answer questions

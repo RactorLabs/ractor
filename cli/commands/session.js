@@ -6,6 +6,7 @@ const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
+const display = require('../lib/display');
 const { marked } = require('marked');
 const TerminalRenderer = require('marked-terminal').default;
 
@@ -436,27 +437,39 @@ async function sessionRemixCommand(sourceSessionId, options) {
 }
 
 function showSessionBox(sessionId, mode, user, source = null) {
-  const commands = '/status, /timeout <s>, /name <name>, /quit, /help';
+  // Create descriptive title based on mode
+  const modeIcons = {
+    'New': `${display.icons.session} Session Start`,
+    'Restore': `${display.icons.session} Session Restore`, 
+    'Remix': `${display.icons.session} Session Remix`
+  };
   
-  // Calculate box width based on longest line
+  const title = modeIcons[mode] || `${display.icons.session} Session`;
+  const commands = '/help (for commands)';
+  
+  // Build lines without mode field
   const lines = [
     `SessionId: ${sessionId}`,
-    `Mode: ${mode}`,
     source ? `Source: ${source}` : null,
     `User: ${user}`,
     `Commands: ${commands}`
   ].filter(line => line !== null);
   
-  const maxWidth = Math.max(...lines.map(line => line.length));
+  const maxWidth = Math.max(title.length, ...lines.map(line => line.length));
   const boxWidth = maxWidth + 4; // Add padding
   
-  // Create box
+  // Create box with title
   console.log();
   console.log('┌' + '─'.repeat(boxWidth - 2) + '┐');
   
+  // Title row
+  const titlePadding = ' '.repeat(boxWidth - title.length - 4);
+  console.log(`│ ${title}${titlePadding} │`);
+  
+  // Content rows
   lines.forEach(line => {
-    const padding = ' '.repeat(boxWidth - line.length - 3);
-    console.log(`│ ${line}${padding}│`);
+    const padding = ' '.repeat(boxWidth - line.length - 4);
+    console.log(`│ ${line}${padding} │`);
   });
   
   console.log('└' + '─'.repeat(boxWidth - 2) + '┘');
@@ -881,10 +894,17 @@ async function chatLoop(sessionId, options = {}) {
     if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
       clearPrompt();
       promptVisible = false;
-      console.log();
-      console.log(chalk.green('✓') + ' Ending session. Goodbye!');
-      cleanup();
+      await cleanup();
       return;
+    }
+
+    // Handle detach command - exit interactive mode without closing session
+    if (userInput.toLowerCase() === '/detach' || userInput.toLowerCase() === '/d') {
+      clearPrompt();
+      promptVisible = false;
+      console.log(chalk.green('◊ Detached from session. Session continues running.'));
+      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc session restore ${sessionId}`));
+      process.exit(0);
     }
 
     // Handle commands - don't return early, just set a flag
@@ -937,16 +957,28 @@ async function chatLoop(sessionId, options = {}) {
     }
   });
 
-  function cleanup() {
+  async function cleanup() {
     clearInterval(stateMonitorInterval);
     clearInterval(dotAnimationInterval);
     rl.close();
-    api.post(`/sessions/${sessionId}/close`).catch(() => {});
+    
+    // Try to close the session on the server
+    try {
+      const closeResponse = await api.post(`/sessions/${sessionId}/close`);
+      if (closeResponse.success) {
+        console.log(chalk.green('✓') + ' Session closed on server');
+      } else {
+        console.log(chalk.yellow('⚠') + ' Could not close session on server: ' + (closeResponse.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.log(chalk.yellow('⚠') + ' Could not communicate with server to close session');
+    }
+    
     process.exit(0);
   }
 
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', () => cleanup());
+  process.on('SIGTERM', () => cleanup());
 
   async function sendMessage(sessionId, userInput) {
     console.log(chalk.green('> ') + chalk.white(userInput));
@@ -1016,6 +1048,7 @@ function showHelp() {
   console.log(chalk.gray('  /status     '), 'Show session status');
   console.log(chalk.gray('  /timeout <s>'), 'Change session timeout (1-3600 seconds)');
   console.log(chalk.gray('  /name <name>'), 'Change session name (alphanumeric and hyphens)');
+  console.log(chalk.gray('  /detach     '), 'Detach from session (keeps session running)');
   console.log(chalk.gray('  /quit       '), 'End the session');
 }
 
@@ -1164,12 +1197,10 @@ async function sessionCloseCommand(sessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🛑 Closing Raworc Session'));
-  console.log(chalk.gray('Session:'), sessionId);
-  const userName = authData.user?.user || authData.user || 'Unknown';
-  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
-  console.log(chalk.gray('User:'), userName + userType);
-  console.log();
+  display.showCommandBox(`${display.icons.stop} Session Close`, {
+    session: sessionId,
+    operation: 'Close and cleanup resources'
+  });
 
   try {
     // Get session details first (to resolve name to ID and show current state)
@@ -1183,11 +1214,11 @@ async function sessionCloseCommand(sessionId, options) {
     const session = sessionResponse.data;
     // Update sessionId to actual UUID for consistent display
     sessionId = session.id;
-    console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
+console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
 
     // Check if session is already closed
     if (session.state === SESSION_STATE_CLOSED) {
-      console.log(chalk.yellow('ℹ') + ' Session was already in closed state');
+      display.info('Session was already in closed state');
       return;
     }
 
@@ -1195,16 +1226,16 @@ async function sessionCloseCommand(sessionId, options) {
     const closeResponse = await api.post(`/sessions/${sessionId}/close`);
 
     if (!closeResponse.success) {
-      console.error(chalk.red('✗ Error:'), closeResponse.error);
+      display.error('Close failed: ' + closeResponse.error);
       process.exit(1);
     }
 
-    console.log(chalk.green('✓') + ` Session closed: ${sessionId}`);
+    display.success(`Session closed: ${sessionId}`);
 
     console.log();
-    console.log(chalk.green('✓') + ' Session has been closed and resources cleaned up');
+    display.success('Session has been closed and resources cleaned up');
     console.log();
-    console.log(chalk.blue('ℹ') + ' Session Operations:');
+    display.info('Session Operations:');
     console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionId}`);
     console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
     console.log();

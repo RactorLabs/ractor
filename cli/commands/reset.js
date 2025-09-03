@@ -1,7 +1,7 @@
 const chalk = require('chalk');
-const ora = require('ora');
 const { spawn } = require('child_process');
 const readline = require('readline');
+const display = require('../lib/display');
 
 // Execute Docker command directly
 async function execDocker(args, options = {}) {
@@ -44,17 +44,22 @@ module.exports = (program) => {
     .option('-s, --services-only', 'Only stop services, don\'t clean Docker resources')
     .action(async (options) => {
       try {
-        console.log(chalk.blue('🧹 Raworc Reset - Complete Cleanup'));
-        console.log();
+        // Show command box with reset info
+        const operation = options.servicesOnly ? 
+          'Stop services only (skip Docker cleanup)' : 
+          'Complete Docker reset (DESTRUCTIVE)';
+        display.showCommandBox(`${display.icons.reset} Complete Reset`, {
+          operation: operation
+        });
 
         if (options.servicesOnly) {
-          console.log(chalk.blue('Services-only mode: Will stop services but skip Docker cleanup'));
+          display.info('Services-only mode: Will stop services but skip Docker cleanup');
         } else {
-          console.log(chalk.red('Full reset mode: This will remove EVERYTHING from Docker'));
+          display.warning('Full reset mode: This will remove EVERYTHING from Docker');
         }
 
         console.log();
-        console.log(chalk.red('⚠️  This will:'));
+        display.warning('This will:');
         console.log(chalk.red('  - Stop ALL running containers'));
         console.log(chalk.red('  - Remove ALL containers (running and stopped)'));
 
@@ -80,17 +85,17 @@ module.exports = (program) => {
           rl.close();
 
           if (!answer.match(/^[Yy]$/)) {
-            console.log(chalk.blue('Operation cancelled'));
+            display.info('Operation cancelled');
             return;
           }
         }
 
         console.log();
-        console.log(chalk.blue('Starting reset process...'));
+        display.info('Starting reset process...');
 
         // Step 1: Stop ALL running containers first
         console.log();
-        const stopSpinner = ora('[1/9] Stopping ALL running containers...').start();
+        display.info('[1/9] Stopping ALL running containers...');
 
         try {
           const runningResult = await execDocker(['ps', '-q'], { silent: true });
@@ -99,20 +104,20 @@ module.exports = (program) => {
             const runningIds = runningResult.stdout.trim().split('\n').filter(id => id);
             if (runningIds.length > 0) {
               await execDocker(['stop', ...runningIds], { silent: true });
-              stopSpinner.succeed(`Stopped ${runningIds.length} running containers`);
+              display.success(`Stopped ${runningIds.length} running containers`);
             } else {
-              stopSpinner.succeed('No running containers found');
+              display.success('No running containers found');
             }
           } else {
-            stopSpinner.succeed('No running containers found');
+            display.success('No running containers found');
           }
         } catch (error) {
-          stopSpinner.warn(`Stop warning: ${error.message}`);
+          display.warning(`Stop warning: ${error.message}`);
         }
 
         // Step 2: Remove ALL containers (running and stopped)
         console.log();
-        const removeSpinner = ora('[2/9] Removing ALL containers...').start();
+        display.info('[2/9] Removing ALL containers...');
 
         try {
           const result = await execDocker(['ps', '-a', '-q'], { silent: true });
@@ -122,26 +127,26 @@ module.exports = (program) => {
 
             if (containerIds.length > 0) {
               await execDocker(['rm', '-f', ...containerIds], { silent: true });
-              removeSpinner.succeed(`Removed ${containerIds.length} containers`);
+              display.success(`Removed ${containerIds.length} containers`);
             } else {
-              removeSpinner.succeed('No containers to remove');
+              display.success('No containers to remove');
             }
           } else {
-            removeSpinner.succeed('No containers to remove');
+            display.success('No containers to remove');
           }
         } catch (error) {
-          removeSpinner.warn(`Container cleanup warning: ${error.message}`);
+          display.warning(`Container cleanup warning: ${error.message}`);
         }
 
         if (options.servicesOnly) {
           console.log();
-          console.log(chalk.green('🎉 Services-only reset completed!'));
+          display.success('Services-only reset completed!');
           return;
         }
 
         // Step 3: Remove ALL Docker images
         console.log();
-        const imageSpinner = ora('[3/9] Removing ALL Docker images...').start();
+        display.info('[3/9] Removing ALL Docker images...');
 
         try {
           const imageResult = await execDocker(['images', '-q'], { silent: true });
@@ -151,20 +156,20 @@ module.exports = (program) => {
 
             if (imageIds.length > 0) {
               await execDocker(['rmi', '-f', ...imageIds], { silent: true });
-              imageSpinner.succeed(`Removed ${imageIds.length} images`);
+              display.success(`Removed ${imageIds.length} images`);
             } else {
-              imageSpinner.succeed('No images found');
+              display.success('No images found');
             }
           } else {
-            imageSpinner.succeed('No images found');
+            display.success('No images found');
           }
         } catch (error) {
-          imageSpinner.warn(`Image cleanup warning: ${error.message}`);
+          display.warning(`Image cleanup warning: ${error.message}`);
         }
 
         // Step 4: Remove ALL custom networks
         console.log();
-        const networkSpinner = ora('[4/9] Removing ALL custom networks...').start();
+        display.info('[4/9] Removing ALL custom networks...');
         try {
           // Get all custom networks (exclude default ones)
           const networkResult = await execDocker(['network', 'ls', '--filter', 'type=custom', '-q'], { silent: true });
@@ -173,22 +178,22 @@ module.exports = (program) => {
             const networkIds = networkResult.stdout.trim().split('\n').filter(id => id);
             if (networkIds.length > 0) {
               await execDocker(['network', 'rm', ...networkIds], { silent: true });
-              networkSpinner.succeed(`Removed ${networkIds.length} custom networks`);
+              display.success(`Removed ${networkIds.length} custom networks`);
             } else {
-              networkSpinner.succeed('No custom networks found');
+              display.success('No custom networks found');
             }
           } else {
             // Fallback to prune
             await execDocker(['network', 'prune', '-f'], { silent: true });
-            networkSpinner.succeed('Networks pruned');
+            display.success('Networks pruned');
           }
         } catch (error) {
-          networkSpinner.warn(`Network cleanup warning: ${error.message}`);
+          display.warning(`Network cleanup warning: ${error.message}`);
         }
 
         // Step 5: Remove ALL Docker volumes
         console.log();
-        const volumeSpinner = ora('[5/9] Removing ALL Docker volumes...').start();
+        display.info('[5/9] Removing ALL Docker volumes...');
         try {
           const volumeResult = await execDocker(['volume', 'ls', '-q'], { silent: true });
 
@@ -213,75 +218,75 @@ module.exports = (program) => {
                 }
               }
 
-              volumeSpinner.succeed(`Removed ${removedCount} of ${volumeNames.length} volumes`);
+              display.success(`Removed ${removedCount} of ${volumeNames.length} volumes`);
             } else {
-              volumeSpinner.succeed('No volumes found');
+              display.success('No volumes found');
             }
           } else {
-            volumeSpinner.succeed('No volumes found');
+            display.success('No volumes found');
           }
         } catch (error) {
-          volumeSpinner.warn(`Volume cleanup warning: ${error.message}`);
+          display.warning(`Volume cleanup warning: ${error.message}`);
         }
 
         // Step 6: Prune dangling images
         console.log();
-        const danglingSpinner = ora('[6/9] Pruning system...').start();
+        display.info('[6/9] Pruning system...');
         try {
           await execDocker(['system', 'prune', '-a', '-f', '--volumes'], { silent: true });
-          danglingSpinner.succeed('System completely pruned');
+          display.success('System completely pruned');
         } catch (error) {
-          danglingSpinner.warn(`Image prune warning: ${error.message}`);
+          display.warning(`Image prune warning: ${error.message}`);
         }
 
         // Step 7: Prune build cache
         console.log();
-        const cacheSpinner = ora('[7/9] Clearing ALL build cache...').start();
+        display.info('[7/9] Clearing ALL build cache...');
         try {
           await execDocker(['builder', 'prune', '-a', '-f'], { silent: true });
-          cacheSpinner.succeed('ALL build cache cleared');
+          display.success('ALL build cache cleared');
         } catch (error) {
-          cacheSpinner.warn(`Build cache cleanup warning: ${error.message}`);
+          display.warning(`Build cache cleanup warning: ${error.message}`);
         }
 
         // Step 8: Final system prune to catch anything missed
         console.log();
-        const systemSpinner = ora('[8/9] Final complete system prune...').start();
+        display.info('[8/9] Final complete system prune...');
         try {
           await execDocker(['system', 'prune', '-a', '-f', '--volumes'], { silent: true });
-          systemSpinner.succeed('Final system prune completed');
+          display.success('Final system prune completed');
         } catch (error) {
-          systemSpinner.warn(`Final prune warning: ${error.message}`);
+          display.warning(`Final prune warning: ${error.message}`);
         }
 
         // Step 9: Show final disk usage
         console.log();
-        const diskSpinner = ora('[9/9] Checking Docker disk usage...').start();
+        display.info('[9/9] Checking Docker disk usage...');
         try {
           console.log(); // Add space before disk usage output
           await execDocker(['system', 'df'], { silent: false });
-          diskSpinner.succeed('Disk usage displayed');
+          display.success('Disk usage displayed');
         } catch (error) {
-          diskSpinner.warn(`Disk usage warning: ${error.message}`);
+          display.warning(`Disk usage warning: ${error.message}`);
         }
 
         console.log();
-        console.log(chalk.green('🎉 Reset completed!'));
+        display.success('Reset completed!');
         console.log();
         console.log(chalk.blue('Summary:'));
-        console.log(chalk.green('  ✓ ALL containers stopped and removed'));
-        console.log(chalk.green('  ✓ ALL Docker images removed'));
-        console.log(chalk.green('  ✓ ALL Docker volumes removed'));
-        console.log(chalk.green('  ✓ ALL custom networks removed'));
-        console.log(chalk.green('  ✓ ALL build cache cleared'));
-        console.log(chalk.green('  ✓ Docker system completely reset'));
+        console.log(chalk.green('  ' + display.icons.success + ' ALL containers stopped and removed'));
+        console.log(chalk.green('  ' + display.icons.success + ' ALL Docker images removed'));
+        console.log(chalk.green('  ' + display.icons.success + ' ALL Docker volumes removed'));
+        console.log(chalk.green('  ' + display.icons.success + ' ALL custom networks removed'));
+        console.log(chalk.green('  ' + display.icons.success + ' ALL build cache cleared'));
+        console.log(chalk.green('  ' + display.icons.success + ' Docker system completely reset'));
         console.log();
         console.log(chalk.cyan('Docker has been completely reset to clean state'));
         console.log(chalk.cyan('To start Raworc again:'));
         console.log('  • ' + chalk.white('raworc start'));
 
       } catch (error) {
-        console.error(chalk.red('❌ Error:'), error.message);
+        display.error('Error: ' + error.message);
         process.exit(1);
       }
     });
