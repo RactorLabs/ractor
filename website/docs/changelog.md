@@ -5,6 +5,18 @@ title: Changelog
 
 # Changelog
 
+## v0.3.5
+
+- **Website Documentation Overhaul**: Comprehensive update of all website documentation to reflect 100+ commits of CLI and feature improvements
+- **CLI Interface Documentation**: Updated all interactive session examples with new geometric icon design system and visual state indicators
+- **Tool Integration Documentation**: Added comprehensive documentation for bash, text_editor, and web_search tools with visual execution examples
+- **Session Management Updates**: Updated session state machine documentation to include all six states (init/idle/busy/closed/errored/deleted)
+- **Interactive Command Reference**: Complete documentation of interactive session commands (/help, /status, /timeout, /name, /detach, /quit)
+- **API Documentation Verification**: Updated version references and verified all endpoints match actual API implementation
+- **Command Syntax Fixes**: Fixed troubleshooting commands and authentication flow examples throughout documentation
+- **Visual Consistency**: Replaced all spinner-based examples with flat icon system for professional appearance
+- **Session State Indicators**: Added visual state indicators (◯, ●, ◐, ◻, ◆) throughout session documentation
+
 ## v0.3.4
 
 - **Session State Management**: Fixed session initialization to properly show 'init' state during container startup instead of prematurely showing 'idle'
