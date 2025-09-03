@@ -170,7 +170,7 @@ raworc session \
 | Option | Description | Example |
 |--------|-------------|---------|
 | `-n, --name <name>` | Name for the session | `--name "my-session"` |
-| `-t, --timeout <seconds>` | Session timeout in seconds (default: 60) | `--timeout 300` |
+| `-t, --timeout <seconds>` | Session timeout in seconds (default: 300) | `--timeout 600` |
 | `-S, --secrets <json>` | JSON secrets for session environment | `--secrets '{"DB_URL":"..."}'` |
 | `-i, --instructions <text>` | Direct instructions text | `--instructions "You are a data analyst"` |
 | `-if, --instructions-file <file>` | Path to instructions file | `--instructions-file ./instructions.md` |

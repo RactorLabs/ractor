@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     publish_permissions JSON DEFAULT ('{"data": true, "code": true, "secrets": true}'),
     
     -- Timeout functionality  
-    timeout_seconds INT NOT NULL DEFAULT 60,
+    timeout_seconds INT NOT NULL DEFAULT 300,
     auto_close_at TIMESTAMP NULL,
     
     -- Constraints

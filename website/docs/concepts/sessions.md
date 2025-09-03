@@ -142,7 +142,7 @@ raworc api sessions -m post -b '{
 - **`instructions`** - Instructions for the Host (written to `/session/code/instructions.md`)
 - **`setup`** - Setup script to run in the container (written to `/session/code/setup.sh`)
 - **`metadata`** - Additional metadata object
-- **`timeout_seconds`** - Session timeout in seconds (default: 60, triggers auto-close when idle)
+- **`timeout_seconds`** - Session timeout in seconds (default: 300, triggers auto-close when idle)
 
 ## Session Lifecycle Operations
 

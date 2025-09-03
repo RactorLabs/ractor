@@ -377,7 +377,7 @@ impl Session {
         let session_id = Uuid::new_v4();
         
         // Calculate timeout - auto_close_at will be set when session becomes idle
-        let timeout = req.timeout_seconds.unwrap_or(60); // Default 60 seconds
+        let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
 
         // Insert the session

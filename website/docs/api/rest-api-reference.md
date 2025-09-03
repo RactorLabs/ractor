@@ -338,7 +338,7 @@ Create a new Host session.
 - `secrets` (optional) - Environment variables/secrets for the session
 - `instructions` (optional) - Instructions for the Host
 - `setup` (optional) - Setup script to run in the container
-- `timeout_seconds` (optional) - Session timeout in seconds (default: 60)
+- `timeout_seconds` (optional) - Session timeout in seconds (default: 300)
 
 **Response**: `200 OK`
 ```json
