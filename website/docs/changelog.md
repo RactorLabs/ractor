@@ -5,6 +5,19 @@ title: Changelog
 
 # Changelog
 
+## v0.3.7
+
+- **Canvas Folder Support**: Added comprehensive Canvas folder copying support for session remix and publish operations with granular control via `--canvas` flag
+- **Canvas Permissions Management**: Implemented canvas-specific permissions for published sessions with selective remix access control
+- **Text Editor Tool Robustness**: Enhanced text editor tool with support for both `file_text` and `content` parameters, improved error messages showing available parameters
+- **Assistant Reasoning Display**: Added display of Claude's explanations and reasoning in CLI before tool execution for transparent interaction experience
+- **Canvas Remix Workflow**: Canvas folders now copied selectively during remix operations following same patterns as data/code/secrets with permission enforcement
+- **CLI Canvas Flags**: Added `--canvas` flag to remix and publish commands with default true value and clear permission status display
+- **Enhanced Error Diagnostics**: Text editor tool now provides debug logging and detailed error messages for easier troubleshooting
+- **Backend Canvas Integration**: Canvas task payload includes copy_canvas flag with proper permission checking and task processing
+- **API Canvas Support**: RemixSessionRequest and PublishSessionRequest structures include canvas field with strict boolean validation
+- **Docker Canvas Management**: Selective copy functions enhanced to handle Canvas folder operations with proper error handling
+
 ## v0.3.6
 
 - **Canvas HTTP Server Optimization**: Moved Canvas port allocation from container creation to session creation, eliminating timing issues where Canvas URL was unavailable immediately after session start

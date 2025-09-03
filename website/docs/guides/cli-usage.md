@@ -209,7 +209,8 @@ raworc session remix my-session \
   --name "data-only-version" \
   --data true \
   --code false \
-  --secrets false
+  --secrets false \
+  --canvas true
 
 # Remix with immediate prompt
 raworc session remix my-session \
@@ -225,6 +226,7 @@ raworc session remix my-session \
 | `-d, --data <boolean>` | Include data files | `true` | `--data false` |
 | `-c, --code <boolean>` | Include code files | `true` | `--code false` |
 | `-s, --secrets <boolean>` | Include secrets | `true` | `--secrets false` |
+| `--canvas <boolean>` | Include canvas files | `true` | `--canvas false` |
 | `-p, --prompt <text>` | Prompt to send after creation | None | `--prompt "Try new approach"` |
 
 ### Publishing Sessions
@@ -237,7 +239,8 @@ raworc session publish my-session
 raworc session publish my-session \
   --data true \
   --code true \
-  --secrets false
+  --secrets false \
+  --canvas true
 
 # Unpublish session
 raworc session unpublish my-session
@@ -266,6 +269,7 @@ raworc session close my-session
 | `-d, --data <boolean>` | Allow data remix | `true` | `--data false` |
 | `-c, --code <boolean>` | Allow code remix | `true` | `--code false` |
 | `-s, --secrets <boolean>` | Allow secrets remix | `true` | `--secrets false` |
+| `--canvas <boolean>` | Allow canvas remix | `true` | `--canvas false` |
 
 ### Interactive Session Interface
 
