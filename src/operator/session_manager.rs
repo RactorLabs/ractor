@@ -378,7 +378,8 @@ impl SessionManager {
                 remix_api_key,
                 remix_token,
                 remix_principal.to_string(),
-                remix_principal_type_str.to_string()
+                remix_principal_type_str.to_string(),
+                task.created_at
             ).await?;
         } else {
             info!("Creating new session {}", session_id);
@@ -392,7 +393,8 @@ impl SessionManager {
                 session_api_key,
                 session_token,
                 principal.to_string(),
-                principal_type_str.to_string()
+                principal_type_str.to_string(),
+                task.created_at
             ).await?;
         }
         
@@ -531,7 +533,7 @@ impl SessionManager {
         
         // All restored sessions were closed (container destroyed), so recreate container
         info!("Session {} was closed, restoring container with persistent volume and fresh tokens", session_id);
-        self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone(), "User".to_string()).await?;
+        self.docker_manager.restore_container_with_tokens(&session_id, restore_api_key, restore_token, principal.clone(), "User".to_string(), task.created_at).await?;
         
         // Update last_activity_at and clear auto_close_at since session is being restored
         sqlx::query(r#"UPDATE sessions SET last_activity_at = NOW(), auto_close_at = NULL WHERE id = ?"#)

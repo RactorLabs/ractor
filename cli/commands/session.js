@@ -547,11 +547,17 @@ async function startInteractiveSession(sessionId, options) {
   // Handle prompt if provided (for any session type)
   if (options.prompt) {
     console.log(chalk.green('> ') + chalk.white(options.prompt));
-    console.log();
 
+    // Show prompt immediately after user input
+    showPrompt('init');
+    
     try {
       // Wait for all host responses to the prompt (tool calls + final response)
-      await waitForAllHostResponses(sessionId, Date.now());
+      await waitForAllHostResponses(sessionId, Date.now(), 60000, {
+        clearPromptFn: () => clearPrompt(),
+        showPromptFn: (state) => showPrompt(state),
+        currentState: 'init'
+      });
     } catch (error) {
       console.log(chalk.yellow('Warning:'), error.message);
       console.log();
@@ -572,8 +578,8 @@ async function startInteractiveSession(sessionId, options) {
     // Wait for either to complete (though monitoring should complete when host finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
-    // Start synchronous chat loop
-    await chatLoop(sessionId, options);
+    // Start synchronous chat loop, skip initial prompt if we just processed one
+    await chatLoop(sessionId, { ...options, skipInitialPrompt: !!options.prompt });
   }
 }
 
@@ -634,9 +640,9 @@ function displayHostMessage(message, options = {}) {
   
   if (metadata && metadata.type === 'tool_execution') {
     // Handle tool execution message
-    if (clearPromptFn && showPromptFn) {
+    if (clearPromptFn) {
       clearPromptFn();
-      setPromptVisibleFn(false);
+      if (setPromptVisibleFn) setPromptVisibleFn(false);
     }
     
     let toolType = message.metadata?.tool_type || 'unknown';
@@ -650,35 +656,45 @@ function displayHostMessage(message, options = {}) {
     console.log(chalk.green('● ') + chalk.white(toolType));
     console.log(chalk.dim('└─ ') + chalk.gray(message.content));
     
-    if (updateStateFn && showPromptFn) {
-      updateStateFn().then(() => {
+    if (showPromptFn) {
+      if (updateStateFn) {
+        updateStateFn().then(() => {
+          showPromptFn(options.currentState || 'init');
+          if (setPromptVisibleFn) setPromptVisibleFn(true);
+        });
+      } else {
+        // In prompt context, just re-show the prompt directly
         showPromptFn(options.currentState || 'init');
-        setPromptVisibleFn(true);
-      });
+      }
     }
     return 'tool_execution';
   } else {
     // Handle conversational response
-    if (clearPromptFn && showPromptFn) {
+    if (clearPromptFn) {
       clearPromptFn();
-      setPromptVisibleFn(false);
+      if (setPromptVisibleFn) setPromptVisibleFn(false);
     }
     
     console.log();
     const formattedContent = formatMarkdown(message.content);
     console.log(formattedContent.trim());
     
-    if (updateStateFn && showPromptFn) {
-      updateStateFn().then(() => {
+    if (showPromptFn) {
+      if (updateStateFn) {
+        updateStateFn().then(() => {
+          showPromptFn(options.currentState || 'init');
+          if (setPromptVisibleFn) setPromptVisibleFn(true);
+        });
+      } else {
+        // In prompt context, just re-show the prompt directly
         showPromptFn(options.currentState || 'init');
-        setPromptVisibleFn(true);
-      });
+      }
     }
     return 'final_response';
   }
 }
 
-async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 60000) {
+async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 60000, promptOptions = {}) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastMessageCount = 0;
@@ -710,7 +726,13 @@ async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 6
             if (message.role === MESSAGE_ROLE_HOST) {
               const messageTime = new Date(message.created_at).getTime();
               if (messageTime > userMessageTime) {
-                const result = displayHostMessage(message);
+                const result = displayHostMessage(message, {
+                  clearPromptFn: promptOptions.clearPromptFn,
+                  showPromptFn: promptOptions.showPromptFn,
+                  updateStateFn: null, // No state update needed in prompt context
+                  setPromptVisibleFn: null,
+                  currentState: promptOptions.currentState
+                });
                 if (result === 'final_response') {
                   foundFinalResponse = true;
                   break;
@@ -951,8 +973,11 @@ async function chatLoop(sessionId, options = {}) {
     }
   }, 500);
 
-  showPrompt(currentSessionState);
-  promptVisible = true;
+  // Only show initial prompt if not skipping it
+  if (!options.skipInitialPrompt) {
+    showPrompt(currentSessionState);
+    promptVisible = true;
+  }
 
   // Track user input as they type
   process.stdin.on('keypress', (str, key) => {

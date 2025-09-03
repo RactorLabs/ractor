@@ -445,7 +445,8 @@ echo 'Session directories created (including logs)'
         api_key: String,
         raworc_token: String,
         principal: String,
-        principal_type: String
+        principal_type: String,
+        task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         info!("Creating remix session {} with selective copy from {} and fresh tokens", 
               session_id, parent_session_id);
@@ -613,7 +614,8 @@ echo 'Session directories created (including logs)'
             api_key,
             raworc_token,
             principal,
-            principal_type
+            principal_type,
+            Some(task_created_at)
         ).await?;
         
         Ok(container_name)
@@ -807,7 +809,8 @@ echo 'Session directories created (including logs)'
         api_key: String,
         raworc_token: String,
         principal: String,
-        principal_type: String
+        principal_type: String,
+        task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         let container_name = self.create_container_internal_with_tokens(
             session_id, 
@@ -817,7 +820,8 @@ echo 'Session directories created (including logs)'
             api_key,
             raworc_token,
             principal,
-            principal_type
+            principal_type,
+            Some(task_created_at)
         ).await?;
         Ok(container_name)
     }
@@ -860,7 +864,8 @@ echo 'Session directories created (including logs)'
         api_key: String,
         raworc_token: String,
         principal: String,
-        principal_type: String
+        principal_type: String,
+        task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         // Read existing user secrets from the volume (but generate fresh system tokens)
         let volume_name = format!("raworc_session_data_{}", session_id);
@@ -889,7 +894,8 @@ echo 'Session directories created (including logs)'
             api_key,
             raworc_token,
             principal,
-            principal_type
+            principal_type,
+            Some(task_created_at)
         ).await?;
         Ok(container_name)
     }
@@ -1035,7 +1041,8 @@ echo 'Session directories created (including logs)'
         api_key: String,
         raworc_token: String,
         principal: String,
-        principal_type: String
+        principal_type: String,
+        task_created_at: Option<chrono::DateTime<chrono::Utc>>
     ) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
         
@@ -1082,6 +1089,11 @@ echo 'Session directories created (including logs)'
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
             env.push("RAWORC_HAS_SETUP=true".to_string());
+        }
+        
+        // Add task creation timestamp for message processing
+        if let Some(timestamp) = task_created_at {
+            env.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
         
         info!("Set system-generated ANTHROPIC_API_KEY and RAWORC_TOKEN as environment variables");

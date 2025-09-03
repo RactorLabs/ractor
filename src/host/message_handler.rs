@@ -6,12 +6,14 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
+use chrono::{DateTime, Utc};
 
 pub struct MessageHandler {
     api_client: Arc<RaworcClient>,
     claude_client: Arc<ClaudeClient>,
     guardrails: Arc<Guardrails>,
     processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
+    task_created_at: DateTime<Utc>,
 }
 
 impl MessageHandler {
@@ -20,18 +22,32 @@ impl MessageHandler {
         claude_client: Arc<ClaudeClient>,
         guardrails: Arc<Guardrails>,
     ) -> Self {
+        // Try to read task creation timestamp from environment, fallback to current time
+        let task_created_at = std::env::var("RAWORC_TASK_CREATED_AT")
+            .ok()
+            .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+            .map(|dt| dt.with_timezone(&Utc))
+            .unwrap_or_else(|| {
+                warn!("RAWORC_TASK_CREATED_AT not found, using current time");
+                Utc::now()
+            });
+        
+        info!("MessageHandler initialized with task created at: {}", task_created_at);
+        
         Self {
             api_client,
             claude_client,
             guardrails,
             processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
+            task_created_at,
         }
     }
 
-    /// Find which user messages already have Host responses to avoid reprocessing.
-    /// Accurately tracks which messages have responses for both fresh and restored sessions.
+    /// Initialize message processing based on task creation time.
+    /// Only messages created after the operator task was created should be processed.
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
-        info!("Initializing processed message tracking...");
+        info!("Initializing timestamp-based message tracking...");
+        info!("Task creation time: {}", self.task_created_at);
         
         let all_messages = self.api_client.get_messages(None, None).await?;
         
@@ -40,33 +56,35 @@ impl MessageHandler {
             return Ok(());
         }
 
-        // Find user messages that actually have Host responses following them
-        let mut user_messages_with_responses = HashSet::new();
+        // Mark all user messages created before task creation time as processed
+        let mut user_messages_before_task = HashSet::new();
+        let mut messages_after_task_count = 0;
         
-        // Go through messages in order and track which user messages have responses
-        for (i, message) in all_messages.iter().enumerate() {
+        for message in &all_messages {
             if message.role == MessageRole::User {
-                // Check if there's a Host message after this user message
-                let has_host_response = all_messages.iter().skip(i + 1)
-                    .any(|m| m.role == MessageRole::Host);
-                
-                if has_host_response {
-                    user_messages_with_responses.insert(message.id.clone());
-                    info!("User message {} has Host response - marking as processed", message.id);
+                if let Ok(message_time) = DateTime::parse_from_rfc3339(&message.created_at) {
+                    let message_time_utc = message_time.with_timezone(&Utc);
+                    if message_time_utc < self.task_created_at {
+                        user_messages_before_task.insert(message.id.clone());
+                        info!("User message {} created before task - marking as processed", message.id);
+                    } else {
+                        messages_after_task_count += 1;
+                        info!("User message {} created after task - will process", message.id);
+                    }
                 } else {
-                    info!("User message {} has no Host response - will process", message.id);
+                    warn!("Failed to parse created_at timestamp for message {}: {}", message.id, message.created_at);
                 }
             }
         }
         
-        info!("Found {} total messages, {} user messages with responses", 
-              all_messages.len(), user_messages_with_responses.len());
+        info!("Found {} total messages", all_messages.len());
+        info!("Marked {} user messages before task as processed", user_messages_before_task.len());
+        info!("Found {} user messages after task that need processing", messages_after_task_count);
 
-        // Mark user messages that have responses as processed
+        // Mark pre-task user messages as processed
         let mut processed = self.processed_user_message_ids.lock().await;
-        *processed = user_messages_with_responses;
+        *processed = user_messages_before_task;
         
-        info!("Initialized tracking: {} user messages already have responses", processed.len());
         Ok(())
     }
     
@@ -80,24 +98,39 @@ impl MessageHandler {
         }
         
         
-        // Find user messages that need processing (much simpler approach)
+        // Find user messages created after task creation that need processing
         let mut unprocessed_user_messages = Vec::new();
         
-        // Simple logic: check if each user message has a Host message after it
-        for (i, message) in recent_messages.iter().enumerate() {
+        for message in &recent_messages {
             if message.role == MessageRole::User {
-                // Check if the next message is a Host response
-                let has_immediate_response = i + 1 < recent_messages.len() 
-                    && recent_messages[i + 1].role == MessageRole::Host;
-                
-                
-                // Only process if no immediate Host response and not already processed
-                let processed_ids = self.processed_user_message_ids.lock().await;
-                let already_processed = processed_ids.contains(&message.id);
-                drop(processed_ids);
-                
-                if !already_processed && !has_immediate_response {
-                    unprocessed_user_messages.push(message.clone());
+                // Only consider messages created after task creation
+                if let Ok(message_time) = DateTime::parse_from_rfc3339(&message.created_at) {
+                    let message_time_utc = message_time.with_timezone(&Utc);
+                    if message_time_utc >= self.task_created_at {
+                        // Check if already processed
+                        let processed_ids = self.processed_user_message_ids.lock().await;
+                        let already_processed = processed_ids.contains(&message.id);
+                        drop(processed_ids);
+                        
+                        if !already_processed {
+                            // Check if this message already has a host response
+                            let has_response = recent_messages.iter()
+                                .any(|m| m.role == MessageRole::Host && {
+                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at) {
+                                        let m_time_utc = m_time.with_timezone(&Utc);
+                                        m_time_utc > message_time_utc
+                                    } else {
+                                        false
+                                    }
+                                });
+                            
+                            if !has_response {
+                                unprocessed_user_messages.push(message.clone());
+                            }
+                        }
+                    }
+                } else {
+                    warn!("Failed to parse created_at timestamp for message {}: {}", message.id, message.created_at);
                 }
             }
         }
