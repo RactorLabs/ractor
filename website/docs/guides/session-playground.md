@@ -25,9 +25,36 @@ raworc session
 ```
 
 In the interactive session interface:
-- Type messages directly to control the Host and automate computer tasks
-- Use `/status` to show session information
-- Use `/quit` or `/q` to exit the session
+```bash
+┌─────────────────────────────────────┐
+│ ◊ Session Start                     │
+│ SessionId: abc123-def456-789        │
+│ User: admin (Operator)              │
+│ Commands: /help (for commands)      │
+└─────────────────────────────────────┘
+
+◯ initializing...
+──────────────────────────────────────────────────
+> Hello, how can you help me?
+
+I'm a Host that can help you with various tasks including:
+- Writing and debugging code
+- Data analysis and visualization  
+- File management and organization
+- Web research and information gathering
+- And much more!
+
+● ready
+──────────────────────────────────────────────────
+```
+
+**Interactive Commands:**
+- `/help, /h` - Show all available commands
+- `/status` - Display session status with visual state indicators
+- `/timeout <seconds>` - Change session timeout (1-3600 seconds)
+- `/name <name>` - Change session name (alphanumeric and hyphens)
+- `/detach, /d` - Detach from session (keeps session running)
+- `/quit, /q` - End the session completely
 
 ## Session Restore
 
@@ -63,11 +90,28 @@ raworc session restore {session-id}
 ```bash
 # Start a data analysis session
 raworc session
+
+┌─────────────────────────────────────┐
+│ ◊ Session Start                     │
+│ SessionId: abc-123                  │
+│ User: admin (Operator)              │
+│ Commands: /help (for commands)      │
+└─────────────────────────────────────┘
+
+● ready
+──────────────────────────────────────────────────
 > Analyze the sales data in /data/sales_2024.csv
 
-# Host begins processing...
-# Need to leave for a meeting? Close the session:
-/quit
+● Run
+└─ Loading and analyzing sales_2024.csv
+
+I'll analyze the sales data for you. Let me examine the file structure and perform initial analysis...
+
+● ready
+──────────────────────────────────────────────────
+# Need to leave for a meeting? Use the detach command:
+> /detach
+👋 Detached from session abc-123 (session continues running)
 
 # Close to save resources
 raworc api sessions/abc-123/close -m post
@@ -75,6 +119,9 @@ raworc api sessions/abc-123/close -m post
 # After your meeting, restore and continue
 raworc api sessions/abc-123/restore -m post
 raworc session restore abc-123
+
+● ready
+──────────────────────────────────────────────────
 > Continue with the regional breakdown analysis
 ```
 
@@ -175,10 +222,18 @@ raworc api "sessions?state=idle"
 Sessions follow a controlled state machine:
 
 ```
-init → idle → busy → closed
-  ↓      ↓      ↓       ↓
-  └─── delete (removes session)
+init → idle → busy → closed → errored
+  ↓      ↓      ↓       ↓         ↓
+  └─── deleted (soft delete with cleanup)
 ```
+
+**Visual State Indicators:**
+- `◯` (init) - Session initializing
+- `●` (idle) - Session ready for messages  
+- `◉` (busy) - Session processing messages
+- `◼` (closed) - Session closed, can be restored
+- `◇` (errored) - Session in error state
+- `◼` (deleted) - Session permanently deleted
 
 Monitor state transitions:
 ```bash
@@ -231,10 +286,20 @@ raworc api sessions/{id}/messages -m delete
 ```bash
 # Interactive session handles this automatically
 raworc session restore {id}
-> First question
-# Wait for response...
+
+● ready
+──────────────────────────────────────────────────
+> First question about the data
+
+I'll help you with that. Let me analyze the data and provide insights...
+
+● ready  
+──────────────────────────────────────────────────
 > Follow-up question based on previous answer
-# Context is maintained throughout
+
+Based on my previous analysis, I can elaborate further...
+
+# Context is maintained throughout the conversation
 ```
 
 ## Session Data Management
@@ -245,8 +310,24 @@ Sessions have persistent storage that survives close/restore:
 
 ```bash
 # In an interactive session
+● ready
+──────────────────────────────────────────────────
 > Create a file called config.yaml with database settings
+
+● Edit
+└─ Creating config.yaml
+
+I'll create a config.yaml file with database settings for you...
+
+● ready
+──────────────────────────────────────────────────
 > Now update the connection string in config.yaml
+
+● Edit  
+└─ Updating connection string in config.yaml
+
+I've updated the connection string in your config.yaml file...
+
 # File persists across close/restore cycles
 ```
 

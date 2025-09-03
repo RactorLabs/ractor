@@ -177,6 +177,62 @@ The Host can automate any manual work that involves using a computer. Here are t
 - "Process these customer survey responses and organize into a spreadsheet"
 - "Complete these insurance forms using data from our employee database"
 
+## Integrated Tools
+
+The Host comes equipped with powerful Anthropic-compatible tools for comprehensive computer use:
+
+### 🔧 Bash Tool
+**Execute terminal commands and system operations:**
+
+- **Command Execution** - Run any bash/shell commands with persistent state
+- **File Operations** - Create, edit, move, copy, and manage files and directories
+- **Package Management** - Install software, manage dependencies (apt-get, yum, pip, npm)
+- **System Administration** - Monitor processes, check system status, manage services
+- **Development Tasks** - Git operations, build processes, testing, deployment
+
+**Example Usage:**
+```bash
+> Install Python dependencies and run the analysis script
+Host: I'll install the required packages and execute your analysis...
+● Run
+└─ pip install pandas numpy matplotlib
+● Run  
+└─ python analysis.py --input data.csv --output report.html
+```
+
+### ✏️ Text Editor Tool
+**Precise file editing and code manipulation:**
+
+- **File Creation** - Create new files with specified content
+- **Content Viewing** - Examine file contents with line range support
+- **String Replacement** - Replace exact text strings with validation
+- **Line Insertion** - Insert text at specific line numbers
+- **Code Editing** - Ideal for configuration files and code modifications
+
+**Example Usage:**
+```bash
+> Update the database configuration in config.py
+Host: I'll update your database configuration...
+● Edit
+└─ Updated database settings in config.py lines 15-18
+```
+
+### 🌐 Web Search Tool  
+**Real-time information retrieval and research:**
+
+- **Current Information** - Access up-to-date information beyond AI knowledge cutoff
+- **Research Tasks** - Find documentation, tutorials, and technical information
+- **Data Verification** - Cross-reference facts and validate information
+- **Trend Analysis** - Research current trends, news, and developments
+
+**Example Usage:**
+```bash
+> What are the latest Python security best practices for 2024?
+Host: Let me search for the most current Python security guidelines...
+● Search
+└─ Searching for: Python security best practices 2024
+```
+
 ## How to Get Started
 
 ### Basic Host Session

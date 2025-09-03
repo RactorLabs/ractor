@@ -41,7 +41,7 @@ Sessions follow a validated state machine with controlled transitions:
 init → idle → busy → closed → errored
   ↓      ↓      ↓       ↓         ↓
   ✓      ✓      ✓       ✓         ✓
-  └─── delete (soft delete with cleanup)
+  └─── deleted (soft delete with cleanup)
 ```
 
 ### State Definitions
@@ -51,6 +51,7 @@ init → idle → busy → closed → errored
 - **`busy`** - Processing messages and executing tasks
 - **`closed`** - Container stopped, volume preserved (can be restored)
 - **`errored`** - Container failed, requires intervention
+- **`deleted`** - Session marked for deletion, resources cleaned up
 
 ### State Transitions
 

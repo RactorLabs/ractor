@@ -82,21 +82,37 @@ For more advanced session configuration options, see the [CLI Usage Guide](/docs
 
 ## Interactive Session Usage
 
-Once in a session, you can interact directly with the Host:
+Once in a session, you can interact directly with the Host using the clean CLI interface:
 
-```
-You: Hello, how can you help me?
-⠋ Waiting for host response...
-Host: Hello! I'm a Host that can help you with various tasks including:
+```bash
+$ raworc session
+
+┌─────────────────────────────────────┐
+│ ◊ Session Start                     │
+│ SessionId: abc123-def456-789        │
+│ User: admin (Operator)              │
+│ Commands: /help (for commands)      │
+└─────────────────────────────────────┘
+
+◯ initializing...
+──────────────────────────────────────────────────
+> Hello, how can you help me?
+
+I'm a Host that can help you with various tasks including:
 - Writing and debugging code
 - Data analysis and visualization  
 - File management and organization
 - Web research and information gathering
 - And much more!
 
-You: Create a Python script to calculate fibonacci numbers
-⠋ Waiting for host response...
-Host: I'll create a Python script to calculate Fibonacci numbers for you.
+● ready
+──────────────────────────────────────────────────
+> Create a Python script to calculate fibonacci numbers
+
+● Edit
+└─ Creating fibonacci.py
+
+I'll create a Python script to calculate Fibonacci numbers for you.
 
 [Creates fibonacci.py with implementation]
 

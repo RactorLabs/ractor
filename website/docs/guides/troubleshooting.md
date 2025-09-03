@@ -47,7 +47,7 @@ docker ps --filter "name=raworc_session_"
 raworc start --restart
 
 # Clean up all sessions
-raworc cleanup --yes
+raworc clean --all
 
 # Manual cleanup of specific session
 docker rm -f raworc_session_{session-id}
@@ -74,6 +74,7 @@ raworc api version
 
 # Check authentication
 raworc auth
-raworc auth login --user admin --pass admin
+raworc login --user admin --pass admin
+raworc auth --token <jwt-token-from-login>
 ```
 

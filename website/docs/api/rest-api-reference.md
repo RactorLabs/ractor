@@ -65,7 +65,7 @@ Get API version and health information.
 **Response**: `200 OK`
 ```json
 {
-  "version": "0.3.3",
+  "version": "0.3.5",
   "api": "v0"
 }
 ```
@@ -285,7 +285,7 @@ List Host sessions. Regular users see only their own sessions, admin users see a
 **Authentication**: Required
 
 **Query Parameters**:
-- `state` (optional) - Filter sessions by state (init, idle, busy, closed, errored)
+- `state` (optional) - Filter sessions by state (init, idle, busy, closed, errored, deleted)
 
 **Response**: `200 OK`
 ```json

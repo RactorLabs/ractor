@@ -269,11 +269,66 @@ raworc session close my-session
 
 ### Interactive Session Interface
 
+Once in an interactive session, you have access to powerful session commands and a clean interface with visual state indicators.
+
+#### Session State Indicators
+
+The CLI uses professional flat geometric icons to show session status:
+
+- `◯ initializing...` - Session container starting up
+- `● ready` - Session idle and ready for requests  
+- `◐ working...` - Session actively processing requests
+- `◻ closed` - Session suspended (container stopped)
+- `◆ error` - Session encountered an error
+
+#### Interactive Session Commands
+
 ```bash
-# In any interactive session:
-# - Type messages directly: "Hello, help me write Python code"
-# - Use /status to show session info
-# - Use /quit to exit session
+# Communication
+# Type messages directly: "Hello, help me write Python code"
+
+# Session management commands:
+/help, /h                    # Show all available commands
+/status                      # Display session status and information
+/timeout <seconds>           # Change session timeout (1-3600 seconds)
+/name <name>                 # Change session name (alphanumeric and hyphens)
+/detach, /d                  # Detach from session (keeps session running)
+/quit, /q                    # End the session completely
+```
+
+#### Example Interactive Session
+
+```bash
+$ raworc session --name "coding-project"
+
+┌─────────────────────────────────────┐
+│ ◊ Session Start                     │
+│ SessionId: coding-project           │
+│ User: admin (Operator)              │
+│ Commands: /help (for commands)      │
+└─────────────────────────────────────┘
+
+◯ initializing...
+──────────────────────────────────────────────────
+> Hello, I need help with Python
+
+● Search
+└─ Searching for Python help resources
+
+Based on your request, I can help you with Python programming. What specific aspect would you like assistance with?
+
+● ready
+──────────────────────────────────────────────────
+> /timeout 600
+
+✓ Session timeout updated to 600 seconds (10 minutes)
+
+● ready  
+──────────────────────────────────────────────────
+> /detach
+
+◊ Detached from session. Session continues running.
+Reconnect with: raworc session restore coding-project
 ```
 
 ### API-based Session Management
