@@ -504,8 +504,6 @@ async function startInteractiveSession(sessionId, options) {
         const recentMessages = messages.slice(-6); // Show last 6 messages (3 exchanges)
 
         console.log();
-        console.log(chalk.blue('≡ Recent conversation history:'));
-        console.log(chalk.gray('─'.repeat(50)));
 
         recentMessages.forEach((msg, index) => {
           console.log();
@@ -677,7 +675,7 @@ function showPrompt(state = 'idle') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('————————————————————————————————————————'));
+  console.log(chalk.gray('─'.repeat(50)));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
@@ -721,7 +719,7 @@ function showPromptWithInput(state = 'idle', userInput = '') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('————————————————————————————————————————'));
+  console.log(chalk.gray('─'.repeat(50)));
   process.stdout.write(chalk.cyanBright('> ') + userInput);
 }
 
