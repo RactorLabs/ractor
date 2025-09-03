@@ -172,7 +172,7 @@ raworc api sessions -m POST -b '{
 ### Send Messages to Session
 
 ```bash
-raworc api sessions/{session-id}/messages -m POST -b '{
+raworc api sessions/{session-name}/messages -m POST -b '{
   "content": "Generate a Python script to calculate fibonacci numbers"
 }'
 ```
@@ -181,13 +181,13 @@ raworc api sessions/{session-id}/messages -m POST -b '{
 
 ```bash
 # Close session (saves resources, preserves data)
-raworc api sessions/{session-id}/close -m POST
+raworc api sessions/{session-name}/close -m POST
 
 # Restore closed session
-raworc api sessions/{session-id}/restore -m POST
+raworc api sessions/{session-name}/restore -m POST
 
 # Delete session permanently
-raworc api sessions/{session-id} -m DELETE
+raworc api sessions/{session-name} -m DELETE
 ```
 
 ## Troubleshooting

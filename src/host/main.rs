@@ -14,9 +14,9 @@ struct Args {
     #[arg(long, env = "RAWORC_API_URL")]
     api_url: String,
     
-    /// Session ID
-    #[arg(long, env = "RAWORC_SESSION_ID")]
-    session_id: String,
+    /// Session Name
+    #[arg(long, env = "RAWORC_SESSION_NAME")]
+    session_name: String,
     
 }
 
@@ -28,5 +28,5 @@ async fn main() -> Result<()> {
     let _ = logging::init_service_logging("/app/logs", "raworc_host");
     
     // Run the Host (Computer Use Agent)
-    host::run(&args.api_url, &args.session_id).await
+    host::run(&args.api_url, &args.session_name).await
 }

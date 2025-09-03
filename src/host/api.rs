@@ -21,7 +21,7 @@ pub enum MessageRole {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
-    pub session_id: String,
+    pub session_name: String,  // Changed from session_id in v0.4.0
     pub role: MessageRole,
     pub content: String,
     pub metadata: Option<serde_json::Value>,
@@ -45,13 +45,10 @@ pub struct UpdateSessionStateRequest {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Session {
-    pub id: String,
+    pub name: String,  // Primary key in v0.4.0
     pub created_by: String,
-    pub name: Option<String>,
     pub state: String,
-    pub container_id: Option<String>,
-    pub persistent_volume_id: Option<String>,
-    pub parent_session_id: Option<String>,
+    pub parent_session_name: Option<String>,  // Changed from parent_session_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -62,6 +59,7 @@ pub struct Session {
     pub timeout_seconds: i32,
     pub auto_close_at: Option<String>,
     pub canvas_port: Option<i32>,
+    // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
 
 pub struct RaworcClient {
@@ -84,7 +82,7 @@ impl RaworcClient {
         let url = format!(
             "{}/api/v0/sessions/{}",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         debug!("Fetching session info from: {}", url);
@@ -98,14 +96,14 @@ impl RaworcClient {
         match response.status() {
             StatusCode::OK => {
                 let session = response.json::<Session>().await?;
-                debug!("Fetched session info for: {}", session.id);
+                debug!("Fetched session info for: {}", session.name);
                 Ok(session)
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -119,7 +117,7 @@ impl RaworcClient {
         let mut url = format!(
             "{}/api/v0/sessions/{}/messages",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         let mut params = vec![];
@@ -153,7 +151,7 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -171,7 +169,7 @@ impl RaworcClient {
         let url = format!(
             "{}/api/v0/sessions/{}/messages",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         let request = CreateMessageRequest {
@@ -199,7 +197,7 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -213,7 +211,7 @@ impl RaworcClient {
         let url = format!(
             "{}/api/v0/sessions/{}/state",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         let request = UpdateSessionStateRequest { state: state.clone() };
@@ -236,7 +234,7 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -250,7 +248,7 @@ impl RaworcClient {
         let url = format!(
             "{}/api/v0/sessions/{}/busy",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         let response = self.client
@@ -268,7 +266,7 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
@@ -282,7 +280,7 @@ impl RaworcClient {
         let url = format!(
             "{}/api/v0/sessions/{}/idle",
             self.config.api_url,
-            self.config.session_id
+            self.config.session_name
         );
         
         let response = self.client
@@ -300,7 +298,7 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => {
-                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+                Err(HostError::Api(format!("Session {} not found", self.config.session_name)))
             }
             status => {
                 let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());

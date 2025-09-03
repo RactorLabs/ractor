@@ -5,7 +5,7 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SessionMessage {
     pub id: String,
-    pub session_id: String,
+    pub session_name: String,
     pub created_by: String,
     pub role: String,
     pub content: String,
@@ -25,7 +25,7 @@ pub struct CreateMessageRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageResponse {
     pub id: String,
-    pub session_id: String,
+    pub session_name: String,
     pub role: String,
     pub content: String,
     pub metadata: serde_json::Value,
@@ -114,7 +114,7 @@ where
 impl SessionMessage {
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        session_name: &str,
         created_by: &str,
         req: CreateMessageRequest,
     ) -> Result<SessionMessage, sqlx::Error> {
@@ -123,12 +123,12 @@ impl SessionMessage {
         
         sqlx::query(
             r#"
-            INSERT INTO session_messages (id, session_id, created_by, role, content, metadata, created_at)
+            INSERT INTO session_messages (id, session_name, created_by, role, content, metadata, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
-        .bind(session_id)
+        .bind(session_name)
         .bind(created_by)
         .bind(&req.role)
         .bind(&req.content)
@@ -139,7 +139,7 @@ impl SessionMessage {
         
         Ok(SessionMessage {
             id,
-            session_id: session_id.to_string(),
+            session_name: session_name.to_string(),
             created_by: created_by.to_string(),
             role: req.role,
             content: req.content,
@@ -151,7 +151,7 @@ impl SessionMessage {
     #[allow(dead_code)]
     pub async fn find_by_session(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        session_name: &str,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<SessionMessage>, sqlx::Error> {
@@ -160,15 +160,15 @@ impl SessionMessage {
         
         sqlx::query_as::<_, SessionMessage>(
             r#"
-            SELECT id, session_id, created_by, role, content,
+            SELECT id, session_name, created_by, role, content,
                    metadata, created_at
             FROM session_messages
-            WHERE session_id = ?
+            WHERE session_name = ?
             ORDER BY created_at ASC
             LIMIT ? OFFSET ?
             "#
         )
-        .bind(session_id)
+        .bind(session_name)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -178,7 +178,7 @@ impl SessionMessage {
     #[allow(dead_code)]
     pub async fn find_by_session_with_filter(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        session_name: &str,
         query: ListMessagesQuery,
     ) -> Result<Vec<SessionMessage>, sqlx::Error> {
         let limit = query.limit.unwrap_or(100).min(1000);
@@ -186,10 +186,10 @@ impl SessionMessage {
         
         let mut sql = String::from(
             r#"
-            SELECT id, session_id, created_by, role, content,
+            SELECT id, session_name, created_by, role, content,
                    metadata, created_at
             FROM session_messages
-            WHERE session_id = ?
+            WHERE session_name = ?
             "#
         );
         
@@ -212,7 +212,7 @@ impl SessionMessage {
         sql.push_str(&format!(" OFFSET ${param_count}"));
         
         let mut query_builder = sqlx::query_as::<_, SessionMessage>(&sql)
-            .bind(session_id);
+            .bind(session_name);
         
         if let Some(role) = query.role {
             query_builder = query_builder.bind(role);
@@ -231,12 +231,12 @@ impl SessionMessage {
 
     pub async fn count_by_session(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        session_name: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_messages WHERE session_id = ?"
+            "SELECT COUNT(*) FROM session_messages WHERE session_name = ?"
         )
-        .bind(session_id)
+        .bind(session_name)
         .fetch_one(pool)
         .await?;
         
@@ -245,10 +245,10 @@ impl SessionMessage {
 
     pub async fn delete_by_session(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        session_name: &str,
     ) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query(r#"DELETE FROM session_messages WHERE session_id = ?"#)
-        .bind(session_id)
+        let result = sqlx::query(r#"DELETE FROM session_messages WHERE session_name = ?"#)
+        .bind(session_name)
         .execute(pool)
         .await?;
         

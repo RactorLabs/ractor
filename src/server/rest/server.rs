@@ -6,6 +6,7 @@ use tracing::{error, info, warn};
 
 use crate::shared::init_database;
 use crate::server::rest::create_router;
+use crate::server::public_server;
 
 pub async fn run_rest_server() -> Result<()> {
     // Environment variables are loaded via cargo run or runtime
@@ -80,13 +81,25 @@ PID: {}
 
     info!("Server started successfully!");
     info!("REST API Endpoint: http://{}:{}/api/v0", host, port);
+    info!("Public Canvas Server: http://{}:8000", host);
     info!("Ready to accept requests...");
 
-    let result = axum::serve(listener, app).await;
+    // Start public server in background
+    let public_server_handle = tokio::spawn(async {
+        if let Err(e) = public_server::start_public_server().await {
+            error!("Public server failed: {}", e);
+        }
+    });
+
+    // Run REST API server
+    let rest_server_result = axum::serve(listener, app).await;
 
     // Clean up PID file on exit
     let _ = fs::remove_file(pid_file);
+    
+    // Wait for public server to finish (or abort if REST server fails)
+    public_server_handle.abort();
 
-    result?;
+    rest_server_result?;
     Ok(())
 }

@@ -186,7 +186,7 @@ echo ""
 
 # Create volumes if they don't exist
 print_status "Creating Docker volumes..."
-for volume in mysql_data operator_data; do
+for volume in mysql_data operator_data raworc_public; do
     if ! docker volume inspect "$volume" >/dev/null 2>&1; then
         if docker volume create "$volume"; then
             print_success "Created volume $volume"
@@ -288,7 +288,9 @@ for component in "${COMPONENTS[@]}"; do
                 --name raworc_server \
                 --network raworc_network \
                 -p 9000:9000 \
+                -p 8000:8000 \
                 -v ./logs:/app/logs \
+                -v raworc_public:/public \
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e RUST_LOG=info \
@@ -395,6 +397,7 @@ if [ -n "$running_containers" ]; then
     print_status "Service URLs:"
     if docker ps --filter "name=raworc_server" --format "{{.Names}}" | grep -q "raworc_server"; then
         echo "  • API Server: http://localhost:9000"
+        echo "  • Public Canvas: http://localhost:8000"
     fi
     if docker ps --filter "name=raworc_mysql" --format "{{.Names}}" | grep -q "raworc_mysql"; then
         echo "  • MySQL Port: 3307"

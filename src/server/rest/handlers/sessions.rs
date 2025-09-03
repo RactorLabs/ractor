@@ -21,13 +21,10 @@ fn is_admin_user(auth: &AuthContext) -> bool {
 
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
-    pub id: String,
+    pub name: String,  // Primary key - no more id field
     pub created_by: String,
-    pub name: Option<String>,
     pub state: String,
-    pub container_id: Option<String>,
-    pub persistent_volume_id: Option<String>,
-    pub parent_session_id: Option<String>,
+    pub parent_session_name: Option<String>,  // Changed from parent_session_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -38,6 +35,7 @@ pub struct SessionResponse {
     pub timeout_seconds: i32,
     pub auto_close_at: Option<String>,
     pub canvas_port: Option<i32>,
+    // Removed: id, container_id, persistent_volume_id
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,13 +46,10 @@ pub struct ListSessionsQuery {
 impl SessionResponse {
     async fn from_session(session: Session, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
         Ok(Self {
-            id: session.id,
-            created_by: session.created_by,
             name: session.name,
+            created_by: session.created_by,
             state: session.state,
-            container_id: session.container_id,
-            persistent_volume_id: session.persistent_volume_id,
-            parent_session_id: session.parent_session_id,
+            parent_session_name: session.parent_session_name,
             created_at: session.created_at.to_rfc3339(),
             last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
             metadata: session.metadata,
@@ -69,32 +64,22 @@ impl SessionResponse {
     }
 }
 
-// Helper function to find session by ID or name
-async fn find_session_by_id_or_name(
+// Helper function to find session by name
+async fn find_session_by_name(
     state: &AppState, 
-    id_or_name: &str, 
+    name: &str, 
     created_by: &str,
     is_admin: bool
 ) -> Result<Session, ApiError> {
-    // Try to find by ID first
-    if let Some(session) = Session::find_by_id(&state.db, id_or_name).await
+    // Try to find by name directly (names are globally unique)
+    if let Some(session) = Session::find_by_name(&state.db, name).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))? {
-        // Admins can access any session, regular users only their own
-        if is_admin || session.created_by == created_by {
+        // Admins can access any session, regular users only their own or published sessions
+        if is_admin || session.created_by == created_by || session.is_published {
             return Ok(session);
+        } else {
+            return Err(ApiError::Forbidden("Access denied to this session".to_string()));
         }
-    }
-    
-    // If not found by ID, try by name (owned sessions first)
-    if let Some(session) = Session::find_by_name(&state.db, id_or_name, created_by).await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session by name: {}", e)))? {
-        return Ok(session);
-    }
-    
-    // If still not found, try searching published sessions by name (for non-owners)
-    if let Some(session) = Session::find_published_by_name(&state.db, id_or_name).await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch published session by name: {}", e)))? {
-        return Ok(session);
     }
     
     Err(ApiError::NotFound("Session not found".to_string()))
@@ -144,7 +129,7 @@ pub async fn list_sessions(
 
 pub async fn get_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check session:get permission
@@ -158,9 +143,9 @@ pub async fn get_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     
-    // Find session by ID or name (admin can access any session)
+    // Find session by name (admin can access any session)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
@@ -195,9 +180,15 @@ pub async fn create_session(
             
             // Check for unique constraint violation on session name
             if let sqlx::Error::Database(db_err) = &e {
+                tracing::error!("Database error - code: {:?}, message: '{}'", db_err.code(), db_err.message());
                 if let Some(code) = db_err.code() {
-                    if (code == "23000" || code == "1062") && db_err.message().contains("unique_session_name") {
-                        return ApiError::BadRequest(format!("Session name '{}' is already taken. Please choose a different name.", req.name.as_deref().unwrap_or("unnamed")));
+                    // Simplify the condition to catch the specific error
+                    if code == "23000" || code == "1062" {
+                        tracing::info!("Detected database constraint violation for session {}", req.name);
+                        if db_err.message().contains("sessions.PRIMARY") || db_err.message().contains("Duplicate entry") {
+                            tracing::info!("Confirmed duplicate session name constraint violation");
+                            return ApiError::BadRequest(format!("Session name '{}' is already taken. Please choose a different name.", req.name));
+                        }
                     }
                 }
             }
@@ -220,25 +211,25 @@ pub async fn create_session(
     });
 
     sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
         "#
     )
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
     
-    tracing::info!("Created session task for session {}", session.id);
+    tracing::info!("Created session task for session {}", session.name);
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
 
 pub async fn remix_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<RemixSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -255,7 +246,7 @@ pub async fn remix_session(
     
     // Find parent session by ID or name (admin can remix any session, users can remix published sessions)
     let is_admin = is_admin_user(&auth);
-    let parent = find_session_by_id_or_name(&state, &id, username, true).await?; // Allow finding any session for remix (permission check below)
+    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for remix (permission check below)
 
     // Check remix permissions for non-owners
     if parent.created_by != *username && !is_admin {
@@ -268,9 +259,7 @@ pub async fn remix_session(
         let publish_perms = parent.publish_permissions.as_object()
             .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid publish permissions format")))?;
         
-        if req.data && !publish_perms.get("data").and_then(|v| v.as_bool()).unwrap_or(false) {
-            return Err(ApiError::Forbidden("Data remix not permitted for this published session".to_string()));
-        }
+        // Data folder removed in v0.4.0 - no data permission check needed
         if req.code && !publish_perms.get("code").and_then(|v| v.as_bool()).unwrap_or(false) {
             return Err(ApiError::Forbidden("Code remix not permitted for this published session".to_string()));
         }
@@ -287,22 +276,20 @@ pub async fn remix_session(
     };
 
     // Store the remix options before moving req into Session::remix
-    let copy_data = req.data;
     let copy_code = req.code;
     let copy_secrets = req.secrets;
     // Canvas is always copied
     let copy_canvas = true;
     let initial_prompt = req.prompt.clone();
     
-    let session = Session::remix(&state.db, &parent.id, req, created_by)
+    let session = Session::remix(&state.db, &parent.name, req, created_by)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e)))?;
 
     // Add task to queue for session manager to create container with remix options
     let task_payload = serde_json::json!({
         "remix": true,
-        "parent_session_id": parent.id,
-        "copy_data": copy_data,
+        "parent_session_name": parent.name,
         "copy_code": copy_code,
         "copy_secrets": copy_secrets,
         "copy_canvas": copy_canvas,
@@ -315,18 +302,18 @@ pub async fn remix_session(
     });
     
     sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
         "#
     )
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(created_by)
     .bind(task_payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
     
-    tracing::info!("Created session task for remixed session {}", session.id);
+    tracing::info!("Created session task for remixed session {}", session.name);
 
     Ok(Json(SessionResponse::from_session(session, &state.db).await?))
 }
@@ -334,10 +321,10 @@ pub async fn remix_session(
 
 pub async fn close_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Close request received for session: {}", id);
+    tracing::info!("Close request received for session: {}", name);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -345,7 +332,7 @@ pub async fn close_session(
     
     // Find session by ID or name (admin can close any session)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, created_by, is_admin).await?;
+    let session = find_session_by_name(&state, &name, created_by, is_admin).await?;
     
     tracing::info!("Found session in state: {}", session.state);
 
@@ -385,7 +372,7 @@ pub async fn close_session(
         WHERE id = ?
     "#)
     .bind(crate::shared::models::constants::SESSION_STATE_CLOSED)
-    .bind(&session.id)
+    .bind(&session.name)
     .execute(&*state.db)
     .await
     .map_err(|e| {
@@ -401,11 +388,11 @@ pub async fn close_session(
 
     // Add task to destroy the container but keep volume
     sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'close_session', ?, '{}', 'pending')
         "#
     )
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(&created_by)
     .execute(&*state.db)
     .await
@@ -414,10 +401,10 @@ pub async fn close_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create suspend task: {}", e))
     })?;
     
-    tracing::info!("Created suspend task for session {}", id);
+    tracing::info!("Created suspend task for session {}", name);
 
     // Fetch updated session
-    let updated_session = Session::find_by_id(&state.db, &id)
+    let updated_session = Session::find_by_name(&state.db, &name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
@@ -427,7 +414,7 @@ pub async fn close_session(
 
 pub async fn restore_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<RestoreSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -444,7 +431,7 @@ pub async fn restore_session(
     
     // Find session by ID or name (admin can find any session, but restore has ownership restrictions)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership: Even admins cannot restore other users' sessions (only remix)
     if session.created_by != *username {
@@ -468,7 +455,7 @@ pub async fn restore_session(
         "#
     )
     .bind(crate::shared::models::constants::SESSION_STATE_INIT)
-    .bind(&session.id)
+    .bind(&session.name)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restore session: {}", e)))?;
@@ -489,11 +476,11 @@ pub async fn restore_session(
     });
     
     sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'restore_session', ?, ?, 'pending')
         "#
     )
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(username)
     .bind(&restore_payload)
     .execute(&*state.db)
@@ -503,10 +490,10 @@ pub async fn restore_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create resume task: {}", e))
     })?;
     
-    tracing::info!("Created resume task for session {}", session.id);
+    tracing::info!("Created resume task for session {}", session.name);
 
     // Fetch updated session
-    let updated_session = Session::find_by_id(&state.db, &session.id)
+    let updated_session = Session::find_by_name(&state.db, &session.name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
@@ -516,7 +503,7 @@ pub async fn restore_session(
 
 pub async fn update_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -533,9 +520,9 @@ pub async fn update_session(
     
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    let updated_session = Session::update(&state.db, &session.id, req)
+    let updated_session = Session::update(&state.db, &session.name, req)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
@@ -554,7 +541,7 @@ pub async fn update_session(
 
 pub async fn update_session_state(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -567,14 +554,14 @@ pub async fn update_session_state(
     
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
     
     // Update the state with ownership verification
     let result = sqlx::query(
         "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
@@ -592,7 +579,7 @@ pub async fn update_session_state(
 
 pub async fn delete_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
     // Check permission for deleting sessions
@@ -608,25 +595,25 @@ pub async fn delete_session(
     
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Sessions can be soft deleted in any state
 
     // Add task to queue for session manager to destroy container
     sqlx::query(r#"
-        INSERT INTO session_tasks (session_id, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'destroy_session', ?, '{}', 'pending')
         "#
     )
-    .bind(&session.id)
+    .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy task: {}", e)))?;
     
-    tracing::info!("Created destroy task for session {}", session.id);
+    tracing::info!("Created destroy task for session {}", session.name);
 
-    let deleted = Session::delete(&state.db, &session.id)
+    let deleted = Session::delete(&state.db, &session.name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete session: {}", e)))?;
 
@@ -639,7 +626,7 @@ pub async fn delete_session(
 
 pub async fn publish_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<PublishSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -656,7 +643,7 @@ pub async fn publish_session(
     
     // Find session by ID or name (admin can publish any session)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can publish)
     if !is_admin && session.created_by != *username {
@@ -664,17 +651,38 @@ pub async fn publish_session(
     }
 
     // Publish the session
-    let published_session = Session::publish(&state.db, &session.id, username, req)
+    let published_session = Session::publish(&state.db, &session.name, username, req.clone())
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to publish session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    // Create task to copy canvas files to public directory
+    let payload = serde_json::json!({
+        "canvas": req.canvas, // Canvas is always included in v0.4.0
+        "code": req.code,
+        "secrets": req.secrets
+    });
+
+    sqlx::query(r#"
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'publish_session', ?, ?, 'pending')
+        "#
+    )
+    .bind(&session.name)
+    .bind(username)
+    .bind(payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create publish task: {}", e)))?;
+
+    tracing::info!("Created publish task for session {}", session.name);
 
     Ok(Json(SessionResponse::from_session(published_session, &state.db).await?))
 }
 
 pub async fn unpublish_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Check permission for updating sessions
@@ -690,7 +698,7 @@ pub async fn unpublish_session(
     
     // Find session by ID or name (admin can unpublish any session)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can unpublish)
     if !is_admin && session.created_by != *username {
@@ -698,10 +706,27 @@ pub async fn unpublish_session(
     }
 
     // Unpublish the session
-    let unpublished_session = Session::unpublish(&state.db, &session.id)
+    let unpublished_session = Session::unpublish(&state.db, &session.name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to unpublish session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+
+    // Create task to remove canvas files from public directory
+    let payload = serde_json::json!({});
+
+    sqlx::query(r#"
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'unpublish_session', ?, ?, 'pending')
+        "#
+    )
+    .bind(&session.name)
+    .bind(username)
+    .bind(payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish task: {}", e)))?;
+
+    tracing::info!("Created unpublish task for session {}", session.name);
 
     Ok(Json(SessionResponse::from_session(unpublished_session, &state.db).await?))
 }
@@ -725,11 +750,11 @@ pub async fn list_published_sessions(
 
 pub async fn get_published_session(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
 ) -> ApiResult<Json<SessionResponse>> {
     // No authentication required for getting published sessions (public access)
     
-    let session = Session::find_by_id(&state.db, &id)
+    let session = Session::find_by_name(&state.db, &name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
@@ -744,7 +769,7 @@ pub async fn get_published_session(
 
 pub async fn update_session_to_busy(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Only the host container should be able to call this
@@ -755,10 +780,10 @@ pub async fn update_session_to_busy(
     
     // Find session (host token should match session ownership)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
     
     // Update session to busy using the new method that clears auto_close_at
-    Session::update_session_to_busy(&state.db, &session.id).await
+    Session::update_session_to_busy(&state.db, &session.name).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session to busy: {}", e)))?;
 
     Ok(Json(serde_json::json!({
@@ -770,7 +795,7 @@ pub async fn update_session_to_busy(
 
 pub async fn update_session_to_idle(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Only the host container should be able to call this
@@ -781,10 +806,10 @@ pub async fn update_session_to_idle(
     
     // Find session (host token should match session ownership)
     let is_admin = is_admin_user(&auth);
-    let session = find_session_by_id_or_name(&state, &id, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
     
     // Update session to idle using the new method that sets auto_close_at
-    Session::update_session_to_idle(&state.db, &session.id).await
+    Session::update_session_to_idle(&state.db, &session.name).await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session to idle: {}", e)))?;
 
     Ok(Json(serde_json::json!({

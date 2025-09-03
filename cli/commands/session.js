@@ -94,43 +94,41 @@ module.exports = (program) => {
 
   // Restore subcommand
   sessionCmd
-    .command('restore <session-id>')
-    .description('Restore an existing session by ID or name')
+    .command('restore <session-name>')
+    .description('Restore an existing session by name')
     .option('-p, --prompt <text>', 'Prompt to send after restoring')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session restore abc123           # Restore by ID\n' +
+      '  $ raworc session restore abc123           # Restore by name\n' +
       '  $ raworc session restore my-session       # Restore by name\n' +
       '  $ raworc session restore my-session -p "Continue work" # Restore with prompt\n')
-    .action(async (sessionId, options) => {
-      await sessionRestoreCommand(sessionId, options);
+    .action(async (sessionName, options) => {
+      await sessionRestoreCommand(sessionName, options);
     });
 
   // Remix subcommand  
   sessionCmd
-    .command('remix <session-id>')
+    .command('remix <session-name>')
     .description('Create a new session remixing an existing session')
     .option('-n, --name <name>', 'Name for the new session')
-    .option('-d, --data <boolean>', 'Include data files (default: true)')
     .option('-c, --code <boolean>', 'Include code files (default: true)')
     .option('-s, --secrets <boolean>', 'Include secrets (default: true)')
     .option('-p, --prompt <text>', 'Prompt to send after creation')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session remix abc123             # Remix by ID\n' +
+      '  $ raworc session remix abc123             # Remix by name\n' +
       '  $ raworc session remix my-session         # Remix by name\n' +
       '  $ raworc session remix my-session -n "new-name" # Remix with new name\n' +
       '  $ raworc session remix my-session -s false # Remix without secrets\n' +
-      '  $ raworc session remix my-session --data false --code false # Copy only secrets\n')
-    .action(async (sessionId, options) => {
-      await sessionRemixCommand(sessionId, options);
+      '  $ raworc session remix my-session --code false # Copy only secrets\n')
+    .action(async (sessionName, options) => {
+      await sessionRemixCommand(sessionName, options);
     });
 
   // Publish subcommand
   sessionCmd
-    .command('publish <session-id>')
+    .command('publish <session-name>')
     .description('Publish a session for public access')
-    .option('-d, --data <boolean>', 'Allow data remix (default: true)')
     .option('-c, --code <boolean>', 'Allow code remix (default: true)')
     .option('-s, --secrets <boolean>', 'Allow secrets remix (default: true)')
     .addHelpText('after', '\n' +
@@ -138,33 +136,33 @@ module.exports = (program) => {
       '  $ raworc session publish abc123           # Publish with all permissions\n' +
       '  $ raworc session publish my-session       # Publish by name\n' +
       '  $ raworc session publish abc123 --secrets false # Publish without secrets remix\n' +
-      '  $ raworc session publish abc123 --data false --secrets false # Only allow code remix\n')
-    .action(async (sessionId, options) => {
-      await sessionPublishCommand(sessionId, options);
+      '  $ raworc session publish abc123 --secrets false # Only allow code remix\n')
+    .action(async (sessionName, options) => {
+      await sessionPublishCommand(sessionName, options);
     });
 
   // Unpublish subcommand
   sessionCmd
-    .command('unpublish <session-id>')
+    .command('unpublish <session-name>')
     .description('Remove session from public access')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session unpublish abc123         # Unpublish by ID\n' +
+      '  $ raworc session unpublish abc123         # Unpublish by name\n' +
       '  $ raworc session unpublish my-session     # Unpublish by name\n')
-    .action(async (sessionId, options) => {
-      await sessionUnpublishCommand(sessionId, options);
+    .action(async (sessionName, options) => {
+      await sessionUnpublishCommand(sessionName, options);
     });
 
   // Close subcommand
   sessionCmd
-    .command('close <session-id>')
+    .command('close <session-name>')
     .description('Close an active session')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session close abc123            # Close by ID\n' +
+      '  $ raworc session close abc123            # Close by name\n' +
       '  $ raworc session close my-session        # Close by name\n')
-    .action(async (sessionId, options) => {
-      await sessionCloseCommand(sessionId, options);
+    .action(async (sessionName, options) => {
+      await sessionCloseCommand(sessionName, options);
     });
 };
 
@@ -178,7 +176,7 @@ async function sessionStartCommand(options) {
   }
 
 
-  let sessionId = null;
+  let sessionName = null;
 
   try {
     // Create a new session
@@ -268,9 +266,9 @@ async function sessionStartCommand(options) {
       process.exit(1);
     }
 
-    sessionId = createResponse.data.id;
+    sessionName = createResponse.data.name;
 
-    await startInteractiveSession(sessionId, options);
+    await startInteractiveSession(sessionName, options);
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -278,7 +276,7 @@ async function sessionStartCommand(options) {
   }
 }
 
-async function sessionRestoreCommand(sessionId, options) {
+async function sessionRestoreCommand(sessionName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -291,7 +289,7 @@ async function sessionRestoreCommand(sessionId, options) {
   try {
 
     // Get session details first
-    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+    const sessionResponse = await api.get(`/sessions/${sessionName}`);
 
     if (!sessionResponse.success) {
       console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
@@ -300,8 +298,8 @@ async function sessionRestoreCommand(sessionId, options) {
 
     const session = sessionResponse.data;
 
-    // Update sessionId to actual UUID for consistent display
-    sessionId = session.id;
+    // Update sessionName to actual name for consistent display
+    sessionName = session.name;
 
     // Handle different session states
     if (session.state === SESSION_STATE_CLOSED) {
@@ -310,7 +308,7 @@ async function sessionRestoreCommand(sessionId, options) {
         restorePayload.prompt = options.prompt;
       }
 
-      const restoreResponse = await api.post(`/sessions/${sessionId}/restore`, restorePayload);
+      const restoreResponse = await api.post(`/sessions/${sessionName}/restore`, restorePayload);
 
       if (!restoreResponse.success) {
         console.error(chalk.red('✗ Error:'), restoreResponse.error);
@@ -323,7 +321,7 @@ async function sessionRestoreCommand(sessionId, options) {
       if (options.prompt) {
         console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
         try {
-          const messageResponse = await api.post(`/sessions/${sessionId}/messages`, {
+          const messageResponse = await api.post(`/sessions/${sessionName}/messages`, {
             content: options.prompt,
             role: 'user'
           });
@@ -345,7 +343,7 @@ async function sessionRestoreCommand(sessionId, options) {
       process.exit(1);
     }
 
-    await startInteractiveSession(sessionId, { ...options, isRestore: true, sessionState: session.state });
+    await startInteractiveSession(sessionName, { ...options, isRestore: true, sessionState: session.state });
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -353,7 +351,7 @@ async function sessionRestoreCommand(sessionId, options) {
   }
 }
 
-async function sessionRemixCommand(sourceSessionId, options) {
+async function sessionRemixCommand(sourceSessionName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -364,8 +362,8 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
 
   try {
-    // Get session details first (to resolve name to ID)
-    const sessionResponse = await api.get(`/sessions/${sourceSessionId}`);
+    // Get session details first
+    const sessionResponse = await api.get(`/sessions/${sourceSessionName}`);
 
     if (!sessionResponse.success) {
       console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
@@ -373,15 +371,11 @@ async function sessionRemixCommand(sourceSessionId, options) {
     }
 
     const sourceSession = sessionResponse.data;
-    // Update sessionId to actual UUID for consistent display
-    sourceSessionId = sourceSession.id;
+    // Update sessionName to actual name for consistent display
+    sourceSessionName = sourceSession.name;
 
     // Prepare remix payload
     const remixPayload = {};
-
-    if (options.data !== undefined) {
-      remixPayload.data = options.data === 'true' || options.data === true;
-    }
 
     if (options.code !== undefined) {
       remixPayload.code = options.code === 'true' || options.code === true;
@@ -415,23 +409,23 @@ async function sessionRemixCommand(sourceSessionId, options) {
     }
 
     // Create remix session
-    const remixResponse = await api.post(`/sessions/${sourceSessionId}/remix`, remixPayload);
+    const remixResponse = await api.post(`/sessions/${sourceSessionName}/remix`, remixPayload);
 
     if (!remixResponse.success) {
       console.error(chalk.red('✗ Error:'), remixResponse.error);
       process.exit(1);
     }
 
-    const sessionId = remixResponse.data.id;
+    const sessionName = remixResponse.data.name;
     const newSession = remixResponse.data;
 
     // Show detailed remix success info
     if (newSession.name) {
-      console.log(chalk.green('✓') + ` Session remixed as "${newSession.name}": ${sessionId}`);
+      console.log(chalk.green('✓') + ` Session remixed as "${newSession.name}": ${sessionName}`);
     }
 
 
-    await startInteractiveSession(sessionId, { ...options, sourceSessionId: sourceSessionId });
+    await startInteractiveSession(sessionName, { ...options, sourceSessionName: sourceSessionName });
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -439,7 +433,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
   }
 }
 
-async function showSessionBox(sessionId, mode, user, source = null) {
+async function showSessionBox(sessionName, mode, user, source = null) {
   // Create descriptive title based on mode
   const modeIcons = {
     'New': `${display.icons.session} Session Start`,
@@ -452,7 +446,7 @@ async function showSessionBox(sessionId, mode, user, source = null) {
   
   // Build base lines
   const lines = [
-    `SessionId: ${sessionId}`,
+    `Session: ${sessionName}`,
     source ? `Source: ${source}` : null,
     `User: ${user}`,
     `Commands: ${commands}`
@@ -460,7 +454,7 @@ async function showSessionBox(sessionId, mode, user, source = null) {
   
   // Try to get Canvas URL from session info
   try {
-    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+    const sessionResponse = await api.get(`/sessions/${sessionName}`);
     if (sessionResponse.success && sessionResponse.data && sessionResponse.data.canvas_port) {
       // Extract hostname from server URL instead of hardcoding localhost
       const serverUrl = config.getServerUrl();
@@ -492,7 +486,7 @@ async function showSessionBox(sessionId, mode, user, source = null) {
   console.log('└' + '─'.repeat(boxWidth - 2) + '┘');
 }
 
-async function startInteractiveSession(sessionId, options) {
+async function startInteractiveSession(sessionName, options) {
   // Get user info and determine mode
   const authData = config.getAuth();
   const userName = authData.user?.user || authData.user || 'Unknown';
@@ -504,17 +498,17 @@ async function startInteractiveSession(sessionId, options) {
   
   if (options.isRestore) {
     mode = 'Restore';
-  } else if (options.sourceSessionId) {
+  } else if (options.sourceSessionName) {
     mode = 'Remix';
-    source = options.sourceSessionId;
+    source = options.sourceSessionName;
   }
   
-  await showSessionBox(sessionId, mode, user, source);
+  await showSessionBox(sessionName, mode, user, source);
 
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
     try {
-      const messagesResponse = await api.get(`/sessions/${sessionId}/messages`);
+      const messagesResponse = await api.get(`/sessions/${sessionName}/messages`);
 
       if (messagesResponse.success && messagesResponse.data && messagesResponse.data.length > 0) {
         const messages = messagesResponse.data;
@@ -566,14 +560,14 @@ async function startInteractiveSession(sessionId, options) {
     console.log(chalk.green('> ') + chalk.white(options.prompt));
 
     // Create comprehensive prompt manager
-    const promptManager = createPromptManager(sessionId);
+    const promptManager = createPromptManager(sessionName);
     await promptManager.show();
     promptManager.startMonitoring();
     
     try {
       // Send the prompt message to the API
       const sendTime = Date.now();
-      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+      const sendResponse = await api.post(`/sessions/${sessionName}/messages`, {
         content: options.prompt,
         role: 'user'
       });
@@ -585,7 +579,7 @@ async function startInteractiveSession(sessionId, options) {
       }
       
       // Wait for all host responses to the prompt (tool calls + final response)
-      await waitForAllHostResponses(sessionId, sendTime, 60000, {
+      await waitForAllHostResponses(sessionName, sendTime, 60000, {
         clearPromptFn: () => promptManager.hide(),
         showPromptFn: (state) => {
           showPrompt(state);
@@ -612,27 +606,27 @@ async function startInteractiveSession(sessionId, options) {
     console.log();
 
     // Start monitoring without a user message time (will show any new messages)
-    const monitoringPromise = monitorForResponses(sessionId, 0);
+    const monitoringPromise = monitorForResponses(sessionName, 0);
 
     // Start chat loop concurrently so user can still interact
-    const chatPromise = chatLoop(sessionId, options);
+    const chatPromise = chatLoop(sessionName, options);
 
     // Wait for either to complete (though monitoring should complete when host finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
     // Start synchronous chat loop - don't skip initial prompt, let chatLoop show the correct state
-    await chatLoop(sessionId, { ...options, skipInitialPrompt: false });
+    await chatLoop(sessionName, { ...options, skipInitialPrompt: false });
   }
 }
 
-async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000) {
+async function waitForHostResponse(sessionName, userMessageTime, timeoutMs = 60000) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastCheckedCount = 0;
 
   // Get initial message count to detect new messages
   try {
-    const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
     if (initialResponse.success && initialResponse.data) {
       const messages = Array.isArray(initialResponse.data) ? initialResponse.data : initialResponse.data.messages || [];
       lastCheckedCount = messages.length;
@@ -643,7 +637,7 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await api.get(`/sessions/${sessionId}/messages`);
+      const response = await api.get(`/sessions/${sessionName}/messages`);
 
       if (response.success && response.data) {
         const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
@@ -749,7 +743,7 @@ function displayHostMessage(message, options = {}) {
   }
 }
 
-async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 60000, promptOptions = {}) {
+async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs = 60000, promptOptions = {}) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastMessageCount = 0;
@@ -757,7 +751,7 @@ async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 6
 
   // Get initial message count
   try {
-    const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
     if (initialResponse.success && initialResponse.data) {
       const messages = Array.isArray(initialResponse.data) ? initialResponse.data : initialResponse.data.messages || [];
       lastMessageCount = messages.length;
@@ -768,7 +762,7 @@ async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 6
 
   while (Date.now() - startTime < timeoutMs && !foundFinalResponse) {
     try {
-      const response = await api.get(`/sessions/${sessionId}/messages`);
+      const response = await api.get(`/sessions/${sessionName}/messages`);
 
       if (response.success && response.data) {
         const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
@@ -816,7 +810,7 @@ async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 6
 }
 
 // Comprehensive prompt manager - handles all prompt operations
-function createPromptManager(sessionId, userInput = '') {
+function createPromptManager(sessionName, userInput = '') {
   let currentState = 'init';
   let currentUserInput = userInput;
   let promptVisible = false;
@@ -826,7 +820,7 @@ function createPromptManager(sessionId, userInput = '') {
   
   const updateState = async () => {
     try {
-      const sessionResponse = await api.get(`/sessions/${sessionId}`);
+      const sessionResponse = await api.get(`/sessions/${sessionName}`);
       if (sessionResponse.success) {
         const newState = sessionResponse.data.state;
         
@@ -1034,11 +1028,11 @@ function clearPrompt() {
   process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear empty line
 }
 
-async function monitorForResponses(sessionId, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
+async function monitorForResponses(sessionName, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
   let lastMessageCount = 0;
 
   try {
-    const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
     if (initialResponse.success) {
       lastMessageCount = initialResponse.data.length;
     }
@@ -1048,7 +1042,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
 
   while (true) {
     try {
-      const response = await api.get(`/sessions/${sessionId}/messages`);
+      const response = await api.get(`/sessions/${sessionName}/messages`);
       if (response.success && response.data.length > lastMessageCount) {
         const newMessages = response.data.slice(lastMessageCount);
 
@@ -1076,7 +1070,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
   }
 }
 
-async function chatLoop(sessionId, options = {}) {
+async function chatLoop(sessionName, options = {}) {
   const readline = require('readline');
   // For restored sessions from closed state, start with 'init' and wait for server to confirm ready
   // For new sessions, start with 'init' 
@@ -1089,7 +1083,7 @@ async function chatLoop(sessionId, options = {}) {
   // Function to fetch and update session state
   async function updateSessionState() {
     try {
-      const sessionResponse = await api.get(`/sessions/${sessionId}`);
+      const sessionResponse = await api.get(`/sessions/${sessionName}`);
       if (sessionResponse.success) {
         const newState = sessionResponse.data.state;
         
@@ -1191,7 +1185,7 @@ async function chatLoop(sessionId, options = {}) {
       clearPrompt();
       promptVisible = false;
       console.log(chalk.green('◊ Detached from session. Session continues running.'));
-      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc session restore ${sessionId}`));
+      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc session restore ${sessionName}`));
       process.exit(0);
     }
 
@@ -1202,7 +1196,7 @@ async function chatLoop(sessionId, options = {}) {
     if (userInput === '/status') {
       clearPrompt(); // Short command, no enter to clear
       promptVisible = false;
-      await showSessionStatus(sessionId);
+      await showSessionStatus(sessionName);
       shouldSendMessage = false;
     }
     // Handle help command
@@ -1218,18 +1212,8 @@ async function chatLoop(sessionId, options = {}) {
       if (timeoutMatch) {
         clearPrompt(); // Short command, no enter to clear
         promptVisible = false;
-        await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
+        await handleTimeoutCommand(sessionName, parseInt(timeoutMatch[1], 10));
         shouldSendMessage = false;
-      }
-      // Handle name commands
-      else {
-        const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
-        if (nameMatch) {
-          clearPrompt(); // Short command, no enter to clear
-          promptVisible = false;
-          await handleNameCommand(sessionId, nameMatch[1]);
-          shouldSendMessage = false;
-        }
       }
     }
     
@@ -1241,7 +1225,7 @@ async function chatLoop(sessionId, options = {}) {
       // Send message to session - clear with enter since it's regular input
       clearPrompt();
       promptVisible = false;
-      await sendMessage(sessionId, userInput);
+      await sendMessage(sessionName, userInput);
     }
   });
 
@@ -1252,7 +1236,7 @@ async function chatLoop(sessionId, options = {}) {
     
     // Close the session on the server silently
     try {
-      await api.post(`/sessions/${sessionId}/close`);
+      await api.post(`/sessions/${sessionName}/close`);
     } catch (error) {
       // Ignore all errors during cleanup
     }
@@ -1266,7 +1250,7 @@ async function chatLoop(sessionId, options = {}) {
   process.on('SIGINT', () => cleanup());
   process.on('SIGTERM', () => cleanup());
 
-  async function sendMessage(sessionId, userInput) {
+  async function sendMessage(sessionName, userInput) {
     console.log(chalk.green('> ') + chalk.white(userInput));
     
     // Show prompt with current actual state
@@ -1274,7 +1258,7 @@ async function chatLoop(sessionId, options = {}) {
     promptVisible = true;
 
     try {
-      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+      const sendResponse = await api.post(`/sessions/${sessionName}/messages`, {
         content: userInput,
         role: 'user'
       });
@@ -1290,7 +1274,7 @@ async function chatLoop(sessionId, options = {}) {
         return;
       }
 
-      await monitorForResponses(sessionId, Date.now(), () => currentSessionState, updateSessionState, () => promptVisible, (visible) => { promptVisible = visible; });
+      await monitorForResponses(sessionName, Date.now(), () => currentSessionState, updateSessionState, () => promptVisible, (visible) => { promptVisible = visible; });
 
     } catch (error) {
       clearPrompt();
@@ -1308,13 +1292,12 @@ async function chatLoop(sessionId, options = {}) {
   });
 }
 
-async function showSessionStatus(sessionId) {
+async function showSessionStatus(sessionName) {
   try {
-    const statusResponse = await api.get(`/sessions/${sessionId}`);
+    const statusResponse = await api.get(`/sessions/${sessionName}`);
     if (statusResponse.success) {
       console.log();
       console.log(chalk.blue('ℹ') + ' Session Status:');
-      console.log(chalk.gray('  ID:'), statusResponse.data.id);
       console.log(chalk.gray('  Name:'), statusResponse.data.name || 'Unnamed');
       console.log(chalk.gray('  State:'), getStateDisplay(statusResponse.data.state));
       console.log(chalk.gray('  Created:'), new Date(statusResponse.data.created_at).toLocaleString());
@@ -1338,10 +1321,10 @@ function showHelp() {
   console.log(chalk.gray('  /quit       '), 'End the session');
 }
 
-async function handleTimeoutCommand(sessionId, timeoutSeconds) {
+async function handleTimeoutCommand(sessionName, timeoutSeconds) {
   if (timeoutSeconds >= 1 && timeoutSeconds <= 3600) {
     try {
-      const updateResponse = await api.put(`/sessions/${sessionId}`, {
+      const updateResponse = await api.put(`/sessions/${sessionName}`, {
         timeout_seconds: timeoutSeconds
       });
       if (updateResponse.success) {
@@ -1357,29 +1340,8 @@ async function handleTimeoutCommand(sessionId, timeoutSeconds) {
   }
 }
 
-async function handleNameCommand(sessionId, newName) {
-  const cleanName = newName.replace(/^["']|["']$/g, '');
-  if (cleanName.length > 0 && cleanName.length <= 100 && /^[a-zA-Z0-9-]+$/.test(cleanName)) {
-    try {
-      const updateResponse = await api.put(`/sessions/${sessionId}`, {
-        name: cleanName
-      });
-      if (updateResponse.success) {
-        console.log(chalk.green('✓') + ` Session name updated to: "${cleanName}"`);
-      } else {
-        console.log(chalk.red('✗ Failed to update name:'), updateResponse.error || 'Unknown error');
-      }
-    } catch (error) {
-      console.log(chalk.red('✗ Failed to update name:'), error.message);
-    }
-  } else {
-    console.log(chalk.red('✗') + ' Invalid session name');
-    console.log(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
-    console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
-  }
-}
 
-async function sessionPublishCommand(sessionId, options) {
+async function sessionPublishCommand(sessionName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1389,13 +1351,12 @@ async function sessionPublishCommand(sessionId, options) {
   }
 
   console.log(chalk.blue('📢 Publishing Raworc Session'));
-  console.log(chalk.gray('Session:'), sessionId);
+  console.log(chalk.gray('Session:'), sessionName);
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
   console.log(chalk.gray('User:'), userName + userType);
 
   // Show publishing permissions (same logic as remix)
-  const data = options.data === undefined ? true : (options.data === 'true' || options.data === true);
   const code = options.code === undefined ? true : (options.code === 'true' || options.code === true);
   const secrets = options.secrets === undefined ? true : (options.secrets === 'true' || options.secrets === true);
   // Canvas is always allowed by default
@@ -1403,7 +1364,6 @@ async function sessionPublishCommand(sessionId, options) {
 
   console.log();
   console.log(chalk.yellow('📋 Remix Permissions:'));
-  console.log(chalk.gray('  Data:'), data ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Code:'), code ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Secrets:'), secrets ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Canvas:'), chalk.green('✓ Allowed'));
@@ -1412,28 +1372,27 @@ async function sessionPublishCommand(sessionId, options) {
   try {
 
     const publishPayload = {
-      data: data,
       code: code,
       secrets: secrets,
       canvas: canvas
     };
 
-    const response = await api.post(`/sessions/${sessionId}/publish`, publishPayload);
+    const response = await api.post(`/sessions/${sessionName}/publish`, publishPayload);
 
     if (!response.success) {
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    console.log(chalk.green('✓') + ` Session published: ${sessionId}`);
+    console.log(chalk.green('✓') + ` Session published: ${sessionName}`);
 
     console.log();
     console.log(chalk.green('✓') + ' Session is now publicly accessible!');
     console.log();
     console.log(chalk.blue('📋 Public Access:'));
-    console.log(chalk.gray('  • View:'), `raworc api published/sessions/${sessionId}`);
+    console.log(chalk.gray('  • View:'), `raworc api published/sessions/${sessionName}`);
     console.log(chalk.gray('  • List all:'), 'raworc api published/sessions');
-    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
+    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionName}`);
     console.log();
 
   } catch (error) {
@@ -1442,7 +1401,7 @@ async function sessionPublishCommand(sessionId, options) {
   }
 }
 
-async function sessionUnpublishCommand(sessionId, options) {
+async function sessionUnpublishCommand(sessionName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1452,7 +1411,7 @@ async function sessionUnpublishCommand(sessionId, options) {
   }
 
   console.log(chalk.blue('🔒 Unpublishing Raworc Session'));
-  console.log(chalk.gray('Session:'), sessionId);
+  console.log(chalk.gray('Session:'), sessionName);
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
   console.log(chalk.gray('User:'), userName + userType);
@@ -1460,14 +1419,14 @@ async function sessionUnpublishCommand(sessionId, options) {
 
   try {
 
-    const response = await api.post(`/sessions/${sessionId}/unpublish`);
+    const response = await api.post(`/sessions/${sessionName}/unpublish`);
 
     if (!response.success) {
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    console.log(chalk.green('✓') + ` Session unpublished: ${sessionId}`);
+    console.log(chalk.green('✓') + ` Session unpublished: ${sessionName}`);
 
     console.log();
     console.log(chalk.green('✓') + ' Session is now private again');
@@ -1478,7 +1437,7 @@ async function sessionUnpublishCommand(sessionId, options) {
   }
 }
 
-async function sessionCloseCommand(sessionId, options) {
+async function sessionCloseCommand(sessionName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1488,13 +1447,13 @@ async function sessionCloseCommand(sessionId, options) {
   }
 
   display.showCommandBox(`${display.icons.stop} Session Close`, {
-    session: sessionId,
+    session: sessionName,
     operation: 'Close and cleanup resources'
   });
 
   try {
-    // Get session details first (to resolve name to ID and show current state)
-    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+    // Get session details first (to show current state)
+    const sessionResponse = await api.get(`/sessions/${sessionName}`);
 
     if (!sessionResponse.success) {
       console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
@@ -1502,8 +1461,8 @@ async function sessionCloseCommand(sessionId, options) {
     }
 
     const session = sessionResponse.data;
-    // Update sessionId to actual UUID for consistent display
-    sessionId = session.id;
+    // Update sessionName to actual name for consistent display
+    sessionName = session.name;
 console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
 
     // Check if session is already closed
@@ -1513,21 +1472,21 @@ console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
     }
 
     // Close the session
-    const closeResponse = await api.post(`/sessions/${sessionId}/close`);
+    const closeResponse = await api.post(`/sessions/${sessionName}/close`);
 
     if (!closeResponse.success) {
       display.error('Close failed: ' + closeResponse.error);
       process.exit(1);
     }
 
-    display.success(`Session closed: ${sessionId}`);
+    display.success(`Session closed: ${sessionName}`);
 
     console.log();
     display.success('Session has been closed and resources cleaned up');
     console.log();
     display.info('Session Operations:');
-    console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionId}`);
-    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionId}`);
+    console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionName}`);
+    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionName}`);
     console.log();
 
   } catch (error) {

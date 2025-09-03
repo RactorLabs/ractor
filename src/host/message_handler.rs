@@ -327,14 +327,6 @@ Working Directory and File Operations:
     - Store development documentation and README files
     - Example: /session/code/my_script.py, /session/code/package.json
 
-  /session/data/ - Session-specific data and working files:
-    - Store input data files, datasets, and raw materials
-    - Save processing results, outputs, and generated reports
-    - Keep temporary files and intermediate processing stages
-    - Place downloaded files, API responses, and external data
-    - Store analysis results and debugging information
-    - Example: /session/data/dataset.csv, /session/data/results.json
-
   /session/logs/ - Command execution logs and system activity:
     - Automatically stores individual bash command execution logs
     - Each bash command creates a timestamped log file (bash_TIMESTAMP.log)
@@ -374,8 +366,7 @@ Special Files with Automatic Processing:
     - Runs once at the beginning of each session (including session restores)
     - Perfect for installing dependencies, setting up tools, or preparing the environment
 
-- Use /session/code/ for anything that is executable, reusable, or represents project structure
-- Use /session/data/ for files that are consumed, processed, or generated during work
+- Use /session/code/ for all files including executables, data, project structure, and working files
 - Use /session/canvas/ for HTML files and web assets that provide visual displays to users
 - /session/logs/ contains automatic execution logs - not for user files
 - All file paths should be relative to /session/ unless specifically working with system files
@@ -396,8 +387,7 @@ Guidelines:
 - Choose the right tool: bash for operations, text_editor for files, web_search for current info
 - Respect user privacy and security
 - When creating files, organize them appropriately:
-  - Save source code, scripts, and project files to /session/code/
-  - Save data files, results, and working materials to /session/data/
+  - Save all files including source code, data, scripts, and project files to /session/code/
   - Save HTML files and visual displays to /session/canvas/
   - Create /session/code/instructions.md for persistent session context (auto-loaded)
   - Create /session/code/setup.sh for environment initialization (auto-executed)
@@ -410,7 +400,7 @@ Guidelines:
   - Example: index.html -> links to -> report.html, chart.html, dashboard/
 - Assume the current working directory is /session/
 - Show command outputs to users when relevant
-- Organize files logically: code in /session/code/, data in /session/data/, visuals in /session/canvas/
+- Organize files logically: all working files in /session/code/, visuals in /session/canvas/
 
 Current session context:
 - This is an isolated session environment with persistent storage

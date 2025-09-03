@@ -69,13 +69,13 @@ raworc session
 # Note the session ID (shown in status)
 
 # Close the session (saves resources)
-raworc api sessions/{session-id}/close -m post
+raworc api sessions/{session-name}/close -m post
 
 # Later, restore the session
-raworc api sessions/{session-id}/restore -m post
+raworc api sessions/{session-name}/restore -m post
 
 # Continue working with restored session
-raworc session restore {session-id}
+raworc session restore {session-name}
 ```
 
 ### Restore Features
@@ -133,7 +133,7 @@ Remix creates a new session based on an existing one, allowing you to branch you
 
 ```bash
 # Create a remix from existing session
-raworc session remix {source-session-id}
+raworc session remix {source-session-name}
 
 # The new session starts with:
 # - All files from the source session
@@ -238,10 +238,10 @@ init → idle → busy → closed → errored
 Monitor state transitions:
 ```bash
 # Check session state
-raworc api sessions/{session-id}
+raworc api sessions/{session-name}
 
 # Watch for state changes
-watch -n 2 'raworc api sessions/{session-id} | grep state'
+watch -n 2 'raworc api sessions/{session-name} | grep state'
 ```
 
 ### Bulk Session Operations

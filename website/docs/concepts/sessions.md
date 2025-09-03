@@ -72,12 +72,12 @@ init → idle → busy → closed → errored
 Each session runs in an isolated Docker container with:
 
 ```
-raworc_session_{session-id}/
-├── /session/code/            # Instructions and setup scripts
+raworc_session_{session-name}/
+├── /session/code/            # User code, data, and project files
 │   ├── instructions.md      # Host instructions
 │   └── setup.sh            # Environment setup script
-├── /session/data/           # Persistent user data
 ├── /session/secrets/        # Environment secrets as files
+├── /session/canvas/         # HTML files and web assets
 └── /session/logs/           # Host execution logs
 ```
 
@@ -85,8 +85,8 @@ raworc_session_{session-id}/
 
 Sessions use persistent Docker volumes for data that survives container lifecycle:
 
-- **Volume Name**: `raworc_session_data_{session-id}`
-- **Mount Point**: `/session/` (code, data, secrets, logs)
+- **Volume Name**: `raworc_session_data_{session-name}`
+- **Mount Point**: `/session/` (code, secrets, canvas, logs)
 - **Persistence**: Survives close/restore operations
 - **Cleanup**: Removed only when session is deleted
 
@@ -167,7 +167,7 @@ raworc api sessions -m post -b '{
 
 ### Session Messaging
 ```bash
-raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
+raworc api sessions/{session-name}/messages -m post -b '{"content":"Hello"}'
 ```
 
 **Flow:**
@@ -180,7 +180,7 @@ raworc api sessions/{session-id}/messages -m post -b '{"content":"Hello"}'
 
 ### Close Session
 ```bash
-raworc api sessions/{session-id}/close -m post
+raworc api sessions/{session-name}/close -m post
 ```
 
 **Flow:**
@@ -191,7 +191,7 @@ raworc api sessions/{session-id}/close -m post
 
 ### Restore Session
 ```bash
-raworc api sessions/{session-id}/restore -m post
+raworc api sessions/{session-name}/restore -m post
 ```
 
 **Flow:**
@@ -203,7 +203,7 @@ raworc api sessions/{session-id}/restore -m post
 
 ### Delete Session
 ```bash
-raworc api sessions/{session-id} -m delete
+raworc api sessions/{session-name} -m delete
 ```
 
 **Flow:**
@@ -218,13 +218,13 @@ Raworc supports **reliable session persistence** - close sessions to save resour
 
 ```bash
 # Close session (preserves state)
-raworc api sessions/{session-id}/close -m post
+raworc api sessions/{session-name}/close -m post
 
 # Restore session later  
-raworc api sessions/{session-id}/restore -m post
+raworc api sessions/{session-name}/restore -m post
 
 # Continue with new messages
-raworc session restore {session-id}
+raworc session restore {session-name}
 ```
 
 **Key Features:**
@@ -239,14 +239,14 @@ Create new sessions based on existing ones with selective content copying:
 
 ```bash
 # CLI usage with selective copying
-raworc session remix {source-session-id}
-raworc session remix {source-session-id} --data false
-raworc session remix {source-session-id} --code false
-raworc session remix {source-session-id} --secrets false
-raworc session remix {source-session-id} --name "new-version" --secrets false --data true --code false
+raworc session remix {source-session-name}
+raworc session remix {source-session-name} --data false
+raworc session remix {source-session-name} --code false
+raworc session remix {source-session-name} --secrets false
+raworc session remix {source-session-name} --name "new-version" --secrets false --data true --code false
 
 # API usage
-raworc api sessions/{source-session-id}/remix -m post -b '{
+raworc api sessions/{source-session-name}/remix -m post -b '{
   "name": "experiment-1",
   "data": true,
   "code": false,

@@ -71,4 +71,4 @@ WORKDIR /session
 # Configure environment variables for session structure
 ENV RAWORC_SESSION_DIR=/session
 
-CMD ["raworc-host", "--api-url", "http://raworc_server:9000", "--session-id", "unknown", "--api-key", "unknown"]
+CMD ["raworc-host", "--api-url", "http://raworc_server:9000", "--session-name", "unknown", "--api-key", "unknown"]

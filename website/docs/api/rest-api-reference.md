@@ -559,7 +559,7 @@ Create a new Host session based on an existing session with selective content co
 **Response**: `200 OK`
 ```json
 {
-  "id": "new-session-id",
+  "id": "new-session-name",
   "name": "my-new-session",
   "state": "init",
   "parent_session_id": "61549530-3095-4cbf-b379-cd32416f626d",

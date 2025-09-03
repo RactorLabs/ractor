@@ -1,18 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use uuid::Uuid;
+// Removed uuid::Uuid - no longer using UUIDs in v0.4.0
 use super::constants::SESSION_STATE_DELETED;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
-    pub id: String,
+    pub name: String,  // Primary key - no more UUID id
     pub created_by: String,
-    pub name: Option<String>,
     pub state: String,
-    pub container_id: Option<String>,
-    pub persistent_volume_id: Option<String>,
-    pub parent_session_id: Option<String>,
+    pub parent_session_name: Option<String>,  // Changed from parent_session_id
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
@@ -23,14 +20,15 @@ pub struct Session {
     pub timeout_seconds: i32,
     pub auto_close_at: Option<DateTime<Utc>>,
     pub canvas_port: Option<i32>,
+    // Removed: id, container_id, persistent_volume_id (derived from name)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateSessionRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
-    #[serde(default, deserialize_with = "deserialize_valid_name")]
-    pub name: Option<String>,
+    #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
+    pub name: String,
     #[serde(default)]
     pub secrets: std::collections::HashMap<String, String>,
     #[serde(default)]
@@ -47,10 +45,9 @@ pub struct CreateSessionRequest {
 pub struct RemixSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
-    #[serde(default, deserialize_with = "deserialize_valid_name")]
-    pub name: Option<String>,
-    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
-    pub data: bool,
+    #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
+    pub name: String,
+    // Removed data field - data folder no longer exists
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub code: bool,
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
@@ -63,8 +60,7 @@ pub struct RemixSessionRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublishSessionRequest {
-    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
-    pub data: bool,
+    // Removed data field - data folder no longer exists
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub code: bool,
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
@@ -77,17 +73,13 @@ pub struct PublishSessionRequest {
 pub struct UpdateSessionStateRequest {
     pub state: String,
     #[serde(default)]
-    pub container_id: Option<String>,
-    #[serde(default)]
-    pub persistent_volume_id: Option<String>,
-    #[serde(default)]
     pub canvas_port: Option<i32>,
+    // Removed: container_id, persistent_volume_id (derived from name)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateSessionRequest {
-    #[serde(default, deserialize_with = "deserialize_valid_name")]
-    pub name: Option<String>,
+    // Removed name field - names cannot be changed in v0.4.0
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
@@ -317,15 +309,60 @@ where
     deserializer.deserialize_any(ValidNameVisitor)
 }
 
-
+// Custom deserializer for required name validation (v0.4.0: names are mandatory)
+fn deserialize_required_name<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+    
+    struct RequiredNameVisitor;
+    
+    impl<'de> Visitor<'de> for RequiredNameVisitor {
+        type Value = String;
+        
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a required valid name (must start with letter, contain only lowercase letters/numbers/hyphens, max 64 chars)")
+        }
+        
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            if value.is_empty() {
+                return Err(E::custom("name is required and cannot be empty"));
+            }
+            
+            if value.len() > 64 {
+                return Err(E::custom("name too long (max 64 characters)"));
+            }
+            
+            // v0.4.0 strict validation: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
+            if !value.chars().next().unwrap_or(' ').is_ascii_lowercase() {
+                return Err(E::custom("name must start with a lowercase letter"));
+            }
+            
+            if value.len() > 1 && !value.chars().last().unwrap_or(' ').is_ascii_alphanumeric() {
+                return Err(E::custom("name must end with a letter or number"));
+            }
+            
+            if !value.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+                return Err(E::custom("name must contain only lowercase letters, numbers, and hyphens"));
+            }
+            
+            Ok(value.to_string())
+        }
+    }
+    
+    deserializer.deserialize_str(RequiredNameVisitor)
+}
 
 // Database queries
 impl Session {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
@@ -338,35 +375,31 @@ impl Session {
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
+    pub async fn find_by_name(pool: &sqlx::MySqlPool, name: &str) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
             FROM sessions
-            WHERE id = ? AND state != 'deleted'
+            WHERE name = ? AND state != 'deleted'
             "#
         )
-        .bind(id)
+        .bind(name)
         .fetch_optional(pool)
         .await
     }
 
-    pub async fn find_by_name(pool: &sqlx::MySqlPool, name: &str, created_by: &str) -> Result<Option<Session>, sqlx::Error> {
+    pub async fn find_by_name_and_creator(pool: &sqlx::MySqlPool, name: &str, created_by: &str) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE name = ? AND created_by = ? AND state != 'deleted'
-            ORDER BY created_at DESC
-            LIMIT 1
             "#
         )
         .bind(name)
@@ -389,9 +422,6 @@ impl Session {
         req: CreateSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
-        // Generate UUID for the session
-        let session_id = Uuid::new_v4();
-        
         // Calculate timeout - auto_close_at will be set when session becomes idle
         let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
@@ -400,16 +430,15 @@ impl Session {
         let canvas_port = Self::find_available_port().await
             .map_err(|e| sqlx::Error::Io(e))?;
 
-        // Insert the session
+        // Insert the session using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, created_by, name, metadata, timeout_seconds, auto_close_at, canvas_port)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (name, created_by, metadata, timeout_seconds, auto_close_at, canvas_port)
+            VALUES (?, ?, ?, ?, ?, ?)
             "#
         )
-        .bind(session_id.to_string())
-        .bind(created_by)
         .bind(&req.name)
+        .bind(created_by)
         .bind(&req.metadata)
         .bind(timeout)
         .bind(auto_close_at)
@@ -418,24 +447,23 @@ impl Session {
         .await?;
         
         // Fetch the created session
-        let session = Self::find_by_id(pool, &session_id.to_string()).await?.unwrap();
+        let session = Self::find_by_name(pool, &req.name).await?.unwrap();
 
         Ok(session)
     }
 
     pub async fn remix(
         pool: &sqlx::MySqlPool,
-        parent_id: &str,
+        parent_name: &str,
         req: RemixSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Get parent session
-        let parent = Self::find_by_id(pool, parent_id)
+        let parent = Self::find_by_name(pool, parent_name)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
         // Create new session based on parent (inherit timeout)
-        let session_id = Uuid::new_v4();
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
         
         // Allocate Canvas port for remix session
@@ -445,16 +473,15 @@ impl Session {
         sqlx::query(
             r#"
             INSERT INTO sessions (
-                id, created_by, name,
-                parent_session_id, metadata, timeout_seconds, auto_close_at, canvas_port
+                name, created_by, parent_session_name,
+                metadata, timeout_seconds, auto_close_at, canvas_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#
         )
-        .bind(session_id.to_string())
-        .bind(created_by) // Use actual remixer as owner
         .bind(&req.name)
-        .bind(parent_id)
+        .bind(created_by) // Use actual remixer as owner
+        .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .bind(parent.timeout_seconds) // Inherit timeout from parent
         .bind(auto_close_at)
@@ -463,7 +490,7 @@ impl Session {
         .await?;
         
         // Fetch the created session
-        let session = Self::find_by_id(pool, &session_id.to_string()).await?.unwrap();
+        let session = Self::find_by_name(pool, &req.name).await?.unwrap();
 
         Ok(session)
     }
@@ -471,11 +498,11 @@ impl Session {
     #[allow(dead_code)]
     pub async fn update_state(
         pool: &sqlx::MySqlPool,
-        id: &str,
+        name: &str,
         req: UpdateSessionStateRequest,
     ) -> Result<Option<Session>, sqlx::Error> {
         // Check current state and validate transition
-        let current = Self::find_by_id(pool, id).await?;
+        let current = Self::find_by_name(pool, name).await?;
         if let Some(session) = current {
             if !super::state_helpers::can_transition_to(&session.state, &req.state) {
                 return Err(sqlx::Error::Protocol(format!(
@@ -492,19 +519,13 @@ impl Session {
 
 
 
-        if req.container_id.is_some() {
-            query_builder.push_str(", container_id = ?");
-        }
-
-        if req.persistent_volume_id.is_some() {
-            query_builder.push_str(", persistent_volume_id = ?");
-        }
+        // Removed container_id and persistent_volume_id - derived from name in v0.4.0
 
         if req.canvas_port.is_some() {
             query_builder.push_str(", canvas_port = ?");
         }
 
-        query_builder.push_str(" WHERE id = ?");
+        query_builder.push_str(" WHERE name = ?");
 
         // Build and execute query
         let mut query = sqlx::query(&query_builder)
@@ -513,24 +534,18 @@ impl Session {
 
 
 
-        if let Some(container_id) = req.container_id {
-            query = query.bind(container_id);
-        }
-
-        if let Some(pv_id) = req.persistent_volume_id {
-            query = query.bind(pv_id);
-        }
+        // Removed container_id and persistent_volume_id bindings
 
         if let Some(canvas_port) = req.canvas_port {
             query = query.bind(canvas_port);
         }
 
-        query = query.bind(id);
+        query = query.bind(name);
 
         let result = query.execute(pool).await?;
         
         if result.rows_affected() > 0 {
-            Self::find_by_id(pool, id).await
+            Self::find_by_name(pool, name).await
         } else {
             Ok(None)
         }
@@ -538,15 +553,12 @@ impl Session {
 
     pub async fn update(
         pool: &sqlx::MySqlPool,
-        id: &str,
+        name: &str,
         req: UpdateSessionRequest,
     ) -> Result<Option<Session>, sqlx::Error> {
         let mut query_builder = String::from("UPDATE sessions SET");
         let mut updates = Vec::new();
 
-        if req.name.is_some() {
-            updates.push(" name = ?".to_string());
-        }
 
 
         if req.metadata.is_some() {
@@ -563,13 +575,10 @@ impl Session {
         }
 
         query_builder.push_str(&updates.join(","));
-        query_builder.push_str(" WHERE id = ? AND state != 'deleted'");
+        query_builder.push_str(" WHERE name = ? AND state != 'deleted'");
 
         let mut query = sqlx::query(&query_builder);
 
-        if let Some(name) = req.name {
-            query = query.bind(name);
-        }
 
 
         if let Some(metadata) = req.metadata {
@@ -581,22 +590,22 @@ impl Session {
             query = query.bind(timeout_seconds); // For the DATE_ADD calculation
         }
 
-        query = query.bind(id);
+        query = query.bind(name);
 
         let result = query.execute(pool).await?;
         
         if result.rows_affected() > 0 {
-            Self::find_by_id(pool, id).await
+            Self::find_by_name(pool, name).await
         } else {
             Ok(None)
         }
     }
 
-    pub async fn delete(pool: &sqlx::MySqlPool, id: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(r#"UPDATE sessions SET state = ? WHERE id = ? AND state != ?"#
+    pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(r#"UPDATE sessions SET state = ? WHERE name = ? AND state != ?"#
         )
         .bind(SESSION_STATE_DELETED)
-        .bind(id)
+        .bind(name)
         .bind(SESSION_STATE_DELETED)
         .execute(pool)
         .await?;
@@ -606,12 +615,11 @@ impl Session {
 
     pub async fn publish(
         pool: &sqlx::MySqlPool,
-        id: &str,
+        name: &str,
         published_by: &str,
         req: PublishSessionRequest,
     ) -> Result<Option<Session>, sqlx::Error> {
         let publish_permissions = serde_json::json!({
-            "data": req.data,
             "code": req.code,
             "secrets": req.secrets,
             "canvas": true // Canvas is always allowed
@@ -624,39 +632,39 @@ impl Session {
                 published_at = NOW(), 
                 published_by = ?,
                 publish_permissions = ?
-            WHERE id = ? AND state != 'deleted'
+            WHERE name = ? AND state != 'deleted'
             "#
         )
         .bind(published_by)
         .bind(&publish_permissions)
-        .bind(id)
+        .bind(name)
         .execute(pool)
         .await?;
 
         if result.rows_affected() > 0 {
-            Self::find_by_id(pool, id).await
+            Self::find_by_name(pool, name).await
         } else {
             Ok(None)
         }
     }
 
-    pub async fn unpublish(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
+    pub async fn unpublish(pool: &sqlx::MySqlPool, name: &str) -> Result<Option<Session>, sqlx::Error> {
         let result = sqlx::query(
             r#"
             UPDATE sessions 
             SET is_published = false, 
                 published_at = NULL, 
                 published_by = NULL,
-                publish_permissions = JSON_OBJECT('data', true, 'code', true, 'secrets', true)
-            WHERE id = ? AND state != 'deleted'
+                publish_permissions = JSON_OBJECT('code', true, 'secrets', true)
+            WHERE name = ? AND state != 'deleted'
             "#
         )
-        .bind(id)
+        .bind(name)
         .execute(pool)
         .await?;
 
         if result.rows_affected() > 0 {
-            Self::find_by_id(pool, id).await
+            Self::find_by_name(pool, name).await
         } else {
             Ok(None)
         }
@@ -665,8 +673,7 @@ impl Session {
     pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
@@ -682,8 +689,7 @@ impl Session {
     pub async fn find_published_by_name(pool: &sqlx::MySqlPool, name: &str) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
@@ -701,8 +707,7 @@ impl Session {
     pub async fn find_sessions_to_auto_close(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, created_by, name, state,
-                   container_id, persistent_volume_id, parent_session_id,
+            SELECT name, created_by, state, parent_session_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, canvas_port
@@ -718,28 +723,28 @@ impl Session {
         .await
     }
 
-    pub async fn extend_session_timeout(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<Session>, sqlx::Error> {
+    pub async fn extend_session_timeout(pool: &sqlx::MySqlPool, name: &str) -> Result<Option<Session>, sqlx::Error> {
         // Extend timeout based on last activity or current time
         let result = sqlx::query(
             r#"
             UPDATE sessions 
             SET auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
                 last_activity_at = NOW()
-            WHERE id = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
+            WHERE name = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
             "#
         )
-        .bind(id)
+        .bind(name)
         .execute(pool)
         .await?;
 
         if result.rows_affected() > 0 {
-            Self::find_by_id(pool, id).await
+            Self::find_by_name(pool, name).await
         } else {
             Ok(None)
         }
     }
 
-    pub async fn update_session_to_idle(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
+    pub async fn update_session_to_idle(pool: &sqlx::MySqlPool, name: &str) -> Result<(), sqlx::Error> {
         // Set session to idle and calculate auto_close_at from now
         sqlx::query(
             r#"
@@ -747,17 +752,17 @@ impl Session {
             SET state = 'idle',
                 last_activity_at = NOW(),
                 auto_close_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
-            WHERE id = ? AND state != 'deleted'
+            WHERE name = ? AND state != 'deleted'
             "#
         )
-        .bind(id)
+        .bind(name)
         .execute(pool)
         .await?;
 
         Ok(())
     }
 
-    pub async fn update_session_to_busy(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
+    pub async fn update_session_to_busy(pool: &sqlx::MySqlPool, name: &str) -> Result<(), sqlx::Error> {
         // Set session to busy and clear auto_close_at (no timeout while active)
         sqlx::query(
             r#"
@@ -765,10 +770,10 @@ impl Session {
             SET state = 'busy',
                 last_activity_at = NOW(),
                 auto_close_at = NULL
-            WHERE id = ? AND state != 'deleted'
+            WHERE name = ? AND state != 'deleted'
             "#
         )
-        .bind(id)
+        .bind(name)
         .execute(pool)
         .await?;
 

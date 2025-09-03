@@ -118,19 +118,19 @@ raworc session [options]
 raworc session start [options]              # Explicit 'start' command
 
 # Restore existing session
-raworc session restore <session-id-or-name>
+raworc session restore <session-name-or-name>
 
 # Create remix from existing session
-raworc session remix <session-id-or-name> [options]
+raworc session remix <session-name-or-name> [options]
 
 # Publish session for public access
-raworc session publish <session-id-or-name> [options]
+raworc session publish <session-name-or-name> [options]
 
 # Remove session from public access
-raworc session unpublish <session-id-or-name>
+raworc session unpublish <session-name-or-name>
 
 # Close active session
-raworc session close <session-id-or-name>
+raworc session close <session-name-or-name>
 ```
 
 ### Starting New Sessions
@@ -357,32 +357,32 @@ raworc api sessions -m post -b '{
 raworc api sessions
 
 # Get specific session details (by ID or name)
-raworc api sessions/{session-id-or-name}
+raworc api sessions/{session-name-or-name}
 
 # Send message to Host
-raworc api sessions/{session-id}/messages -m post -b '{"content":"Generate a Python script to calculate fibonacci numbers"}'
+raworc api sessions/{session-name}/messages -m post -b '{"content":"Generate a Python script to calculate fibonacci numbers"}'
 
 # View messages
-raworc api sessions/{session-id}/messages
+raworc api sessions/{session-name}/messages
 
 # Get latest messages (limit to last 10)
-raworc api "sessions/{session-id}/messages?limit=10"
+raworc api "sessions/{session-name}/messages?limit=10"
 
 # Close session (saves resources, preserves data)
-raworc api sessions/{session-id}/close -m post
+raworc api sessions/{session-name}/close -m post
 
 # Restore closed session (with optional prompt)
-raworc api sessions/{session-id-or-name}/restore -m post
-raworc api sessions/{session-id-or-name}/restore -m post -b '{"prompt":"Continue from where we left off"}'
+raworc api sessions/{session-name-or-name}/restore -m post
+raworc api sessions/{session-name-or-name}/restore -m post -b '{"prompt":"Continue from where we left off"}'
 
 # Mark session as busy (prevents timeout)
-raworc api sessions/{session-id-or-name}/busy -m post
+raworc api sessions/{session-name-or-name}/busy -m post
 
 # Mark session as idle (enables timeout)
-raworc api sessions/{session-id-or-name}/idle -m post
+raworc api sessions/{session-name-or-name}/idle -m post
 
 # Create remix from session
-raworc api sessions/{session-id-or-name}/remix -m post -b '{
+raworc api sessions/{session-name-or-name}/remix -m post -b '{
   "name": "experiment-1",
   "data": true,
   "code": true,
@@ -390,23 +390,23 @@ raworc api sessions/{session-id-or-name}/remix -m post -b '{
 }'
 
 # Publish session for public access
-raworc api sessions/{session-id-or-name}/publish -m post -b '{
+raworc api sessions/{session-name-or-name}/publish -m post -b '{
   "data": true,
   "code": true,
   "secrets": false
 }'
 
 # Unpublish session
-raworc api sessions/{session-id-or-name}/unpublish -m post
+raworc api sessions/{session-name-or-name}/unpublish -m post
 
 # View published sessions (no auth required)
 raworc api published/sessions
 
 # Get published session (no auth required)
-raworc api published/sessions/{session-id-or-name}
+raworc api published/sessions/{session-name-or-name}
 
 # Terminate session permanently
-raworc api sessions/{session-id-or-name} -m delete
+raworc api sessions/{session-name-or-name} -m delete
 ```
 
 ## 4. Session Configuration Options
@@ -462,19 +462,19 @@ Create new sessions based on existing ones with selective copying:
 
 ```bash
 # Default remix (copies everything)
-raworc session remix {source-session-id}
+raworc session remix {source-session-name}
 
 # Selective copying
-raworc session remix {source-session-id} --data false      # Skip data files
-raworc session remix {source-session-id} --code false      # Skip code files
+raworc session remix {source-session-name} --data false      # Skip data files
+raworc session remix {source-session-name} --code false      # Skip code files
 
 # Combination
-raworc session remix {source-session-id} --data false --code false
+raworc session remix {source-session-name} --data false --code false
 
 # API version with selective copying
-raworc api sessions/{source-session-id}/remix -m post -b '{
+raworc api sessions/{source-session-name}/remix -m post -b '{
   "metadata": {
-    "remixed_from": "{source-session-id}",
+    "remixed_from": "{source-session-name}",
     "purpose": "experiment with new approach"
   },
   "data": true,

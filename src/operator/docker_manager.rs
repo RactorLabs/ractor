@@ -39,11 +39,11 @@ impl DockerManager {
     
 
     // NEW: Create session volume with explicit naming
-    async fn create_session_volume(&self, session_id: &str) -> Result<String> {
-        let volume_name = format!("raworc_session_data_{}", session_id);
+    async fn create_session_volume(&self, session_name: &str) -> Result<String> {
+        let volume_name = format!("raworc_session_data_{}", session_name);
         
         let mut labels = HashMap::new();
-        labels.insert("raworc.session_id".to_string(), session_id.to_string());
+        labels.insert("raworc.session_name".to_string(), session_name.to_string());
         labels.insert("raworc.type".to_string(), "host_session_volume".to_string());
         labels.insert("raworc.created_at".to_string(), chrono::Utc::now().to_rfc3339());
         
@@ -57,78 +57,59 @@ impl DockerManager {
         self.docker.create_volume(volume_config).await?;
         info!("Created session volume: {}", volume_name);
         
-        // Update database with volume ID
-        self.update_session_volume(session_id, &volume_name).await?;
         
         Ok(volume_name)
     }
 
-    // NEW: Update session with volume ID
-    async fn update_session_volume(&self, session_id: &str, volume_name: &str) -> Result<()> {
-        sqlx::query("UPDATE sessions SET persistent_volume_id = ? WHERE id = ?")
-            .bind(volume_name)
-            .bind(session_id)
-            .execute(&self.db_pool)
-            .await?;
-        Ok(())
+    // Get session volume name (derived from session name)
+    fn get_session_volume_name(&self, session_name: &str) -> String {
+        format!("raworc_session_data_{}", session_name)
     }
 
-    // NEW: Get session volume with new naming
-    async fn get_session_volume(&self, session_id: &str) -> Result<Option<String>> {
-        // First check database
-        let result = sqlx::query_as::<_, (Option<String>,)>(
-            "SELECT persistent_volume_id FROM sessions WHERE id = ?"
-        )
-        .bind(session_id)
-        .fetch_optional(&self.db_pool)
-        .await?;
-        
-        if let Some((Some(volume_name),)) = result {
-            return Ok(Some(volume_name));
-        }
-        
-        // Fallback: check if volume exists with expected name
-        let expected_volume_name = format!("raworc_session_data_{}", session_id);
-        match self.docker.inspect_volume(&expected_volume_name).await {
-            Ok(_) => {
-                // Volume exists but not in database, update database
-                self.update_session_volume(session_id, &expected_volume_name).await?;
-                Ok(Some(expected_volume_name))
-            }
-            Err(_) => Ok(None),
+    // Get session container name (derived from session name)
+    fn get_session_container_name(&self, session_name: &str) -> String {
+        format!("raworc_session_{}", session_name)
+    }
+
+    // Check if session volume exists
+    async fn session_volume_exists(&self, session_name: &str) -> Result<bool> {
+        let volume_name = self.get_session_volume_name(session_name);
+        match self.docker.inspect_volume(&volume_name).await {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false)
         }
     }
 
     // Initialize session directory structure with secrets, instructions, and setup
-    async fn initialize_session_structure(&self, session_id: &str, secrets: &HashMap<String, String>, instructions: Option<&str>, setup: Option<&str>) -> Result<()> {
-        info!("Initializing session structure for session {}", session_id);
+    async fn initialize_session_structure(&self, session_name: &str, secrets: &HashMap<String, String>, instructions: Option<&str>, setup: Option<&str>) -> Result<()> {
+        info!("Initializing session structure for session {}", session_name);
         
-        // Create base directories including logs and canvas
-        let init_script = "mkdir -p /session/{code,data,secrets,logs,canvas}
+        // Create base directories (no data folder in v0.4.0)
+        let init_script = "mkdir -p /session/{code,secrets,logs,canvas}
 chmod -R 755 /session
-echo 'Session directories created (including logs and canvas)'
+echo 'Session directories created (code, secrets, logs, canvas)'
 ";
 
-        self.execute_command(session_id, init_script).await?;
+        self.execute_command(session_name, init_script).await?;
         
         // Write secrets to /session/secrets/ folder
         for (key, value) in secrets {
             let write_secret_command = format!("echo '{}' > /session/secrets/{}", value, key);
-            self.execute_command(session_id, &write_secret_command).await?;
+            self.execute_command(session_name, &write_secret_command).await?;
         }
         
         // Write instructions if provided
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
             let write_instructions_command = format!("echo '{}' > /session/code/instructions.md", escaped_instructions);
-            self.execute_command(session_id, &write_instructions_command).await?;
+            self.execute_command(session_name, &write_instructions_command).await?;
         }
         
         // Write and make setup script executable if provided
         if let Some(setup_content) = setup {
             let escaped_setup = setup_content.replace("'", "'\"'\"'");
             let write_setup_command = format!("echo '{}' > /session/code/setup.sh && chmod +x /session/code/setup.sh", escaped_setup);
-            self.execute_command(session_id, &write_setup_command).await?;
+            self.execute_command(session_name, &write_setup_command).await?;
         }
         
         info!("Session structure initialized with {} secrets", secrets.len());
@@ -144,18 +125,13 @@ echo 'Session directories created (including logs and canvas)'
 
 
     // NEW: Cleanup session volume
-    pub async fn cleanup_session_volume(&self, session_id: &str) -> Result<()> {
-        let expected_volume_name = format!("raworc_session_data_{}", session_id);
+    pub async fn cleanup_session_volume(&self, session_name: &str) -> Result<()> {
+        let expected_volume_name = format!("raworc_session_data_{}", session_name);
         
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
                 info!("Removed session volume: {}", expected_volume_name);
                 
-                // Clear from database
-                sqlx::query("UPDATE sessions SET persistent_volume_id = NULL WHERE id = ?")
-                    .bind(session_id)
-                    .execute(&self.db_pool)
-                    .await?;
             }
             Err(e) => warn!("Failed to remove session volume {}: {}", expected_volume_name, e),
         }
@@ -164,20 +140,20 @@ echo 'Session directories created (including logs and canvas)'
     }
     
 
-    pub async fn create_container_with_volume_copy(&self, session_id: &str, parent_session_id: &str) -> Result<String> {
-        info!("Creating remix session {} with volume copy from {}", session_id, parent_session_id);
+    pub async fn create_container_with_volume_copy(&self, session_name: &str, parent_session_name: &str) -> Result<String> {
+        info!("Creating remix session {} with volume copy from {}", session_name, parent_session_name);
         
         // First create the container normally (this creates the empty target volume)
-        let container_name = self.create_container(session_id).await?;
+        let container_name = self.create_container(session_name).await?;
         
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
-        let new_volume = format!("raworc_session_data_{}", session_id);
+        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
+        let new_volume = format!("raworc_session_data_{}", session_name);
         
         info!("Copying volume data from {} to {}", parent_volume, new_volume);
         
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
         
         let config = Config {
             image: Some(self.host_image.clone()),
@@ -266,22 +242,22 @@ echo 'Session directories created (including logs and canvas)'
 
     pub async fn create_container_with_selective_copy(
         &self, 
-        session_id: &str, 
-        parent_session_id: &str,
+        session_name: &str, 
+        parent_session_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_secrets: bool,
         copy_canvas: bool
     ) -> Result<String> {
         info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {}, canvas: {})", 
-              session_id, parent_session_id, copy_data, copy_code, copy_secrets, copy_canvas);
+              session_name, parent_session_name, copy_data, copy_code, copy_secrets, copy_canvas);
         
         // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_id).await?;
+        let session_volume = self.create_session_volume(session_name).await?;
         
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
-        let new_volume = format!("raworc_session_data_{}", session_id);
+        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
+        let new_volume = format!("raworc_session_data_{}", session_name);
         
         info!("Copying selective data from {} to {}", parent_volume, new_volume);
         
@@ -319,7 +295,7 @@ echo 'Session directories created (including logs and canvas)'
         let copy_command = copy_commands.join(" && ");
         
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
         
         let config = Config {
             image: Some(self.host_image.clone()),
@@ -437,15 +413,15 @@ echo 'Session directories created (including logs and canvas)'
         info!("Creating container with {} secrets from copied volume", secrets.len());
         
         // Now create and start the container with the copied secrets as environment variables
-        let container_name = self.create_container_internal(session_id, Some(secrets), instructions, setup).await?;
+        let container_name = self.create_container_internal(session_name, Some(secrets), instructions, setup).await?;
         
         Ok(container_name)
     }
 
     pub async fn create_container_with_selective_copy_and_tokens(
         &self, 
-        session_id: &str, 
-        parent_session_id: &str,
+        session_name: &str, 
+        parent_session_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_secrets: bool,
@@ -457,14 +433,14 @@ echo 'Session directories created (including logs and canvas)'
         task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         info!("Creating remix session {} with selective copy from {} and fresh tokens", 
-              session_id, parent_session_id);
+              session_name, parent_session_name);
         
         // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_id).await?;
+        let session_volume = self.create_session_volume(session_name).await?;
         
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_session_data_{}", parent_session_id);
-        let new_volume = format!("raworc_session_data_{}", session_id);
+        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
+        let new_volume = format!("raworc_session_data_{}", session_name);
         
         info!("Copying selective data from {} to {}", parent_volume, new_volume);
         
@@ -502,7 +478,7 @@ echo 'Session directories created (including logs and canvas)'
         let copy_command = copy_commands.join(" && ");
         
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_id);
+        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
         
         let config = Config {
             image: Some(self.host_image.clone()),
@@ -621,7 +597,7 @@ echo 'Session directories created (including logs and canvas)'
         
         // Now create and start the container with user secrets + generated system tokens
         let container_name = self.create_container_internal_with_tokens(
-            session_id, 
+            session_name, 
             Some(secrets), 
             instructions, 
             setup,
@@ -805,18 +781,18 @@ echo 'Session directories created (including logs and canvas)'
 
     pub async fn create_container_with_params(
         &self, 
-        session_id: &str, 
+        session_name: &str, 
         secrets: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>
     ) -> Result<String> {
-        let container_name = self.create_container_internal(session_id, Some(secrets), instructions, setup).await?;
+        let container_name = self.create_container_internal(session_name, Some(secrets), instructions, setup).await?;
         Ok(container_name)
     }
 
     pub async fn create_container_with_params_and_tokens(
         &self, 
-        session_id: &str, 
+        session_name: &str, 
         secrets: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -827,7 +803,7 @@ echo 'Session directories created (including logs and canvas)'
         task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         let container_name = self.create_container_internal_with_tokens(
-            session_id, 
+            session_name, 
             Some(secrets), 
             instructions, 
             setup,
@@ -840,26 +816,26 @@ echo 'Session directories created (including logs and canvas)'
         Ok(container_name)
     }
 
-    pub async fn create_container(&self, session_id: &str) -> Result<String> {
-        let container_name = self.create_container_internal(session_id, None, None, None).await?;
+    pub async fn create_container(&self, session_name: &str) -> Result<String> {
+        let container_name = self.create_container_internal(session_name, None, None, None).await?;
         Ok(container_name)
     }
     
-    pub async fn restore_container(&self, session_id: &str) -> Result<String> {
+    pub async fn restore_container(&self, session_name: &str) -> Result<String> {
         // Read existing secrets from the volume
-        let volume_name = format!("raworc_session_data_{}", session_id);
-        info!("Restoring container for session {} - reading secrets from volume {}", session_id, volume_name);
+        let volume_name = format!("raworc_session_data_{}", session_name);
+        info!("Restoring container for session {} - reading secrets from volume {}", session_name, volume_name);
         
         let secrets = match self.read_secrets_from_volume(&volume_name).await {
             Ok(s) => {
-                info!("Found {} secrets in volume for session {}", s.len(), session_id);
+                info!("Found {} secrets in volume for session {}", s.len(), session_name);
                 for key in s.keys() {
                     info!("  - Secret: {}", key);
                 }
                 Some(s)
             },
             Err(e) => {
-                warn!("Could not read secrets from volume for session {}: {}", session_id, e);
+                warn!("Could not read secrets from volume for session {}: {}", session_name, e);
                 None
             }
         };
@@ -868,13 +844,13 @@ echo 'Session directories created (including logs and canvas)'
         let instructions = self.read_file_from_volume(&volume_name, "code/instructions.md").await.ok();
         let setup = self.read_file_from_volume(&volume_name, "code/setup.sh").await.ok();
         
-        let container_name = self.create_container_internal(session_id, secrets, instructions, setup).await?;
+        let container_name = self.create_container_internal(session_name, secrets, instructions, setup).await?;
         Ok(container_name)
     }
 
     pub async fn restore_container_with_tokens(
         &self, 
-        session_id: &str,
+        session_name: &str,
         api_key: String,
         raworc_token: String,
         principal: String,
@@ -882,16 +858,16 @@ echo 'Session directories created (including logs and canvas)'
         task_created_at: chrono::DateTime<chrono::Utc>
     ) -> Result<String> {
         // Read existing user secrets from the volume (but generate fresh system tokens)
-        let volume_name = format!("raworc_session_data_{}", session_id);
-        info!("Restoring container for session {} with fresh tokens", session_id);
+        let volume_name = format!("raworc_session_data_{}", session_name);
+        info!("Restoring container for session {} with fresh tokens", session_name);
         
         let secrets = match self.read_secrets_from_volume(&volume_name).await {
             Ok(s) => {
-                info!("Found {} user secrets in volume for session {}", s.len(), session_id);
+                info!("Found {} user secrets in volume for session {}", s.len(), session_name);
                 Some(s)
             },
             Err(e) => {
-                warn!("Could not read secrets from volume for session {}: {}", session_id, e);
+                warn!("Could not read secrets from volume for session {}: {}", session_name, e);
                 None
             }
         };
@@ -901,7 +877,7 @@ echo 'Session directories created (including logs and canvas)'
         let setup = self.read_file_from_volume(&volume_name, "code/setup.sh").await.ok();
         
         let container_name = self.create_container_internal_with_tokens(
-            session_id, 
+            session_name, 
             secrets, 
             instructions, 
             setup,
@@ -916,37 +892,38 @@ echo 'Session directories created (including logs and canvas)'
 
     async fn create_container_internal(
         &self, 
-        session_id: &str, 
+        session_name: &str, 
         secrets: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>
     ) -> Result<String> {
-        let container_name = format!("raworc_session_{session_id}");
+        let container_name = format!("raworc_session_{session_name}");
         
         // Get canvas port from session (already allocated during session creation)
-        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE id = ?")
-            .bind(session_id)
+        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE name = ?")
+            .bind(session_name)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get canvas port from session: {}", e))?
             .ok_or_else(|| anyhow::anyhow!("Session has no canvas port assigned"))?;
         
-        info!("Using Canvas port {} from session {}", canvas_port, session_id);
+        info!("Using Canvas port {} from session {}", canvas_port, session_name);
         
         // Use host image directly for all sessions
         let container_image = self.host_image.clone();
         info!("Creating container {} with host image {}", container_name, container_image);
         
-        info!("Creating container for session {}", session_id);
+        info!("Creating container for session {}", session_name);
 
         // Create or get existing session volume
-        let session_volume = match self.get_session_volume(session_id).await? {
-            Some(existing) => existing,
-            None => self.create_session_volume(session_id).await?,
+        let session_volume = if self.session_volume_exists(session_name).await? {
+            self.get_session_volume_name(session_name)
+        } else {
+            self.create_session_volume(session_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.session".to_string(), session_id.to_string());
+        labels.insert("raworc.session".to_string(), session_name.to_string());
         labels.insert("raworc.managed".to_string(), "true".to_string());
         labels.insert("raworc.volume".to_string(), session_volume.clone());
         
@@ -986,7 +963,7 @@ echo 'Session directories created (including logs and canvas)'
         // Set environment variables for the session structure
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
-            format!("RAWORC_SESSION_ID={}", session_id),
+            format!("RAWORC_SESSION_ID={}", session_name),
             format!("RAWORC_SESSION_DIR=/session"),
         ];
 
@@ -1007,7 +984,7 @@ echo 'Session directories created (including logs and canvas)'
             for (key, value) in secrets_map {
                 env.push(format!("{}={}", key, value));
                 if key != "RAWORC_TOKEN" && key != "RAWORC_PRINCIPAL" && key != "RAWORC_PRINCIPAL_TYPE" {
-                    info!("Adding secret {} as environment variable for session {}", key, session_id);
+                    info!("Adding secret {} as environment variable for session {}", key, session_name);
                 }
             }
         }
@@ -1017,13 +994,13 @@ echo 'Session directories created (including logs and canvas)'
             "raworc-host".to_string(),
             "--api-url".to_string(),
             "http://raworc_server:9000".to_string(),
-            "--session-id".to_string(),
-            session_id.to_string(),
+            "--session-name".to_string(),
+            session_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!("session-{}", &session_id.to_string()[..8])),
+            hostname: Some(format!("session-{}", &session_name[..session_name.len().min(8)])),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
@@ -1057,15 +1034,8 @@ echo 'Session directories created (including logs and canvas)'
         if !self.session_initialized(&session_volume).await? {
             let empty_secrets = HashMap::new();
             let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
-            self.initialize_session_structure(session_id, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
+            self.initialize_session_structure(session_name, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
         }
-
-        // Update database with container ID
-        sqlx::query("UPDATE sessions SET container_id = ? WHERE id = ?")
-            .bind(&container.id)
-            .bind(session_id)
-            .execute(&self.db_pool)
-            .await?;
 
         info!("Container {} created with session volume {} using Canvas port {}", container_name, session_volume, canvas_port);
         Ok(container.id)
@@ -1073,7 +1043,7 @@ echo 'Session directories created (including logs and canvas)'
 
     async fn create_container_internal_with_tokens(
         &self, 
-        session_id: &str, 
+        session_name: &str, 
         secrets: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -1083,32 +1053,33 @@ echo 'Session directories created (including logs and canvas)'
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>
     ) -> Result<String> {
-        let container_name = format!("raworc_session_{session_id}");
+        let container_name = format!("raworc_session_{session_name}");
         
         // Get canvas port from session (already allocated during session creation)
-        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE id = ?")
-            .bind(session_id)
+        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE name = ?")
+            .bind(session_name)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get canvas port from session: {}", e))?
             .ok_or_else(|| anyhow::anyhow!("Session has no canvas port assigned"))?;
         
-        info!("Using Canvas port {} from session {}", canvas_port, session_id);
+        info!("Using Canvas port {} from session {}", canvas_port, session_name);
         
         // Use host image directly for all sessions
         let container_image = self.host_image.clone();
         info!("Creating container {} with host image and generated tokens", container_name);
         
-        info!("Creating container for session {} with fresh tokens", session_id);
+        info!("Creating container for session {} with fresh tokens", session_name);
 
         // Create or get existing session volume
-        let session_volume = match self.get_session_volume(session_id).await? {
-            Some(existing) => existing,
-            None => self.create_session_volume(session_id).await?,
+        let session_volume = if self.session_volume_exists(session_name).await? {
+            self.get_session_volume_name(session_name)
+        } else {
+            self.create_session_volume(session_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.session".to_string(), session_id.to_string());
+        labels.insert("raworc.session".to_string(), session_name.to_string());
         labels.insert("raworc.managed".to_string(), "true".to_string());
         labels.insert("raworc.volume".to_string(), session_volume.clone());
 
@@ -1139,7 +1110,7 @@ echo 'Session directories created (including logs and canvas)'
         // Set environment variables for the session structure
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
-            format!("RAWORC_SESSION_ID={}", session_id),
+            format!("RAWORC_SESSION_ID={}", session_name),
             format!("RAWORC_SESSION_DIR=/session"),
             // Set the generated system tokens directly as environment variables
             format!("ANTHROPIC_API_KEY={}", api_key),
@@ -1169,7 +1140,7 @@ echo 'Session directories created (including logs and canvas)'
                     continue;
                 }
                 env.push(format!("{}={}", key, value));
-                info!("Adding user secret {} as environment variable for session {}", key, session_id);
+                info!("Adding user secret {} as environment variable for session {}", key, session_name);
             }
         }
 
@@ -1178,13 +1149,13 @@ echo 'Session directories created (including logs and canvas)'
             "raworc-host".to_string(),
             "--api-url".to_string(),
             "http://raworc_server:9000".to_string(),
-            "--session-id".to_string(),
-            session_id.to_string(),
+            "--session-name".to_string(),
+            session_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!("session-{}", &session_id.to_string()[..8])),
+            hostname: Some(format!("session-{}", &session_name[..session_name.len().min(8)])),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
@@ -1219,23 +1190,17 @@ echo 'Session directories created (including logs and canvas)'
         if !self.session_initialized(&session_volume).await? {
             let empty_secrets = HashMap::new();
             let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
-            self.initialize_session_structure(session_id, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
+            self.initialize_session_structure(session_name, secrets_ref, instructions.as_deref(), setup.as_deref()).await?;
         }
 
-        // Update database with container ID
-        sqlx::query("UPDATE sessions SET container_id = ? WHERE id = ?")
-            .bind(&container.id)
-            .bind(session_id)
-            .execute(&self.db_pool)
-            .await?;
 
         info!("Container {} created with session volume {} using Canvas port {}, and fresh system tokens", container_name, session_volume, canvas_port);
         Ok(container.id)
     }
 
     // Close container but retain persistent volume (for session pause/close)
-    pub async fn close_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_id}");
+    pub async fn close_container(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("raworc_session_{session_name}");
         
         info!("Closing container {}", container_name);
 
@@ -1262,8 +1227,8 @@ echo 'Session directories created (including logs and canvas)'
     }
 
     // Delete container and remove persistent volume (for session deletion)
-    pub async fn delete_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_id}");
+    pub async fn delete_container(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("raworc_session_{session_name}");
         
         info!("Deleting container {}", container_name);
 
@@ -1277,8 +1242,8 @@ echo 'Session directories created (including logs and canvas)'
                 info!("Container {} deleted", container_name);
                 
                 // Cleanup the session volume
-                if let Err(e) = self.cleanup_session_volume(session_id).await {
-                    warn!("Failed to cleanup session volume for {}: {}", session_id, e);
+                if let Err(e) = self.cleanup_session_volume(session_name).await {
+                    warn!("Failed to cleanup session volume for {}: {}", session_name, e);
                 }
                 
                 Ok(())
@@ -1288,8 +1253,8 @@ echo 'Session directories created (including logs and canvas)'
                     warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
                     
                     // Still try to cleanup the session volume
-                    if let Err(e) = self.cleanup_session_volume(session_id).await {
-                        warn!("Failed to cleanup session volume for {}: {}", session_id, e);
+                    if let Err(e) = self.cleanup_session_volume(session_name).await {
+                        warn!("Failed to cleanup session volume for {}: {}", session_name, e);
                     }
                     
                     Ok(())
@@ -1303,13 +1268,13 @@ echo 'Session directories created (including logs and canvas)'
 
     // Legacy method - kept for backward compatibility, but deprecated
     // Use close_container or delete_container instead
-    pub async fn destroy_container(&self, session_id: &str) -> Result<()> {
+    pub async fn destroy_container(&self, session_name: &str) -> Result<()> {
         warn!("destroy_container is deprecated, use close_container or delete_container instead");
-        self.delete_container(session_id).await
+        self.delete_container(session_name).await
     }
 
-    pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {
-        let container_name = format!("raworc_session_{session_id}");
+    pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
+        let container_name = format!("raworc_session_{session_name}");
         
         info!("Executing command in container {}: {}", container_name, command);
 
@@ -1335,5 +1300,80 @@ echo 'Session directories created (including logs and canvas)'
         }
 
         Ok(output_str)
+    }
+
+    pub async fn publish_canvas(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("raworc_session_{}", session_name);
+        let public_path = format!("/public/{}", session_name);
+        
+        info!("Publishing canvas for session {} to {}", session_name, public_path);
+        
+        // Create public directory
+        let create_dir_cmd = format!("mkdir -p {}", public_path);
+        if let Err(e) = std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&create_dir_cmd)
+            .output()
+        {
+            error!("Failed to create public directory {}: {}", public_path, e);
+            return Err(anyhow::anyhow!("Failed to create public directory: {}", e));
+        }
+        
+        // Copy canvas files from container to public directory
+        let copy_cmd = format!("docker cp {}:/session/canvas/. {}/", container_name, public_path);
+        match std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&copy_cmd)
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Canvas published successfully for session {}", session_name);
+                    Ok(())
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    if stderr.contains("No such file or directory") {
+                        info!("No canvas files found for session {}, creating empty public directory", session_name);
+                        Ok(())
+                    } else {
+                        error!("Failed to copy canvas files for session {}: {}", session_name, stderr);
+                        Err(anyhow::anyhow!("Failed to copy canvas files: {}", stderr))
+                    }
+                }
+            }
+            Err(e) => {
+                error!("Failed to execute docker cp command for session {}: {}", session_name, e);
+                Err(anyhow::anyhow!("Failed to execute docker cp: {}", e))
+            }
+        }
+    }
+
+    pub async fn unpublish_canvas(&self, session_name: &str) -> Result<()> {
+        let public_path = format!("/public/{}", session_name);
+        
+        info!("Unpublishing canvas for session {} from {}", session_name, public_path);
+        
+        // Remove public directory
+        let remove_cmd = format!("rm -rf {}", public_path);
+        match std::process::Command::new("bash")
+            .arg("-c")
+            .arg(&remove_cmd)
+            .output()
+        {
+            Ok(output) => {
+                if output.status.success() {
+                    info!("Canvas unpublished successfully for session {}", session_name);
+                    Ok(())
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    error!("Failed to remove public directory for session {}: {}", session_name, stderr);
+                    Err(anyhow::anyhow!("Failed to remove public directory: {}", stderr))
+                }
+            }
+            Err(e) => {
+                error!("Failed to execute rm command for session {}: {}", session_name, e);
+                Err(anyhow::anyhow!("Failed to execute rm: {}", e))
+            }
+        }
     }
 }

@@ -261,10 +261,10 @@ git clone <this-repo>
 
 **Session Management:**
 - `raworc session [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new session
-- `raworc session restore <session-id> [-p/--prompt]` - Restore existing session
-- `raworc session remix <session-id> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix session
-- `raworc session publish <session-id> [-d/--data] [-c/--code] [-s/--secrets]` - Publish session
-- `raworc session unpublish <session-id>` - Unpublish session
+- `raworc session restore <session-name> [-p/--prompt]` - Restore existing session
+- `raworc session remix <session-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix session
+- `raworc session publish <session-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish session
+- `raworc session unpublish <session-name>` - Unpublish session
 
 **API Access:**
 - `raworc api <endpoint> [-m/--method] [-b/--body] [-H/--headers] [-p/--pretty] [-s/--status]` - Execute API requests
@@ -784,7 +784,7 @@ Interactive sessions use a clean command box with essential information:
 ```
 ┌─────────────────────────────────────┐
 │ ◊ Session Start                     │
-│ SessionId: abc123                   │
+│ Session: abc123                     │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘

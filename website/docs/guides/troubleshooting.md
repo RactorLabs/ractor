@@ -50,14 +50,14 @@ raworc start --restart
 raworc clean --all
 
 # Manual cleanup of specific session
-docker rm -f raworc_session_{session-id}
+docker rm -f raworc_session_{session-name}
 
 # Check session container logs
-docker logs raworc_session_{session-id} --tail 50
+docker logs raworc_session_{session-name} --tail 50
 
 # Check Host logs inside session
-docker exec raworc_session_{session-id} ls -la /session/logs/
-docker exec raworc_session_{session-id} cat /session/logs/host_{timestamp}_stderr.log
+docker exec raworc_session_{session-name} ls -la /session/logs/
+docker exec raworc_session_{session-name} cat /session/logs/host_{timestamp}_stderr.log
 
 # Complete system reset
 raworc reset --yes

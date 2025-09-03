@@ -10,10 +10,10 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{info, error, warn};
 
-pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
+pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     tracing::info!("Starting Raworc Host...");
     tracing::info!("Connecting to API: {}", api_url);
-    tracing::info!("Session ID: {}", session_id);
+    tracing::info!("Session Name: {}", session_name);
     
     // Log which principal this Host is running as
     if let Ok(principal) = std::env::var("RAWORC_PRINCIPAL") {
@@ -47,7 +47,7 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     
     // Initialize configuration
     let config = Arc::new(config::Config {
-        session_id: session_id.to_string(),
+        session_name: session_name.to_string(),
         api_url: api_url.to_string(),
         api_token,
         polling_interval: std::time::Duration::from_secs(2),
@@ -76,7 +76,6 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     let session_dirs = [
         "/session",
         "/session/code", 
-        "/session/data",
         "/session/secrets",
         "/session/canvas"
     ];
