@@ -971,16 +971,36 @@ async function chatLoop(sessionId, options = {}) {
     clearInterval(dotAnimationInterval);
     rl.close();
     
-    // Try to close the session on the server
+    // Try to close the session on the server (ignore if already closed)
     try {
       const closeResponse = await api.post(`/sessions/${sessionId}/close`);
       if (closeResponse.success) {
         console.log(chalk.green('✓') + ' Session closed on server');
       } else {
-        console.log(chalk.yellow('⚠') + ' Could not close session on server: ' + (closeResponse.error || 'Unknown error'));
+        // Check if the error indicates container is already closed/not found
+        const errorMessage = closeResponse.error || 'Unknown error';
+        const isAlreadyClosed = typeof errorMessage === 'string' && 
+          (errorMessage.toLowerCase().includes('not found') || 
+           errorMessage.toLowerCase().includes('already closed') ||
+           errorMessage.toLowerCase().includes('does not exist'));
+        
+        if (!isAlreadyClosed) {
+          // Only show warning if it's not an "already closed" error
+          const displayError = typeof errorMessage === 'object' ? 
+            JSON.stringify(errorMessage) : errorMessage;
+          console.log(chalk.yellow('⚠') + ' Could not close session on server: ' + displayError);
+        }
       }
     } catch (error) {
-      console.log(chalk.yellow('⚠') + ' Could not communicate with server to close session');
+      // Only show communication errors that aren't about missing containers
+      const errorMsg = error.message || error;
+      const isMissingContainer = typeof errorMsg === 'string' && 
+        (errorMsg.toLowerCase().includes('not found') || 
+         errorMsg.toLowerCase().includes('404'));
+      
+      if (!isMissingContainer) {
+        console.log(chalk.yellow('⚠') + ' Could not communicate with server to close session');
+      }
     }
     
     process.exit(0);
