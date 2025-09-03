@@ -57,8 +57,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     timeout_seconds INT NOT NULL DEFAULT 300,
     auto_close_at TIMESTAMP NULL,
     
-    -- Canvas HTTP server port mapping
-    canvas_port INT NULL COMMENT 'Mapped host port for Canvas HTTP server (port 8000 inside container)',
+    -- Content HTTP server port mapping
+    content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
     
     -- Constraints
     CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     INDEX idx_sessions_parent_session_id (parent_session_id),
     INDEX idx_sessions_published (is_published, published_at),
     INDEX idx_sessions_auto_close (auto_close_at, state),
-    INDEX idx_sessions_canvas_port (canvas_port),
+    INDEX idx_sessions_content_port (content_port),
     
     -- Unique constraints
     UNIQUE KEY unique_session_name (name)

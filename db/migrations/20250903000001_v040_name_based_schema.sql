@@ -57,14 +57,14 @@ CREATE TABLE sessions (
     is_published BOOLEAN NOT NULL DEFAULT false,
     published_at TIMESTAMP NULL,
     published_by VARCHAR(255) NULL,
-    publish_permissions JSON DEFAULT ('{"code": true, "secrets": true, "canvas": true}'),  -- Removed data, added canvas
+    publish_permissions JSON DEFAULT ('{"code": true, "secrets": true, "content": true}'),  -- Removed data, added content
     
     -- Timeout functionality  
     timeout_seconds INT NOT NULL DEFAULT 300,
     auto_close_at TIMESTAMP NULL,
     
-    -- Canvas HTTP server port mapping (public server on port 8000)
-    canvas_port INT NULL COMMENT 'Mapped host port for Canvas HTTP server (port 8000 inside container)',
+    -- Content HTTP server port mapping (public server on port 8000)
+    content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
     
     -- Constraints
     CONSTRAINT sessions_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),  -- Strict name validation
@@ -82,7 +82,7 @@ CREATE TABLE sessions (
     INDEX idx_sessions_parent_session_name (parent_session_name),
     INDEX idx_sessions_published (is_published, published_at),
     INDEX idx_sessions_auto_close (auto_close_at, state),
-    INDEX idx_sessions_canvas_port (canvas_port)
+    INDEX idx_sessions_content_port (content_port)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Session Messages - Updated to use session name instead of ID

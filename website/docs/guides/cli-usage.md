@@ -227,7 +227,7 @@ raworc session remix my-session \
 | `-s, --secrets <boolean>` | Include secrets | `true` | `--secrets false` |
 | `-p, --prompt <text>` | Prompt to send after creation | None | `--prompt "Try new approach"` |
 
-**Note**: Canvas files are always included in remixes.
+**Note**: Content files are always included in remixes.
 
 ### Publishing Sessions
 
@@ -269,7 +269,7 @@ raworc session close my-session
 | `-c, --code <boolean>` | Allow code remix | `true` | `--code false` |
 | `-s, --secrets <boolean>` | Allow secrets remix | `true` | `--secrets false` |
 
-**Note**: Canvas remixing is always allowed for published sessions.
+**Note**: Content remixing is always allowed for published sessions.
 
 ### Interactive Session Interface
 

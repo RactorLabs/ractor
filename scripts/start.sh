@@ -397,7 +397,7 @@ if [ -n "$running_containers" ]; then
     print_status "Service URLs:"
     if docker ps --filter "name=raworc_server" --format "{{.Names}}" | grep -q "raworc_server"; then
         echo "  • API Server: http://localhost:9000"
-        echo "  • Public Canvas: http://localhost:8000"
+        echo "  • Public Content: http://localhost:8000"
     fi
     if docker ps --filter "name=raworc_mysql" --format "{{.Names}}" | grep -q "raworc_mysql"; then
         echo "  • MySQL Port: 3307"

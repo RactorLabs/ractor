@@ -1,12 +1,12 @@
-use super::api::{RaworcClient, Message, MessageRole, MESSAGE_ROLE_USER};
+use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
 use super::claude::ClaudeClient;
 use super::error::Result;
 use super::guardrails::Guardrails;
+use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
-use chrono::{DateTime, Utc};
 
 pub struct MessageHandler {
     api_client: Arc<RaworcClient>,
@@ -31,9 +31,12 @@ impl MessageHandler {
                 warn!("RAWORC_TASK_CREATED_AT not found, using current time");
                 Utc::now()
             });
-        
-        info!("MessageHandler initialized with task created at: {}", task_created_at);
-        
+
+        info!(
+            "MessageHandler initialized with task created at: {}",
+            task_created_at
+        );
+
         Self {
             api_client,
             claude_client,
@@ -48,9 +51,9 @@ impl MessageHandler {
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!("Initializing timestamp-based message tracking...");
         info!("Task creation time: {}", self.task_created_at);
-        
+
         let all_messages = self.api_client.get_messages(None, None).await?;
-        
+
         if all_messages.is_empty() {
             info!("No existing messages - fresh session");
             return Ok(());
@@ -59,48 +62,61 @@ impl MessageHandler {
         // Mark all user messages created before task creation time as processed
         let mut user_messages_before_task = HashSet::new();
         let mut messages_after_task_count = 0;
-        
+
         for message in &all_messages {
             if message.role == MessageRole::User {
                 if let Ok(message_time) = DateTime::parse_from_rfc3339(&message.created_at) {
                     let message_time_utc = message_time.with_timezone(&Utc);
                     if message_time_utc < self.task_created_at {
                         user_messages_before_task.insert(message.id.clone());
-                        info!("User message {} created before task - marking as processed", message.id);
+                        info!(
+                            "User message {} created before task - marking as processed",
+                            message.id
+                        );
                     } else {
                         messages_after_task_count += 1;
-                        info!("User message {} created after task - will process", message.id);
+                        info!(
+                            "User message {} created after task - will process",
+                            message.id
+                        );
                     }
                 } else {
-                    warn!("Failed to parse created_at timestamp for message {}: {}", message.id, message.created_at);
+                    warn!(
+                        "Failed to parse created_at timestamp for message {}: {}",
+                        message.id, message.created_at
+                    );
                 }
             }
         }
-        
+
         info!("Found {} total messages", all_messages.len());
-        info!("Marked {} user messages before task as processed", user_messages_before_task.len());
-        info!("Found {} user messages after task that need processing", messages_after_task_count);
+        info!(
+            "Marked {} user messages before task as processed",
+            user_messages_before_task.len()
+        );
+        info!(
+            "Found {} user messages after task that need processing",
+            messages_after_task_count
+        );
 
         // Mark pre-task user messages as processed
         let mut processed = self.processed_user_message_ids.lock().await;
         *processed = user_messages_before_task;
-        
+
         Ok(())
     }
-    
-    
+
     pub async fn poll_and_process(&self) -> Result<usize> {
         // Get recent messages
         let recent_messages = self.api_client.get_messages(Some(50), None).await?;
-        
+
         if recent_messages.is_empty() {
             return Ok(0);
         }
-        
-        
+
         // Find user messages created after task creation that need processing
         let mut unprocessed_user_messages = Vec::new();
-        
+
         for message in &recent_messages {
             if message.role == MessageRole::User {
                 // Only consider messages created after task creation
@@ -111,97 +127,108 @@ impl MessageHandler {
                         let processed_ids = self.processed_user_message_ids.lock().await;
                         let already_processed = processed_ids.contains(&message.id);
                         drop(processed_ids);
-                        
+
                         if !already_processed {
                             // Check if this message already has a host response
-                            let has_response = recent_messages.iter()
-                                .any(|m| m.role == MessageRole::Host && {
-                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at) {
+                            let has_response = recent_messages.iter().any(|m| {
+                                m.role == MessageRole::Host && {
+                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at)
+                                    {
                                         let m_time_utc = m_time.with_timezone(&Utc);
                                         m_time_utc > message_time_utc
                                     } else {
                                         false
                                     }
-                                });
-                            
+                                }
+                            });
+
                             if !has_response {
                                 unprocessed_user_messages.push(message.clone());
                             }
                         }
                     }
                 } else {
-                    warn!("Failed to parse created_at timestamp for message {}: {}", message.id, message.created_at);
+                    warn!(
+                        "Failed to parse created_at timestamp for message {}: {}",
+                        message.id, message.created_at
+                    );
                 }
             }
         }
-        
-        
+
         if unprocessed_user_messages.is_empty() {
             return Ok(0);
         }
-        
+
         // Sort by creation time to process in order
         unprocessed_user_messages.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-        
-        
+
         // Update session state to BUSY (pauses timeout)
         if let Err(e) = self.api_client.update_session_to_busy().await {
             warn!("Failed to update session state to BUSY: {}", e);
         }
-        
+
         // Process each message
         for message in &unprocessed_user_messages {
             if let Err(e) = self.process_message(message).await {
                 error!("Failed to process message {}: {}", message.id, e);
-                
+
                 // Generate error response
-                let error_response = format!("Sorry, I encountered an error processing your message: {}", e);
-                if let Err(send_err) = self.api_client.send_message(
-                    error_response,
-                    Some(serde_json::json!({
-                        "type": "error_response",
-                        "original_error": e.to_string()
-                    })),
-                ).await {
+                let error_response = format!(
+                    "Sorry, I encountered an error processing your message: {}",
+                    e
+                );
+                if let Err(send_err) = self
+                    .api_client
+                    .send_message(
+                        error_response,
+                        Some(serde_json::json!({
+                            "type": "error_response",
+                            "original_error": e.to_string()
+                        })),
+                    )
+                    .await
+                {
                     error!("Failed to send error response: {}", send_err);
                 }
             }
-            
+
             // Mark this user message as processed
             let mut processed_ids = self.processed_user_message_ids.lock().await;
             processed_ids.insert(message.id.clone());
         }
-        
+
         // Update session state back to IDLE (starts timeout)
         if let Err(e) = self.api_client.update_session_to_idle().await {
             warn!("Failed to update session state to IDLE: {}", e);
         }
-        
+
         Ok(unprocessed_user_messages.len())
     }
-    
+
     async fn process_message(&self, message: &Message) -> Result<()> {
         info!("Processing message: {}", message.id);
-        
+
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
-        
+
         // Use Claude API directly
         info!("Using Claude API for message processing");
-        
+
         // Fetch ALL messages from session for complete conversation history
         info!("Fetching complete conversation history for Claude");
         let all_messages = self.fetch_all_session_messages().await?;
-        
+
         // Prepare conversation history for Claude
         let conversation = self.prepare_conversation_history(&all_messages, &message.id);
-        
+
         // Get Claude's response with fallback
         let system_prompt = self.build_system_prompt().await;
-        let response_result = self.claude_client
+        let response_result = self
+            .claude_client
             .complete(conversation, Some(system_prompt))
             .await;
-            
+
         let (response_text, response_type) = match response_result {
             Ok(claude_response) => {
                 // Validate and sanitize output
@@ -223,30 +250,39 @@ impl MessageHandler {
                 (fallback_response, "fallback_response")
             }
         };
-        
+
         // Send response back via API
-        self.api_client.send_message(
-            response_text,
-            Some(serde_json::json!({
-                "type": response_type,
-                "model": "claude-sonnet-4-20250514"
-            })),
-        ).await?;
-        
+        self.api_client
+            .send_message(
+                response_text,
+                Some(serde_json::json!({
+                    "type": response_type,
+                    "model": "claude-sonnet-4-20250514"
+                })),
+            )
+            .await?;
+
         Ok(())
     }
-    
+
     async fn fetch_all_session_messages(&self) -> Result<Vec<Message>> {
         // Fetch ALL messages in session without pagination limits
         let all_messages = self.api_client.get_messages(None, None).await?;
-        
-        info!("Fetched {} total messages for conversation history", all_messages.len());
+
+        info!(
+            "Fetched {} total messages for conversation history",
+            all_messages.len()
+        );
         Ok(all_messages)
     }
-    
-    fn prepare_conversation_history(&self, messages: &[Message], current_id: &str) -> Vec<(String, String)> {
+
+    fn prepare_conversation_history(
+        &self,
+        messages: &[Message],
+        current_id: &str,
+    ) -> Vec<(String, String)> {
         let mut conversation = Vec::new();
-        
+
         // Include ALL message history (excluding the current message being processed)
         let history: Vec<_> = messages
             .iter()
@@ -255,24 +291,27 @@ impl MessageHandler {
             .map(|m| {
                 let role = match m.role {
                     MessageRole::User => MESSAGE_ROLE_USER,
-                    MessageRole::Host => "assistant", // Claude expects "assistant" not "host"  
+                    MessageRole::Host => "assistant", // Claude expects "assistant" not "host"
                     _ => MESSAGE_ROLE_USER,
                 };
                 (role.to_string(), m.content.clone())
             })
             .collect();
-        
+
         conversation.extend(history);
-        
+
         // Add current message
         if let Some(current) = messages.iter().find(|m| m.id == current_id) {
             conversation.push((MESSAGE_ROLE_USER.to_string(), current.content.clone()));
         }
-        
-        info!("Prepared conversation with {} messages of history", conversation.len() - 1);
+
+        info!(
+            "Prepared conversation with {} messages of history",
+            conversation.len() - 1
+        );
         conversation
     }
-    
+
     async fn build_system_prompt(&self) -> String {
         let mut prompt = String::from(
             r#"You are a helpful AI assistant operating within a RemoteAgent session with bash command execution capabilities.
@@ -335,9 +374,9 @@ Working Directory and File Operations:
     - Not copied during session remix - logs are unique per session instance
     - Example: /session/logs/bash_1641234567.log
 
-  /session/canvas/ - HTML display and visualization content:
+  /session/content/ - HTML display and visualization content:
     - Store HTML files and supporting assets for displaying information to users
-    - ALWAYS create or update /session/canvas/index.html as the main entry point
+    - ALWAYS create or update /session/content/index.html as the main entry point
     - Use index.html for summary, overview, intro, instructions, or navigation
     - Link to other files using relative URLs (e.g., <a href="report.html">Report</a>)
     - Create interactive visualizations, reports, charts, and data displays
@@ -367,7 +406,7 @@ Special Files with Automatic Processing:
     - Perfect for installing dependencies, setting up tools, or preparing the environment
 
 - Use /session/code/ for all files including executables, data, project structure, and working files
-- Use /session/canvas/ for HTML files and web assets that provide visual displays to users
+- Use /session/content/ for HTML files and web assets that provide visual displays to users
 - /session/logs/ contains automatic execution logs - not for user files
 - All file paths should be relative to /session/ unless specifically working with system files
 
@@ -388,11 +427,11 @@ Guidelines:
 - Respect user privacy and security
 - When creating files, organize them appropriately:
   - Save all files including source code, data, scripts, and project files to /session/code/
-  - Save HTML files and visual displays to /session/canvas/
+  - Save HTML files and visual displays to /session/content/
   - Create /session/code/instructions.md for persistent session context (auto-loaded)
   - Create /session/code/setup.sh for environment initialization (auto-executed)
-- Canvas folder workflow (IMPORTANT for visual content):
-  - ALWAYS create /session/canvas/index.html as the main entry point
+- Content folder workflow (IMPORTANT for visual content):
+  - ALWAYS create /session/content/index.html as the main entry point
   - Use index.html for overview, summary, navigation, or standalone content
   - Link additional files using relative paths: href="report.html", src="data/chart.png"
   - Create supporting files: report.html, dashboard.html, styles.css, etc.
@@ -400,19 +439,22 @@ Guidelines:
   - Example: index.html -> links to -> report.html, chart.html, dashboard/
 - Assume the current working directory is /session/
 - Show command outputs to users when relevant
-- Organize files logically: all working files in /session/code/, visuals in /session/canvas/
+- Organize files logically: all working files in /session/code/, visuals in /session/content/
 
 Current session context:
 - This is an isolated session environment with persistent storage
 - Messages are persisted in the Raworc system
 - You're operating as the Host (Computer Use Agent) within this session
 - Your session persists between container restarts
-- You have full bash access for development, analysis, and automation tasks"#
+- You have full bash access for development, analysis, and automation tasks"#,
         );
 
         // Read instructions from /session/code/instructions.md if it exists
         let instructions_path = std::path::Path::new("/session/code/instructions.md");
-        info!("Checking for instructions file at: {}", instructions_path.display());
+        info!(
+            "Checking for instructions file at: {}",
+            instructions_path.display()
+        );
         if instructions_path.exists() {
             info!("Instructions file exists, reading contents...");
             match tokio::fs::read_to_string(instructions_path).await {
@@ -427,7 +469,10 @@ Current session context:
                 }
             }
         } else {
-            info!("No instructions file found at {}", instructions_path.display());
+            info!(
+                "No instructions file found at {}",
+                instructions_path.display()
+            );
         }
 
         prompt

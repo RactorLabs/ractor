@@ -60,7 +60,7 @@ impl ClaudeClient {
             .timeout(std::time::Duration::from_secs(60))
             .build()
             .map_err(|e| HostError::Claude(format!("Failed to create client: {}", e)))?;
-        
+
         Ok(Self {
             client,
             api_key: api_key.to_string(),
@@ -166,13 +166,14 @@ impl ClaudeClient {
             }),
         }
     }
-    
+
     pub async fn complete(
         &self,
         messages: Vec<(String, String)>, // (role, content)
         system_prompt: Option<String>,
     ) -> Result<String> {
-        self.complete_with_tools(messages, system_prompt, true).await
+        self.complete_with_tools(messages, system_prompt, true)
+            .await
     }
 
     pub async fn complete_with_tools(
@@ -185,25 +186,25 @@ impl ClaudeClient {
         if messages.is_empty() {
             return Err(HostError::Claude("No messages provided".to_string()));
         }
-        
+
         if self.api_key.is_empty() {
             return Err(HostError::Claude("API key is empty".to_string()));
         }
 
         let mut conversation_messages = Vec::new();
-        
+
         // Convert messages to Claude format - use consistent array format for tool compatibility
         for (role, content) in messages {
             if content.trim().is_empty() {
                 continue;
             }
-            
+
             let claude_role = match role.as_str() {
                 "user" | "USER" => "user".to_string(),
                 "assistant" | "HOST" => "assistant".to_string(),
                 _ => "user".to_string(),
             };
-            
+
             // Always use array format for consistency with tools
             conversation_messages.push(ClaudeMessage {
                 role: claude_role,
@@ -213,32 +214,34 @@ impl ClaudeClient {
                 }]),
             });
         }
-        
+
         // Ensure we have at least one valid message
         if conversation_messages.is_empty() {
-            return Err(HostError::Claude("All messages are empty after filtering".to_string()));
+            return Err(HostError::Claude(
+                "All messages are empty after filtering".to_string(),
+            ));
         }
 
         // Tool execution loop - continue until we get a final text response
         let max_tool_iterations = 20;
         let mut iteration_count = 0;
-        
+
         loop {
             if iteration_count >= max_tool_iterations {
                 return Err(HostError::Claude("Too many tool iterations".to_string()));
             }
             iteration_count += 1;
 
-            let tools = if enable_tools { 
+            let tools = if enable_tools {
                 Some(vec![
-                    Self::get_bash_tool(), 
+                    Self::get_bash_tool(),
                     Self::get_text_editor_tool(),
-                    Self::get_web_search_tool()
-                ]) 
-            } else { 
-                None 
+                    Self::get_web_search_tool(),
+                ])
+            } else {
+                None
             };
-            
+
             let request = ClaudeRequest {
                 model: "claude-sonnet-4-20250514".to_string(),
                 max_tokens: 4096,
@@ -246,10 +249,15 @@ impl ClaudeClient {
                 system: system_prompt.clone(),
                 tools,
             };
-            
-            debug!("Sending request to Claude API with {} messages (iteration {})", request.messages.len(), iteration_count);
-            
-            let response = self.client
+
+            debug!(
+                "Sending request to Claude API with {} messages (iteration {})",
+                request.messages.len(),
+                iteration_count
+            );
+
+            let response = self
+                .client
                 .post("https://api.anthropic.com/v1/messages")
                 .header("x-api-key", &self.api_key)
                 .header("anthropic-version", "2023-06-01")
@@ -258,22 +266,28 @@ impl ClaudeClient {
                 .send()
                 .await
                 .map_err(|e| HostError::Claude(format!("Request failed: {}", e)))?;
-            
+
             if !response.status().is_success() {
                 let status = response.status();
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                return Err(HostError::Claude(format!("API error ({}): {}", status, error_text)));
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                return Err(HostError::Claude(format!(
+                    "API error ({}): {}",
+                    status, error_text
+                )));
             }
-            
+
             let claude_response: ClaudeResponse = response
                 .json()
                 .await
                 .map_err(|e| HostError::Claude(format!("Failed to parse response: {}", e)))?;
-            
+
             // Process response content
             let mut response_text = String::new();
             let mut tool_calls = Vec::new();
-            
+
             for content in &claude_response.content {
                 match content {
                     ClaudeContent::Text { text } => {
@@ -284,24 +298,27 @@ impl ClaudeClient {
                     }
                 }
             }
-            
+
             // If no tool calls, return the text response
             if tool_calls.is_empty() {
-                info!("Received final response from Claude (length: {})", response_text.len());
+                info!(
+                    "Received final response from Claude (length: {})",
+                    response_text.len()
+                );
                 return Ok(response_text);
             }
-            
+
             // Add assistant message with tool calls to conversation
             if !response_text.is_empty() || !tool_calls.is_empty() {
                 let mut assistant_content = Vec::new();
-                
+
                 if !response_text.is_empty() {
                     assistant_content.push(serde_json::json!({
                         "type": "text",
                         "text": response_text
                     }));
                 }
-                
+
                 for (id, name, input) in &tool_calls {
                     assistant_content.push(serde_json::json!({
                         "type": "tool_use",
@@ -310,49 +327,62 @@ impl ClaudeClient {
                         "input": input
                     }));
                 }
-                
+
                 conversation_messages.push(ClaudeMessage {
                     role: "assistant".to_string(),
                     content: serde_json::Value::Array(assistant_content),
                 });
             }
-            
+
             // Show Claude's reasoning/explanation if provided before tool execution
             if !response_text.is_empty() && !tool_calls.is_empty() {
                 // Send Claude's reasoning as a regular message
                 self.send_assistant_message(&response_text).await?;
             }
-            
+
             // Execute tool calls and add results to conversation
             for (tool_id, tool_name, tool_input) in tool_calls {
                 debug!("Executing tool: {} with id: {}", tool_name, tool_id);
-                
+
                 // Send tool execution notification to user
                 let tool_description = match tool_name.as_str() {
                     "bash" => {
-                        let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let cmd = tool_input
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         cmd.to_string()
-                    },
+                    }
                     "text_editor" => {
-                        let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("unknown");
-                        let path = tool_input.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let cmd = tool_input
+                            .get("command")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        let path = tool_input
+                            .get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         path.to_string()
-                    },
+                    }
                     "web_search" => {
-                        let query = tool_input.get("query").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let query = tool_input
+                            .get("query")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         format!("Searching the web for: {}", query)
-                    },
+                    }
                     _ => format!("Executing {} tool", tool_name),
                 };
 
-                self.send_tool_message(&tool_description, &tool_name).await?;
-                
+                self.send_tool_message(&tool_description, &tool_name)
+                    .await?;
+
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
                     "text_editor" => self.execute_text_editor_tool(&tool_input).await,
                     _ => Err(HostError::Claude(format!("Unknown tool: {}", tool_name))),
                 };
-                
+
                 let result_content = match tool_result {
                     Ok(output) => serde_json::json!([{
                         "type": "tool_result",
@@ -360,29 +390,35 @@ impl ClaudeClient {
                         "content": output
                     }]),
                     Err(e) => serde_json::json!([{
-                        "type": "tool_result", 
+                        "type": "tool_result",
                         "tool_use_id": tool_id,
                         "content": format!("Error executing tool: {}", e),
                         "is_error": true
                     }]),
                 };
-                
+
                 conversation_messages.push(ClaudeMessage {
                     role: "user".to_string(),
                     content: result_content,
                 });
             }
         }
-        
+
         // If we reach here without returning, no final response was generated
-        Err(HostError::Claude("No response generated after maximum iterations".to_string()))
+        Err(HostError::Claude(
+            "No response generated after maximum iterations".to_string(),
+        ))
     }
 
     async fn execute_bash_tool(&self, input: &Value) -> Result<String> {
         let command = input
             .get("command")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing or invalid 'command' parameter for bash tool".to_string()))?;
+            .ok_or_else(|| {
+                HostError::Claude(
+                    "Missing or invalid 'command' parameter for bash tool".to_string(),
+                )
+            })?;
 
         let restart = input
             .get("restart")
@@ -431,30 +467,47 @@ impl ClaudeClient {
                 format!("{}\n[stderr]: {}", stdout, stderr)
             }
         } else {
-            format!("Command failed with exit code {}\n[stdout]: {}\n[stderr]: {}", 
-                    exit_code, stdout, stderr)
+            format!(
+                "Command failed with exit code {}\n[stdout]: {}\n[stderr]: {}",
+                exit_code, stdout, stderr
+            )
         };
 
         // Log to Docker logs with structured format
-        println!("BASH_EXECUTION: command={:?} exit_code={} success={} output_length={}", 
-                command, exit_code, success, result.len());
+        println!(
+            "BASH_EXECUTION: command={:?} exit_code={} success={} output_length={}",
+            command,
+            exit_code,
+            success,
+            result.len()
+        );
 
         // Save individual log file
-        self.save_bash_log(command, &stdout, &stderr, exit_code, success, start_time).await;
+        self.save_bash_log(command, &stdout, &stderr, exit_code, success, start_time)
+            .await;
 
         info!("Bash command result (length: {})", result.len());
         Ok(result)
     }
 
-    async fn save_bash_log(&self, command: &str, stdout: &str, stderr: &str, exit_code: i32, success: bool, start_time: std::time::SystemTime) {
+    async fn save_bash_log(
+        &self,
+        command: &str,
+        stdout: &str,
+        stderr: &str,
+        exit_code: i32,
+        success: bool,
+        start_time: std::time::SystemTime,
+    ) {
         use std::time::UNIX_EPOCH;
-        
-        let timestamp = start_time.duration_since(UNIX_EPOCH)
+
+        let timestamp = start_time
+            .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        
+
         let log_filename = format!("/session/logs/bash_{}.log", timestamp);
-        
+
         let log_content = format!(
             "=== BASH COMMAND LOG ===\n\
             Timestamp: {}\n\
@@ -486,15 +539,24 @@ impl ClaudeClient {
         }
     }
 
-    async fn save_text_editor_log(&self, command: &str, path: &str, result_msg: &str, success: bool, input: &Value, start_time: std::time::SystemTime) {
+    async fn save_text_editor_log(
+        &self,
+        command: &str,
+        path: &str,
+        result_msg: &str,
+        success: bool,
+        input: &Value,
+        start_time: std::time::SystemTime,
+    ) {
         use std::time::UNIX_EPOCH;
-        
-        let timestamp = start_time.duration_since(UNIX_EPOCH)
+
+        let timestamp = start_time
+            .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        
+
         let log_filename = format!("/session/logs/text_editor_{}.log", timestamp);
-        
+
         // Extract additional parameters for logging
         let mut params = Vec::new();
         if let Some(old_str) = input.get("old_str").and_then(|v| v.as_str()) {
@@ -534,7 +596,11 @@ impl ClaudeClient {
             command,
             path,
             success,
-            if params.is_empty() { "None".to_string() } else { params.join(", ") },
+            if params.is_empty() {
+                "None".to_string()
+            } else {
+                params.join(", ")
+            },
             result_msg
         );
 
@@ -566,7 +632,10 @@ impl ClaudeClient {
 
         for pattern in &dangerous_patterns {
             if command.contains(pattern) {
-                return Err(HostError::Claude(format!("Command blocked: contains dangerous pattern '{}'", pattern)));
+                return Err(HostError::Claude(format!(
+                    "Command blocked: contains dangerous pattern '{}'",
+                    pattern
+                )));
             }
         }
 
@@ -584,7 +653,10 @@ impl ClaudeClient {
 
         for path in &restricted_paths {
             if command.contains(path) {
-                return Err(HostError::Claude(format!("Command blocked: accesses restricted path '{}'", path)));
+                return Err(HostError::Claude(format!(
+                    "Command blocked: accesses restricted path '{}'",
+                    path
+                )));
             }
         }
 
@@ -600,17 +672,26 @@ impl ClaudeClient {
         let command = input
             .get("command")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing or invalid 'command' parameter for text_editor tool".to_string()))?;
+            .ok_or_else(|| {
+                HostError::Claude(
+                    "Missing or invalid 'command' parameter for text_editor tool".to_string(),
+                )
+            })?;
 
-        let path = input
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing or invalid 'path' parameter for text_editor tool".to_string()))?;
+        let path = input.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+            HostError::Claude(
+                "Missing or invalid 'path' parameter for text_editor tool".to_string(),
+            )
+        })?;
 
         // Validate and normalize path (must be within /session/)
         let full_path = self.validate_and_normalize_path(path)?;
 
-        info!("Executing text_editor command: {} on path: {}", command, full_path.display());
+        info!(
+            "Executing text_editor command: {} on path: {}",
+            command,
+            full_path.display()
+        );
 
         // Ensure logs directory exists
         if let Err(e) = tokio::fs::create_dir_all("/session/logs").await {
@@ -623,7 +704,10 @@ impl ClaudeClient {
             "create" => self.text_editor_create(&full_path, input).await,
             "str_replace" => self.text_editor_str_replace(&full_path, input).await,
             "insert" => self.text_editor_insert(&full_path, input).await,
-            _ => Err(HostError::Claude(format!("Unknown text_editor command: {}", command))),
+            _ => Err(HostError::Claude(format!(
+                "Unknown text_editor command: {}",
+                command
+            ))),
         };
 
         // Log the text editor operation
@@ -634,11 +718,17 @@ impl ClaudeClient {
         };
 
         // Log to Docker logs with structured format
-        println!("TEXT_EDITOR_EXECUTION: command={:?} path={:?} success={} result_length={}", 
-                command, path, success, result_msg.len());
+        println!(
+            "TEXT_EDITOR_EXECUTION: command={:?} path={:?} success={} result_length={}",
+            command,
+            path,
+            success,
+            result_msg.len()
+        );
 
         // Save individual log file
-        self.save_text_editor_log(command, path, &result_msg, success, input, start_time).await;
+        self.save_text_editor_log(command, path, &result_msg, success, input, start_time)
+            .await;
 
         result
     }
@@ -648,7 +738,10 @@ impl ClaudeClient {
 
         // Security: prevent path traversal attacks
         if path.contains("..") || path.starts_with('/') {
-            return Err(HostError::Claude(format!("Invalid path: path traversal not allowed ({})", path)));
+            return Err(HostError::Claude(format!(
+                "Invalid path: path traversal not allowed ({})",
+                path
+            )));
         }
 
         // Normalize path relative to /session/
@@ -657,7 +750,10 @@ impl ClaudeClient {
 
         // Ensure the resolved path is still within /session/
         if !full_path.starts_with(session_root) {
-            return Err(HostError::Claude(format!("Invalid path: must be within /session/ ({})", path)));
+            return Err(HostError::Claude(format!(
+                "Invalid path: must be within /session/ ({})",
+                path
+            )));
         }
 
         Ok(full_path)
@@ -667,21 +763,35 @@ impl ClaudeClient {
         use tokio::fs;
 
         // Get max_characters parameter if specified
-        let max_characters = input.get("max_characters")
+        let max_characters = input
+            .get("max_characters")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize);
 
         // Check if path is a directory
         if path.is_dir() {
             // List directory contents
-            let mut entries = fs::read_dir(path).await
-                .map_err(|e| HostError::Claude(format!("Failed to read directory {}: {}", path.display(), e)))?;
-            
+            let mut entries = fs::read_dir(path).await.map_err(|e| {
+                HostError::Claude(format!(
+                    "Failed to read directory {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?;
+
             let mut items = Vec::new();
-            while let Some(entry) = entries.next_entry().await
-                .map_err(|e| HostError::Claude(format!("Failed to read directory entry: {}", e)))? {
+            while let Some(entry) = entries
+                .next_entry()
+                .await
+                .map_err(|e| HostError::Claude(format!("Failed to read directory entry: {}", e)))?
+            {
                 let name = entry.file_name().to_string_lossy().to_string();
-                let file_type = if entry.file_type().await.map_err(|e| HostError::Claude(format!("Failed to get file type: {}", e)))?.is_dir() {
+                let file_type = if entry
+                    .file_type()
+                    .await
+                    .map_err(|e| HostError::Claude(format!("Failed to get file type: {}", e)))?
+                    .is_dir()
+                {
                     "directory"
                 } else {
                     "file"
@@ -694,21 +804,30 @@ impl ClaudeClient {
             }
 
             items.sort();
-            let result = format!("Directory contents of {}:\n{}", path.display(), items.join("\n"));
-            
+            let result = format!(
+                "Directory contents of {}:\n{}",
+                path.display(),
+                items.join("\n")
+            );
+
             // Apply max_characters truncation if specified
             if let Some(max_chars) = max_characters {
                 if result.len() > max_chars {
-                    return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+                    return Ok(format!(
+                        "{}...\n[Output truncated at {} characters]",
+                        &result[..max_chars],
+                        max_chars
+                    ));
                 }
             }
-            
+
             return Ok(result);
         }
 
         // Read file contents
-        let content = fs::read_to_string(path).await
-            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            HostError::Claude(format!("Failed to read file {}: {}", path.display(), e))
+        })?;
 
         // Handle view_range if specified
         if let Some(view_range) = input.get("view_range") {
@@ -716,29 +835,46 @@ impl ClaudeClient {
                 if range_array.len() == 2 {
                     let start = range_array[0].as_u64().unwrap_or(1) as usize;
                     let end = range_array[1].as_u64().unwrap_or(1) as usize;
-                    
+
                     let lines: Vec<&str> = content.lines().collect();
                     let start_idx = start.saturating_sub(1);
                     let end_idx = std::cmp::min(end, lines.len());
-                    
+
                     if start_idx < lines.len() {
                         let selected_lines = &lines[start_idx..end_idx];
-                        let numbered_lines: Vec<String> = selected_lines.iter()
+                        let numbered_lines: Vec<String> = selected_lines
+                            .iter()
                             .enumerate()
                             .map(|(i, line)| format!("{:4}: {}", start_idx + i + 1, line))
                             .collect();
-                        let result = format!("File: {} (lines {}-{})\n{}", path.display(), start, end_idx, numbered_lines.join("\n"));
-                        
+                        let result = format!(
+                            "File: {} (lines {}-{})\n{}",
+                            path.display(),
+                            start,
+                            end_idx,
+                            numbered_lines.join("\n")
+                        );
+
                         // Apply max_characters truncation if specified
                         if let Some(max_chars) = max_characters {
                             if result.len() > max_chars {
-                                return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+                                return Ok(format!(
+                                    "{}...\n[Output truncated at {} characters]",
+                                    &result[..max_chars],
+                                    max_chars
+                                ));
                             }
                         }
-                        
+
                         return Ok(result);
                     } else {
-                        return Ok(format!("File: {} - line range {}-{} is beyond file length ({})", path.display(), start, end, lines.len()));
+                        return Ok(format!(
+                            "File: {} - line range {}-{} is beyond file length ({})",
+                            path.display(),
+                            start,
+                            end,
+                            lines.len()
+                        ));
                     }
                 }
             }
@@ -746,20 +882,30 @@ impl ClaudeClient {
 
         // Return full file with line numbers
         let lines: Vec<&str> = content.lines().collect();
-        let numbered_lines: Vec<String> = lines.iter()
+        let numbered_lines: Vec<String> = lines
+            .iter()
             .enumerate()
             .map(|(i, line)| format!("{:4}: {}", i + 1, line))
             .collect();
-        
-        let result = format!("File: {} ({} lines)\n{}", path.display(), lines.len(), numbered_lines.join("\n"));
-        
+
+        let result = format!(
+            "File: {} ({} lines)\n{}",
+            path.display(),
+            lines.len(),
+            numbered_lines.join("\n")
+        );
+
         // Apply max_characters truncation if specified
         if let Some(max_chars) = max_characters {
             if result.len() > max_chars {
-                return Ok(format!("{}...\n[Output truncated at {} characters]", &result[..max_chars], max_chars));
+                return Ok(format!(
+                    "{}...\n[Output truncated at {} characters]",
+                    &result[..max_chars],
+                    max_chars
+                ));
             }
         }
-        
+
         Ok(result)
     }
 
@@ -767,7 +913,10 @@ impl ClaudeClient {
         use tokio::fs;
 
         // Debug log the input parameters to help diagnose issues
-        debug!("text_editor_create called with input: {}", serde_json::to_string_pretty(input).unwrap_or_else(|_| "Invalid JSON".to_string()));
+        debug!(
+            "text_editor_create called with input: {}",
+            serde_json::to_string_pretty(input).unwrap_or_else(|_| "Invalid JSON".to_string())
+        );
 
         // Try both 'file_text' (official spec) and 'content' (alternative) parameters
         // If neither is provided, create an empty file
@@ -779,43 +928,69 @@ impl ClaudeClient {
 
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).await
-                .map_err(|e| HostError::Claude(format!("Failed to create parent directories for {}: {}", path.display(), e)))?;
+            fs::create_dir_all(parent).await.map_err(|e| {
+                HostError::Claude(format!(
+                    "Failed to create parent directories for {}: {}",
+                    path.display(),
+                    e
+                ))
+            })?;
         }
 
         // Check if file already exists
         if path.exists() {
-            return Err(HostError::Claude(format!("File {} already exists. Use str_replace to modify existing files.", path.display())));
+            return Err(HostError::Claude(format!(
+                "File {} already exists. Use str_replace to modify existing files.",
+                path.display()
+            )));
         }
 
         // Write the file
-        fs::write(path, file_text).await
-            .map_err(|e| HostError::Claude(format!("Failed to create file {}: {}", path.display(), e)))?;
+        fs::write(path, file_text).await.map_err(|e| {
+            HostError::Claude(format!("Failed to create file {}: {}", path.display(), e))
+        })?;
 
         let line_count = file_text.lines().count();
-        Ok(format!("Created file {} with {} lines", path.display(), line_count))
+        Ok(format!(
+            "Created file {} with {} lines",
+            path.display(),
+            line_count
+        ))
     }
 
-    async fn text_editor_str_replace(&self, path: &std::path::Path, input: &Value) -> Result<String> {
+    async fn text_editor_str_replace(
+        &self,
+        path: &std::path::Path,
+        input: &Value,
+    ) -> Result<String> {
         use tokio::fs;
 
         let old_str = input
             .get("old_str")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing 'old_str' parameter for str_replace command".to_string()))?;
+            .ok_or_else(|| {
+                HostError::Claude("Missing 'old_str' parameter for str_replace command".to_string())
+            })?;
 
         let new_str = input
             .get("new_str")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing 'new_str' parameter for str_replace command".to_string()))?;
+            .ok_or_else(|| {
+                HostError::Claude("Missing 'new_str' parameter for str_replace command".to_string())
+            })?;
 
         // Read current file content
-        let content = fs::read_to_string(path).await
-            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            HostError::Claude(format!("Failed to read file {}: {}", path.display(), e))
+        })?;
 
         // Check if old_str exists in the file
         if !content.contains(old_str) {
-            return Err(HostError::Claude(format!("String not found in file {}: {:?}", path.display(), old_str)));
+            return Err(HostError::Claude(format!(
+                "String not found in file {}: {:?}",
+                path.display(),
+                old_str
+            )));
         }
 
         // Check for multiple occurrences
@@ -828,12 +1003,22 @@ impl ClaudeClient {
         let new_content = content.replace(old_str, new_str);
 
         // Write the modified content back
-        fs::write(path, &new_content).await
-            .map_err(|e| HostError::Claude(format!("Failed to write modified file {}: {}", path.display(), e)))?;
+        fs::write(path, &new_content).await.map_err(|e| {
+            HostError::Claude(format!(
+                "Failed to write modified file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         let old_lines = content.lines().count();
         let new_lines = new_content.lines().count();
-        Ok(format!("Replaced 1 occurrence in {} (lines: {} -> {})", path.display(), old_lines, new_lines))
+        Ok(format!(
+            "Replaced 1 occurrence in {} (lines: {} -> {})",
+            path.display(),
+            old_lines,
+            new_lines
+        ))
     }
 
     async fn text_editor_insert(&self, path: &std::path::Path, input: &Value) -> Result<String> {
@@ -842,22 +1027,34 @@ impl ClaudeClient {
         let insert_line = input
             .get("insert_line")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| HostError::Claude("Missing or invalid 'insert_line' parameter for insert command".to_string()))? as usize;
+            .ok_or_else(|| {
+                HostError::Claude(
+                    "Missing or invalid 'insert_line' parameter for insert command".to_string(),
+                )
+            })? as usize;
 
         let new_str = input
             .get("new_str")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing 'new_str' parameter for insert command".to_string()))?;
+            .ok_or_else(|| {
+                HostError::Claude("Missing 'new_str' parameter for insert command".to_string())
+            })?;
 
         // Read current file content
-        let content = fs::read_to_string(path).await
-            .map_err(|e| HostError::Claude(format!("Failed to read file {}: {}", path.display(), e)))?;
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            HostError::Claude(format!("Failed to read file {}: {}", path.display(), e))
+        })?;
 
         let mut lines: Vec<&str> = content.lines().collect();
-        
+
         // Validate insert position
         if insert_line == 0 || insert_line > lines.len() + 1 {
-            return Err(HostError::Claude(format!("Invalid insert line {}. File has {} lines (valid range: 1-{})", insert_line, lines.len(), lines.len() + 1)));
+            return Err(HostError::Claude(format!(
+                "Invalid insert line {}. File has {} lines (valid range: 1-{})",
+                insert_line,
+                lines.len(),
+                lines.len() + 1
+            )));
         }
 
         // Insert new content at the specified line (1-based)
@@ -868,12 +1065,23 @@ impl ClaudeClient {
         let new_content = lines.join("\n");
 
         // Write the modified content back
-        fs::write(path, &new_content).await
-            .map_err(|e| HostError::Claude(format!("Failed to write modified file {}: {}", path.display(), e)))?;
+        fs::write(path, &new_content).await.map_err(|e| {
+            HostError::Claude(format!(
+                "Failed to write modified file {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
 
         let old_line_count = content.lines().count();
         let new_line_count = new_content.lines().count();
-        Ok(format!("Inserted text at line {} in {} (lines: {} -> {})", insert_line, path.display(), old_line_count, new_line_count))
+        Ok(format!(
+            "Inserted text at line {} in {} (lines: {} -> {})",
+            insert_line,
+            path.display(),
+            old_line_count,
+            new_line_count
+        ))
     }
 
     async fn send_tool_message(&self, description: &str, tool_name: &str) -> Result<()> {
@@ -886,27 +1094,30 @@ impl ClaudeClient {
                 "type": "tool_execution",
                 "tool_type": tool_name
             });
-            
-            api_client.send_message(description.to_string(), Some(metadata)).await?;
+
+            api_client
+                .send_message(description.to_string(), Some(metadata))
+                .await?;
         }
-        
+
         Ok(())
     }
 
     async fn send_assistant_message(&self, content: &str) -> Result<()> {
         // Log assistant reasoning to Docker logs
         println!("ASSISTANT_REASONING: {}", content);
-        
+
         // Send assistant message to user if api client is available
         if let Some(api_client) = &self.api_client {
             let metadata = serde_json::json!({
                 "type": "assistant_reasoning"
             });
-            
-            api_client.send_message(content.to_string(), Some(metadata)).await?;
+
+            api_client
+                .send_message(content.to_string(), Some(metadata))
+                .await?;
         }
-        
+
         Ok(())
     }
-    
 }

@@ -1,12 +1,12 @@
+use crate::server::auth::decode_jwt;
+use crate::shared::models::AppState;
+use crate::shared::rbac::{AuthPrincipal, Subject, SubjectType};
 use axum::{
     extract::{Request, State},
     http::{header, StatusCode},
     middleware::Next,
     response::Response,
 };
-use crate::server::auth::decode_jwt;
-use crate::shared::models::AppState;
-use crate::shared::rbac::{AuthPrincipal, Subject, SubjectType};
 use std::sync::Arc;
 use tracing::info;
 
@@ -23,9 +23,7 @@ pub async fn auth_middleware(
 ) -> Result<Response, StatusCode> {
     // Skip auth for public endpoints
     let path = request.uri().path();
-    if path == "/api/v0/version" || 
-       path.starts_with("/api/v0/auth/") ||
-       path.contains("/login") {
+    if path == "/api/v0/version" || path.starts_with("/api/v0/auth/") || path.contains("/login") {
         return Ok(next.run(request).await);
     }
 
@@ -41,8 +39,7 @@ pub async fn auth_middleware(
         .ok_or(StatusCode::UNAUTHORIZED)?;
 
     // Decode and validate JWT
-    let claims = decode_jwt(token, &state.jwt_secret)
-        .map_err(|_| StatusCode::UNAUTHORIZED)?;
+    let claims = decode_jwt(token, &state.jwt_secret).map_err(|_| StatusCode::UNAUTHORIZED)?;
 
     // Get principal from claims
     let principal = match claims.sub_type {
@@ -73,7 +70,7 @@ pub async fn auth_middleware(
         AuthPrincipal::Subject(s) => &s.name,
         AuthPrincipal::Operator(op) => &op.user,
     };
-    
+
     info!(
         method = %method,
         path = %uri.path(),

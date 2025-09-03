@@ -57,9 +57,11 @@ fn deserialize_strict_role<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
+    use crate::shared::models::constants::{
+        MESSAGE_ROLE_HOST, MESSAGE_ROLE_SYSTEM, MESSAGE_ROLE_USER,
+    };
     use serde::de::{Error, Visitor};
-    use crate::shared::models::constants::{MESSAGE_ROLE_USER, MESSAGE_ROLE_HOST, MESSAGE_ROLE_SYSTEM};
-    
+
     struct StrictRoleVisitor;
 
     impl<'de> Visitor<'de> for StrictRoleVisitor {
@@ -78,9 +80,9 @@ where
                     Ok(value.to_string())
                 }
                 _ => Err(E::custom(format!(
-                    "invalid role '{}', must be 'user', 'host', or 'system'", 
+                    "invalid role '{}', must be 'user', 'host', or 'system'",
                     value
-                )))
+                ))),
             }
         }
 
@@ -110,7 +112,6 @@ where
     deserializer.deserialize_str(StrictRoleVisitor)
 }
 
-
 impl SessionMessage {
     pub async fn create(
         pool: &sqlx::MySqlPool,
@@ -120,7 +121,7 @@ impl SessionMessage {
     ) -> Result<SessionMessage, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
-        
+
         sqlx::query(
             r#"
             INSERT INTO session_messages (id, session_name, created_by, role, content, metadata, created_at)
@@ -136,7 +137,7 @@ impl SessionMessage {
         .bind(&now)
         .execute(pool)
         .await?;
-        
+
         Ok(SessionMessage {
             id,
             session_name: session_name.to_string(),
@@ -155,9 +156,9 @@ impl SessionMessage {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<SessionMessage>, sqlx::Error> {
-        let limit = limit.unwrap_or(100).min(1000);  // Max 1000 messages
+        let limit = limit.unwrap_or(100).min(1000); // Max 1000 messages
         let offset = offset.unwrap_or(0);
-        
+
         sqlx::query_as::<_, SessionMessage>(
             r#"
             SELECT id, session_name, created_by, role, content,
@@ -166,7 +167,7 @@ impl SessionMessage {
             WHERE session_name = ?
             ORDER BY created_at ASC
             LIMIT ? OFFSET ?
-            "#
+            "#,
         )
         .bind(session_name)
         .bind(limit)
@@ -183,50 +184,45 @@ impl SessionMessage {
     ) -> Result<Vec<SessionMessage>, sqlx::Error> {
         let limit = query.limit.unwrap_or(100).min(1000);
         let offset = query.offset.unwrap_or(0);
-        
+
         let mut sql = String::from(
             r#"
             SELECT id, session_name, created_by, role, content,
                    metadata, created_at
             FROM session_messages
             WHERE session_name = ?
-            "#
+            "#,
         );
-        
+
         let mut param_count = 1;
-        
+
         if query.role.is_some() {
             param_count += 1;
             sql.push_str(&format!(" AND role = ${param_count}"));
         }
-        
+
         if query.since.is_some() {
             param_count += 1;
             sql.push_str(&format!(" AND created_at > ${param_count}"));
         }
-        
+
         sql.push_str(" ORDER BY created_at ASC");
         param_count += 1;
         sql.push_str(&format!(" LIMIT ${param_count}"));
         param_count += 1;
         sql.push_str(&format!(" OFFSET ${param_count}"));
-        
-        let mut query_builder = sqlx::query_as::<_, SessionMessage>(&sql)
-            .bind(session_name);
-        
+
+        let mut query_builder = sqlx::query_as::<_, SessionMessage>(&sql).bind(session_name);
+
         if let Some(role) = query.role {
             query_builder = query_builder.bind(role);
         }
-        
+
         if let Some(since) = query.since {
             query_builder = query_builder.bind(since);
         }
-        
-        query_builder
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(pool)
-            .await
+
+        query_builder.bind(limit).bind(offset).fetch_all(pool).await
     }
 
     pub async fn count_by_session(
@@ -234,12 +230,12 @@ impl SessionMessage {
         session_name: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_messages WHERE session_name = ?"
+            "SELECT COUNT(*) FROM session_messages WHERE session_name = ?",
         )
         .bind(session_name)
         .fetch_one(pool)
         .await?;
-        
+
         Ok(result)
     }
 
@@ -248,10 +244,10 @@ impl SessionMessage {
         session_name: &str,
     ) -> Result<u64, sqlx::Error> {
         let result = sqlx::query(r#"DELETE FROM session_messages WHERE session_name = ?"#)
-        .bind(session_name)
-        .execute(pool)
-        .await?;
-        
+            .bind(session_name)
+            .execute(pool)
+            .await?;
+
         Ok(result.rows_affected())
     }
 }

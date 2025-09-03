@@ -9,7 +9,7 @@ mod operator;
 async fn main() -> Result<()> {
     // Initialize service logging
     let _ = logging::init_service_logging("/app/logs", "raworc_operator");
-    
+
     // Run the operator service
     operator::run().await
 }

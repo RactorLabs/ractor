@@ -1,17 +1,16 @@
 use axum::{
     extract::{Path, State},
-    Extension,
-    Json,
+    Extension, Json,
 };
 use bcrypt::{hash, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::shared::models::AppState;
-use crate::shared::rbac::Operator;
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
+use crate::shared::models::AppState;
+use crate::shared::rbac::Operator;
 
 #[derive(Debug, Deserialize)]
 pub struct CreateOperatorRequest {
@@ -33,7 +32,7 @@ where
     D: serde::Deserializer<'de>,
 {
     use serde::de::{Error, Visitor};
-    
+
     struct StrictOptionBoolVisitor;
 
     impl<'de> Visitor<'de> for StrictOptionBoolVisitor {
@@ -135,7 +134,9 @@ pub async fn list_operators(
     check_api_permission(&auth, &state, &permissions::OPERATOR_LIST)
         .await
         .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            axum::http::StatusCode::FORBIDDEN => {
+                ApiError::Forbidden("Insufficient permissions".to_string())
+            }
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
 
@@ -153,11 +154,13 @@ pub async fn get_operator(
     check_api_permission(&auth, &state, &permissions::OPERATOR_GET)
         .await
         .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            axum::http::StatusCode::FORBIDDEN => {
+                ApiError::Forbidden("Insufficient permissions".to_string())
+            }
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
     let operator = state.get_operator(&name).await?;
-    
+
     let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
     Ok(Json(operator.into()))
 }
@@ -171,21 +174,21 @@ pub async fn create_operator(
     check_api_permission(&auth, &state, &permissions::OPERATOR_CREATE)
         .await
         .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            axum::http::StatusCode::FORBIDDEN => {
+                ApiError::Forbidden("Insufficient permissions".to_string())
+            }
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
     // Check if already exists
     if let Ok(Some(_)) = state.get_operator(&req.user).await {
         return Err(ApiError::Conflict("Operator already exists".to_string()));
     }
-    
+
     let pass_hash = hash(&req.pass, DEFAULT_COST)?;
-    let operator = state.create_operator(
-        &req.user,
-        &pass_hash,
-        req.description,
-    ).await?;
-    
+    let operator = state
+        .create_operator(&req.user, &pass_hash, req.description)
+        .await?;
+
     Ok(Json(operator.into()))
 }
 
@@ -198,16 +201,18 @@ pub async fn delete_operator(
     check_api_permission(&auth, &state, &permissions::OPERATOR_DELETE)
         .await
         .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            axum::http::StatusCode::FORBIDDEN => {
+                ApiError::Forbidden("Insufficient permissions".to_string())
+            }
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
     // Operators use name as primary key now
     let deleted = state.delete_operator(&name).await?;
-    
+
     if !deleted {
         return Err(ApiError::NotFound("Operator not found".to_string()));
     }
-    
+
     Ok(())
 }
 
@@ -227,31 +232,35 @@ pub async fn update_operator_password(
         check_api_permission(&auth, &state, &permissions::OPERATOR_UPDATE)
             .await
             .map_err(|e| match e {
-                axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+                axum::http::StatusCode::FORBIDDEN => {
+                    ApiError::Forbidden("Insufficient permissions".to_string())
+                }
                 _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
             })?;
     }
     use bcrypt::verify;
-    
+
     // Get the operator first
     let operator = state.get_operator(&name).await?;
     let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
-    
+
     // Verify current password
     if !verify(&req.current_password, &operator.pass_hash)? {
         return Err(ApiError::Unauthorized);
     }
-    
+
     // Hash new password
     let new_pass_hash = hash(&req.new_password, DEFAULT_COST)?;
-    
+
     // Update password - use name as primary key
-    let updated = state.update_operator_password(&operator.user, &new_pass_hash).await?;
-    
+    let updated = state
+        .update_operator_password(&operator.user, &new_pass_hash)
+        .await?;
+
     if !updated {
         return Err(ApiError::NotFound("Operator not found".to_string()));
     }
-    
+
     Ok(())
 }
 
@@ -265,27 +274,29 @@ pub async fn update_operator(
     check_api_permission(&auth, &state, &permissions::OPERATOR_UPDATE)
         .await
         .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => ApiError::Forbidden("Insufficient permissions".to_string()),
+            axum::http::StatusCode::FORBIDDEN => {
+                ApiError::Forbidden("Insufficient permissions".to_string())
+            }
             _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
         })?;
     // Check if operator exists
     let operator = state.get_operator(&name).await?;
     let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;
-    
+
     // Update the operator - use name as primary key
-    let updated = state.update_operator(
-        &operator.user,
-        req.description,
-        req.active,
-    ).await?;
-    
+    let updated = state
+        .update_operator(&operator.user, req.description, req.active)
+        .await?;
+
     if !updated {
         return Err(ApiError::NotFound("Operator not found".to_string()));
     }
-    
+
     // Fetch the updated operator
-    let updated_operator = state.get_operator(&name).await?
+    let updated_operator = state
+        .get_operator(&name)
+        .await?
         .ok_or(ApiError::NotFound("Operator not found".to_string()))?;
-    
+
     Ok(Json(updated_operator.into()))
 }

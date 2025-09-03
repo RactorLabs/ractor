@@ -77,7 +77,7 @@ raworc_session_{session-name}/
 │   ├── instructions.md      # Host instructions
 │   └── setup.sh            # Environment setup script
 ├── /session/secrets/        # Environment secrets as files
-├── /session/canvas/         # HTML files and web assets
+├── /session/content/        # HTML files and web assets
 └── /session/logs/           # Host execution logs
 ```
 
@@ -86,7 +86,7 @@ raworc_session_{session-name}/
 Sessions use persistent Docker volumes for data that survives container lifecycle:
 
 - **Volume Name**: `raworc_session_data_{session-name}`
-- **Mount Point**: `/session/` (code, secrets, canvas, logs)
+- **Mount Point**: `/session/` (code, secrets, content, logs)
 - **Persistence**: Survives close/restore operations
 - **Cleanup**: Removed only when session is deleted
 

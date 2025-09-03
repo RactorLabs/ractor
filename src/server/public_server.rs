@@ -12,13 +12,13 @@ use tracing::{error, info, warn};
 
 pub async fn start_public_server() -> Result<()> {
     let app = create_public_app().await;
-    
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await?;
-    info!("Public Canvas HTTP server listening on http://0.0.0.0:8000");
-    info!("Serving published canvas content from /public directory");
-    
+    info!("Public Content HTTP server listening on http://0.0.0.0:8000");
+    info!("Serving published content files from /public directory");
+
     axum::serve(listener, app).await?;
-    
+
     Ok(())
 }
 
@@ -27,13 +27,12 @@ async fn create_public_app() -> Router {
     if let Err(e) = fs::create_dir_all("/public").await {
         warn!("Failed to create /public directory: {}", e);
     }
-    
+
     Router::new()
         .route("/", get(index_handler))
         .route("/health", get(health_handler))
         .fallback_service(
-            ServeDir::new("/public")
-                .not_found_service(axum::routing::any(not_found_handler))
+            ServeDir::new("/public").not_found_service(axum::routing::any(not_found_handler)),
         )
 }
 
@@ -45,8 +44,12 @@ async fn index_handler() -> impl IntoResponse {
 async fn health_handler() -> impl IntoResponse {
     let mut headers = HeaderMap::new();
     headers.insert("content-type", HeaderValue::from_static("application/json"));
-    
-    (StatusCode::OK, headers, r#"{"status":"healthy","service":"raworc-public-server"}"#)
+
+    (
+        StatusCode::OK,
+        headers,
+        r#"{"status":"healthy","service":"raworc-public-server"}"#,
+    )
 }
 
 async fn not_found_handler() -> impl IntoResponse {

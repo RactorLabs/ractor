@@ -1,13 +1,16 @@
+use sqlx::{MySql, Pool};
 use thiserror::Error;
-use sqlx::{Pool, MySql};
 
-pub mod session;
-pub mod message;
 pub mod constants;
+pub mod message;
+pub mod session;
 pub mod state_helpers;
 
-pub use session::{Session, CreateSessionRequest, RemixSessionRequest, UpdateSessionStateRequest, UpdateSessionRequest, RestoreSessionRequest, PublishSessionRequest};
-pub use message::{SessionMessage, CreateMessageRequest, MessageResponse, ListMessagesQuery};
+pub use message::{CreateMessageRequest, ListMessagesQuery, MessageResponse, SessionMessage};
+pub use session::{
+    CreateSessionRequest, PublishSessionRequest, RemixSessionRequest, RestoreSessionRequest,
+    Session, UpdateSessionRequest, UpdateSessionStateRequest,
+};
 
 // Database errors
 #[derive(Error, Debug)]

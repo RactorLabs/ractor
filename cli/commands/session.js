@@ -385,8 +385,8 @@ async function sessionRemixCommand(sourceSessionName, options) {
       remixPayload.secrets = options.secrets === 'true' || options.secrets === true;
     }
 
-    // Canvas is always included by default
-    remixPayload.canvas = true;
+    // Content is always included by default
+    remixPayload.content = true;
 
     // Add prompt if provided
     if (options.prompt) {
@@ -452,18 +452,18 @@ async function showSessionBox(sessionName, mode, user, source = null) {
     `Commands: ${commands}`
   ].filter(line => line !== null);
   
-  // Try to get Canvas URL from session info
+  // Try to get Content URL from session info
   try {
     const sessionResponse = await api.get(`/sessions/${sessionName}`);
-    if (sessionResponse.success && sessionResponse.data && sessionResponse.data.canvas_port) {
+    if (sessionResponse.success && sessionResponse.data && sessionResponse.data.content_port) {
       // Extract hostname from server URL instead of hardcoding localhost
       const serverUrl = config.getServerUrl();
       const serverHostname = new URL(serverUrl).hostname;
-      const canvasUrl = `http://${serverHostname}:${sessionResponse.data.canvas_port}/`;
-      lines.splice(-1, 0, `Canvas: ${canvasUrl}`); // Insert before Commands line
+      const contentUrl = `http://${serverHostname}:${sessionResponse.data.content_port}/`;
+      lines.splice(-1, 0, `Content: ${contentUrl}`); // Insert before Commands line
     }
   } catch (error) {
-    // Continue without Canvas URL if API call fails
+    // Continue without Content URL if API call fails
   }
   
   const maxWidth = Math.max(title.length, ...lines.map(line => line.length));
@@ -1359,14 +1359,14 @@ async function sessionPublishCommand(sessionName, options) {
   // Show publishing permissions (same logic as remix)
   const code = options.code === undefined ? true : (options.code === 'true' || options.code === true);
   const secrets = options.secrets === undefined ? true : (options.secrets === 'true' || options.secrets === true);
-  // Canvas is always allowed by default
-  const canvas = true;
+  // Content is always allowed by default
+  const content = true;
 
   console.log();
   console.log(chalk.yellow('📋 Remix Permissions:'));
   console.log(chalk.gray('  Code:'), code ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Secrets:'), secrets ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
-  console.log(chalk.gray('  Canvas:'), chalk.green('✓ Allowed'));
+  console.log(chalk.gray('  Content:'), chalk.green('✓ Allowed'));
   console.log();
 
   try {
@@ -1374,7 +1374,7 @@ async function sessionPublishCommand(sessionName, options) {
     const publishPayload = {
       code: code,
       secrets: secrets,
-      canvas: canvas
+      content: content
     };
 
     const response = await api.post(`/sessions/${sessionName}/publish`, publishPayload);

@@ -4,13 +4,13 @@ use std::process;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::shared::init_database;
-use crate::server::rest::create_router;
 use crate::server::public_server;
+use crate::server::rest::create_router;
+use crate::shared::init_database;
 
 pub async fn run_rest_server() -> Result<()> {
     // Environment variables are loaded via cargo run or runtime
-    
+
     // Write PID file for process management
     let pid = process::id();
     let pid_file = "/tmp/raworc.pid";
@@ -44,17 +44,15 @@ PID: {}
 
     // Initialize database connection and app state
     info!("Connecting to MySQL database...");
-    
+
     // Get environment variables or use defaults
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "mysql://root:root@localhost:3306/raworc".to_string());
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "development-secret-key".to_string());
-    let host = std::env::var("RAWORC_HOST")
-        .unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("RAWORC_PORT")
-        .unwrap_or_else(|_| "9000".to_string());
-    
+    let jwt_secret =
+        std::env::var("JWT_SECRET").unwrap_or_else(|_| "development-secret-key".to_string());
+    let host = std::env::var("RAWORC_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("RAWORC_PORT").unwrap_or_else(|_| "9000".to_string());
+
     let app_state = match init_database(&database_url, jwt_secret).await {
         Ok(state) => {
             info!("Connected to database successfully!");
@@ -81,7 +79,7 @@ PID: {}
 
     info!("Server started successfully!");
     info!("REST API Endpoint: http://{}:{}/api/v0", host, port);
-    info!("Public Canvas Server: http://{}:8000", host);
+    info!("Public Content Server: http://{}:8000", host);
     info!("Ready to accept requests...");
 
     // Start public server in background
@@ -96,7 +94,7 @@ PID: {}
 
     // Clean up PID file on exit
     let _ = fs::remove_file(pid_file);
-    
+
     // Wait for public server to finish (or abort if REST server fails)
     public_server_handle.abort();
 

@@ -13,17 +13,17 @@ pub fn init_service_logging(log_dir: &str, service_name: &str) -> Result<(), any
         .and_then(|_| std::fs::File::create(format!("{log_dir}/.test_write")))
         .map(|_| std::fs::remove_file(format!("{log_dir}/.test_write")))
         .is_ok();
-    
+
     if can_write_logs {
         use tracing_appender::rolling;
-        
+
         // Rotate logs on startup
         let _ = rotate_logs_on_startup(log_dir, service_name);
-        
+
         // Set up file appender with daily rotation
         let file_appender = rolling::daily(log_dir, format!("{service_name}.log"));
         let (non_blocking_file, _guard_file) = non_blocking(file_appender);
-        
+
         // Set up console output
         let (non_blocking_stdout, _guard_stdout) = non_blocking(std::io::stdout());
 
@@ -56,7 +56,7 @@ pub fn init_service_logging(log_dir: &str, service_name: &str) -> Result<(), any
     } else {
         // Set up console output only
         let (non_blocking_stdout, _guard_stdout) = non_blocking(std::io::stdout());
-        
+
         let console_layer = fmt::layer()
             .with_writer(non_blocking_stdout)
             .with_ansi(true) // Colors for console

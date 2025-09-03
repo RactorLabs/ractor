@@ -21,7 +21,6 @@ pub struct Operator {
     pub last_login_at: Option<String>,
 }
 
-
 // Permission Rule - Fine-grained access control
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rule {
@@ -41,7 +40,6 @@ pub struct Role {
     pub description: Option<String>,
     pub created_at: String,
 }
-
 
 // Subject type for role bindings
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq)]
@@ -67,7 +65,6 @@ pub struct RoleBinding {
     pub principal_type: SubjectType,
     pub created_at: String,
 }
-
 
 // Role Reference for bindings
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,11 +100,11 @@ impl AuthPrincipal {
 // JWT Claims for RBAC authentication
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RbacClaims {
-    pub sub: String,               // Subject name
-    pub sub_type: SubjectType,     // Subject type
-    pub exp: usize,                // Expiration time
-    pub iat: usize,                // Issued at
-    pub iss: String,               // Issuer
+    pub sub: String,           // Subject name
+    pub sub_type: SubjectType, // Subject type
+    pub exp: usize,            // Expiration time
+    pub iat: usize,            // Issued at
+    pub iss: String,           // Issuer
 }
 
 // Input types removed - were unused
@@ -142,4 +139,3 @@ impl RbacAuthz {
         true
     }
 }
-

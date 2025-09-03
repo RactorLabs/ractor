@@ -1,18 +1,13 @@
-use crate::shared::{AppState};
 use crate::shared::models::DatabaseError;
 use crate::shared::rbac::{
-    AuthPrincipal, PermissionContext, RbacAuthz, RbacClaims, Operator, SubjectType,
-    TokenResponse,
+    AuthPrincipal, Operator, PermissionContext, RbacAuthz, RbacClaims, SubjectType, TokenResponse,
 };
+use crate::shared::AppState;
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 
-
-
-
 // Legacy Auth guard for backward compatibility during migration
-
 
 // JWT utility functions for RBAC
 pub fn create_operator_jwt(
@@ -44,7 +39,6 @@ pub fn create_operator_jwt(
     })
 }
 
-
 pub fn decode_rbac_jwt(token: &str, secret: &str) -> Result<RbacClaims> {
     let token_data: TokenData<RbacClaims> = decode(
         token,
@@ -64,10 +58,7 @@ pub async fn check_permission(
     // Get all roles and role bindings
     let roles = app_state.get_all_roles().await?;
     let role_bindings = app_state
-        .get_role_bindings_for_subject(
-            principal.name(),
-            principal.subject_type(),
-        )
+        .get_role_bindings_for_subject(principal.name(), principal.subject_type())
         .await?;
 
     tracing::info!(
@@ -90,7 +81,6 @@ pub async fn check_permission(
     tracing::info!("RBAC authorization result: {}", result);
     Ok(result)
 }
-
 
 // Authentication functions
 pub async fn authenticate_operator(

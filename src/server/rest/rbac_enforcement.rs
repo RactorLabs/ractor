@@ -1,8 +1,8 @@
-use axum::http::StatusCode;
-use crate::shared::models::AppState;
-use crate::server::rest::middleware::AuthContext;
-use crate::shared::rbac::PermissionContext;
 use crate::server::auth::check_permission;
+use crate::server::rest::middleware::AuthContext;
+use crate::shared::models::AppState;
+use crate::shared::rbac::PermissionContext;
+use axum::http::StatusCode;
 
 /// Permission requirements for each API endpoint
 #[allow(dead_code)]
@@ -53,8 +53,13 @@ pub async fn check_api_permission(
     tracing::info!("Permission check result: {}", has_permission);
 
     if !has_permission {
-        tracing::warn!("Permission denied for {} on {}/{}/{}", 
-            auth.principal.name(), context.api_group, context.resource, context.verb);
+        tracing::warn!(
+            "Permission denied for {} on {}/{}/{}",
+            auth.principal.name(),
+            context.api_group,
+            context.resource,
+            context.verb
+        );
         return Err(StatusCode::FORBIDDEN);
     }
 
@@ -66,34 +71,32 @@ pub mod permissions {
     use super::PermissionRequirement;
 
     // Operator permissions
-    pub const OPERATOR_LIST: PermissionRequirement = 
+    pub const OPERATOR_LIST: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "list");
-    pub const OPERATOR_GET: PermissionRequirement = 
+    pub const OPERATOR_GET: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "get");
-    pub const OPERATOR_CREATE: PermissionRequirement = 
+    pub const OPERATOR_CREATE: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "create");
-    pub const OPERATOR_UPDATE: PermissionRequirement = 
+    pub const OPERATOR_UPDATE: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "update");
-    pub const OPERATOR_DELETE: PermissionRequirement = 
+    pub const OPERATOR_DELETE: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "delete");
-
 
     // Session permissions
     #[allow(dead_code)]
-    pub const SESSION_LIST: PermissionRequirement = 
+    pub const SESSION_LIST: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "list");
     #[allow(dead_code)]
-    pub const SESSION_GET: PermissionRequirement = 
+    pub const SESSION_GET: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "get");
     #[allow(dead_code)]
-    pub const SESSION_CREATE: PermissionRequirement = 
+    pub const SESSION_CREATE: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "create");
-    pub const SESSION_UPDATE: PermissionRequirement = 
+    pub const SESSION_UPDATE: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "update");
-    pub const SESSION_DELETE: PermissionRequirement = 
+    pub const SESSION_DELETE: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "delete");
     #[allow(dead_code)]
-    pub const SESSION_LIST_ALL: PermissionRequirement = 
+    pub const SESSION_LIST_ALL: PermissionRequirement =
         PermissionRequirement::new("api", "sessions", "list-all");
-
 }

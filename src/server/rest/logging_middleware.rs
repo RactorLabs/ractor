@@ -1,9 +1,4 @@
-use axum::{
-    extract::Request,
-    http::StatusCode,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, http::StatusCode, middleware::Next, response::Response};
 use std::time::Instant;
 use tracing::info;
 
@@ -14,7 +9,7 @@ pub async fn request_logging_middleware(
     let method = request.method().clone();
     let uri = request.uri().clone();
     let start = Instant::now();
-    
+
     // Get user info if available (for authenticated endpoints)
     let user = request
         .headers()
@@ -22,11 +17,11 @@ pub async fn request_logging_middleware(
         .and_then(|h| h.to_str().ok())
         .map(|_| "authenticated")
         .unwrap_or("anonymous");
-    
+
     let response = next.run(request).await;
     let status = response.status();
     let duration = start.elapsed();
-    
+
     // Log the request with response status and duration
     info!(
         method = %method,
@@ -36,6 +31,6 @@ pub async fn request_logging_middleware(
         user = %user,
         "HTTP request"
     );
-    
+
     Ok(response)
 }
