@@ -5,7 +5,19 @@ title: Changelog
 
 # Changelog
 
-## v0.3.8 (Unreleased)
+## v0.4.0 (In Development)
+
+- **Major Architecture Overhaul**: Complete system redesign using session name as primary key
+- **Remove Session IDs**: All operations now use session name directly, no more UUID IDs
+- **Remove Data Folder**: Simplified session structure to only code/, secrets/, and canvas/ folders
+- **Public Canvas Server**: Added HTTP server on port 8000 to serve published canvas content
+- **Persistent Public Volume**: Published canvas content persists across container rebuilds
+- **Container Naming by Name**: Containers named `raworc_session_{name}` instead of by ID
+- **Database Schema Overhaul**: Name as primary key, removed container_id and persistent_volume_id fields
+- **Simplified CLI**: Removed --data flag, removed name change capability, name required at creation
+- **No Backward Compatibility**: Complete data reset required for this major version
+
+## v0.3.8
 
 - **Canvas Always Included**: Removed canvas flag - canvas files are now always included in remix and publish operations by default
 - **Simplified CLI**: Removed `--canvas` flag from remix and publish commands - canvas is always copied and always allowed
