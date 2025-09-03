@@ -389,12 +389,19 @@ Update session details.
 **Request Body**:
 ```json
 {
+  "name": "my-updated-session",
   "metadata": {
     "updated_by": "admin",
     "purpose": "production deployment"
-  }
+  },
+  "timeout_seconds": 600
 }
 ```
+
+**Fields**:
+- `name` (optional) - Update session name (alphanumeric and hyphens only)
+- `metadata` (optional) - Update session metadata object
+- `timeout_seconds` (optional) - Update session timeout in seconds
 
 **Response**: `200 OK`
 (Returns updated session)
