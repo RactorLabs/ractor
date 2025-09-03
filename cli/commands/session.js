@@ -548,7 +548,7 @@ async function startInteractiveSession(sessionId, options) {
 
   // Handle prompt if provided (for any session type)
   if (options.prompt) {
-    console.log(chalk.blue('Prompt sent:'), options.prompt);
+    console.log(chalk.green('> ') + chalk.white(options.prompt));
     console.log();
 
     try {
