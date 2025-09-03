@@ -614,7 +614,7 @@ impl Session {
             "data": req.data,
             "code": req.code,
             "secrets": req.secrets,
-            "canvas": req.canvas
+            "canvas": true // Canvas is always allowed
         });
 
         let result = sqlx::query(

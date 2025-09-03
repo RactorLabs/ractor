@@ -277,9 +277,7 @@ pub async fn remix_session(
         if req.secrets && !publish_perms.get("secrets").and_then(|v| v.as_bool()).unwrap_or(false) {
             return Err(ApiError::Forbidden("Secrets remix not permitted for this published session".to_string()));
         }
-        if req.canvas && !publish_perms.get("canvas").and_then(|v| v.as_bool()).unwrap_or(false) {
-            return Err(ApiError::Forbidden("Canvas remix not permitted for this published session".to_string()));
-        }
+        // Canvas is always allowed - no permission check needed
     }
 
     // Get the principal name for task creation (remixer becomes owner)
@@ -292,7 +290,8 @@ pub async fn remix_session(
     let copy_data = req.data;
     let copy_code = req.code;
     let copy_secrets = req.secrets;
-    let copy_canvas = req.canvas;
+    // Canvas is always copied
+    let copy_canvas = true;
     let initial_prompt = req.prompt.clone();
     
     let session = Session::remix(&state.db, &parent.id, req, created_by)

@@ -5,6 +5,14 @@ title: Changelog
 
 # Changelog
 
+## v0.3.8 (Unreleased)
+
+- **Canvas Always Included**: Removed canvas flag - canvas files are now always included in remix and publish operations by default
+- **Simplified CLI**: Removed `--canvas` flag from remix and publish commands - canvas is always copied and always allowed
+- **Backend Simplification**: Canvas permissions always set to true, no longer requiring explicit user choice
+- **Text Editor Enhancement**: Empty file creation now supported when no content parameter provided
+- **Documentation Updates**: Updated CLI usage examples and option tables to reflect canvas behavior changes
+
 ## v0.3.7
 
 - **Canvas Folder Support**: Added comprehensive Canvas folder copying support for session remix and publish operations with granular control via `--canvas` flag
