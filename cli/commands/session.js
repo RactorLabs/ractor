@@ -363,6 +363,17 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
 
   try {
+    // Get session details first (to resolve name to ID)
+    const sessionResponse = await api.get(`/sessions/${sourceSessionId}`);
+
+    if (!sessionResponse.success) {
+      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
+      process.exit(1);
+    }
+
+    const sourceSession = sessionResponse.data;
+    // Update sessionId to actual UUID for consistent display
+    sourceSessionId = sourceSession.id;
 
     // Prepare remix payload
     const remixPayload = {};
@@ -603,24 +614,34 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
 }
 
 function showPrompt(state = 'idle') {
+  const stateIcons = {
+    'init': '◯',      // empty circle - initializing
+    'idle': '●',      // solid circle - ready
+    'busy': '◐',      // half circle - working
+    'closed': '◻',    // empty square - closed/slept
+    'errored': '◆',   // diamond - error
+    'deleted': '◼'    // filled square - deleted
+  };
+
   const stateLabels = {
     'init': 'initializing',
     'idle': 'idle',
     'busy': 'working',
-    'waiting': 'idle',
-    'error': 'error',
-    'closed': 'slept'
+    'closed': 'slept',
+    'errored': 'error',
+    'deleted': 'deleted'
   };
   
   const stateColors = {
     'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
-    'waiting': chalk.blue,
-    'error': chalk.red,
-    'closed': chalk.gray
+    'closed': chalk.cyan,     // brighter than gray
+    'errored': chalk.red,
+    'deleted': chalk.magenta
   };
   
+  const icon = stateIcons[state] || '◯';
   let label = stateLabels[state] || state;
   
   // Add animated dots for init and busy states
@@ -631,30 +652,40 @@ function showPrompt(state = 'idle') {
   
   const color = stateColors[state] || chalk.gray;
   console.log();
-  console.log(color(label));
+  console.log(color(`${icon} ${label}`));
   console.log(chalk.gray('————————————————————————————————————————'));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
 function showPromptWithInput(state = 'idle', userInput = '') {
+  const stateIcons = {
+    'init': '◯',      // empty circle - initializing
+    'idle': '●',      // solid circle - ready
+    'busy': '◐',      // half circle - working
+    'closed': '◻',    // empty square - closed/slept
+    'errored': '◆',   // diamond - error
+    'deleted': '◼'    // filled square - deleted
+  };
+
   const stateLabels = {
     'init': 'initializing',
     'idle': 'idle',
     'busy': 'working',
-    'waiting': 'idle',
-    'error': 'error',
-    'closed': 'slept'
+    'closed': 'slept',
+    'errored': 'error',
+    'deleted': 'deleted'
   };
   
   const stateColors = {
     'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
-    'waiting': chalk.blue,
-    'error': chalk.red,
-    'closed': chalk.gray
+    'closed': chalk.cyan,     // brighter than gray
+    'errored': chalk.red,
+    'deleted': chalk.magenta
   };
   
+  const icon = stateIcons[state] || '◯';
   let label = stateLabels[state] || state;
   
   // Add animated dots for init and busy states
@@ -665,7 +696,7 @@ function showPromptWithInput(state = 'idle', userInput = '') {
   
   const color = stateColors[state] || chalk.gray;
   console.log();
-  console.log(color(label));
+  console.log(color(`${icon} ${label}`));
   console.log(chalk.gray('————————————————————————————————————————'));
   process.stdout.write(chalk.cyanBright('> ') + userInput);
 }
@@ -1141,8 +1172,7 @@ async function sessionCloseCommand(sessionId, options) {
   console.log();
 
   try {
-
-    // Get session details first to show current state
+    // Get session details first (to resolve name to ID and show current state)
     const sessionResponse = await api.get(`/sessions/${sessionId}`);
 
     if (!sessionResponse.success) {
@@ -1151,7 +1181,9 @@ async function sessionCloseCommand(sessionId, options) {
     }
 
     const session = sessionResponse.data;
-    console.log(chalk.gray('Current state:'), session.state);
+    // Update sessionId to actual UUID for consistent display
+    sessionId = session.id;
+    console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
 
     // Check if session is already closed
     if (session.state === SESSION_STATE_CLOSED) {
@@ -1184,13 +1216,25 @@ async function sessionCloseCommand(sessionId, options) {
 }
 
 function getStateDisplay(state) {
+  const stateIcons = {
+    'init': '◯',      // empty circle - initializing
+    'idle': '●',      // solid circle - ready
+    'busy': '◐',      // half circle - working  
+    'closed': '◻',    // empty square - closed/slept
+    'errored': '◆',   // diamond - error
+    'deleted': '◼'    // filled square - deleted
+  };
+
   const stateColors = {
+    'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow, 
-    'closed': chalk.red,
-    'errored': chalk.red
+    'closed': chalk.cyan,     // brighter than gray
+    'errored': chalk.red,
+    'deleted': chalk.magenta
   };
   
+  const icon = stateIcons[state] || '◯';
   const color = stateColors[state] || chalk.gray;
-  return color(state);
+  return color(`${icon} ${state}`);
 }
