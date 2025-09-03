@@ -55,6 +55,8 @@ pub struct RemixSessionRequest {
     pub code: bool,
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub secrets: bool,
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
+    pub canvas: bool,
     #[serde(default)]
     pub prompt: Option<String>,
 }
@@ -67,6 +69,8 @@ pub struct PublishSessionRequest {
     pub code: bool,
     #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
     pub secrets: bool,
+    #[serde(default = "default_true", deserialize_with = "deserialize_strict_bool_default_true")]
+    pub canvas: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -609,7 +613,8 @@ impl Session {
         let publish_permissions = serde_json::json!({
             "data": req.data,
             "code": req.code,
-            "secrets": req.secrets
+            "secrets": req.secrets,
+            "canvas": req.canvas
         });
 
         let result = sqlx::query(

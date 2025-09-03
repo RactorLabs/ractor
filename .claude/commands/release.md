@@ -102,6 +102,21 @@ git commit -m "chore: bump version to 0.3.5"
 - **Consistency**: Prevents version mismatches between source and lock files
 - **Release reliability**: Ensures published packages will build successfully
 
+**IMPORTANT NOTE:** Always verify all version bump files are included in the commit. If some files are missing from the version bump commit, manually stage them:
+
+```bash
+# Check which files were modified but not committed
+git status
+
+# Add any missing version-related files
+git add <missing-files>
+git commit --amend --no-edit
+
+# Or create a follow-up commit if already pushed
+git add <missing-files>
+git commit -m "chore: complete version references update for X.Y.Z"
+```
+
 ### Files that must be updated and committed with version bumps
 
 **Version References (manual updates):**

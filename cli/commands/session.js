@@ -114,6 +114,7 @@ module.exports = (program) => {
     .option('-d, --data <boolean>', 'Include data files (default: true)')
     .option('-c, --code <boolean>', 'Include code files (default: true)')
     .option('-s, --secrets <boolean>', 'Include secrets (default: true)')
+    .option('--canvas <boolean>', 'Include canvas files (default: true)')
     .option('-p, --prompt <text>', 'Prompt to send after creation')
     .addHelpText('after', '\n' +
       'Examples:\n' +
@@ -121,7 +122,8 @@ module.exports = (program) => {
       '  $ raworc session remix my-session         # Remix by name\n' +
       '  $ raworc session remix my-session -n "new-name" # Remix with new name\n' +
       '  $ raworc session remix my-session -s false # Remix without secrets\n' +
-      '  $ raworc session remix my-session --data false --code false # Copy only secrets\n')
+      '  $ raworc session remix my-session --data false --code false # Copy only secrets\n' +
+      '  $ raworc session remix my-session --canvas false # Remix without canvas files\n')
     .action(async (sessionId, options) => {
       await sessionRemixCommand(sessionId, options);
     });
@@ -133,12 +135,14 @@ module.exports = (program) => {
     .option('-d, --data <boolean>', 'Allow data remix (default: true)')
     .option('-c, --code <boolean>', 'Allow code remix (default: true)')
     .option('-s, --secrets <boolean>', 'Allow secrets remix (default: true)')
+    .option('--canvas <boolean>', 'Allow canvas remix (default: true)')
     .addHelpText('after', '\n' +
       'Examples:\n' +
       '  $ raworc session publish abc123           # Publish with all permissions\n' +
       '  $ raworc session publish my-session       # Publish by name\n' +
       '  $ raworc session publish abc123 --secrets false # Publish without secrets remix\n' +
-      '  $ raworc session publish abc123 --data false --secrets false # Only allow code remix\n')
+      '  $ raworc session publish abc123 --data false --secrets false # Only allow code remix\n' +
+      '  $ raworc session publish abc123 --canvas false # Publish without canvas remix\n')
     .action(async (sessionId, options) => {
       await sessionPublishCommand(sessionId, options);
     });
@@ -389,6 +393,10 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
     if (options.secrets !== undefined) {
       remixPayload.secrets = options.secrets === 'true' || options.secrets === true;
+    }
+
+    if (options.canvas !== undefined) {
+      remixPayload.canvas = options.canvas === 'true' || options.canvas === true;
     }
 
     // Add prompt if provided
@@ -1382,12 +1390,14 @@ async function sessionPublishCommand(sessionId, options) {
   const data = options.data === undefined ? true : (options.data === 'true' || options.data === true);
   const code = options.code === undefined ? true : (options.code === 'true' || options.code === true);
   const secrets = options.secrets === undefined ? true : (options.secrets === 'true' || options.secrets === true);
+  const canvas = options.canvas === undefined ? true : (options.canvas === 'true' || options.canvas === true);
 
   console.log();
   console.log(chalk.yellow('📋 Remix Permissions:'));
   console.log(chalk.gray('  Data:'), data ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Code:'), code ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log(chalk.gray('  Secrets:'), secrets ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
+  console.log(chalk.gray('  Canvas:'), canvas ? chalk.green('✓ Allowed') : chalk.red('✗ Blocked'));
   console.log();
 
   try {
@@ -1395,7 +1405,8 @@ async function sessionPublishCommand(sessionId, options) {
     const publishPayload = {
       data: data,
       code: code,
-      secrets: secrets
+      secrets: secrets,
+      canvas: canvas
     };
 
     const response = await api.post(`/sessions/${sessionId}/publish`, publishPayload);

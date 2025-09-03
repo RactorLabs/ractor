@@ -270,10 +270,11 @@ echo 'Session directories created (including logs and canvas)'
         parent_session_id: &str,
         copy_data: bool,
         copy_code: bool,
-        copy_secrets: bool
+        copy_secrets: bool,
+        copy_canvas: bool
     ) -> Result<String> {
-        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {})", 
-              session_id, parent_session_id, copy_data, copy_code, copy_secrets);
+        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {}, canvas: {})", 
+              session_id, parent_session_id, copy_data, copy_code, copy_secrets, copy_canvas);
         
         // First create the session volume (without starting container)
         let session_volume = self.create_session_volume(session_id).await?;
@@ -302,6 +303,12 @@ echo 'Session directories created (including logs and canvas)'
             copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
         } else {
             copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+        }
+        
+        if copy_canvas {
+            copy_commands.push("if [ -d /source/canvas ]; then cp -a /source/canvas/. /dest/canvas/ || echo 'No canvas to copy'; fi".to_string());
+        } else {
+            copy_commands.push("echo 'Skipping canvas copy as requested'".to_string());
         }
         
         // Always copy README.md from root if it exists
@@ -442,6 +449,7 @@ echo 'Session directories created (including logs and canvas)'
         copy_data: bool,
         copy_code: bool,
         copy_secrets: bool,
+        copy_canvas: bool,
         api_key: String,
         raworc_token: String,
         principal: String,
@@ -478,6 +486,12 @@ echo 'Session directories created (including logs and canvas)'
             copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
         } else {
             copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+        }
+        
+        if copy_canvas {
+            copy_commands.push("if [ -d /source/canvas ]; then cp -a /source/canvas/. /dest/canvas/ || echo 'No canvas to copy'; fi".to_string());
+        } else {
+            copy_commands.push("echo 'Skipping canvas copy as requested'".to_string());
         }
         
         // Always copy README.md from root if it exists

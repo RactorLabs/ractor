@@ -340,6 +340,9 @@ impl SessionManager {
             let copy_secrets = task.payload.get("copy_secrets")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
+            let copy_canvas = task.payload.get("copy_canvas")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
                 
             // For remix sessions, get principal info from remix task payload
             let remix_principal = task.payload.get("principal")
@@ -359,8 +362,8 @@ impl SessionManager {
                 _ => SubjectType::Subject,
             };
                 
-            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}) for principal {} ({})", 
-                  session_id, parent_session_id, copy_data, copy_code, copy_secrets, remix_principal, remix_principal_type_str);
+            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}, copy_canvas: {}) for principal {} ({})", 
+                  session_id, parent_session_id, copy_data, copy_code, copy_secrets, copy_canvas, remix_principal, remix_principal_type_str);
             
             // For remix sessions, create container with selective volume copy from parent
             // Generate fresh tokens for remix session
@@ -375,6 +378,7 @@ impl SessionManager {
                 copy_data, 
                 copy_code,
                 copy_secrets,
+                copy_canvas,
                 remix_api_key,
                 remix_token,
                 remix_principal.to_string(),
