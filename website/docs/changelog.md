@@ -5,6 +5,21 @@ title: Changelog
 
 # Changelog
 
+## v0.3.4
+
+- **Session State Management**: Fixed session initialization to properly show 'init' state during container startup instead of prematurely showing 'idle'
+- **Backend State Corrections**: Sessions now set to 'init' state during creation and restoration, transitioning to 'idle' only when host containers are actually ready
+- **Prompt System Reliability**: Implemented comprehensive prompt manager to handle state monitoring, animation, and message processing consistently
+- **Prompt Option Fixes**: Fixed `-p` prompt option to properly send messages to API before waiting for responses, resolving lost message issues
+- **Timestamp-based Message Processing**: Implemented task creation timestamp tracking to prevent processing messages sent before operator task starts
+- **Message Handler Improvements**: Enhanced message processing with proper timestamp filtering and environment variable passing between operator and host containers
+- **CLI Animation Fixes**: Resolved duplicate prompt displays and animation conflicts between prompt processing and interactive session systems
+- **Session Timeout Increase**: Increased default session auto-close timeout from 60 seconds to 5 minutes (300 seconds) for better user experience
+- **Interactive Session Enhancements**: Unified message handling between prompt and interactive modes with comprehensive tool execution display
+- **Error Handling Improvements**: Enhanced session close error handling to gracefully ignore API calls for already closed containers
+- **Prompt Display Cleanup**: Eliminated extra blank lines and duplicate prompts in CLI output for cleaner user interface
+- **State Transition Accuracy**: Sessions now accurately reflect container readiness state throughout initialization and restoration processes
+
 ## v0.3.3
 
 - **CLI Design System**: Implemented consistent flat geometric icon system throughout CLI interface, replacing emojis with professional Unicode characters
