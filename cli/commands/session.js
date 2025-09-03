@@ -554,7 +554,7 @@ async function startInteractiveSession(sessionId, options) {
       const hostResponse = await waitForHostResponse(sessionId, Date.now());
 
       if (hostResponse) {
-        console.log(chalk.cyan('Host:'), chalk.whiteBright(hostResponse.content));
+        console.log(hostResponse.content);
         console.log();
       } else {
         console.log(chalk.yellow('No host response received within timeout'));
@@ -971,37 +971,15 @@ async function chatLoop(sessionId, options = {}) {
     clearInterval(dotAnimationInterval);
     rl.close();
     
-    // Try to close the session on the server (ignore if already closed)
+    // Close the session on the server silently
     try {
-      const closeResponse = await api.post(`/sessions/${sessionId}/close`);
-      if (closeResponse.success) {
-        console.log(chalk.green('✓') + ' Session closed on server');
-      } else {
-        // Check if the error indicates container is already closed/not found
-        const errorMessage = closeResponse.error || 'Unknown error';
-        const isAlreadyClosed = typeof errorMessage === 'string' && 
-          (errorMessage.toLowerCase().includes('not found') || 
-           errorMessage.toLowerCase().includes('already closed') ||
-           errorMessage.toLowerCase().includes('does not exist'));
-        
-        if (!isAlreadyClosed) {
-          // Only show warning if it's not an "already closed" error
-          const displayError = typeof errorMessage === 'object' ? 
-            JSON.stringify(errorMessage) : errorMessage;
-          console.log(chalk.yellow('⚠') + ' Could not close session on server: ' + displayError);
-        }
-      }
+      await api.post(`/sessions/${sessionId}/close`);
     } catch (error) {
-      // Only show communication errors that aren't about missing containers
-      const errorMsg = error.message || error;
-      const isMissingContainer = typeof errorMsg === 'string' && 
-        (errorMsg.toLowerCase().includes('not found') || 
-         errorMsg.toLowerCase().includes('404'));
-      
-      if (!isMissingContainer) {
-        console.log(chalk.yellow('⚠') + ' Could not communicate with server to close session');
-      }
+      // Ignore all errors during cleanup
     }
+    
+    console.log();
+    console.log(chalk.cyan('Goodbye! 👋'));
     
     process.exit(0);
   }

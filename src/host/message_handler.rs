@@ -29,7 +29,7 @@ impl MessageHandler {
     }
 
     /// Find which user messages already have Host responses to avoid reprocessing.
-    /// Simple and reliable approach for both fresh and restored sessions.
+    /// Accurately tracks which messages have responses for both fresh and restored sessions.
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!("Initializing processed message tracking...");
         
@@ -40,37 +40,27 @@ impl MessageHandler {
             return Ok(());
         }
 
-        // Find user messages that have corresponding Host responses
-        // Simple approach: if there are any Host messages, assume all previous user messages have responses
+        // Find user messages that actually have Host responses following them
         let mut user_messages_with_responses = HashSet::new();
         
-        // Collect all user and Host message IDs first
-        let mut user_messages = Vec::new();
-        let mut host_count = 0;
-        
-        for message in &all_messages {
-            match message.role {
-                MessageRole::User => {
-                    user_messages.push(message.id.clone());
-                },
-                MessageRole::Host => {
-                    host_count += 1;
-                },
-                MessageRole::System => {
-                    // System messages don't affect counting
+        // Go through messages in order and track which user messages have responses
+        for (i, message) in all_messages.iter().enumerate() {
+            if message.role == MessageRole::User {
+                // Check if there's a Host message after this user message
+                let has_host_response = all_messages.iter().skip(i + 1)
+                    .any(|m| m.role == MessageRole::Host);
+                
+                if has_host_response {
+                    user_messages_with_responses.insert(message.id.clone());
+                    info!("User message {} has Host response - marking as processed", message.id);
+                } else {
+                    info!("User message {} has no Host response - will process", message.id);
                 }
             }
         }
         
-        // Mark the first N user messages as having responses (where N = host_count)
-        for (i, user_msg_id) in user_messages.iter().enumerate() {
-            if i < host_count {
-                user_messages_with_responses.insert(user_msg_id.clone());
-            }
-        }
-        
-        info!("Found {} user messages, {} Host responses, marking first {} user messages as processed", 
-              user_messages.len(), host_count, user_messages_with_responses.len());
+        info!("Found {} total messages, {} user messages with responses", 
+              all_messages.len(), user_messages_with_responses.len());
 
         // Mark user messages that have responses as processed
         let mut processed = self.processed_user_message_ids.lock().await;
