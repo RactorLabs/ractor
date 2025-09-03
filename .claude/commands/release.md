@@ -14,13 +14,11 @@ Automate the complete release workflow for Raworc project.
 8. **Push to main**: `git push origin main`
 9. **Tag release**: Tag current commit with project version (without "v" prefix)
 10. **Push tag**: `git push origin <version>` (triggers GitHub Actions)
+11. **Update website**: Deploy website with latest API docs, CLI changes, and version updates
 
-11. **Bump version**: Increment patch version in all files (see detailed list below)
-12. **Run builds**: Update lock files and validate changes
-13. **Stage all changes**: `git add .`
-14. **Commit version bump**: `git commit -m "chore: bump version to <next>"`
-15. **Push version bump**: `git push origin main`
-16. **Update website**: Deploy website with latest API docs, CLI changes, and version updates
+**Next steps after release:**
+- Use `/bump` command to increment version for next development cycle
+- Use `/commit` command to commit the version bump changes
 
 ## Pre-Release Documentation Updates
 
@@ -59,79 +57,18 @@ git log --oneline <last-version>..HEAD
 Current version: 0.3.7
 → Stage changes and commit
 → Tag 0.3.7 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
-→ Bump to 0.3.8 for next development
-→ Push version bump
+→ Use /bump command to increment to 0.3.8
+→ Use /commit to push version bump
 ```
 
-## Version Bump Requirements
+## Version Management
 
-**CRITICAL: When bumping versions, always build both Cargo and npm to ensure success and update lock files:**
+After completing the release workflow, use the separate `/bump` command to increment the version for next development:
 
 ```bash
-# 1. Update version in all files:
-#    - Cargo.toml: version = "0.3.7"
-#    - cli/package.json: "version": "0.3.7"  
-#    - website/package.json: "version": "0.3.7"
-#    - CLAUDE.md: Current version: 0.3.7
-#    - src/server/rest/routes.rs: "version": "0.3.7" (API response)
-#    - website/docs/api/rest-api.md: "version": "0.3.7" (documentation)
-#    - website/docs/changelog.md: Add new version entry with changes
-#    - .claude/commands/release.md: Update version examples
-
-# 2. Build Rust project to validate and update Cargo.lock
-cargo build --release
-
-# 3. Build npm packages to validate and update package-lock.json (if exists)
-cd cli && npm install && cd ..
-cd website && npm install && cd ..
-
-# 4. Verify both builds succeeded before committing
-# 5. Commit all changes including updated lock files
-git add Cargo.toml cli/package.json website/package.json CLAUDE.md \
-        src/server/rest/routes.rs website/docs/api/rest-api.md \
-        website/docs/changelog.md .claude/commands/release.md \
-        Cargo.lock cli/package-lock.json website/package-lock.json
-git commit -m "chore: bump version to 0.3.5"
+# After /release completes successfully:
+/bump    # Increments version and updates all files
+/commit  # Commits the version bump changes
 ```
 
-**Why this is required:**
-
-- **Rust validation**: `cargo build` ensures new version doesn't break compilation
-- **Node.js validation**: `npm install` ensures package.json changes are valid
-- **Lock file updates**: `Cargo.lock` and `package-lock.json` must reflect version changes
-- **Consistency**: Prevents version mismatches between source and lock files
-- **Release reliability**: Ensures published packages will build successfully
-
-**IMPORTANT NOTE:** Always verify all version bump files are included in the commit. If some files are missing from the version bump commit, manually stage them:
-
-```bash
-# Check which files were modified but not committed
-git status
-
-# Add any missing version-related files
-git add <missing-files>
-git commit --amend --no-edit
-
-# Or create a follow-up commit if already pushed
-git add <missing-files>
-git commit -m "chore: complete version references update for X.Y.Z"
-```
-
-### Files that must be updated and committed with version bumps
-
-**Version References (manual updates):**
-
-- `Cargo.toml` - Main Rust project version
-- `cli/package.json` - CLI npm package version
-- `website/package.json` - Website package version
-- `CLAUDE.md` - Documentation version reference
-- `src/server/rest/routes.rs` - API version response
-- `website/docs/api/rest-api.md` - API documentation version
-- `website/docs/changelog.md` - Version changelog entry
-- `.claude/commands/release.md` - Release workflow examples
-
-**Lock Files (auto-updated):**
-
-- `Cargo.lock` - Updated by `cargo build --release`
-- `cli/package-lock.json` - Updated by `npm install` in cli/ folder
-- `website/package-lock.json` - Updated by `npm install` in website/ folder
+The `/bump` command handles all version file updates and lock file generation automatically.
