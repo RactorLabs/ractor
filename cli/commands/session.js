@@ -504,28 +504,39 @@ async function startInteractiveSession(sessionId, options) {
         const recentMessages = messages.slice(-6); // Show last 6 messages (3 exchanges)
 
         console.log();
-        console.log(chalk.blue('📜 Recent conversation history:'));
+        console.log(chalk.blue('≡ Recent conversation history:'));
         console.log(chalk.gray('─'.repeat(50)));
 
         recentMessages.forEach((msg, index) => {
-          const timestamp = new Date(msg.created_at).toLocaleTimeString();
-          const roleColor = msg.role === 'user' ? chalk.green : chalk.cyan;
-          const roleLabel = msg.role === 'user' ? 'User' : 'Host';
-
           console.log();
-          console.log(roleColor(`${roleLabel} (${timestamp}):`));
 
           // Truncate long messages for history display
           const content = msg.content.length > 200
             ? msg.content.substring(0, 200) + '...'
             : msg.content;
 
-          console.log(chalk.white(content));
+          if (msg.role === 'user') {
+            // User messages: show with green "> " prefix
+            const lines = content.split('\n');
+            lines.forEach(line => {
+              if (line.trim() === '') {
+                console.log(chalk.green('> '));
+              } else {
+                console.log(chalk.green('> ') + chalk.white(line));
+              }
+            });
+          } else {
+            // Host messages: show content without "> " prefix, just normal text
+            const lines = content.split('\n');
+            lines.forEach(line => {
+              console.log(line);
+            });
+          }
         });
 
         console.log();
         console.log(chalk.gray('─'.repeat(50)));
-        console.log(chalk.blue('💬 Continue the conversation below:'));
+
       } else {
       }
     } catch (error) {
