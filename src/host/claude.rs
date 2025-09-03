@@ -116,6 +116,10 @@ impl ClaudeClient {
                         "type": "string",
                         "description": "Content for new file (create command only)"
                     },
+                    "content": {
+                        "type": "string",
+                        "description": "Alternative parameter name for file content (create command only)"
+                    },
                     "old_str": {
                         "type": "string",
                         "description": "Text to replace (str_replace command only)"
@@ -311,6 +315,12 @@ impl ClaudeClient {
                     role: "assistant".to_string(),
                     content: serde_json::Value::Array(assistant_content),
                 });
+            }
+            
+            // Show Claude's reasoning/explanation if provided before tool execution
+            if !response_text.is_empty() && !tool_calls.is_empty() {
+                // Send Claude's reasoning as a regular message
+                self.send_assistant_message(&response_text).await?;
             }
             
             // Execute tool calls and add results to conversation
@@ -756,10 +766,20 @@ impl ClaudeClient {
     async fn text_editor_create(&self, path: &std::path::Path, input: &Value) -> Result<String> {
         use tokio::fs;
 
+        // Debug log the input parameters to help diagnose issues
+        debug!("text_editor_create called with input: {}", serde_json::to_string_pretty(input).unwrap_or_else(|_| "Invalid JSON".to_string()));
+
+        // Try both 'file_text' (official spec) and 'content' (alternative) parameters
         let file_text = input
             .get("file_text")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Claude("Missing 'file_text' parameter for create command".to_string()))?;
+            .or_else(|| input.get("content").and_then(|v| v.as_str()))
+            .ok_or_else(|| {
+                let available_keys: Vec<String> = input.as_object()
+                    .map(|obj| obj.keys().cloned().collect())
+                    .unwrap_or_default();
+                HostError::Claude(format!("Missing 'file_text' or 'content' parameter for create command. Available parameters: {:?}", available_keys))
+            })?;
 
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
@@ -872,6 +892,22 @@ impl ClaudeClient {
             });
             
             api_client.send_message(description.to_string(), Some(metadata)).await?;
+        }
+        
+        Ok(())
+    }
+
+    async fn send_assistant_message(&self, content: &str) -> Result<()> {
+        // Log assistant reasoning to Docker logs
+        println!("ASSISTANT_REASONING: {}", content);
+        
+        // Send assistant message to user if api client is available
+        if let Some(api_client) = &self.api_client {
+            let metadata = serde_json::json!({
+                "type": "assistant_reasoning"
+            });
+            
+            api_client.send_message(content.to_string(), Some(metadata)).await?;
         }
         
         Ok(())

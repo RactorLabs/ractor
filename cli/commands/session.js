@@ -715,6 +715,19 @@ function displayHostMessage(message, options = {}) {
       }
     }
     return 'tool_execution';
+  } else if (metadata && metadata.type === 'assistant_reasoning') {
+    // Handle Claude's reasoning/explanation before tool execution
+    if (clearPromptFn) {
+      clearPromptFn();
+      if (setPromptVisibleFn) setPromptVisibleFn(false);
+    }
+    
+    console.log();
+    const formattedContent = formatMarkdown(message.content);
+    console.log(formattedContent.trim());
+    
+    // Don't show prompt after reasoning - tool execution will handle it
+    return 'assistant_reasoning';
   } else {
     // Handle conversational response
     if (clearPromptFn) {
