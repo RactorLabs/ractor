@@ -5,6 +5,27 @@ title: Changelog
 
 # Changelog
 
+## v0.3.3
+
+- **CLI Design System**: Implemented consistent flat geometric icon system throughout CLI interface, replacing emojis with professional Unicode characters
+- **Session Interface Overhaul**: Major redesign of session interface with clean formatting, visual state indicators, and improved user experience
+- **Session Detach Functionality**: Added `/detach` and `/d` commands to detach from sessions while keeping them running in background
+- **Session Name Resolution**: Enhanced session name handling with alphanumeric validation and automatic ID resolution
+- **Markdown Formatting**: Integrated marked-terminal for proper markdown rendering in CLI session output
+- **Visual State Indicators**: Added geometric shape indicators for session states (idle, busy, init, closed, errored, deleted)
+- **Conversation History**: Implemented clean conversation history display with user input prefixes and improved readability
+- **Command Box Layout**: Standardized command box format across all CLI operations with consistent server/user context
+- **Session Commands**: Added comprehensive session management commands (`/help`, `/status`, `/timeout`, `/name`, `/quit`)
+- **Spinner Removal**: Replaced all loading spinners with immediate feedback for better terminal compatibility
+- **Tool Integration**: Enhanced bash tool implementation with proper Anthropic specification compliance
+- **Web Search Integration**: Added Anthropic web search tool for enhanced session capabilities
+- **Text Editor Tool**: Implemented comprehensive text editor tool with latest Anthropic specifications
+- **State Management**: Improved session state handling with real-time monitoring and better error recovery
+- **Interface Cleanup**: Removed redundant messages, status displays, and visual clutter for minimalist experience
+- **Prompt Standardization**: Unified prompt display formatting across all session interaction points
+- **Security Enhancements**: Reduced excessive guardrails while maintaining essential system security
+- **Performance Improvements**: Optimized session monitoring and message handling for better responsiveness
+
 ## v0.3.2
 
 - **API Input Validation**: Added comprehensive input validation with strict type checking and clear error messages
