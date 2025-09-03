@@ -89,7 +89,7 @@ $ raworc session
 
 ┌─────────────────────────────────────┐
 │ ◊ Session Start                     │
-│ SessionId: abc123-def456-789        │
+│ Session: abc123-def456-789          │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘

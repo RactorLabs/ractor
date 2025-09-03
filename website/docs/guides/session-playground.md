@@ -28,7 +28,7 @@ In the interactive session interface:
 ```bash
 ┌─────────────────────────────────────┐
 │ ◊ Session Start                     │
-│ SessionId: abc123-def456-789        │
+│ Session: abc123-def456-789          │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘
@@ -93,7 +93,7 @@ raworc session
 
 ┌─────────────────────────────────────┐
 │ ◊ Session Start                     │
-│ SessionId: abc-123                  │
+│ Session: abc-123                    │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘

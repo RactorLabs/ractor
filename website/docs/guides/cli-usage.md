@@ -307,7 +307,7 @@ $ raworc session --name "coding-project"
 
 ┌─────────────────────────────────────┐
 │ ◊ Session Start                     │
-│ SessionId: coding-project           │
+│ Session: coding-project             │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘

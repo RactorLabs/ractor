@@ -17,7 +17,7 @@ interface Session {
   state: SessionState;           // Current lifecycle state
   container_id?: string;         // Docker container ID
   persistent_volume_id: string;  // Data volume ID
-  parent_session_id?: string;    // For session remixing
+  parent_session_name?: string;  // For session remixing
   created_at: timestamp;         // Session creation
   started_at?: timestamp;        // Container started
   last_activity_at?: timestamp;  // Last message/activity
@@ -273,9 +273,9 @@ Sessions support creating child sessions from parent sessions for tracking relat
 
 ```typescript
 interface SessionLineage {
-  session_id: string;
-  parent_session_id?: string;
-  children: string[];         // Child session IDs
+  session_name: string;
+  parent_session_name?: string;
+  children: string[];         // Child session names
   depth: number;              // How many levels from root
   created_from: "new" | "remix";
   remix_options?: {           // What was copied in remix

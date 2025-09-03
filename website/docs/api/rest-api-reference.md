@@ -297,7 +297,7 @@ List Host sessions. Regular users see only their own sessions, admin users see a
     "state": "idle",
     "container_id": "container-id",
     "persistent_volume_id": "volume-id",
-    "parent_session_id": null,
+    "parent_session_name": null,
     "created_at": "2025-01-20T10:00:00Z",
     "last_activity_at": "2025-01-20T10:05:00Z",
     "metadata": {},
@@ -349,7 +349,7 @@ Create a new Host session.
   "state": "init",
   "container_id": null,
   "persistent_volume_id": null,
-  "parent_session_id": null,
+  "parent_session_name": null,
   "created_at": "2025-01-20T10:00:00Z",
   "started_at": null,
   "last_activity_at": null,
@@ -562,7 +562,7 @@ Create a new Host session based on an existing session with selective content co
   "id": "new-session-name",
   "name": "my-new-session",
   "state": "init",
-  "parent_session_id": "61549530-3095-4cbf-b379-cd32416f626d",
+  "parent_session_name": "original-session",
   "created_at": "2025-01-20T10:00:00Z",
   "created_by": "admin",
   "metadata": {
@@ -643,14 +643,14 @@ List messages in a Host session.
 [
   {
     "id": "msg-uuid",
-    "session_id": "session-uuid",
+    "session_name": "session-name",
     "role": "user",
     "content": "Generate a Python script to calculate fibonacci numbers",
     "created_at": "2025-01-20T10:00:00Z"
   },
   {
     "id": "msg-uuid-2", 
-    "session_id": "session-uuid",
+    "session_name": "session-name",
     "role": "host",
     "content": "I'll create a Python script for calculating fibonacci numbers...",
     "created_at": "2025-01-20T10:01:00Z"
@@ -678,7 +678,7 @@ Send a message to a Host session. If the session is closed, it will automaticall
 ```json
 {
   "id": "msg-uuid",
-  "session_id": "session-uuid", 
+  "session_name": "session-name", 
   "role": "user",
   "content": "Generate a Python script to calculate fibonacci numbers",
   "created_at": "2025-01-20T10:00:00Z"
