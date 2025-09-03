@@ -419,9 +419,9 @@ impl SessionManager {
             info!("Prompt message {} created for session {}", message_id, session_id);
         }
         
-        // Set session state to IDLE after prompt is created (so host will find it when it starts polling)
+        // Set session state to INIT after container creation (host will set to IDLE when ready)
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ?"#)
-        .bind(SESSION_STATE_IDLE)
+        .bind(crate::shared::models::constants::SESSION_STATE_INIT)
         .bind(&session_id)
         .execute(&self.pool)
         .await?;

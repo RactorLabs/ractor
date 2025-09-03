@@ -548,19 +548,44 @@ async function startInteractiveSession(sessionId, options) {
   if (options.prompt) {
     console.log(chalk.green('> ') + chalk.white(options.prompt));
 
-    // Show prompt immediately after user input
-    showPrompt('init');
+    // Create comprehensive prompt manager
+    const promptManager = createPromptManager(sessionId);
+    await promptManager.show();
+    promptManager.startMonitoring();
     
     try {
-      // Wait for all host responses to the prompt (tool calls + final response)
-      await waitForAllHostResponses(sessionId, Date.now(), 60000, {
-        clearPromptFn: () => clearPrompt(),
-        showPromptFn: (state) => showPrompt(state),
-        currentState: 'init'
+      // Send the prompt message to the API
+      const sendTime = Date.now();
+      const sendResponse = await api.post(`/sessions/${sessionId}/messages`, {
+        content: options.prompt,
+        role: 'user'
       });
+      
+      if (!sendResponse.success) {
+        console.log(chalk.yellow('Warning: Failed to send prompt:'), sendResponse.error);
+        promptManager.stopMonitoring();
+        return;
+      }
+      
+      // Wait for all host responses to the prompt (tool calls + final response)
+      await waitForAllHostResponses(sessionId, sendTime, 60000, {
+        clearPromptFn: () => promptManager.hide(),
+        showPromptFn: (state) => {
+          showPrompt(state);
+          promptManager.visible = true;
+        },
+        currentState: promptManager.currentState
+      });
+      
+      // Don't show final prompt here - let chatLoop handle it
+      
     } catch (error) {
       console.log(chalk.yellow('Warning:'), error.message);
       console.log();
+    } finally {
+      // Stop prompt manager monitoring and clear any existing prompt before transitioning to chatLoop
+      promptManager.stopMonitoring();
+      promptManager.hide();
     }
   }
 
@@ -578,8 +603,8 @@ async function startInteractiveSession(sessionId, options) {
     // Wait for either to complete (though monitoring should complete when host finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
-    // Start synchronous chat loop, skip initial prompt if we just processed one
-    await chatLoop(sessionId, { ...options, skipInitialPrompt: !!options.prompt });
+    // Start synchronous chat loop - don't skip initial prompt, let chatLoop show the correct state
+    await chatLoop(sessionId, { ...options, skipInitialPrompt: false });
   }
 }
 
@@ -756,11 +781,130 @@ async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 6
   if (!foundFinalResponse) {
     console.log();
     console.log(chalk.yellow('No final response received within timeout'));
+    console.log();
   }
-  console.log();
 }
 
-function showPrompt(state = 'idle') {
+// Comprehensive prompt manager - handles all prompt operations
+function createPromptManager(sessionId, userInput = '') {
+  let currentState = 'init';
+  let currentUserInput = userInput;
+  let promptVisible = false;
+  let stateMonitorInterval = null;
+  let dotAnimationInterval = null;
+  let isRestoringFromClosed = false;
+  
+  const updateState = async () => {
+    try {
+      const sessionResponse = await api.get(`/sessions/${sessionId}`);
+      if (sessionResponse.success) {
+        const newState = sessionResponse.data.state;
+        
+        // Special handling for sessions being restored from closed state
+        if (isRestoringFromClosed) {
+          // Stay in 'init' until server confirms session is ready (idle or busy)
+          if (newState === 'idle' || newState === 'busy') {
+            isRestoringFromClosed = false; // Clear the flag
+            currentState = newState;
+          }
+          // Otherwise keep showing 'init' state
+        } else {
+          // Normal state transitions
+          if (newState !== currentState) {
+            currentState = newState;
+          }
+        }
+        
+        // Only redraw if prompt is currently visible
+        if (promptVisible) {
+          clearPrompt();
+          if (currentUserInput) {
+            showPromptWithInput(currentState, currentUserInput);
+          } else {
+            showPrompt(currentState);
+          }
+        }
+      }
+    } catch (error) {
+      // Keep current state if API fails
+    }
+    return currentState;
+  };
+  
+  const startMonitoring = (isRestoring = false) => {
+    isRestoringFromClosed = isRestoring;
+    
+    if (stateMonitorInterval || dotAnimationInterval) return; // Already started
+    
+    // Monitor session state changes every 2 seconds
+    stateMonitorInterval = setInterval(updateState, 2000);
+    
+    // Animation interval for dots (every 500ms)
+    dotAnimationInterval = setInterval(async () => {
+      await updateState();
+      if (promptVisible && (currentState === 'init' || currentState === 'busy')) {
+        clearPrompt();
+        if (currentUserInput) {
+          showPromptWithInput(currentState, currentUserInput);
+        } else {
+          showPrompt(currentState);
+        }
+      }
+    }, 500);
+  };
+  
+  const stopMonitoring = () => {
+    if (stateMonitorInterval) {
+      clearInterval(stateMonitorInterval);
+      stateMonitorInterval = null;
+    }
+    if (dotAnimationInterval) {
+      clearInterval(dotAnimationInterval);
+      dotAnimationInterval = null;
+    }
+  };
+  
+  const show = async (skipInitial = false) => {
+    if (!skipInitial) {
+      await updateState();
+      if (currentUserInput) {
+        showPromptWithInput(currentState, currentUserInput);
+      } else {
+        showPrompt(currentState);
+      }
+      promptVisible = true;
+    }
+  };
+  
+  const hide = () => {
+    if (promptVisible) {
+      clearPrompt();
+      promptVisible = false;
+    }
+  };
+  
+  const updateUserInput = (input) => {
+    currentUserInput = input;
+  };
+  
+  const getCurrentState = async () => {
+    return await updateState();
+  };
+  
+  return {
+    startMonitoring,
+    stopMonitoring,
+    show,
+    hide,
+    updateUserInput,
+    getCurrentState,
+    get currentState() { return currentState; },
+    get visible() { return promptVisible; },
+    set visible(value) { promptVisible = value; }
+  };
+}
+
+function showPrompt(state = 'init') {
   const stateIcons = {
     'init': '◯',      // empty circle - initializing
     'idle': '●',      // solid circle - ready
@@ -804,7 +948,7 @@ function showPrompt(state = 'idle') {
   process.stdout.write(chalk.cyanBright('> '));
 }
 
-function showPromptWithInput(state = 'idle', userInput = '') {
+function showPromptWithInput(state = 'init', userInput = '') {
   const stateIcons = {
     'init': '◯',      // empty circle - initializing
     'idle': '●',      // solid circle - ready

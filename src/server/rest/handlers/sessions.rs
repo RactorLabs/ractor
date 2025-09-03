@@ -454,14 +454,14 @@ pub async fn restore_session(
         return Err(ApiError::BadRequest(format!("Cannot restore session in {} state - only closed sessions can be restored", session.state)));
     }
 
-    // Update session state to idle
+    // Update session state to init (will be set to idle by host when ready)
     let result = query(r#"
         UPDATE sessions 
         SET state = ?
         WHERE id = ?
         "#
     )
-    .bind(crate::shared::models::constants::SESSION_STATE_IDLE)
+    .bind(crate::shared::models::constants::SESSION_STATE_INIT)
     .bind(&session.id)
     .execute(&*state.db)
     .await

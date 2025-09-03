@@ -29,10 +29,10 @@ pub async fn create_message(
     if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
         tracing::info!("Auto-restoring closed session {} due to new message", session_id);
         
-        // Update session state to IDLE (container will be restored)
+        // Update session state to INIT (will be set to idle by host when ready)
         sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#
         )
-        .bind(SESSION_STATE_IDLE)
+        .bind(SESSION_STATE_INIT)
         .bind(&session_id)
         .bind(SESSION_STATE_CLOSED)
         .execute(&*state.db)
