@@ -1,32 +1,59 @@
 const chalk = require('chalk');
+
+// Force chalk to use colors in terminal
+chalk.level = 1;
 const inquirer = require('inquirer');
 const ora = require('ora');
 const api = require('../lib/api');
 const config = require('../config/config');
 const { marked } = require('marked');
-const markedTerminal = require('marked-terminal').markedTerminal;
+const TerminalRenderer = require('marked-terminal').default;
 
-// Configure marked for terminal output
+// Configure marked-terminal
 marked.setOptions({
-  renderer: new markedTerminal({
+  renderer: new TerminalRenderer({
     blockquote: chalk.gray.italic,
     code: chalk.yellow,
     codespan: chalk.cyan,
-    del: chalk.dim.gray.strikethrough,
     em: chalk.italic,
     heading: chalk.green.bold,
-    hr: chalk.reset,
-    html: chalk.gray,
     link: chalk.blue,
-    list: chalk.reset,
-    listitem: chalk.reset,
-    paragraph: chalk.reset,
-    strong: chalk.bold,
-    table: chalk.reset,
-    tablerow: chalk.reset,
-    tablecell: chalk.reset
+    strong: chalk.bold
   })
 });
+
+// Preprocess markdown to fix formatting issues, then use marked-terminal
+function formatMarkdown(text) {
+  try {
+    // Preprocess: Replace problematic formatting patterns
+    let processedText = text
+      // Convert bold in lists to a special placeholder
+      .replace(/^(\s*[-*+]\s+.*?)(\*\*([^*]+)\*\*)/gm, (match, prefix, boldPart, boldText) => {
+        return prefix + `__BOLD_START__${boldText}__BOLD_END__`;
+      })
+      // Convert italic in lists to a special placeholder
+      .replace(/^(\s*[-*+]\s+.*?)(\*([^*]+)\*)/gm, (match, prefix, italicPart, italicText) => {
+        return prefix + `__ITALIC_START__${italicText}__ITALIC_END__`;
+      })
+      // Convert code in lists to a special placeholder
+      .replace(/^(\s*[-*+]\s+.*?)(`([^`]+)`)/gm, (match, prefix, codePart, codeText) => {
+        return prefix + `__CODE_START__${codeText}__CODE_END__`;
+      });
+    
+    // Process with marked-terminal
+    let result = marked(processedText);
+    
+    // Post-process: Replace placeholders with actual formatting
+    result = result
+      .replace(/__BOLD_START__(.*?)__BOLD_END__/g, (match, text) => chalk.bold(text))
+      .replace(/__ITALIC_START__(.*?)__ITALIC_END__/g, (match, text) => chalk.italic(text))
+      .replace(/__CODE_START__(.*?)__CODE_END__/g, (match, text) => chalk.cyan(text));
+    
+    return result;
+  } catch (error) {
+    return text;
+  }
+}
 
 const {
   SESSION_STATE_IDLE,
@@ -149,26 +176,6 @@ async function sessionStartCommand(options) {
     process.exit(1);
   }
 
-  console.log();
-  console.log(chalk.gray('Mode:'), 'New Session');
-  const userName = authData.user?.user || authData.user || 'Unknown';
-  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
-  console.log(chalk.gray('User:'), userName + userType);
-
-  // Show session creation parameters if provided
-  if (options.secrets) {
-    console.log(chalk.gray('Secrets:'), 'Provided');
-  }
-  if (options.instructions) {
-    console.log(chalk.gray('Instructions:'), options.instructions);
-  }
-  if (options.setup) {
-    console.log(chalk.gray('Setup:'), options.setup);
-  }
-  if (options.name) {
-    console.log(chalk.gray('Name:'), options.name);
-  }
-  console.log();
 
   let sessionId = null;
 
@@ -261,7 +268,6 @@ async function sessionStartCommand(options) {
     }
 
     sessionId = createResponse.data.id;
-    console.log(chalk.gray('Session Id:'), sessionId);
 
     await startInteractiveSession(sessionId, options);
 
@@ -280,13 +286,6 @@ async function sessionRestoreCommand(sessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('ℹ') + ' Restoring Raworc AI Session');
-  console.log(chalk.gray('Mode:'), 'Restore');
-  console.log(chalk.gray('Session:'), sessionId);
-  const userName = authData.user?.user || authData.user || 'Unknown';
-  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
-  console.log(chalk.gray('User:'), userName + userType);
-  console.log();
 
   try {
 
@@ -299,8 +298,6 @@ async function sessionRestoreCommand(sessionId, options) {
     }
 
     const session = sessionResponse.data;
-    console.log(chalk.gray('Session state:'), session.state);
-    console.log();
 
     // Update sessionId to actual UUID for consistent display
     sessionId = session.id;
@@ -319,9 +316,7 @@ async function sessionRestoreCommand(sessionId, options) {
         process.exit(1);
       }
 
-      console.log(chalk.gray('Session Id:'), sessionId);
     } else if (session.state === SESSION_STATE_IDLE) {
-      console.log(chalk.gray('Session Id:'), sessionId);
 
       // If prompt provided for already-running session, send it as a message
       if (options.prompt) {
@@ -343,7 +338,6 @@ async function sessionRestoreCommand(sessionId, options) {
         console.log();
       }
     } else if (session.state === SESSION_STATE_BUSY) {
-      console.log(chalk.gray('Session Id:'), sessionId);
       console.log(chalk.yellow('ℹ') + ' Session is currently processing. You can observe ongoing activity.');
       console.log();
     } else {
@@ -367,26 +361,6 @@ async function sessionRemixCommand(sourceSessionId, options) {
     process.exit(1);
   }
 
-  console.log(chalk.gray('Mode:'), 'Remix');
-  console.log(chalk.gray('Source:'), sourceSessionId);
-  if (options.name) {
-    console.log(chalk.gray('New Name:'), options.name);
-  }
-  const userName = authData.user?.user || authData.user || 'Unknown';
-  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
-  console.log(chalk.gray('User:'), userName + userType);
-
-  // Show remix parameters
-  if (options.data !== undefined) {
-    console.log(chalk.gray('Copy Data:'), options.data === 'true' || options.data === true ? 'Yes' : 'No');
-  }
-  if (options.code !== undefined) {
-    console.log(chalk.gray('Copy Code:'), options.code === 'true' || options.code === true ? 'Yes' : 'No');
-  }
-  if (options.secrets !== undefined) {
-    console.log(chalk.gray('Copy Secrets:'), options.secrets === 'true' || options.secrets === true ? 'Yes' : 'No');
-  }
-  console.log();
 
   try {
 
@@ -438,13 +412,11 @@ async function sessionRemixCommand(sourceSessionId, options) {
 
     // Show detailed remix success info
     if (newSession.name) {
-      spinner.succeed(`Session remixed as "${newSession.name}": ${sessionId}`);
-    } else {
-      console.log(chalk.gray('Session Id:'), sessionId);
+      console.log(chalk.green('✓') + ` Session remixed as "${newSession.name}": ${sessionId}`);
     }
 
 
-    await startInteractiveSession(sessionId, options);
+    await startInteractiveSession(sessionId, { ...options, sourceSessionId: sourceSessionId });
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -452,9 +424,51 @@ async function sessionRemixCommand(sourceSessionId, options) {
   }
 }
 
-async function startInteractiveSession(sessionId, options) {
+function showSessionBox(sessionId, mode, user, source = null) {
+  const commands = '/status, /timeout <s>, /name <name>, /quit, /help';
+  
+  // Calculate box width based on longest line
+  const lines = [
+    `SessionId: ${sessionId}`,
+    `Mode: ${mode}`,
+    source ? `Source: ${source}` : null,
+    `User: ${user}`,
+    `Commands: ${commands}`
+  ].filter(line => line !== null);
+  
+  const maxWidth = Math.max(...lines.map(line => line.length));
+  const boxWidth = maxWidth + 4; // Add padding
+  
+  // Create box
   console.log();
-  console.log(chalk.gray('Commands: /status, /timeout <s>, /name <name>, /quit, /help'));
+  console.log('┌' + '─'.repeat(boxWidth - 2) + '┐');
+  
+  lines.forEach(line => {
+    const padding = ' '.repeat(boxWidth - line.length - 3);
+    console.log(`│ ${line}${padding}│`);
+  });
+  
+  console.log('└' + '─'.repeat(boxWidth - 2) + '┘');
+}
+
+async function startInteractiveSession(sessionId, options) {
+  // Get user info and determine mode
+  const authData = config.getAuth();
+  const userName = authData.user?.user || authData.user || 'Unknown';
+  const userType = authData.user?.type ? ` (${authData.user.type})` : '';
+  const user = userName + userType;
+  
+  let mode = 'New';
+  let source = null;
+  
+  if (options.isRestore) {
+    mode = 'Restore';
+  } else if (options.sourceSessionId) {
+    mode = 'Remix';
+    source = options.sourceSessionId;
+  }
+  
+  showSessionBox(sessionId, mode, user, source);
 
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
@@ -528,13 +542,13 @@ async function startInteractiveSession(sessionId, options) {
     const monitoringPromise = monitorForResponses(sessionId, 0);
 
     // Start chat loop concurrently so user can still interact
-    const chatPromise = chatLoop(sessionId);
+    const chatPromise = chatLoop(sessionId, options);
 
     // Wait for either to complete (though monitoring should complete when host finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
     // Start synchronous chat loop
-    await chatLoop(sessionId);
+    await chatLoop(sessionId, options);
   }
 }
 
@@ -618,7 +632,7 @@ function showPrompt(state = 'idle') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(label));
-  console.log(chalk.gray('————————————————————'));
+  console.log(chalk.gray('————————————————————————————————————————'));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
@@ -652,18 +666,20 @@ function showPromptWithInput(state = 'idle', userInput = '') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(label));
-  console.log(chalk.gray('————————————————————'));
+  console.log(chalk.gray('————————————————————————————————————————'));
   process.stdout.write(chalk.cyanBright('> ') + userInput);
 }
 
-function clearPromptLine() {
-  // Clear 4 lines of prompt (for host messages)
-  process.stdout.write('\r\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
-}
-
-function clearPromptAfterEnter() {
-  // Clear newline from Enter + 4 lines of prompt (for user input)
-  process.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K\x1b[1A\x1b[2K');
+function clearPrompt() {
+  // Clear the 4-line prompt structure:
+  // Line 4: "> " cursor (current line, no newline)
+  // Line 3: dash line 
+  // Line 2: state line
+  // Line 1: empty line
+  process.stdout.write('\r\x1b[2K');      // Clear current line (cursor line)
+  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear dash line
+  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear state line  
+  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear empty line
 }
 
 async function monitorForResponses(sessionId, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
@@ -689,7 +705,7 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
             const metadata = message.metadata;
             if (metadata && metadata.type === 'tool_execution') {
               if (getPromptVisible()) {
-                clearPromptLine();
+                clearPrompt();
                 setPromptVisible(false);
               }
               let toolType = message.metadata?.tool_type || 'unknown';
@@ -701,18 +717,20 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
               };
               toolType = toolNameMap[toolType] || toolType;
               console.log();
-              console.log(chalk.gray(`● ${toolType}`));
+              console.log(chalk.green('● ') + chalk.white(toolType));
               console.log(chalk.dim('└─ ') + chalk.gray(message.content));
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
             } else {
               if (getPromptVisible()) {
-                clearPromptLine();
+                clearPrompt();
                 setPromptVisible(false);
               }
               console.log();
-              // Format markdown content for terminal display\n              const formattedContent = marked(message.content);\n              console.log(formattedContent.trim());
+              // Format markdown content for terminal display
+              const formattedContent = formatMarkdown(message.content);
+              console.log(formattedContent.trim());
               await updateState();
               showPrompt(getCurrentState());
               setPromptVisible(true);
@@ -729,11 +747,15 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
   }
 }
 
-async function chatLoop(sessionId) {
+async function chatLoop(sessionId, options = {}) {
   const readline = require('readline');
+  // For restored sessions from closed state, start with 'init' and wait for server to confirm ready
+  // For new sessions, start with 'init' 
+  // For other cases, use current session state
   let currentSessionState = 'init';
   let currentUserInput = '';
   let promptVisible = false; // Track if prompt is currently displayed
+  let isRestoringFromClosed = options.isRestore && options.sessionState === SESSION_STATE_CLOSED;
 
   // Function to fetch and update session state
   async function updateSessionState() {
@@ -741,14 +763,28 @@ async function chatLoop(sessionId) {
       const sessionResponse = await api.get(`/sessions/${sessionId}`);
       if (sessionResponse.success) {
         const newState = sessionResponse.data.state;
-        if (newState !== currentSessionState) {
-          currentSessionState = newState;
-          // Only redraw if prompt is currently visible
-          if (promptVisible) {
-            clearPromptLine();
-            showPromptWithInput(currentSessionState, currentUserInput);
+        
+        // Special handling for sessions being restored from closed state
+        if (isRestoringFromClosed) {
+          // Stay in 'init' until server confirms session is ready (idle or busy)
+          if (newState === 'idle' || newState === 'busy') {
+            isRestoringFromClosed = false; // Clear the flag
+            currentSessionState = newState;
+          }
+          // Otherwise keep showing 'init' state
+        } else {
+          // Normal state transitions
+          if (newState !== currentSessionState) {
+            currentSessionState = newState;
           }
         }
+        
+        // Only redraw if prompt is currently visible
+        if (promptVisible) {
+          clearPrompt();
+          showPromptWithInput(currentSessionState, currentUserInput);
+        }
+        
         return currentSessionState;
       }
     } catch (error) {
@@ -777,7 +813,7 @@ async function chatLoop(sessionId) {
   // Animation interval for dots (every 500ms)
   const dotAnimationInterval = setInterval(() => {
     if (promptVisible && (currentSessionState === 'init' || currentSessionState === 'busy')) {
-      clearPromptLine();
+      clearPrompt();
       showPromptWithInput(currentSessionState, currentUserInput);
     }
   }, 500);
@@ -803,7 +839,7 @@ async function chatLoop(sessionId) {
     currentUserInput = ''; // Reset after line submitted
 
     if (!userInput) {
-      clearPromptAfterEnter();
+      clearPrompt();
       promptVisible = false;
       showPrompt(currentSessionState);
       promptVisible = true;
@@ -812,7 +848,7 @@ async function chatLoop(sessionId) {
 
     // Handle quit command
     if (userInput.toLowerCase() === '/quit' || userInput.toLowerCase() === '/q' || userInput.toLowerCase() === 'exit') {
-      clearPromptAfterEnter();
+      clearPrompt();
       promptVisible = false;
       console.log();
       console.log(chalk.green('✓') + ' Ending session. Goodbye!');
@@ -825,14 +861,14 @@ async function chatLoop(sessionId) {
     
     // Handle status command
     if (userInput === '/status') {
-      clearPromptLine(); // Short command, no enter to clear
+      clearPrompt(); // Short command, no enter to clear
       promptVisible = false;
       await showSessionStatus(sessionId);
       shouldSendMessage = false;
     }
     // Handle help command
     else if (userInput === '/help' || userInput === '/h') {
-      clearPromptLine(); // Short command, no enter to clear
+      clearPrompt(); // Short command, no enter to clear
       promptVisible = false;
       showHelp();
       shouldSendMessage = false;
@@ -841,7 +877,7 @@ async function chatLoop(sessionId) {
     else {
       const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
       if (timeoutMatch) {
-        clearPromptLine(); // Short command, no enter to clear
+        clearPrompt(); // Short command, no enter to clear
         promptVisible = false;
         await handleTimeoutCommand(sessionId, parseInt(timeoutMatch[1], 10));
         shouldSendMessage = false;
@@ -850,7 +886,7 @@ async function chatLoop(sessionId) {
       else {
         const nameMatch = userInput.match(/^(?:\/n|\/name|name)\s+(.+)$/);
         if (nameMatch) {
-          clearPromptLine(); // Short command, no enter to clear
+          clearPrompt(); // Short command, no enter to clear
           promptVisible = false;
           await handleNameCommand(sessionId, nameMatch[1]);
           shouldSendMessage = false;
@@ -864,7 +900,7 @@ async function chatLoop(sessionId) {
       promptVisible = true;
     } else {
       // Send message to session - clear with enter since it's regular input
-      clearPromptAfterEnter();
+      clearPrompt();
       promptVisible = false;
       await sendMessage(sessionId, userInput);
     }
@@ -882,7 +918,6 @@ async function chatLoop(sessionId) {
   process.on('SIGTERM', cleanup);
 
   async function sendMessage(sessionId, userInput) {
-    console.log();
     console.log(chalk.green('> ') + chalk.white(userInput));
     
     // Show prompt with current actual state
@@ -896,7 +931,7 @@ async function chatLoop(sessionId) {
       });
 
       if (!sendResponse.success) {
-        clearPromptLine();
+        clearPrompt();
         promptVisible = false;
         console.log(chalk.red('✗ Failed to send message:'), sendResponse.error);
         // Update state from server after error
@@ -909,7 +944,7 @@ async function chatLoop(sessionId) {
       await monitorForResponses(sessionId, Date.now(), () => currentSessionState, updateSessionState, () => promptVisible, (visible) => { promptVisible = visible; });
 
     } catch (error) {
-      clearPromptLine();
+      clearPrompt();
       promptVisible = false;
       console.log(chalk.red('✗ Error sending message:'), error.message);
       // Update state from server after error
