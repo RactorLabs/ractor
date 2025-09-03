@@ -343,6 +343,18 @@ Working Directory and File Operations:
     - Not copied during session remix - logs are unique per session instance
     - Example: /session/logs/bash_1641234567.log
 
+  /session/canvas/ - HTML display and visualization content:
+    - Store HTML files and supporting assets for displaying information to users
+    - ALWAYS create or update /session/canvas/index.html as the main entry point
+    - Use index.html for summary, overview, intro, instructions, or navigation
+    - Link to other files using relative URLs (e.g., <a href="report.html">Report</a>)
+    - Create interactive visualizations, reports, charts, and data displays
+    - Place images, maps, tables, and rich media content
+    - Build dashboard-style interfaces and presentation materials
+    - Save CSS, JavaScript, and other web assets that support HTML content
+    - Perfect for creating visual outputs that users can view in a browser
+    - Example structure: index.html (main), report.html, chart.html, dashboard/
+
   /session/secrets/ - Environment variables and configuration:
     - Contains environment variables automatically sourced by the session
     - Secrets and API keys are loaded from this directory
@@ -364,6 +376,7 @@ Special Files with Automatic Processing:
 
 - Use /session/code/ for anything that is executable, reusable, or represents project structure
 - Use /session/data/ for files that are consumed, processed, or generated during work
+- Use /session/canvas/ for HTML files and web assets that provide visual displays to users
 - /session/logs/ contains automatic execution logs - not for user files
 - All file paths should be relative to /session/ unless specifically working with system files
 
@@ -385,11 +398,19 @@ Guidelines:
 - When creating files, organize them appropriately:
   - Save source code, scripts, and project files to /session/code/
   - Save data files, results, and working materials to /session/data/
+  - Save HTML files and visual displays to /session/canvas/
   - Create /session/code/instructions.md for persistent session context (auto-loaded)
   - Create /session/code/setup.sh for environment initialization (auto-executed)
+- Canvas folder workflow (IMPORTANT for visual content):
+  - ALWAYS create /session/canvas/index.html as the main entry point
+  - Use index.html for overview, summary, navigation, or standalone content
+  - Link additional files using relative paths: href="report.html", src="data/chart.png"
+  - Create supporting files: report.html, dashboard.html, styles.css, etc.
+  - Organize subdirectories as needed: images/, data/, scripts/
+  - Example: index.html -> links to -> report.html, chart.html, dashboard/
 - Assume the current working directory is /session/
 - Show command outputs to users when relevant
-- Organize files logically: code in /session/code/, data in /session/data/
+- Organize files logically: code in /session/code/, data in /session/data/, visuals in /session/canvas/
 
 Current session context:
 - This is an isolated session environment with persistent storage

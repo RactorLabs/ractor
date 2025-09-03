@@ -436,7 +436,7 @@ async function sessionRemixCommand(sourceSessionId, options) {
   }
 }
 
-function showSessionBox(sessionId, mode, user, source = null) {
+async function showSessionBox(sessionId, mode, user, source = null) {
   // Create descriptive title based on mode
   const modeIcons = {
     'New': `${display.icons.session} Session Start`,
@@ -447,13 +447,27 @@ function showSessionBox(sessionId, mode, user, source = null) {
   const title = modeIcons[mode] || `${display.icons.session} Session`;
   const commands = '/help (for commands)';
   
-  // Build lines without mode field
+  // Build base lines
   const lines = [
     `SessionId: ${sessionId}`,
     source ? `Source: ${source}` : null,
     `User: ${user}`,
     `Commands: ${commands}`
   ].filter(line => line !== null);
+  
+  // Try to get Canvas URL from session info
+  try {
+    const sessionResponse = await api.get(`/sessions/${sessionId}`);
+    if (sessionResponse.success && sessionResponse.data && sessionResponse.data.canvas_port) {
+      // Extract hostname from server URL instead of hardcoding localhost
+      const serverUrl = config.getServerUrl();
+      const serverHostname = new URL(serverUrl).hostname;
+      const canvasUrl = `http://${serverHostname}:${sessionResponse.data.canvas_port}/`;
+      lines.splice(-1, 0, `Canvas: ${canvasUrl}`); // Insert before Commands line
+    }
+  } catch (error) {
+    // Continue without Canvas URL if API call fails
+  }
   
   const maxWidth = Math.max(title.length, ...lines.map(line => line.length));
   const boxWidth = maxWidth + 4; // Add padding
@@ -492,7 +506,7 @@ async function startInteractiveSession(sessionId, options) {
     source = options.sourceSessionId;
   }
   
-  showSessionBox(sessionId, mode, user, source);
+  await showSessionBox(sessionId, mode, user, source);
 
   // Show recent conversation history for restored sessions
   if (options.isRestore) {
@@ -672,9 +686,9 @@ function displayHostMessage(message, options = {}) {
     
     let toolType = message.metadata?.tool_type || 'unknown';
     const toolNameMap = {
-      'text_editor': 'Edit',
-      'bash': 'Run',
-      'web_search': 'Search'
+      'text_editor': 'Text Editor',
+      'bash': 'Run Bash',
+      'web_search': 'Web Search'
     };
     toolType = toolNameMap[toolType] || toolType;
     console.log();

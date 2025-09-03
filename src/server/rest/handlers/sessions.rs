@@ -37,6 +37,7 @@ pub struct SessionResponse {
     pub publish_permissions: serde_json::Value,
     pub timeout_seconds: i32,
     pub auto_close_at: Option<String>,
+    pub canvas_port: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,6 +64,7 @@ impl SessionResponse {
             publish_permissions: session.publish_permissions,
             timeout_seconds: session.timeout_seconds,
             auto_close_at: session.auto_close_at.map(|dt| dt.to_rfc3339()),
+            canvas_port: session.canvas_port,
         })
     }
 }

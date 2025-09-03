@@ -77,7 +77,8 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
         "/session",
         "/session/code", 
         "/session/data",
-        "/session/secrets"
+        "/session/secrets",
+        "/session/canvas"
     ];
     
     for dir in session_dirs.iter() {
@@ -85,6 +86,14 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
             warn!("Failed to create directory {}: {}", dir, e);
         }
     }
+    
+    // Start Canvas HTTP server on port 8000
+    info!("Starting Canvas HTTP server on port 8000...");
+    tokio::spawn(async {
+        if let Err(e) = start_canvas_server().await {
+            error!("Canvas HTTP server failed: {}", e);
+        }
+    });
     
     // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/session/code/setup.sh");
@@ -154,7 +163,30 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
         warn!("Failed to initialize processed tracking: {}, proceeding anyway", e);
     }
     
-    info!("Host initialized, setting session to idle to start timeout...");
+    info!("Host initialized, getting Canvas port information...");
+    
+    // Get session info to display Canvas URL
+    match api_client.get_session().await {
+        Ok(session) => {
+            if let Some(canvas_port) = session.canvas_port {
+                // Extract hostname from API URL instead of hardcoding localhost
+                let server_hostname = if let Ok(url) = url::Url::parse(&config.api_url) {
+                    url.host_str().unwrap_or("localhost").to_string()
+                } else {
+                    "localhost".to_string()
+                };
+                info!("Canvas HTTP server available at: http://{}:{}/", server_hostname, canvas_port);
+                info!("Canvas folder: /session/canvas/ - Create HTML files here for visual displays");
+            } else {
+                warn!("Canvas port not available for this session");
+            }
+        }
+        Err(e) => {
+            warn!("Failed to get session info for Canvas port: {}", e);
+        }
+    }
+    
+    info!("Setting session to idle to start timeout...");
     
     // Set session to idle after initialization to start timeout
     if let Err(e) = api_client.update_session_to_idle().await {
@@ -182,5 +214,95 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
         // Wait before next poll
         tokio::time::sleep(config.polling_interval).await;
     }
+}
+
+async fn start_canvas_server() -> Result<()> {
+    use std::convert::Infallible;
+    use std::net::SocketAddr;
+    use std::path::Path;
+    use hyper::service::{make_service_fn, service_fn};
+    use hyper::{Body, Request, Response, Server, StatusCode};
+    use hyper::header::{CONTENT_TYPE, CONTENT_LENGTH};
+    use tokio::fs;
+
+    async fn serve_canvas(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+        let path = req.uri().path();
+        
+        // Security: prevent path traversal
+        if path.contains("..") {
+            return Ok(Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Body::from("Forbidden"))
+                .unwrap());
+        }
+        
+        // Default to index.html for root path
+        let file_path = if path == "/" {
+            "/session/canvas/index.html"
+        } else {
+            // Remove leading slash and prepend canvas directory
+            let clean_path = path.trim_start_matches('/');
+            &format!("/session/canvas/{}", clean_path)
+        };
+        
+        // Check if file exists and serve it
+        if Path::new(file_path).exists() {
+            match fs::read(file_path).await {
+                Ok(contents) => {
+                    // Determine content type based on file extension
+                    let content_type = match Path::new(file_path).extension()
+                        .and_then(|ext| ext.to_str()) 
+                    {
+                        Some("html") => "text/html; charset=utf-8",
+                        Some("css") => "text/css",
+                        Some("js") => "application/javascript",
+                        Some("json") => "application/json",
+                        Some("png") => "image/png",
+                        Some("jpg") | Some("jpeg") => "image/jpeg",
+                        Some("gif") => "image/gif",
+                        Some("svg") => "image/svg+xml",
+                        Some("ico") => "image/x-icon",
+                        _ => "application/octet-stream",
+                    };
+                    
+                    Ok(Response::builder()
+                        .status(StatusCode::OK)
+                        .header(CONTENT_TYPE, content_type)
+                        .header(CONTENT_LENGTH, contents.len())
+                        .body(Body::from(contents))
+                        .unwrap())
+                }
+                Err(_) => {
+                    Ok(Response::builder()
+                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(Body::from("Internal Server Error"))
+                        .unwrap())
+                }
+            }
+        } else {
+            // Return 404 for missing files
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::from("File not found"))
+                .unwrap())
+        }
+    }
+    
+    let make_svc = make_service_fn(|_conn| async {
+        Ok::<_, Infallible>(service_fn(serve_canvas))
+    });
+    
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
+    let server = Server::bind(&addr).serve(make_svc);
+    
+    info!("Canvas HTTP server listening on http://0.0.0.0:8000");
+    info!("Canvas directory: /session/canvas/");
+    
+    if let Err(e) = server.await {
+        error!("Canvas HTTP server error: {}", e);
+        return Err(anyhow::anyhow!("Canvas HTTP server failed: {}", e));
+    }
+    
+    Ok(())
 }
 

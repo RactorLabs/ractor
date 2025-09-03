@@ -22,6 +22,7 @@ pub struct Session {
     pub publish_permissions: serde_json::Value,
     pub timeout_seconds: i32,
     pub auto_close_at: Option<DateTime<Utc>>,
+    pub canvas_port: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +76,8 @@ pub struct UpdateSessionStateRequest {
     pub container_id: Option<String>,
     #[serde(default)]
     pub persistent_volume_id: Option<String>,
+    #[serde(default)]
+    pub canvas_port: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,7 +324,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE state != 'deleted'
             ORDER BY created_at DESC
@@ -338,7 +341,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE id = ? AND state != 'deleted'
             "#
@@ -355,7 +358,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE name = ? AND created_by = ? AND state != 'deleted'
             ORDER BY created_at DESC
@@ -366,6 +369,15 @@ impl Session {
         .bind(created_by)
         .fetch_optional(pool)
         .await
+    }
+
+    // Helper function to find an available port for Canvas HTTP server
+    async fn find_available_port() -> Result<u16, std::io::Error> {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("0.0.0.0:0")?;
+        let port = listener.local_addr()?.port();
+        drop(listener);
+        Ok(port)
     }
 
     pub async fn create(
@@ -380,11 +392,15 @@ impl Session {
         let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
 
+        // Allocate Canvas port
+        let canvas_port = Self::find_available_port().await
+            .map_err(|e| sqlx::Error::Io(e))?;
+
         // Insert the session
         sqlx::query(
             r#"
-            INSERT INTO sessions (id, created_by, name, metadata, timeout_seconds, auto_close_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (id, created_by, name, metadata, timeout_seconds, auto_close_at, canvas_port)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
@@ -393,6 +409,7 @@ impl Session {
         .bind(&req.metadata)
         .bind(timeout)
         .bind(auto_close_at)
+        .bind(canvas_port as i32)
         .execute(pool)
         .await?;
         
@@ -417,13 +434,17 @@ impl Session {
         let session_id = Uuid::new_v4();
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
         
+        // Allocate Canvas port for remix session
+        let canvas_port = Self::find_available_port().await
+            .map_err(|e| sqlx::Error::Io(e))?;
+        
         sqlx::query(
             r#"
             INSERT INTO sessions (
                 id, created_by, name,
-                parent_session_id, metadata, timeout_seconds, auto_close_at
+                parent_session_id, metadata, timeout_seconds, auto_close_at, canvas_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(session_id.to_string())
@@ -433,6 +454,7 @@ impl Session {
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .bind(parent.timeout_seconds) // Inherit timeout from parent
         .bind(auto_close_at)
+        .bind(canvas_port as i32)
         .execute(pool)
         .await?;
         
@@ -474,6 +496,10 @@ impl Session {
             query_builder.push_str(", persistent_volume_id = ?");
         }
 
+        if req.canvas_port.is_some() {
+            query_builder.push_str(", canvas_port = ?");
+        }
+
         query_builder.push_str(" WHERE id = ?");
 
         // Build and execute query
@@ -489,6 +515,10 @@ impl Session {
 
         if let Some(pv_id) = req.persistent_volume_id {
             query = query.bind(pv_id);
+        }
+
+        if let Some(canvas_port) = req.canvas_port {
+            query = query.bind(canvas_port);
         }
 
         query = query.bind(id);
@@ -634,7 +664,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
@@ -651,7 +681,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE name = ? AND is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
@@ -670,7 +700,7 @@ impl Session {
                    container_id, persistent_volume_id, parent_session_id,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at
+                   timeout_seconds, auto_close_at, canvas_port
             FROM sessions
             WHERE auto_close_at <= NOW() 
               AND state IN ('init', 'idle', 'busy')

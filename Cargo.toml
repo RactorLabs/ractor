@@ -30,6 +30,8 @@ futures-util = "0.3"
 tar = "0.4"
 tempfile = "3.0"
 tokio-util = { version = "0.7", features = ["codec"] }
+hyper = { version = "0.14", features = ["full"] }
+url = "2.5"
 
 [[bin]]
 name = "raworc-server"

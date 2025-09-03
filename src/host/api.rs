@@ -43,6 +43,27 @@ pub struct UpdateSessionStateRequest {
     pub state: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Session {
+    pub id: String,
+    pub created_by: String,
+    pub name: Option<String>,
+    pub state: String,
+    pub container_id: Option<String>,
+    pub persistent_volume_id: Option<String>,
+    pub parent_session_id: Option<String>,
+    pub created_at: String,
+    pub last_activity_at: Option<String>,
+    pub metadata: serde_json::Value,
+    pub is_published: bool,
+    pub published_at: Option<String>,
+    pub published_by: Option<String>,
+    pub publish_permissions: serde_json::Value,
+    pub timeout_seconds: i32,
+    pub auto_close_at: Option<String>,
+    pub canvas_port: Option<i32>,
+}
+
 pub struct RaworcClient {
     client: Client,
     config: Arc<Config>,
@@ -56,6 +77,41 @@ impl RaworcClient {
             .expect("Failed to create HTTP client");
         
         Self { client, config }
+    }
+    
+    /// Get session information including canvas_port
+    pub async fn get_session(&self) -> Result<Session> {
+        let url = format!(
+            "{}/api/v0/sessions/{}",
+            self.config.api_url,
+            self.config.session_id
+        );
+        
+        debug!("Fetching session info from: {}", url);
+        
+        let response = self.client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        
+        match response.status() {
+            StatusCode::OK => {
+                let session = response.json::<Session>().await?;
+                debug!("Fetched session info for: {}", session.id);
+                Ok(session)
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => {
+                Err(HostError::Api(format!("Session {} not found", self.config.session_id)))
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("API error ({}): {}", status, error_text)))
+            }
+        }
     }
     
     /// Get messages for the current session

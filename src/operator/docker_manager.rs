@@ -2,7 +2,7 @@ use anyhow::Result;
 use bollard::{
     container::{Config, CreateContainerOptions, RemoveContainerOptions, LogsOptions},
     exec::{CreateExecOptions, StartExecResults},
-    models::{HostConfig, Mount, MountTypeEnum},
+    models::{HostConfig, Mount, MountTypeEnum, PortBinding},
     Docker,
 };
 use futures::StreamExt;
@@ -103,10 +103,10 @@ impl DockerManager {
     async fn initialize_session_structure(&self, session_id: &str, secrets: &HashMap<String, String>, instructions: Option<&str>, setup: Option<&str>) -> Result<()> {
         info!("Initializing session structure for session {}", session_id);
         
-        // Create base directories including logs
-        let init_script = "mkdir -p /session/{code,data,secrets,logs}
+        // Create base directories including logs and canvas
+        let init_script = "mkdir -p /session/{code,data,secrets,logs,canvas}
 chmod -R 755 /session
-echo 'Session directories created (including logs)'
+echo 'Session directories created (including logs and canvas)'
 ";
 
         self.execute_command(session_id, init_script).await?;
@@ -288,7 +288,7 @@ echo 'Session directories created (including logs)'
         let mut copy_commands = Vec::new();
         
         // Always create base directory structure with proper ownership
-        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets && sudo chown -R host:host /dest".to_string());
+        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets /dest/canvas && sudo chown -R host:host /dest".to_string());
         
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -464,7 +464,7 @@ echo 'Session directories created (including logs)'
         let mut copy_commands = Vec::new();
         
         // Always create base directory structure with proper ownership
-        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets && sudo chown -R host:host /dest".to_string());
+        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets /dest/canvas && sudo chown -R host:host /dest".to_string());
         
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -909,6 +909,16 @@ echo 'Session directories created (including logs)'
     ) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
         
+        // Get canvas port from session (already allocated during session creation)
+        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE id = ?")
+            .bind(session_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get canvas port from session: {}", e))?
+            .ok_or_else(|| anyhow::anyhow!("Session has no canvas port assigned"))?;
+        
+        info!("Using Canvas port {} from session {}", canvas_port, session_id);
+        
         // Use host image directly for all sessions
         let container_image = self.host_image.clone();
         info!("Creating container {} with host image {}", container_name, container_image);
@@ -945,6 +955,19 @@ echo 'Session directories created (including logs)'
                 ..Default::default()
             }
         ];
+
+        // Configure port mapping for Canvas HTTP server (8000 inside -> random port outside)
+        let mut port_bindings = HashMap::new();
+        port_bindings.insert(
+            "8000/tcp".to_string(),
+            Some(vec![PortBinding {
+                host_ip: Some("0.0.0.0".to_string()),
+                host_port: Some(canvas_port.to_string()),
+            }]),
+        );
+
+        let mut exposed_ports = HashMap::new();
+        exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
 
         // Set environment variables for the session structure
         let mut env = vec![
@@ -991,6 +1014,7 @@ echo 'Session directories created (including logs)'
             env: Some(env),
             cmd: Some(cmd),
             working_dir: Some("/session".to_string()), // User starts in their session
+            exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
                 cpu_period: Some(100000),
@@ -998,6 +1022,7 @@ echo 'Session directories created (including logs)'
                 memory_swap: Some(self.memory_limit),
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
+                port_bindings: Some(port_bindings),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1028,7 +1053,7 @@ echo 'Session directories created (including logs)'
             .execute(&self.db_pool)
             .await?;
 
-        info!("Container {} created with session volume {}", container_name, session_volume);
+        info!("Container {} created with session volume {} using Canvas port {}", container_name, session_volume, canvas_port);
         Ok(container.id)
     }
 
@@ -1045,6 +1070,16 @@ echo 'Session directories created (including logs)'
         task_created_at: Option<chrono::DateTime<chrono::Utc>>
     ) -> Result<String> {
         let container_name = format!("raworc_session_{session_id}");
+        
+        // Get canvas port from session (already allocated during session creation)
+        let canvas_port: i32 = sqlx::query_scalar::<_, Option<i32>>("SELECT canvas_port FROM sessions WHERE id = ?")
+            .bind(session_id)
+            .fetch_one(&self.db_pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get canvas port from session: {}", e))?
+            .ok_or_else(|| anyhow::anyhow!("Session has no canvas port assigned"))?;
+        
+        info!("Using Canvas port {} from session {}", canvas_port, session_id);
         
         // Use host image directly for all sessions
         let container_image = self.host_image.clone();
@@ -1073,6 +1108,19 @@ echo 'Session directories created (including logs)'
                 ..Default::default()
             }
         ];
+
+        // Configure port mapping for Canvas HTTP server (8000 inside -> random port outside)
+        let mut port_bindings = HashMap::new();
+        port_bindings.insert(
+            "8000/tcp".to_string(),
+            Some(vec![PortBinding {
+                host_ip: Some("0.0.0.0".to_string()),
+                host_port: Some(canvas_port.to_string()),
+            }]),
+        );
+
+        let mut exposed_ports = HashMap::new();
+        exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
 
         // Set environment variables for the session structure
         let mut env = vec![
@@ -1127,6 +1175,7 @@ echo 'Session directories created (including logs)'
             env: Some(env),
             cmd: Some(cmd),
             working_dir: Some("/session".to_string()), // User starts in their session
+            exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
                 cpu_period: Some(100000),
@@ -1134,6 +1183,7 @@ echo 'Session directories created (including logs)'
                 memory_swap: Some(self.memory_limit),
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
+                port_bindings: Some(port_bindings),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1165,7 +1215,7 @@ echo 'Session directories created (including logs)'
             .execute(&self.db_pool)
             .await?;
 
-        info!("Container {} created with session volume {} and fresh system tokens", container_name, session_volume);
+        info!("Container {} created with session volume {} using Canvas port {}, and fresh system tokens", container_name, session_volume, canvas_port);
         Ok(container.id)
     }
 
