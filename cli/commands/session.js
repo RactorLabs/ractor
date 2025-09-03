@@ -550,16 +550,8 @@ async function startInteractiveSession(sessionId, options) {
     console.log();
 
     try {
-      // Wait for the host to respond to the prompt
-      const hostResponse = await waitForHostResponse(sessionId, Date.now());
-
-      if (hostResponse) {
-        console.log(hostResponse.content);
-        console.log();
-      } else {
-        console.log(chalk.yellow('No host response received within timeout'));
-        console.log();
-      }
+      // Wait for all host responses to the prompt (tool calls + final response)
+      await waitForAllHostResponses(sessionId, Date.now());
     } catch (error) {
       console.log(chalk.yellow('Warning:'), error.message);
       console.log();
@@ -633,6 +625,117 @@ async function waitForHostResponse(sessionId, userMessageTime, timeoutMs = 60000
   }
 
   throw new Error('Timeout waiting for host response');
+}
+
+// Shared function to display host messages (tool calls + final response)
+function displayHostMessage(message, options = {}) {
+  const { clearPromptFn, showPromptFn, updateStateFn, setPromptVisibleFn } = options;
+  const metadata = message.metadata;
+  
+  if (metadata && metadata.type === 'tool_execution') {
+    // Handle tool execution message
+    if (clearPromptFn && showPromptFn) {
+      clearPromptFn();
+      setPromptVisibleFn(false);
+    }
+    
+    let toolType = message.metadata?.tool_type || 'unknown';
+    const toolNameMap = {
+      'text_editor': 'Edit',
+      'bash': 'Run',
+      'web_search': 'Search'
+    };
+    toolType = toolNameMap[toolType] || toolType;
+    console.log();
+    console.log(chalk.green('● ') + chalk.white(toolType));
+    console.log(chalk.dim('└─ ') + chalk.gray(message.content));
+    
+    if (updateStateFn && showPromptFn) {
+      updateStateFn().then(() => {
+        showPromptFn(options.currentState || 'init');
+        setPromptVisibleFn(true);
+      });
+    }
+    return 'tool_execution';
+  } else {
+    // Handle conversational response
+    if (clearPromptFn && showPromptFn) {
+      clearPromptFn();
+      setPromptVisibleFn(false);
+    }
+    
+    console.log();
+    const formattedContent = formatMarkdown(message.content);
+    console.log(formattedContent.trim());
+    
+    if (updateStateFn && showPromptFn) {
+      updateStateFn().then(() => {
+        showPromptFn(options.currentState || 'init');
+        setPromptVisibleFn(true);
+      });
+    }
+    return 'final_response';
+  }
+}
+
+async function waitForAllHostResponses(sessionId, userMessageTime, timeoutMs = 60000) {
+  const startTime = Date.now();
+  const pollInterval = 1500; // Check every 1.5 seconds
+  let lastMessageCount = 0;
+  let foundFinalResponse = false;
+
+  // Get initial message count
+  try {
+    const initialResponse = await api.get(`/sessions/${sessionId}/messages`);
+    if (initialResponse.success && initialResponse.data) {
+      const messages = Array.isArray(initialResponse.data) ? initialResponse.data : initialResponse.data.messages || [];
+      lastMessageCount = messages.length;
+    }
+  } catch (error) {
+    // Continue with 0 count
+  }
+
+  while (Date.now() - startTime < timeoutMs && !foundFinalResponse) {
+    try {
+      const response = await api.get(`/sessions/${sessionId}/messages`);
+
+      if (response.success && response.data) {
+        const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
+        
+        // Process any new messages
+        if (messages.length > lastMessageCount) {
+          const newMessages = messages.slice(lastMessageCount);
+          
+          for (const message of newMessages) {
+            if (message.role === MESSAGE_ROLE_HOST) {
+              const messageTime = new Date(message.created_at).getTime();
+              if (messageTime > userMessageTime) {
+                const result = displayHostMessage(message);
+                if (result === 'final_response') {
+                  foundFinalResponse = true;
+                  break;
+                }
+              }
+            }
+          }
+          
+          lastMessageCount = messages.length;
+        }
+      }
+    } catch (error) {
+      // Continue polling on error
+    }
+
+    if (!foundFinalResponse) {
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+  }
+
+  if (!foundFinalResponse) {
+    console.log();
+    console.log(chalk.yellow('No final response received within timeout'));
+  }
+  console.log();
 }
 
 function showPrompt(state = 'idle') {
@@ -755,38 +858,15 @@ async function monitorForResponses(sessionId, userMessageTime, getCurrentState, 
 
         for (const message of newMessages) {
           if (message.role === 'host') {
-            const metadata = message.metadata;
-            if (metadata && metadata.type === 'tool_execution') {
-              if (getPromptVisible()) {
-                clearPrompt();
-                setPromptVisible(false);
-              }
-              let toolType = message.metadata?.tool_type || 'unknown';
-              // Map tool types to friendly names
-              const toolNameMap = {
-                'text_editor': 'Edit',
-                'bash': 'Run',
-                'web_search': 'Search'
-              };
-              toolType = toolNameMap[toolType] || toolType;
-              console.log();
-              console.log(chalk.green('● ') + chalk.white(toolType));
-              console.log(chalk.dim('└─ ') + chalk.gray(message.content));
-              await updateState();
-              showPrompt(getCurrentState());
-              setPromptVisible(true);
-            } else {
-              if (getPromptVisible()) {
-                clearPrompt();
-                setPromptVisible(false);
-              }
-              console.log();
-              // Format markdown content for terminal display
-              const formattedContent = formatMarkdown(message.content);
-              console.log(formattedContent.trim());
-              await updateState();
-              showPrompt(getCurrentState());
-              setPromptVisible(true);
+            const result = displayHostMessage(message, {
+              clearPromptFn: getPromptVisible() ? clearPrompt : null,
+              showPromptFn: showPrompt,
+              updateStateFn: updateState,
+              setPromptVisibleFn: setPromptVisible,
+              currentState: getCurrentState()
+            });
+            
+            if (result === 'final_response') {
               return;
             }
           }
