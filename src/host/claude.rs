@@ -114,11 +114,11 @@ impl ClaudeClient {
                     },
                     "file_text": {
                         "type": "string",
-                        "description": "Content for new file (create command only)"
+                        "description": "Content for new file. REQUIRED for 'create' command."
                     },
                     "content": {
                         "type": "string",
-                        "description": "Alternative parameter name for file content (create command only)"
+                        "description": "Alternative parameter name for file content. REQUIRED for 'create' command if file_text not provided."
                     },
                     "old_str": {
                         "type": "string",
