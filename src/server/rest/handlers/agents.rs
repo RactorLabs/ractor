@@ -363,7 +363,7 @@ pub async fn sleep_agent(
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<AgentResponse>> {
-    tracing::info!("Close request received for agent: {}", name);
+    tracing::info!("Sleep request received for agent: {}", name);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -383,7 +383,7 @@ pub async fn sleep_agent(
             ApiError::Forbidden("Insufficient permissions to sleep agent".to_string())
         })?;
 
-    // Allow closing own agents or admin can sleep any agent
+    // Allow sleeping own agents or admin can sleep any agent
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -397,7 +397,7 @@ pub async fn sleep_agent(
     }
     tracing::info!("Permission check passed");
 
-    // Check current state - cannot suspend if already suspended or in error
+    // Check current state - cannot sleep if already sleeping or in error
 
     if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
         return Err(ApiError::BadRequest(
@@ -410,12 +410,12 @@ pub async fn sleep_agent(
         ));
     }
 
-    // Update agent state to suspended
+    // Update agent state to slept
     let result = sqlx::query(
         r#"
         UPDATE agents 
         SET state = ?
-        WHERE id = ?
+        WHERE name = ?
     "#,
     )
     .bind(crate::shared::models::constants::AGENT_STATE_SLEPT)
@@ -514,7 +514,7 @@ pub async fn wake_agent(
         r#"
         UPDATE agents 
         SET state = ?
-        WHERE id = ?
+        WHERE name = ?
         "#,
     )
     .bind(crate::shared::models::constants::AGENT_STATE_INIT)
@@ -630,7 +630,7 @@ pub async fn update_agent_state(
 
     // Update the state with ownership verification
     let result = sqlx::query(
-        "UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
+        "UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND created_by = ?"
     )
     .bind(&req.state)
     .bind(&agent.name)
