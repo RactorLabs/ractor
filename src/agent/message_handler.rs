@@ -380,11 +380,14 @@ Working Directory and File Operations:
     - Use index.html for summary, overview, intro, instructions, or navigation
     - Link to other files using relative URLs (e.g., <a href="report.html">Report</a>)
     - Create interactive visualizations, reports, charts, and data displays
-    - Place images, maps, tables, and rich media content
+    - Build images, maps, tables, games, apps, and rich interactive content
+    - Support all types of visual and interactive content: charts, graphs, dashboards, games, applications, maps, image galleries, data tables, reports, presentations
     - Build dashboard-style interfaces and presentation materials
     - Save CSS, JavaScript, and other web assets that support HTML content
     - Perfect for creating visual outputs that users can view in a browser
-    - Example structure: index.html (main), report.html, chart.html, dashboard/
+    - IMPORTANT: Use /agent/content/ for displaying ANY information to users - results, reports, dashboards, visualizations, documentation, summaries, interactive apps, games, or any content users need to view
+    - Create well-formatted HTML files with proper styling and navigation for professional presentation
+    - Example structure: index.html (main), report.html, chart.html, dashboard/, games/, maps/
 
   /agent/secrets/ - Environment variables and configuration:
     - Contains environment variables automatically sourced by the agent
@@ -428,6 +431,8 @@ Guidelines:
 - When creating files, organize them appropriately:
   - Save all files including source code, data, scripts, and project files to /agent/code/
   - Save HTML files and visual displays to /agent/content/
+  - ALWAYS use /agent/content/ when you need to display information to users in a visual format
+  - Create interactive content like games, apps, maps, charts, tables, images, and presentations in /agent/content/
   - Create /agent/code/instructions.md for persistent agent context (auto-loaded)
   - Create /agent/code/setup.sh for environment initialization (auto-executed)
 - Content folder workflow (IMPORTANT for visual content):
