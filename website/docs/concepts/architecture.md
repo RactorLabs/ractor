@@ -5,7 +5,7 @@ title: Architecture Overview
 
 # Raworc Architecture Overview
 
-Raworc is built using a **Kubernetes-inspired control plane pattern** for Computer Use Agent orchestration, providing dedicated computers for each session with enterprise-grade operations.
+Raworc is built using a **Kubernetes-inspired control plane pattern** for Computer Use Agent orchestration, providing dedicated computers for each agent with enterprise-grade operations.
 
 ## System Architecture
 
@@ -26,7 +26,7 @@ Raworc is built using a **Kubernetes-inspired control plane pattern** for Comput
                 ┌─────────────────────────────────┐
                 │    Computer Use Agents          │
                 │ ┌─────────────┐ ┌─────────────┐ │
-                │ │   Host +    │ │   Host +    │ │
+                │ │  Agent +    │ │  Agent +    │ │
                 │ │  Computer   │ │  Computer   │ │
                 │ └─────────────┘ └─────────────┘ │
                 └─────────────────────────────────┘
@@ -172,7 +172,7 @@ Each session provides a dedicated computer use agent with full computer access:
 
 ## Next Steps
 
-- [Sessions](/docs/concepts/sessions) - Deep dive into session lifecycle and management
+- [Agents](/docs/concepts/agents) - Deep dive into agent lifecycle and management
 - [Computer Use Agents](/docs/concepts/computer-use-agents) - Understanding Host capabilities
 - [RBAC System](/docs/concepts/authentication-users) - Security and access control
 - [API Reference](/docs/api/rest-api-reference) - Complete REST API documentation

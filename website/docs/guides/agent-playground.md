@@ -1,34 +1,34 @@
 ---
 sidebar_position: 3
-title: Session Playground
+title: Agent Playground
 ---
 
-# Session Playground
+# Agent Playground
 
-Master the full power of Raworc sessions with interactive examples and advanced features. This guide demonstrates session management capabilities with Host (Computer Use Agent) through practical, hands-on examples.
+Master the full power of Raworc agents with interactive examples and advanced features. This guide demonstrates agent management capabilities with Computer Use Agent through practical, hands-on examples.
 
 ## Prerequisites
 
-- **ANTHROPIC_API_KEY**: Required environment variable for all new sessions
+- **ANTHROPIC_API_KEY**: Required environment variable for all new agents
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-your-actual-key
 ```
 
-## Interactive Sessions
+## Interactive Agents
 
-The simplest way to work with sessions is through the interactive CLI:
+The simplest way to work with agents is through the interactive CLI:
 
 ```bash
-# Start a new interactive session with Host (uses ANTHROPIC_API_KEY from environment)
-raworc session
+# Start a new interactive agent (uses ANTHROPIC_API_KEY from environment)
+raworc agent
 ```
 
-In the interactive session interface:
+In the interactive agent interface:
 ```bash
 ┌─────────────────────────────────────┐
-│ ◊ Session Start                     │
-│ Session: abc123-def456-789          │
+│ ◊ Agent Start                       │
+│ Agent: abc123-def456-789            │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘
@@ -37,7 +37,7 @@ In the interactive session interface:
 ──────────────────────────────────────────────────
 > Hello, how can you help me?
 
-I'm a Host that can help you with various tasks including:
+I'm an agent that can help you with various tasks including:
 - Writing and debugging code
 - Data analysis and visualization  
 - File management and organization
@@ -50,50 +50,50 @@ I'm a Host that can help you with various tasks including:
 
 **Interactive Commands:**
 - `/help, /h` - Show all available commands
-- `/status` - Display session status with visual state indicators
-- `/timeout <seconds>` - Change session timeout (1-3600 seconds)
-- `/name <name>` - Change session name (alphanumeric and hyphens)
-- `/detach, /d` - Detach from session (keeps session running)
-- `/quit, /q` - End the session completely
+- `/status` - Display agent status with visual state indicators
+- `/timeout <seconds>` - Change agent timeout (1-3600 seconds)
+- `/name <name>` - Change agent name (alphanumeric and hyphens)
+- `/detach, /d` - Detach from agent (keeps agent running)
+- `/quit, /q` - End the agent completely
 
-## Session Restore
+## Agent Sleep/Wake
 
-Restore allows you to close sessions to save resources, then bring them back later with full state preservation:
+Sleep/wake allows you to sleep agents to save resources, then wake them later with full state preservation:
 
-### Basic Restore Workflow
+### Basic Sleep/Wake Workflow
 
 ```bash
-# Create a session and work with it
-raworc session
-# Work with the session...
-# Note the session ID (shown in status)
+# Create an agent and work with it
+raworc agent
+# Work with the agent...
+# Note the agent ID (shown in status)
 
-# Close the session (saves resources)
-raworc api sessions/{session-name}/close -m post
+# Sleep the agent (saves resources)
+raworc api agents/{agent-name}/sleep -m post
 
-# Later, restore the session
-raworc api sessions/{session-name}/restore -m post
+# Later, wake the agent
+raworc api agents/{agent-name}/wake -m post
 
-# Continue working with restored session
-raworc session restore {session-name}
+# Continue working with woken agent
+raworc agent wake {agent-name}
 ```
 
-### Restore Features
+### Sleep/Wake Features
 
 **✅ State Preservation**: All files, data, and computer state are preserved
-**✅ No Reprocessing**: Previous messages are not reprocessed - only new messages after restore
-**✅ Fast Recovery**: Sessions restore in 3-5 seconds with full Host context
-**✅ Resource Efficiency**: Closed sessions don't consume CPU or memory
+**✅ No Reprocessing**: Previous messages are not reprocessed - only new messages after wake
+**✅ Fast Recovery**: Agents wake in 3-5 seconds with full context
+**✅ Resource Efficiency**: Sleeping agents don't consume CPU or memory
 
 ### Practical Example: Long-Running Analysis
 
 ```bash
-# Start a data analysis session
-raworc session
+# Start a data analysis agent
+raworc agent
 
 ┌─────────────────────────────────────┐
-│ ◊ Session Start                     │
-│ Session: abc-123                    │
+│ ◊ Agent Start                       │
+│ Agent: abc-123                      │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘
@@ -111,181 +111,181 @@ I'll analyze the sales data for you. Let me examine the file structure and perfo
 ──────────────────────────────────────────────────
 # Need to leave for a meeting? Use the detach command:
 > /detach
-👋 Detached from session abc-123 (session continues running)
+👋 Detached from agent abc-123 (agent continues running)
 
-# Close to save resources
-raworc api sessions/abc-123/close -m post
+# Sleep to save resources
+raworc api agents/abc-123/sleep -m post
 
-# After your meeting, restore and continue
-raworc api sessions/abc-123/restore -m post
-raworc session restore abc-123
+# After your meeting, wake and continue
+raworc api agents/abc-123/wake -m post
+raworc agent wake abc-123
 
 ● ready
 ──────────────────────────────────────────────────
 > Continue with the regional breakdown analysis
 ```
 
-## Session Remix
+## Agent Remix
 
-Remix creates a new session based on an existing one, allowing you to branch your workflow:
+Remix creates a new agent based on an existing one, allowing you to branch your workflow:
 
 ### Basic Remix Workflow
 
 ```bash
-# Create a remix from existing session
-raworc session remix {source-session-name}
+# Create a remix from existing agent
+raworc agent remix {source-agent-name}
 
-# The new session starts with:
-# - All files from the source session
+# The new agent starts with:
+# - All files from the source agent
 # - Complete computer state
-# - Independent Host message history
+# - Independent agent message history
 ```
 
 ### Remix Use Cases
 
 #### 1. Experiment Branching
 ```bash
-# Original session: working on main algorithm
-raworc session
+# Original agent: working on main algorithm
+raworc agent
 > Implement quicksort algorithm in Python
-# Session ID: main-456
+# Agent ID: main-456
 
 # Create branch to try different approach
-raworc session remix main-456
+raworc agent remix main-456
 > Now implement the same using merge sort instead
-# New session with quicksort as starting point
+# New agent with quicksort as starting point
 ```
 
-#### 2. Template Sessions
+#### 2. Template Agents
 ```bash
-# Create a base session with common setup
-raworc session
+# Create a base agent with common setup
+raworc agent
 > Set up a Python project with pytest, black, and pre-commit hooks
-# Session ID: template-789
+# Agent ID: template-789
 
 # Remix for each new project
-raworc session remix template-789 
+raworc agent remix template-789 
 > Add FastAPI with PostgreSQL setup
 # Starts with all the base tools already configured
 
-raworc session remix template-789
+raworc agent remix template-789
 > Add Django with MySQL setup  
 # Another project from the same template
 ```
 
 #### 3. A/B Testing Configurations
 ```bash
-# Base session with data loaded
-raworc session
+# Base agent with data loaded
+raworc agent
 > Load customer data from database
-# Session ID: base-321
+# Agent ID: base-321
 
 # Test different ML models
-raworc session remix base-321
+raworc agent remix base-321
 > Train a random forest classifier
 
-raworc session remix base-321
+raworc agent remix base-321
 > Train a gradient boosting classifier
 
-# Compare results from both sessions
+# Compare results from both agents
 ```
 
 #### 4. Checkpoint Workflows
 ```bash
 # Create checkpoints at key stages
-raworc session
+raworc agent
 > Complete phase 1 of the migration
-# Session ID: checkpoint-1
+# Agent ID: checkpoint-1
 
 # Branch from checkpoint for different scenarios
-raworc session remix checkpoint-1
+raworc agent remix checkpoint-1
 > Continue with the aggressive optimization approach
 
-raworc session remix checkpoint-1  
+raworc agent remix checkpoint-1  
 > Continue with the conservative safety-first approach
 ```
 
-## Advanced Session Management
+## Advanced Agent Management
 
-### Listing and Filtering Sessions
+### Listing and Filtering Agents
 
 ```bash
-# List all sessions
-raworc api sessions
+# List all agents
+raworc api agents
 
-# List active sessions only
-raworc api "sessions?state=idle"
+# List active agents only
+raworc api "agents?state=idle"
 ```
 
-### Session State Transitions
+### Agent State Transitions
 
-Sessions follow a controlled state machine:
+Agents follow a controlled state machine:
 
 ```
-init → idle → busy → closed → errored
+init → idle → busy → slept → errored
   ↓      ↓      ↓       ↓         ↓
   └─── deleted (soft delete with cleanup)
 ```
 
 **Visual State Indicators:**
-- `◯` (init) - Session initializing
-- `●` (idle) - Session ready for messages  
-- `◉` (busy) - Session processing messages
-- `◼` (closed) - Session closed, can be restored
-- `◇` (errored) - Session in error state
-- `◼` (deleted) - Session permanently deleted
+- `◯` (init) - Agent initializing
+- `●` (idle) - Agent ready for messages  
+- `◉` (busy) - Agent processing messages
+- `◼` (slept) - Agent sleeping, can be woken
+- `◇` (errored) - Agent in error state
+- `◼` (deleted) - Agent permanently deleted
 
 Monitor state transitions:
 ```bash
-# Check session state
-raworc api sessions/{session-name}
+# Check agent state
+raworc api agents/{agent-name}
 
 # Watch for state changes
-watch -n 2 'raworc api sessions/{session-name} | grep state'
+watch -n 2 'raworc api agents/{agent-name} | grep state'
 ```
 
-### Bulk Session Operations
+### Bulk Agent Operations
 
 ```bash
-# Close all idle sessions
-for id in $(raworc api "sessions?state=idle" | jq -r '.[].id'); do
-  raworc api sessions/$id/close -m post
+# Sleep all idle agents
+for id in $(raworc api "agents?state=idle" | jq -r '.[].id'); do
+  raworc api agents/$id/sleep -m post
 done
 
-# Delete old sessions (older than 7 days)
-raworc api sessions | jq -r '.[] | select(.created_at < (now - 604800)) | .id' | \
+# Delete old agents (older than 7 days)
+raworc api agents | jq -r '.[] | select(.created_at < (now - 604800)) | .id' | \
 while read id; do
-  raworc api sessions/$id -m delete
+  raworc api agents/$id -m delete
 done
 ```
 
-## Session Messaging Patterns
+## Agent Messaging Patterns
 
 ### Synchronous Messaging
 ```bash
 # Send message and wait for response
-raworc api sessions/{id}/messages -m post -b '{"content":"Generate unit tests"}'
+raworc api agents/{id}/messages -m post -b '{"content":"Generate unit tests"}'
 
 # Poll for response
-raworc api sessions/{id}/messages
+raworc api agents/{id}/messages
 ```
 
 ### Message History Management
 ```bash
 # Get last 10 messages
-raworc api "sessions/{id}/messages?limit=10"
+raworc api "agents/{id}/messages?limit=10"
 
 # Get message count
-raworc api sessions/{id}/messages/count
+raworc api agents/{id}/messages/count
 
 # Clear message history (careful!)
-raworc api sessions/{id}/messages -m delete
+raworc api agents/{id}/messages -m delete
 ```
 
 ### Multi-Turn Conversations
 ```bash
-# Interactive session handles this automatically
-raworc session restore {id}
+# Interactive agent handles this automatically
+raworc agent wake {id}
 
 ● ready
 ──────────────────────────────────────────────────
@@ -302,14 +302,14 @@ Based on my previous analysis, I can elaborate further...
 # Context is maintained throughout the conversation
 ```
 
-## Session Data Management
+## Agent Data Management
 
-### Working with Session Files
+### Working with Agent Files
 
-Sessions have persistent storage that survives close/restore:
+Agents have persistent storage that survives sleep/wake:
 
 ```bash
-# In an interactive session
+# In an interactive agent
 ● ready
 ──────────────────────────────────────────────────
 > Create a file called config.yaml with database settings
@@ -328,82 +328,82 @@ I'll create a config.yaml file with database settings for you...
 
 I've updated the connection string in your config.yaml file...
 
-# File persists across close/restore cycles
+# File persists across sleep/wake cycles
 ```
 
-### Accessing Session Containers
+### Accessing Agent Containers
 
 For debugging or advanced operations:
 
 ```bash
-# List session containers
-docker ps -a --filter "name=raworc_session_"
+# List agent containers
+docker ps -a --filter "name=raworc_agent_"
 
-# Access session filesystem
-docker exec raworc_session_{id} ls -la /session/code/
+# Access agent filesystem
+docker exec raworc_agent_{id} ls -la /agent/code/
 
-# View Host logs
-docker exec raworc_session_{id} ls /session/logs/
-docker exec raworc_session_{id} cat /session/logs/host_*.log
+# View agent logs
+docker exec raworc_agent_{id} ls /agent/logs/
+docker exec raworc_agent_{id} cat /agent/logs/agent_*.log
 ```
 
 ## Best Practices
 
 ### Resource Management
-- **Close inactive sessions** to save CPU and memory
-- **Use restore** instead of creating new sessions when continuing work
+- **Sleep inactive agents** to save CPU and memory
+- **Use wake** instead of creating new agents when continuing work
 - **Set resource limits** appropriate for your workload
 
 ### Workflow Organization
-- **Create template sessions** for common starting points with Host configurations
+- **Create template agents** for common starting points with agent configurations
 - **Leverage remix** for experimentation without losing original work
-- **Name sessions clearly** with metadata for easy identification
-- **Use Host instructions** to specialize sessions for different tasks
+- **Name agents clearly** with metadata for easy identification
+- **Use agent instructions** to specialize agents for different tasks
 
 ### Performance Tips
-- **Close sessions** when not actively using them to save resources
-- **Use session remix** instead of recreating similar Host setups
+- **Sleep agents** when not actively using them to save resources
+- **Use agent remix** instead of recreating similar agent setups
 - **Monitor resource usage** to optimize computer allocation
 
-## Troubleshooting Sessions
+## Troubleshooting Agents
 
-### Session Won't Start
+### Agent Won't Start
 ```bash
-# Check session state and configuration
-raworc api sessions/{id}
+# Check agent state and configuration
+raworc api agents/{id}
 
 # Check operator logs
 docker logs raworc_operator --tail 50
 ```
 
-### Session Restore Fails
+### Agent Wake Fails
 ```bash
-# Check session state
-raworc api sessions/{id}
+# Check agent state
+raworc api agents/{id}
 
 # Verify container status
-docker ps -a | grep raworc_session_{id}
+docker ps -a | grep raworc_agent_{id}
 
 # Force recovery if needed
-raworc api sessions/{id}/state -m put -b '{"state":"idle"}'
+raworc api agents/{id}/state -m put -b '{"state":"idle"}'
 ```
 
-### Session Not Responding
+### Agent Not Responding
 ```bash
-# Check session state (should be "idle" to receive messages)
-raworc api sessions/{id} | grep state
+# Check agent state (should be "idle" to receive messages)
+raworc api agents/{id} | grep state
 
 # View recent container logs
-docker logs raworc_session_{id} --tail 100
+docker logs raworc_agent_{id} --tail 100
 
-# Restart session if needed
-raworc api sessions/{id}/close -m post
-raworc api sessions/{id}/restore -m post
+# Restart agent if needed
+raworc api agents/{id}/sleep -m post
+raworc api agents/{id}/wake -m post
 ```
 
 ## Next Steps
 
 - [CLI Usage Guide](/docs/guides/cli-usage) - Complete CLI command reference
-- [Sessions](/docs/concepts/sessions) - Technical architecture details
+- [Agents](/docs/concepts/agents) - Technical architecture details
 - [API Reference](/docs/api/rest-api-reference) - Full REST API documentation
 - [Troubleshooting](/docs/guides/troubleshooting) - Common issues and solutions

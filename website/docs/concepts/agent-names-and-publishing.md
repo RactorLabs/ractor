@@ -1,32 +1,32 @@
 ---
 sidebar_position: 5
-title: Session Names and Publishing
+title: Agent Names and Publishing
 ---
 
-# Session Names and Publishing
+# Agent Names and Publishing
 
-Raworc provides powerful session management through **Named Sessions** and **Session Publishing** - enabling organized workflows, collaboration, and knowledge sharing across teams and the community.
+Raworc provides powerful agent management through **Named Agents** and **Agent Publishing** - enabling organized workflows, collaboration, and knowledge sharing across teams and the community.
 
-## Session Naming
+## Agent Naming
 
-### Why Use Named Sessions?
+### Why Use Named Agents?
 
-Session names transform anonymous UUIDs into memorable, meaningful identifiers:
+Agent names transform anonymous UUIDs into memorable, meaningful identifiers:
 
 ```bash
 # Without names - hard to remember
-raworc session restore 7f3e2a1b-4c8d-9e5f-1234-567890abcdef
+raworc agent wake 7f3e2a1b-4c8d-9e5f-1234-567890abcdef
 
 # With names - intuitive and memorable  
-raworc session restore "customer-analysis-q3"
+raworc agent wake "customer-analysis-q3"
 ```
 
-### Session Name Benefits
+### Agent Name Benefits
 
 - **Human-readable identification** - Use descriptive names instead of UUIDs
-- **Cross-user accessibility** - Published sessions can be found by name globally
-- **Organized workflows** - Group related sessions with consistent naming patterns
-- **Easy session management** - Restore, remix, and reference sessions by name
+- **Cross-user accessibility** - Published agents can be found by name globally
+- **Organized workflows** - Group related agents with consistent naming patterns
+- **Easy agent management** - Wake, remix, and reference agents by name
 
 ### Naming Conventions
 
@@ -34,60 +34,60 @@ raworc session restore "customer-analysis-q3"
 
 ```bash
 # Project-based naming
-raworc session --name "project-website-redesign"
-raworc session --name "project-mobile-app-v2"
+raworc agent --name "project-website-redesign"
+raworc agent --name "project-mobile-app-v2"
 
 # Task-based naming
-raworc session --name "data-analysis-monthly-sales"
-raworc session --name "automation-invoice-processing"
+raworc agent --name "data-analysis-monthly-sales"
+raworc agent --name "automation-invoice-processing"
 
 # Team-based naming  
-raworc session --name "marketing-content-generation"
-raworc session --name "devops-deployment-scripts"
+raworc agent --name "marketing-content-generation"
+raworc agent --name "devops-deployment-scripts"
 
 # Date-based naming
-raworc session --name "report-2024-q3-analysis"
-raworc session --name "backup-cleanup-jan-2024"
+raworc agent --name "report-2024-q3-analysis"
+raworc agent --name "backup-cleanup-jan-2024"
 ```
 
 ### Name Requirements
 
-- **Unique within scope** - Names must be unique for your sessions
+- **Unique within scope** - Names must be unique for your agents
 - **URL-safe characters** - Use letters, numbers, hyphens, underscores
 - **Descriptive length** - Aim for 3-50 characters
 - **No spaces** - Use hyphens or underscores instead
 
-## Session Publishing
+## Agent Publishing
 
-### What is Session Publishing?
+### What is Agent Publishing?
 
-Publishing makes private sessions **publicly accessible** for remixing and collaboration:
+Publishing makes private agents **publicly accessible** for remixing and collaboration:
 
 ```bash
-# Make session publicly accessible
-raworc session publish "my-data-analysis"
+# Make agent publicly accessible
+raworc agent publish "my-data-analysis"
 
-# Anyone can now remix this session (no authentication required)
-raworc session remix "my-data-analysis" --name "my-version"
+# Anyone can now remix this agent (no authentication required)
+raworc agent remix "my-data-analysis" --name "my-version"
 ```
 
 ### Publishing Benefits
 
-- **Knowledge sharing** - Share useful sessions with the community
-- **Template creation** - Create reusable session templates
+- **Knowledge sharing** - Share useful agents with the community
+- **Template creation** - Create reusable agent templates
 - **Collaboration** - Enable team members to build on your work
 - **Learning resources** - Provide examples for others to learn from
 
 ### Publishing Permissions
 
-Control what gets shared when publishing sessions:
+Control what gets shared when publishing agents:
 
 ```bash
 # Publish with full permissions (default)
-raworc session publish "my-session"
+raworc agent publish "my-agent"
 
 # Publish with selective permissions
-raworc session publish "my-session" \
+raworc agent publish "my-agent" \
   --data true \
   --code true \
   --secrets false
@@ -95,61 +95,61 @@ raworc session publish "my-session" \
 
 **Permission Types:**
 
-- **`data`** - Share data files and documents created during the session
+- **`data`** - Share data files and documents created during the agent session
 - **`code`** - Share code, scripts, and configuration files
 - **secrets** - Share environment variables and API keys (**⚠️ Generally not recommended**)
 
 ### Publishing Workflow
 
 ```bash
-# 1. Create and work on your session
-raworc session --name "web-scraping-tutorial"
-# ... do work in the session ...
+# 1. Create and work on your agent
+raworc agent --name "web-scraping-tutorial"
+# ... do work in the agent ...
 
 # 2. Publish for others to use
-raworc session publish "web-scraping-tutorial" \
+raworc agent publish "web-scraping-tutorial" \
   --data true \
   --code true \
   --secrets false
 
 # 3. Others can discover and remix
-raworc api published/sessions  # List all published sessions
-raworc session remix "web-scraping-tutorial" --name "my-scraper"
+raworc api published/agents  # List all published agents
+raworc agent remix "web-scraping-tutorial" --name "my-scraper"
 ```
 
 ## Practical Use Cases
 
-### 1. Template Sessions
+### 1. Template Agents
 
-Create reusable session templates for common workflows:
+Create reusable agent templates for common workflows:
 
 ```bash
-# Create base session for data analysis
-raworc session --name "data-analysis-template" \
+# Create base agent for data analysis
+raworc agent --name "data-analysis-template" \
   --instructions "You are a data scientist. Use pandas, matplotlib, and seaborn for analysis." \
   --setup "pip install pandas matplotlib seaborn jupyter plotly"
 
-# Work on the session to set up tools, create example notebooks
+# Work with the agent to set up tools, create example notebooks
 # ... 
 
 # Publish as template
-raworc session publish "data-analysis-template" \
+raworc agent publish "data-analysis-template" \
   --data true \
   --code true \
   --secrets false
 
 # Team members can remix for new projects
-raworc session remix "data-analysis-template" --name "sales-analysis-q4"
-raworc session remix "data-analysis-template" --name "customer-churn-analysis"
+raworc agent remix "data-analysis-template" --name "sales-analysis-q4"
+raworc agent remix "data-analysis-template" --name "customer-churn-analysis"
 ```
 
-### 2. Tutorial and Learning Sessions
+### 2. Tutorial and Learning Agents
 
-Share educational sessions with the community:
+Share educational agents with the community:
 
 ```bash
-# Create tutorial session
-raworc session --name "python-web-scraping-tutorial" \
+# Create tutorial agent
+raworc agent --name "python-web-scraping-tutorial" \
   --instructions "Teach web scraping with Python using requests and BeautifulSoup" \
   --setup "pip install requests beautifulsoup4 pandas"
 
@@ -157,10 +157,10 @@ raworc session --name "python-web-scraping-tutorial" \
 # ...
 
 # Publish for others to learn from
-raworc session publish "python-web-scraping-tutorial"
+raworc agent publish "python-web-scraping-tutorial"
 
 # Learners can remix and experiment
-raworc session remix "python-web-scraping-tutorial" --name "my-scraping-practice"
+raworc agent remix "python-web-scraping-tutorial" --name "my-scraping-practice"
 ```
 
 ### 3. Team Collaboration
@@ -168,22 +168,22 @@ raworc session remix "python-web-scraping-tutorial" --name "my-scraping-practice
 Share work within teams for collaboration:
 
 ```bash
-# Team lead creates base session
-raworc session --name "product-launch-analysis" \
+# Team lead creates base agent
+raworc agent --name "product-launch-analysis" \
   --instructions "Analyze product launch metrics and create reports"
 
 # Work on initial analysis
 # ...
 
 # Publish for team access
-raworc session publish "product-launch-analysis" \
+raworc agent publish "product-launch-analysis" \
   --data true \
   --code true \
   --secrets false
 
 # Team members create specialized versions
-raworc session remix "product-launch-analysis" --name "marketing-metrics-deep-dive"
-raworc session remix "product-launch-analysis" --name "technical-performance-analysis"
+raworc agent remix "product-launch-analysis" --name "marketing-metrics-deep-dive"
+raworc agent remix "product-launch-analysis" --name "technical-performance-analysis"
 ```
 
 ### 4. Project Milestones
@@ -191,87 +191,87 @@ raworc session remix "product-launch-analysis" --name "technical-performance-ana
 Preserve important project states:
 
 ```bash
-# Create session for project milestone
-raworc session --name "website-redesign-milestone-1" \
+# Create agent for project milestone
+raworc agent --name "website-redesign-milestone-1" \
   --instructions "Website redesign project - Phase 1 complete"
 
 # Complete milestone work
 # ...
 
 # Publish milestone for team reference
-raworc session publish "website-redesign-milestone-1"
+raworc agent publish "website-redesign-milestone-1"
 
 # Continue with next phase
-raworc session remix "website-redesign-milestone-1" --name "website-redesign-phase-2"
+raworc agent remix "website-redesign-milestone-1" --name "website-redesign-phase-2"
 ```
 
-## Finding and Using Published Sessions
+## Finding and Using Published Agents
 
 ### Discovery
 
 ```bash
-# List all published sessions
-raworc api published/sessions
+# List all published agents
+raworc api published/agents
 
-# Get details about a published session
-raworc api published/sessions/data-analysis-template
+# Get details about a published agent
+raworc api published/agents/data-analysis-template
 
-# Search published sessions (use grep to filter)
-raworc api published/sessions | grep -i "analysis"
+# Search published agents (use grep to filter)
+raworc api published/agents | grep -i "analysis"
 ```
 
-### Remixing Published Sessions
+### Remixing Published Agents
 
 ```bash
 # Remix with new name
-raworc session remix "published-session-name" --name "my-version"
+raworc agent remix "published-agent-name" --name "my-version"
 
 # Remix with selective copying
-raworc session remix "published-session-name" \
+raworc agent remix "published-agent-name" \
   --name "code-only-version" \
   --data false \
   --code true \
   --secrets false
 
 # Remix and start immediately with prompt
-raworc session remix "data-analysis-template" \
+raworc agent remix "data-analysis-template" \
   --name "quarterly-sales-analysis" \
   --prompt "Analyze Q3 sales data and create executive summary"
 ```
 
-## Session Management Commands
+## Agent Management Commands
 
 ### Naming Operations
 
 ```bash
-# Create named session
-raworc session --name "my-session"
+# Create named agent
+raworc agent --name "my-agent"
 
-# Restore by name
-raworc session restore "my-session"
+# Wake by name
+raworc agent wake "my-agent"
 
-# Use session name in API calls
-raworc api sessions/my-session
-raworc api sessions/my-session/messages
+# Use agent name in API calls
+raworc api agents/my-agent
+raworc api agents/my-agent/messages
 ```
 
 ### Publishing Operations
 
 ```bash
-# Publish session
-raworc session publish "my-session"
+# Publish agent
+raworc agent publish "my-agent"
 
 # Publish with permissions
-raworc session publish "my-session" --data true --code true --secrets false
+raworc agent publish "my-agent" --data true --code true --secrets false
 
-# Unpublish session
-raworc session unpublish "my-session"
+# Unpublish agent
+raworc agent unpublish "my-agent"
 
-# List published sessions
-raworc api published/sessions
+# List published agents
+raworc api published/agents
 
-# Get published session info
-raworc api published/sessions/session-name
+# Get published agent info
+raworc api published/agents/agent-name
 ```
 
 ## Best Practices
@@ -286,7 +286,7 @@ raworc api published/sessions/session-name
 ### Publishing Best Practices
 
 1. **Review content first** - Ensure no sensitive data before publishing
-2. **Set appropriate permissions** - Generally exclude secrets from public sessions
+2. **Set appropriate permissions** - Generally exclude secrets from public agents
 3. **Add documentation** - Include clear instructions and examples
 4. **Update regularly** - Keep published templates current and useful
 
@@ -294,46 +294,46 @@ raworc api published/sessions/session-name
 
 - **Never publish secrets** - Use `--secrets false` when publishing
 - **Review data files** - Ensure no sensitive information in data
-- **Use private sessions for sensitive work** - Keep confidential work unpublished
+- **Use private agents for sensitive work** - Keep confidential work unpublished
 - **Clean up before publishing** - Remove temporary files and sensitive logs
 
 ## Advanced Use Cases
 
-### Session Hierarchies
+### Agent Hierarchies
 
-Create organized session families:
+Create organized agent families:
 
 ```bash
 # Base template
-raworc session --name "ecommerce-analysis-base"
-raworc session publish "ecommerce-analysis-base"
+raworc agent --name "ecommerce-analysis-base"
+raworc agent publish "ecommerce-analysis-base"
 
 # Specialized versions
-raworc session remix "ecommerce-analysis-base" --name "ecommerce-customer-segmentation"
-raworc session remix "ecommerce-analysis-base" --name "ecommerce-sales-forecasting" 
-raworc session remix "ecommerce-analysis-base" --name "ecommerce-inventory-optimization"
+raworc agent remix "ecommerce-analysis-base" --name "ecommerce-customer-segmentation"
+raworc agent remix "ecommerce-analysis-base" --name "ecommerce-sales-forecasting" 
+raworc agent remix "ecommerce-analysis-base" --name "ecommerce-inventory-optimization"
 ```
 
 ### Iterative Development
 
-Version your session work:
+Version your agent work:
 
 ```bash
 # Initial version
-raworc session --name "ml-model-v1"
-raworc session publish "ml-model-v1"
+raworc agent --name "ml-model-v1"
+raworc agent publish "ml-model-v1"
 
 # Improved version
-raworc session remix "ml-model-v1" --name "ml-model-v2"
-raworc session publish "ml-model-v2"
+raworc agent remix "ml-model-v1" --name "ml-model-v2"
+raworc agent publish "ml-model-v2"
 
 # Production version
-raworc session remix "ml-model-v2" --name "ml-model-production"
+raworc agent remix "ml-model-v2" --name "ml-model-production"
 ```
 
 ## Next Steps
 
-- **[Sessions Concepts](/docs/concepts/sessions)** - Core session architecture
+- **[Agents Concepts](/docs/concepts/agents)** - Core agent architecture
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Complete command reference
-- **[Getting Started](/docs/getting-started)** - Basic session setup
-- **[API Reference](/docs/api/rest-api-reference)** - REST API for session management
+- **[Getting Started](/docs/getting-started)** - Basic agent setup
+- **[API Reference](/docs/api/rest-api-reference)** - REST API for agent management

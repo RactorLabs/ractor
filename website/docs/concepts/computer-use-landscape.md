@@ -160,5 +160,5 @@ You: "Help me organize these files and create a summary report"
 ## Next Steps
 
 - **[Getting Started](/docs/getting-started)** - Set up your first Host session
-- **[Sessions](/docs/concepts/sessions)** - Understand Host session management
+- **[Agents](/docs/concepts/agents)** - Understand agent management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all commands for Host control

@@ -35,8 +35,8 @@ const sidebars: SidebarsConfig = {
       },
       items: [
         'concepts/computer-use-agents',
-        'concepts/sessions',
-        'concepts/session-names-and-publishing',
+        'concepts/agents',
+        'concepts/agent-names-and-publishing',
         'concepts/computer-use-landscape',
         'concepts/authentication-users',
       ],
@@ -52,7 +52,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/cli-usage',
         'guides/dev-mode',
-        'guides/session-playground',
+        'guides/agent-playground',
       ],
     },
     {

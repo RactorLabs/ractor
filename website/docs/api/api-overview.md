@@ -5,7 +5,7 @@ title: API Overview
 
 # REST API Overview
 
-Raworc provides a comprehensive REST API for Computer Use automation. The API enables programmatic control over Agent agents, dedicated computers, and enterprise operations.
+Raworc provides a comprehensive REST API for Computer Use automation. The API enables programmatic control over computer use agents, dedicated computers, and enterprise operations.
 
 ## Base Information
 
@@ -20,12 +20,12 @@ All API endpoints (except `/version` and `/auth/login`) require authentication u
 
 ## Agents
 
-Raworc uses agents to provide Computer Use automation. Each agent includes a dedicated computer with a Agent for automating manual work. Agents support:
+Raworc uses agents to provide Computer Use automation. Each agent includes a dedicated computer with an AI assistant for automating manual work. Agents support:
 
 - **Named Agents**: Use names instead of UUIDs for easier identification
-- **Session Publishing**: Share agents publicly with configurable permissions
+- **Agent Publishing**: Share agents publicly with configurable permissions
 - **Auto-Timeouts**: Automatic resource management with idle-based timeouts
-- **Auto-Restore**: Seamless agent restoration when messaging closed agents
+- **Auto-Wake**: Seamless agent restoration when messaging sleeping agents
 - **Cross-User Access**: Admin privileges and published agent access
 
 ### Obtaining a Token
@@ -97,18 +97,18 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/operators/{name}`](./rest-api-reference#delete-operatorsname) | DELETE | Delete operator |
 | [`/operators/{name}/password`](./rest-api-reference#put-operatorsnamepassword) | PUT | Update operator password |
 
-### Agent Agents
+### Computer Use Agents
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/agents`](./rest-api-reference#get-agents) | GET | List Agent agents |
-| [`/agents`](./rest-api-reference#post-agents) | POST | Create new Agent agent |
+| [`/agents`](./rest-api-reference#get-agents) | GET | List computer use agents |
+| [`/agents`](./rest-api-reference#post-agents) | POST | Create new agent |
 | [`/agents/{id}`](./rest-api-reference#get-agentsid) | GET | Get specific agent |
 | [`/agents/{id}`](./rest-api-reference#put-agentsid) | PUT | Update agent details |
 | [`/agents/{id}/state`](./rest-api-reference#put-agentsidstate) | PUT | Update agent state |
-| [`/agents/{id}/close`](./rest-api-reference#post-agentsidclose) | POST | Close Agent agent |
-| [`/agents/{id}/restore`](./rest-api-reference#post-agentsidrestore) | POST | Restore Agent agent |
-| [`/agents/{id}/remix`](./rest-api-reference#post-agentsidremix) | POST | Fork Agent agent |
+| [`/agents/{id}/sleep`](./rest-api-reference#post-agentsidsleep) | POST | Sleep agent |
+| [`/agents/{id}/wake`](./rest-api-reference#post-agentsidwake) | POST | Wake agent |
+| [`/agents/{id}/remix`](./rest-api-reference#post-agentsidremix) | POST | Fork agent |
 | [`/agents/{id}/publish`](./rest-api-reference#post-agentsidpublish) | POST | Publish agent |
 | [`/agents/{id}/unpublish`](./rest-api-reference#post-agentsidunpublish) | POST | Unpublish agent |
 | [`/agents/{id}/busy`](./rest-api-reference#post-agentsidbusy) | POST | Mark agent busy |
@@ -126,8 +126,8 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/agents/{id}/messages`](./rest-api-reference#get-agentsidmessages) | GET | List Agent messages |
-| [`/agents/{id}/messages`](./rest-api-reference#post-agentsidmessages) | POST | Send message to Agent |
+| [`/agents/{id}/messages`](./rest-api-reference#get-agentsidmessages) | GET | List agent messages |
+| [`/agents/{id}/messages`](./rest-api-reference#post-agentsidmessages) | POST | Send message to agent |
 | [`/agents/{id}/messages/count`](./rest-api-reference#get-agentsidmessagescount) | GET | Get message count |
 | [`/agents/{id}/messages`](./rest-api-reference#delete-agentsidmessages) | DELETE | Clear all messages |
 

@@ -29,7 +29,7 @@ interface Agent {
   published_by?: string;         // Who published the agent
   publish_permissions: object;   // Remix permissions (data/code/secrets)
   timeout_seconds: number;       // Agent timeout in seconds
-  auto_close_at?: timestamp;     // When agent will auto-close
+  auto_sleep_at?: timestamp;     // When agent will auto-sleep
 }
 ```
 
@@ -38,9 +38,9 @@ interface Agent {
 Agents follow a validated state machine with controlled transitions:
 
 ```
-init → idle → busy → closed → errored
-  ↓      ↓      ↓       ↓         ↓
-  ✓      ✓      ✓       ✓         ✓
+init → idle → busy → sleeping → errored
+  ↓      ↓      ↓         ↓         ↓
+  ✓      ✓      ✓         ✓         ✓
   └─── deleted (soft delete with cleanup)
 ```
 
@@ -49,7 +49,7 @@ init → idle → busy → closed → errored
 - **`init`** - Container being created and Agent initialized
 - **`idle`** - Ready to receive and process messages
 - **`busy`** - Processing messages and executing tasks
-- **`closed`** - Container stopped, volume preserved (can be restored)
+- **`sleeping`** - Container stopped, volume preserved (can be woken)
 - **`errored`** - Container failed, requires intervention
 - **`deleted`** - Agent marked for deletion, resources cleaned up
 
@@ -60,8 +60,8 @@ init → idle → busy → closed → errored
 | `init` | `idle` | Container ready | Agent polling starts |
 | `idle` | `busy` | Message received | Agent processing |
 | `busy` | `idle` | Task completed | Ready for next message |
-| `idle` | `closed` | Manual close | Container stopped |
-| `closed` | `idle` | Restore request | Container restarted |
+| `idle` | `sleeping` | Manual sleep | Container stopped |
+| `sleeping` | `idle` | Wake request | Container restarted |
 | `idle` | `errored` | Error condition | Container marked failed |
 | `errored` | `idle` | Manual recovery | Container recreated |
 
@@ -87,7 +87,7 @@ Agents use persistent Docker volumes for data that survives container lifecycle:
 
 - **Volume Name**: `raworc_agent_data_{agent-name}`
 - **Mount Point**: `/agent/` (code, secrets, content, logs)
-- **Persistence**: Survives close/restore operations
+- **Persistence**: Survives sleep/wake operations
 - **Cleanup**: Removed only when agent is deleted
 
 ### Resource Management
@@ -143,7 +143,7 @@ raworc api agents -m post -b '{
 - **`instructions`** - Instructions for the Agent (written to `/agent/code/instructions.md`)
 - **`setup`** - Setup script to run in the container (written to `/agent/code/setup.sh`)
 - **`metadata`** - Additional metadata object
-- **`timeout_seconds`** - Agent timeout in seconds (default: 300, triggers auto-close when idle)
+- **`timeout_seconds`** - Agent timeout in seconds (default: 300, triggers auto-sleep when idle)
 
 ## Agent Lifecycle Operations
 
@@ -175,30 +175,30 @@ raworc api agents/{agent-name}/messages -m post -b '{"content":"Hello"}'
 2. Agent state transitions to `busy`
 3. Agent polls and receives message
 4. Agent executes using AI capabilities and computer-use tools
-5. Response stored with `host` role
+5. Response stored with `assistant` role
 6. Agent returns to `idle` state
 
-### Close Agent
+### Sleep Agent
 ```bash
-raworc api agents/{agent-name}/close -m post
+raworc api agents/{agent-name}/sleep -m post
 ```
 
 **Flow:**
-1. Agent state transitions to `closed`
+1. Agent state transitions to `sleeping`
 2. Container stopped and removed to free resources
 3. Persistent volume preserved with all agent data
-4. Agent can be restored later with full state
+4. Agent can be woken later with full state
 
-### Restore Agent
+### Wake Agent
 ```bash
-raworc api agents/{agent-name}/restore -m post
+raworc api agents/{agent-name}/wake -m post
 ```
 
 **Flow:**
 1. New container created from host image
 2. Persistent volume remounted with preserved state
 3. Agent initializes and resumes message polling
-4. **No reprocessing** - Only new messages after restore are handled
+4. **No reprocessing** - Only new messages after wake are handled
 5. Agent returns to `idle` state (~3-5 seconds)
 
 ### Delete Agent
@@ -212,26 +212,26 @@ raworc api agents/{agent-name} -m delete
 3. Agent marked as soft-deleted in database
 4. All agent data and logs permanently removed
 
-## Agent Restore
+## Agent Sleep/Wake
 
-Raworc supports **reliable agent persistence** - close agents to save resources and restore them later with full state preservation:
+Raworc supports **reliable agent persistence** - sleep agents to save resources and wake them later with full state preservation:
 
 ```bash
-# Close agent (preserves state)
-raworc api agents/{agent-name}/close -m post
+# Sleep agent (preserves state)
+raworc api agents/{agent-name}/sleep -m post
 
-# Restore agent later  
-raworc api agents/{agent-name}/restore -m post
+# Wake agent later  
+raworc api agents/{agent-name}/wake -m post
 
 # Continue with new messages
-raworc agent restore {agent-name}
+raworc agent wake {agent-name}
 ```
 
 **Key Features:**
-- ✅ **No message reprocessing** - Restored agents only handle new messages
+- ✅ **No message reprocessing** - Woken agents only handle new messages
 - ✅ **Persistent storage** - All files and state preserved between restarts
 - ✅ **Reliable message loop** - Second and subsequent messages process correctly
-- ✅ **Fast restoration** - Agent agents resume quickly with minimal overhead
+- ✅ **Fast wake up** - Agents resume quickly with minimal overhead
 
 ## Agent Remix
 
@@ -377,7 +377,7 @@ raworc api agents -m post -b '{
 
 - **Busy State**: Agent processing messages, timeout suspended
 - **Idle State**: Agent waiting for messages, timeout counting down
-- **Auto-Close**: Agent automatically closed when timeout reached
+- **Auto-Sleep**: Agent automatically sleeps when timeout reached
 
 ### Manual State Control
 
@@ -393,35 +393,35 @@ raworc api agents/my-agent/idle -m post
 
 - **Default Timeout**: 60 seconds unless specified
 - **Idle-Based**: Only counts down when agent is idle
-- **Resource Saving**: Automatically closes unused agents
-- **Restore Ready**: Auto-closed agents can be restored instantly
+- **Resource Saving**: Automatically sleeps unused agents
+- **Wake Ready**: Auto-sleeping agents can be woken instantly
 
-## Auto-Restore for Closed Agents
+## Auto-Wake for Sleeping Agents
 
-Seamless agent resumption when sending messages to closed agents:
+Seamless agent resumption when sending messages to sleeping agents:
 
-### Auto-Restore Behavior
+### Auto-Wake Behavior
 
 ```bash
-# Send message to closed agent - automatically restores
-raworc api agents/closed-agent/messages -m post -b '{"content":"Hello"}'
-# Returns 200 OK immediately, queues restore task
+# Send message to sleeping agent - automatically wakes
+raworc api agents/sleeping-agent/messages -m post -b '{"content":"Hello"}'
+# Returns 200 OK immediately, queues wake task
 ```
 
-### Auto-Restore Flow
+### Auto-Wake Flow
 
-1. **Message Detection**: API detects message sent to closed agent
+1. **Message Detection**: API detects message sent to sleeping agent
 2. **Immediate Response**: Returns 200 OK without delay
-3. **Background Restore**: Queues agent restoration task
-4. **Message Processing**: Agent processes message after restoration
+3. **Background Wake**: Queues agent wake task
+4. **Message Processing**: Agent processes message after waking
 5. **Transparent Experience**: User sees no difference from active agent
 
 ### Key Benefits
 
-- **Zero Downtime**: No user-facing errors for closed agents
-- **Resource Efficiency**: Agents auto-close when idle, restore on demand
-- **Seamless UX**: Users don't need to manually restore agents
-- **Background Processing**: Restoration happens asynchronously
+- **Zero Downtime**: No user-facing errors for sleeping agents
+- **Resource Efficiency**: Agents auto-sleep when idle, wake on demand
+- **Seamless UX**: Users don't need to manually wake agents
+- **Background Processing**: Wake happens asynchronously
 
 ## Performance and Optimization
 
@@ -430,12 +430,12 @@ raworc api agents/closed-agent/messages -m post -b '{"content":"Hello"}'
 Agents start quickly because:
 - **No Build Pipeline**: Direct host image usage without pre-compilation steps
 - **Environment Variables**: Secrets passed directly to container
-- **Container Recreation**: Close/restore with quick startup
+- **Container Recreation**: Sleep/wake with quick startup
 - **Persistent Volumes**: Data survives container lifecycle
 
 ### Resource Efficiency
 
-- **Close Unused Agents**: Automatic container stopping saves resources
+- **Sleep Unused Agents**: Automatic container stopping saves resources
 - **Persistent Volumes**: Data preservation without container overhead
 - **Shared Base Images**: Common dependencies cached across agents
 - **Connection Pooling**: Efficient database connections from API server
@@ -470,8 +470,8 @@ Use the interactive agent interface for real-time Agent interaction:
 
 ```bash
 # All new agents require ANTHROPIC_API_KEY environment variable
-raworc agent                                                    # Start new Agent agent
-raworc agent restore abc123                                           # Continue existing Agent agent
+raworc agent                                                    # Start new agent
+raworc agent wake abc123                                        # Continue existing agent
 raworc agent remix def456                                             # Create remix
 
 # In agent interface:

@@ -100,7 +100,7 @@ const config: Config = {
             },
             {
               label: 'Sessions',
-              to: '/docs/concepts/sessions',
+              to: '/docs/concepts/agents',
             },
             {
               label: 'API Reference',

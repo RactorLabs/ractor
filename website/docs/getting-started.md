@@ -5,7 +5,7 @@ title: Getting Started
 
 # Getting Started with Raworc
 
-Get started with the Remote Agentic Work Orchestrator in just a few commands. Raworc provides dedicated remote computers with Host to automate any manual work with enterprise-grade reliability.
+Get started with the Remote Agentic Work Orchestrator in just a few commands. Raworc provides dedicated remote computers with computer use agents to automate any manual work with enterprise-grade reliability.
 
 ## Prerequisites
 
@@ -45,60 +45,60 @@ raworc login --user admin --pass admin
 raworc auth -t <jwt-token-from-step-1>
 ```
 
-### 4. Start Your First Session
+### 4. Start Your First Agent
 
 ```bash
-raworc session
+raworc agent
 ```
 
 **Note**: Make sure you have set the `ANTHROPIC_API_KEY` environment variable as shown in the prerequisites.
 
-That's it! You now have a running Host session.
+That's it! You now have a running agent.
 
-## Session Configuration
+## Agent Configuration
 
-### Basic Session
+### Basic Agent
 
 ```bash
-# Create new session (uses ANTHROPIC_API_KEY from environment)
-raworc session
+# Create new agent (uses ANTHROPIC_API_KEY from environment)
+raworc agent
 ```
 
-**Note**: The Anthropic API key environment variable is required for all new sessions.
+**Note**: The Anthropic API key environment variable is required for all new agents.
 
-### Session with Instructions
+### Agent with Instructions
 
 ```bash
-raworc session --instructions "You are a helpful coding assistant specialized in Python"
+raworc agent --instructions "You are a helpful coding assistant specialized in Python"
 ```
 
-### Session with Setup Script
+### Agent with Setup Script
 
 ```bash
-raworc session --setup "pip install pandas numpy matplotlib"
+raworc agent --setup "pip install pandas numpy matplotlib"
 ```
 
-For more advanced session configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#4-session-configuration-options).
+For more advanced agent configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#4-agent-configuration-options).
 
-## Interactive Session Usage
+## Interactive Agent Usage
 
-Once in a session, you can interact directly with the Host using the clean CLI interface:
+Once in an agent, you can interact directly with the agent using the clean CLI interface:
 
 ```bash
-$ raworc session
+$ raworc agent
 
 ┌─────────────────────────────────────┐
-│ ◊ Session Start                     │
-│ Session: abc123-def456-789          │
-│ User: admin (Operator)              │
-│ Commands: /help (for commands)      │
+│ ◊ Agent Start                       │
+│ Agent: abc123-def456-789             │
+│ User: admin (Operator)               │
+│ Commands: /help (for commands)       │
 └─────────────────────────────────────┘
 
 ◯ initializing...
 ──────────────────────────────────────────────────
 > Hello, how can you help me?
 
-I'm a Host that can help you with various tasks including:
+I'm an agent that can help you with various tasks including:
 - Writing and debugging code
 - Data analysis and visualization  
 - File management and organization
@@ -117,77 +117,77 @@ I'll create a Python script to calculate Fibonacci numbers for you.
 [Creates fibonacci.py with implementation]
 
 You: /quit
-👋 Ending session...
+👋 Ending agent...
 ```
 
-### Session Commands
+### Agent Commands
 
 - **Regular messages**: Just type your request
-- **`/quit`** or **`/exit`** - End the session
-- **`/status`** - Show session information
+- **`/quit`** or **`/exit`** - End the agent
+- **`/status`** - Show agent information
 
-## Session Management
+## Agent Management
 
-### List Your Sessions
+### List Your Agents
 
 ```bash
-raworc api sessions
+raworc api agents
 ```
 
-### Restore Previous Session
+### Wake Previous Agent
 
 ```bash
-raworc session restore abc123-def456-789
+raworc agent wake abc123-def456-789
 ```
 
-### Create Session Remix
+### Create Agent Remix
 
 ```bash
-# Remix from existing session
-raworc session remix abc123-def456-789
+# Remix from existing agent
+raworc agent remix abc123-def456-789
 
 # Selective remix options
-raworc session remix abc123-def456-789 --data false    # Don't copy data files
-raworc session remix abc123-def456-789 --code false    # Don't copy code files
+raworc agent remix abc123-def456-789 --data false    # Don't copy data files
+raworc agent remix abc123-def456-789 --code false    # Don't copy code files
 ```
 
 ## Direct API Usage
 
-### Create Session via API
+### Create Agent via API
 
 ```bash
-# Basic session
-raworc api sessions -m POST -b '{}'
+# Basic agent
+raworc api agents -m POST -b '{}'
 
-# Session with configuration
-raworc api sessions -m POST -b '{
+# Agent with configuration
+raworc api agents -m POST -b '{
   "secrets": {
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
-  "instructions": "You are a helpful Host specialized in data analysis.",
+  "instructions": "You are a helpful agent specialized in data analysis.",
   "setup": "#!/bin/bash\necho \"Setting up environment\"\npip install pandas numpy"
 }'
 ```
 
-### Send Messages to Session
+### Send Messages to Agent
 
 ```bash
-raworc api sessions/{session-name}/messages -m POST -b '{
+raworc api agents/{agent-name}/messages -m POST -b '{
   "content": "Generate a Python script to calculate fibonacci numbers"
 }'
 ```
 
-### Session Lifecycle
+### Agent Lifecycle
 
 ```bash
-# Close session (saves resources, preserves data)
-raworc api sessions/{session-name}/close -m POST
+# Sleep agent (saves resources, preserves data)
+raworc api agents/{agent-name}/sleep -m POST
 
-# Restore closed session
-raworc api sessions/{session-name}/restore -m POST
+# Wake sleeping agent
+raworc api agents/{agent-name}/wake -m POST
 
-# Delete session permanently
-raworc api sessions/{session-name} -m DELETE
+# Delete agent permanently
+raworc api agents/{agent-name} -m DELETE
 ```
 
 ## Troubleshooting
@@ -222,7 +222,7 @@ Now that you have Raworc running:
 
 - **[Common Use Cases](/docs/guides/cli-usage#common-use-cases)** - Practical examples for different automation scenarios
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Master all CLI commands and features
-- **[Sessions Concepts](/docs/concepts/sessions)** - Understand session architecture and lifecycle
+- **[Agent Concepts](/docs/concepts/agents)** - Understand agent architecture and lifecycle
 - **[API Reference](/docs/api/rest-api-reference)** - Complete REST API documentation
 
 ## Support

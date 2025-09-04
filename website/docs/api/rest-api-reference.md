@@ -23,21 +23,21 @@ raworc api <endpoint>
 
 # Examples
 raworc api version                   # GET /version
-raworc api sessions                  # GET /sessions
-raworc api sessions -m POST          # POST /sessions
-raworc api sessions/abc123          # GET /sessions/abc123
-raworc api sessions/abc123 -m DELETE # DELETE /sessions/abc123
+raworc api agents                    # GET /agents
+raworc api agents -m POST            # POST /agents
+raworc api agents/abc123            # GET /agents/abc123
+raworc api agents/abc123 -m DELETE  # DELETE /agents/abc123
 
 # With request body
-raworc api sessions -m POST -b '{"instructions":"Hello"}'
+raworc api agents -m POST -b '{"instructions":"Hello"}'
 
 # With query parameters  
-raworc api "sessions/abc123/messages?limit=10"
+raworc api "agents/abc123/messages?limit=10"
 
 # Response formatting
-raworc api sessions --pretty         # Pretty print JSON
-raworc api sessions --headers        # Show response headers
-raworc api sessions --status         # Show HTTP status
+raworc api agents --pretty           # Pretty print JSON
+raworc api agents --headers          # Show response headers
+raworc api agents --status           # Show HTTP status
 ```
 
 **CLI Options:**
@@ -276,16 +276,16 @@ Update operator password.
 
 **Response**: `200 OK`
 
-## Sessions
+## Agents
 
-### GET /sessions
+### GET /agents
 
-List Host sessions. Regular users see only their own sessions, admin users see all sessions.
+List computer use agents. Regular users see only their own agents, admin users see all agents.
 
 **Authentication**: Required
 
 **Query Parameters**:
-- `state` (optional) - Filter sessions by state (init, idle, busy, closed, errored, deleted)
+- `state` (optional) - Filter agents by state (init, idle, busy, sleeping, errored, deleted)
 
 **Response**: `200 OK`
 ```json
@@ -293,11 +293,11 @@ List Host sessions. Regular users see only their own sessions, admin users see a
   {
     "id": "61549530-3095-4cbf-b379-cd32416f626d",
     "created_by": "admin",
-    "name": "my-session",
+    "name": "my-agent",
     "state": "idle",
     "container_id": "container-id",
     "persistent_volume_id": "volume-id",
-    "parent_session_name": null,
+    "parent_agent_name": null,
     "created_at": "2025-01-20T10:00:00Z",
     "last_activity_at": "2025-01-20T10:05:00Z",
     "metadata": {},
@@ -306,50 +306,50 @@ List Host sessions. Regular users see only their own sessions, admin users see a
     "published_by": null,
     "publish_permissions": {},
     "timeout_seconds": 300,
-    "auto_close_at": "2025-01-20T10:10:00Z"
+    "auto_sleep_at": "2025-01-20T10:10:00Z"
   }
 ]
 ```
 
-### POST /sessions
+### POST /agents
 
-Create a new Host session.
+Create a new computer use agent.
 
 **Authentication**: Required
 
 **Request Body**:
 ```json
 {
-  "name": "my-session",
+  "name": "my-agent",
   "metadata": {},
   "secrets": {
     "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
-  "instructions": "You are a helpful Host specialized in data analysis.",
+  "instructions": "You are a helpful AI agent specialized in data analysis.",
   "setup": "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy",
   "timeout_seconds": 300
 }
 ```
 
 **Fields**:
-- `name` (optional) - Unique name for the session
+- `name` (optional) - Unique name for the agent
 - `metadata` (optional) - Additional metadata object (defaults to {})
-- `secrets` (optional) - Environment variables/secrets for the session
-- `instructions` (optional) - Instructions for the Host
+- `secrets` (optional) - Environment variables/secrets for the agent
+- `instructions` (optional) - Instructions for the AI agent
 - `setup` (optional) - Setup script to run in the container
-- `timeout_seconds` (optional) - Session timeout in seconds (default: 300)
+- `timeout_seconds` (optional) - Agent timeout in seconds (default: 300)
 
 **Response**: `200 OK`
 ```json
 {
   "id": "61549530-3095-4cbf-b379-cd32416f626d",
   "created_by": "admin",
-  "name": "my-session",
+  "name": "my-agent",
   "state": "init",
   "container_id": null,
   "persistent_volume_id": null,
-  "parent_session_name": null,
+  "parent_agent_name": null,
   "created_at": "2025-01-20T10:00:00Z",
   "started_at": null,
   "last_activity_at": null,
@@ -361,35 +361,35 @@ Create a new Host session.
   "published_by": null,
   "publish_permissions": {},
   "timeout_seconds": 300,
-  "auto_close_at": null
+  "auto_sleep_at": null
 }
 ```
 
-### GET /sessions/\{name\}
+### GET /agents/\{name\}
 
-Get a specific session by ID or name. Users can access their own sessions and published sessions. Admin users can access any session.
+Get a specific agent by ID or name. Users can access their own agents and published agents. Admin users can access any agent.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 (Same format as POST response)
 
-### PUT /sessions/\{name\}
+### PUT /agents/\{name\}
 
-Update session details.
+Update agent details.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Agent ID
 
 **Request Body**:
 ```json
 {
-  "name": "my-updated-session",
+  "name": "my-updated-agent",
   "metadata": {
     "updated_by": "admin",
     "purpose": "production deployment"
@@ -399,50 +399,50 @@ Update session details.
 ```
 
 **Fields**:
-- `name` (optional) - Update session name (alphanumeric and hyphens only)
-- `metadata` (optional) - Update session metadata object
-- `timeout_seconds` (optional) - Update session timeout in seconds
+- `name` (optional) - Update agent name (alphanumeric and hyphens only)
+- `metadata` (optional) - Update agent metadata object
+- `timeout_seconds` (optional) - Update agent timeout in seconds
 
 **Response**: `200 OK`
-(Returns updated session)
+(Returns updated agent)
 
-### PUT /sessions/`{name}`/state
+### PUT /agents/`{name}`/state
 
-Update session state.
+Update agent state.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Agent ID
 
 **Request Body**:
 ```json
 {
-  "state": "closed"
+  "state": "sleeping"
 }
 ```
 
 **Response**: `200 OK`
 
-### POST /sessions/`{name}`/close
+### POST /agents/`{name}`/sleep
 
-Close a Host session (saves resources by stopping the container while preserving state).
+Sleep an agent (saves resources by stopping the container while preserving state).
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID
+- `id` (path) - Agent ID
 
 **Response**: `200 OK`
 
-### POST /sessions/`{name}`/restore
+### POST /agents/`{name}`/wake
 
-Restore a closed Host session (restarts the container with preserved state).
+Wake a sleeping agent (restarts the container with preserved state).
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Request Body** (optional):
 ```json
@@ -452,18 +452,18 @@ Restore a closed Host session (restarts the container with preserved state).
 ```
 
 **Fields**:
-- `prompt` (optional) - Message to send after restoring session
+- `prompt` (optional) - Message to send after waking agent
 
 **Response**: `200 OK`
 
-### POST /sessions/`{name}`/publish
+### POST /agents/`{name}`/publish
 
-Publish a session for public access with configurable remix permissions.
+Publish an agent for public access with configurable remix permissions.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Request Body**:
 ```json
@@ -483,62 +483,62 @@ Publish a session for public access with configurable remix permissions.
 ```json
 {
   "success": true,
-  "message": "Session published successfully"
+  "message": "Agent published successfully"
 }
 ```
 
-### POST /sessions/`{name}`/unpublish
+### POST /agents/`{name}`/unpublish
 
-Remove session from public access.
+Remove agent from public access.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 ```json
 {
   "success": true,
-  "message": "Session unpublished successfully"
+  "message": "Agent unpublished successfully"
 }
 ```
 
-### POST /sessions/`{name}`/busy
+### POST /agents/`{name}`/busy
 
-Mark session as busy (prevents timeout).
+Mark agent as busy (prevents timeout).
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 
-### POST /sessions/`{name}`/idle
+### POST /agents/`{name}`/idle
 
-Mark session as idle (enables timeout counting).
+Mark agent as idle (enables timeout counting).
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 
-### POST /sessions/`{name}`/remix
+### POST /agents/`{name}`/remix
 
-Create a new Host session based on an existing session with selective content copying.
+Create a new agent based on an existing agent with selective content copying.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Parent session ID or name
+- `id` (path) - Parent agent ID or name
 
 **Request Body**:
 ```json
 {
-  "name": "my-new-session",
+  "name": "my-new-agent",
   "metadata": {
     "remixed_from": "61549530-3095-4cbf-b379-cd32416f626d",
     "remix_timestamp": "2025-01-20T10:00:00Z"
@@ -550,19 +550,19 @@ Create a new Host session based on an existing session with selective content co
 ```
 
 **Fields**:
-- `name` (optional) - Name for the new session
-- `metadata` (optional) - Additional metadata for the new session
-- `data` (optional) - Copy data files from parent session (default: true)
-- `code` (optional) - Copy code files from parent session (default: true)
-- `secrets` (optional) - Copy secrets from parent session (default: true)
+- `name` (optional) - Name for the new agent
+- `metadata` (optional) - Additional metadata for the new agent
+- `data` (optional) - Copy data files from parent agent (default: true)
+- `code` (optional) - Copy code files from parent agent (default: true)
+- `secrets` (optional) - Copy secrets from parent agent (default: true)
 
 **Response**: `200 OK`
 ```json
 {
-  "id": "new-session-name",
-  "name": "my-new-session",
+  "id": "new-agent-name",
+  "name": "my-new-agent",
   "state": "init",
-  "parent_session_name": "original-session",
+  "parent_agent_name": "original-agent",
   "created_at": "2025-01-20T10:00:00Z",
   "created_by": "admin",
   "metadata": {
@@ -572,22 +572,22 @@ Create a new Host session based on an existing session with selective content co
 }
 ```
 
-### DELETE /sessions/\{name\}
+### DELETE /agents/\{name\}
 
-Terminate a Host session.
+Terminate an agent.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 
-## Public Sessions
+## Public Agents
 
-### GET /published/sessions
+### GET /published/agents
 
-List all published sessions available for public access.
+List all published agents available for public access.
 
 **Authentication**: Not required
 
@@ -612,28 +612,28 @@ List all published sessions available for public access.
 ]
 ```
 
-### GET /published/sessions/\{name\}
+### GET /published/agents/\{name\}
 
-Get a specific published session by ID or name.
+Get a specific published agent by ID or name.
 
 **Authentication**: Not required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
-(Same format as published sessions list)
+(Same format as published agents list)
 
-## Session Messages
+## Agent Messages
 
-### GET /sessions/`{name}`/messages
+### GET /agents/`{name}`/messages
 
-List messages in a Host session.
+List messages in an agent.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Query Parameters**:
 - `limit` (optional) - Maximum number of messages to return
@@ -643,29 +643,29 @@ List messages in a Host session.
 [
   {
     "id": "msg-uuid",
-    "session_name": "session-name",
+    "agent_name": "agent-name",
     "role": "user",
     "content": "Generate a Python script to calculate fibonacci numbers",
     "created_at": "2025-01-20T10:00:00Z"
   },
   {
     "id": "msg-uuid-2", 
-    "session_name": "session-name",
-    "role": "host",
+    "agent_name": "agent-name",
+    "role": "assistant",
     "content": "I'll create a Python script for calculating fibonacci numbers...",
     "created_at": "2025-01-20T10:01:00Z"
   }
 ]
 ```
 
-### POST /sessions/`{name}`/messages
+### POST /agents/`{name}`/messages
 
-Send a message to a Host session. If the session is closed, it will automatically be restored before processing the message.
+Send a message to an agent. If the agent is sleeping, it will automatically be woken before processing the message.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Request Body**:
 ```json
@@ -678,23 +678,23 @@ Send a message to a Host session. If the session is closed, it will automaticall
 ```json
 {
   "id": "msg-uuid",
-  "session_name": "session-name", 
+  "agent_name": "agent-name", 
   "role": "user",
   "content": "Generate a Python script to calculate fibonacci numbers",
   "created_at": "2025-01-20T10:00:00Z"
 }
 ```
 
-**Note**: When sending a message to a closed session, the API returns `200 OK` immediately and queues an auto-restore task. The session will be restored and then process the message.
+**Note**: When sending a message to a sleeping agent, the API returns `200 OK` immediately and queues an auto-wake task. The agent will be woken and then process the message.
 
-### GET /sessions/`{name}`/messages/count
+### GET /agents/`{name}`/messages/count
 
-Get message count for Host session.
+Get message count for agent.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 ```json
@@ -703,14 +703,14 @@ Get message count for Host session.
 }
 ```
 
-### DELETE /sessions/`{name}`/messages
+### DELETE /agents/`{name}`/messages
 
-Clear all Host session messages.
+Clear all agent messages.
 
 **Authentication**: Required
 
 **Parameters**:
-- `id` (path) - Session ID or name
+- `id` (path) - Agent ID or name
 
 **Response**: `200 OK`
 
