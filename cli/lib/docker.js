@@ -142,6 +142,7 @@ class DockerManager {
           '--name', 'raworc_server',
           '--network', 'raworc_network',
           '-p', '9000:9000',
+          '-p', '8000:8000',
           '-v', `${process.cwd()}/logs:/app/logs`,
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
