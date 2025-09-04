@@ -970,11 +970,11 @@ echo 'Agent directories created (code, secrets, logs, content)'
         Ok(container_name)
     }
 
-    pub async fn restore_container(&self, agent_name: &str) -> Result<String> {
+    pub async fn wake_container(&self, agent_name: &str) -> Result<String> {
         // Read existing secrets from the volume
         let volume_name = format!("raworc_agent_data_{}", agent_name);
         info!(
-            "Restoring container for agent {} - reading secrets from volume {}",
+            "Waking container for agent {} - reading secrets from volume {}",
             agent_name, volume_name
         );
 
@@ -1015,7 +1015,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         Ok(container_name)
     }
 
-    pub async fn restore_container_with_tokens(
+    pub async fn wake_container_with_tokens(
         &self,
         agent_name: &str,
         api_key: String,
@@ -1027,7 +1027,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Read existing user secrets from the volume (but generate fresh system tokens)
         let volume_name = format!("raworc_agent_data_{}", agent_name);
         info!(
-            "Restoring container for agent {} with fresh tokens",
+            "Waking container for agent {} with fresh tokens",
             agent_name
         );
 
@@ -1441,11 +1441,11 @@ echo 'Agent directories created (code, secrets, logs, content)'
         Ok(container.id)
     }
 
-    // Close container but retain persistent volume (for agent pause/close)
-    pub async fn close_container(&self, agent_name: &str) -> Result<()> {
+    // Sleep container but retain persistent volume (for agent pause/sleep)
+    pub async fn sleep_container(&self, agent_name: &str) -> Result<()> {
         let container_name = format!("raworc_agent_{agent_name}");
 
-        info!("Closing container {}", container_name);
+        info!("Sleeping container {}", container_name);
 
         let options = RemoveContainerOptions {
             force: true,
@@ -1459,7 +1459,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         {
             Ok(_) => {
                 info!(
-                    "Container {} closed, persistent volume retained",
+                    "Container {} slept, persistent volume retained",
                     container_name
                 );
                 Ok(())
@@ -1472,8 +1472,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
                     );
                     Ok(())
                 } else {
-                    error!("Failed to close container {}: {}", container_name, e);
-                    Err(anyhow::anyhow!("Failed to close container: {}", e))
+                    error!("Failed to sleep container {}: {}", container_name, e);
+                    Err(anyhow::anyhow!("Failed to sleep container: {}", e))
                 }
             }
         }

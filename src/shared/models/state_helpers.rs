@@ -7,13 +7,13 @@ pub fn can_transition_to(from: &str, to: &str) -> bool {
         (AGENT_STATE_INIT, AGENT_STATE_ERRORED) => true,
 
         // From IDLE (ready and waiting)
-        (AGENT_STATE_IDLE, AGENT_STATE_CLOSED) => true, // User suspends
+        (AGENT_STATE_IDLE, AGENT_STATE_SLEPT) => true, // User sleeps
         (AGENT_STATE_IDLE, AGENT_STATE_BUSY) => true,   // Processing request
         (AGENT_STATE_IDLE, AGENT_STATE_ERRORED) => true,
 
-        // From SUSPENDED (container destroyed, volume preserved)
-        (AGENT_STATE_CLOSED, AGENT_STATE_IDLE) => true, // User resumes, recreate container
-        (AGENT_STATE_CLOSED, AGENT_STATE_ERRORED) => true,
+        // From SLEPT (container destroyed, volume preserved)
+        (AGENT_STATE_SLEPT, AGENT_STATE_IDLE) => true, // User wakes, recreate container
+        (AGENT_STATE_SLEPT, AGENT_STATE_ERRORED) => true,
 
         // From BUSY (actively processing)
         (AGENT_STATE_BUSY, AGENT_STATE_IDLE) => true, // Processing complete

@@ -18,7 +18,7 @@ pub struct Agent {
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
     pub timeout_seconds: i32,
-    pub auto_close_at: Option<DateTime<Utc>>,
+    pub auto_sleep_at: Option<DateTime<Utc>>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id (derived from name)
 }
@@ -460,7 +460,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
             WHERE state != 'deleted'
             ORDER BY created_at DESC
@@ -479,7 +479,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
             WHERE name = ? AND state != 'deleted'
             "#,
@@ -499,7 +499,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
             WHERE name = ? AND created_by = ? AND state != 'deleted'
             "#,
@@ -575,9 +575,9 @@ impl Agent {
         // Use the provided name (random generation to be implemented later)
         let agent_name = req.name;
 
-        // Calculate timeout - auto_close_at will be set when agent becomes idle
+        // Calculate timeout - auto_sleep_at will be set when agent becomes idle
         let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
-        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
+        let auto_sleep_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
 
         // Allocate Content port
         let content_port = Self::find_available_port()
@@ -587,7 +587,7 @@ impl Agent {
         // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO agents (name, created_by, metadata, timeout_seconds, auto_close_at, content_port)
+            INSERT INTO agents (name, created_by, metadata, timeout_seconds, auto_sleep_at, content_port)
             VALUES (?, ?, ?, ?, ?, ?)
             "#
         )
@@ -595,7 +595,7 @@ impl Agent {
         .bind(created_by)
         .bind(&req.metadata)
         .bind(timeout)
-        .bind(auto_close_at)
+        .bind(auto_sleep_at)
 .bind(content_port as i32)
         .execute(pool)
         .await?;
@@ -618,7 +618,7 @@ impl Agent {
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
         // Create new agent based on parent (inherit timeout)
-        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
+        let auto_sleep_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
 
         // Allocate Content port for remix agent
         let content_port = Self::find_available_port()
@@ -629,7 +629,7 @@ impl Agent {
             r#"
             INSERT INTO agents (
                 name, created_by, parent_agent_name,
-                metadata, timeout_seconds, auto_close_at, content_port
+                metadata, timeout_seconds, auto_sleep_at, content_port
             )
             VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
@@ -639,7 +639,7 @@ impl Agent {
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .bind(parent.timeout_seconds) // Inherit timeout from parent
-        .bind(auto_close_at)
+        .bind(auto_sleep_at)
         .bind(content_port as i32)
         .execute(pool)
         .await?;
@@ -717,7 +717,7 @@ impl Agent {
         if req.timeout_seconds.is_some() {
             updates.push(" timeout_seconds = ?".to_string());
             updates.push(
-                " auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL ? SECOND)"
+                " auto_sleep_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL ? SECOND)"
                     .to_string(),
             );
         }
@@ -828,7 +828,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
             WHERE is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
@@ -847,7 +847,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
             WHERE name = ? AND is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
@@ -867,12 +867,12 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   timeout_seconds, auto_close_at, content_port
+                   timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE auto_close_at <= NOW() 
+            WHERE auto_sleep_at <= NOW() 
               AND state IN ('init', 'idle', 'busy')
               AND state != 'deleted'
-            ORDER BY auto_close_at ASC
+            ORDER BY auto_sleep_at ASC
             LIMIT 50
             "#,
         )
@@ -888,7 +888,7 @@ impl Agent {
         let result = sqlx::query(
             r#"
             UPDATE agents 
-            SET auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
+            SET auto_sleep_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
                 last_activity_at = NOW()
             WHERE name = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
             "#
@@ -908,13 +908,13 @@ impl Agent {
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set agent to idle and calculate auto_close_at from now
+        // Set agent to idle and calculate auto_sleep_at from now
         sqlx::query(
             r#"
             UPDATE agents 
             SET state = 'idle',
                 last_activity_at = NOW(),
-                auto_close_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
+                auto_sleep_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
             WHERE name = ? AND state != 'deleted'
             "#,
         )
@@ -929,13 +929,13 @@ impl Agent {
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set agent to busy and clear auto_close_at (no timeout while active)
+        // Set agent to busy and clear auto_sleep_at (no timeout while active)
         sqlx::query(
             r#"
             UPDATE agents 
             SET state = 'busy',
                 last_activity_at = NOW(),
-                auto_close_at = NULL
+                auto_sleep_at = NULL
             WHERE name = ? AND state != 'deleted'
             "#,
         )

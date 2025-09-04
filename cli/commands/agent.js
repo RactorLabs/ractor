@@ -58,7 +58,7 @@ function formatMarkdown(text) {
 
 const {
   AGENT_STATE_IDLE,
-  AGENT_STATE_CLOSED,
+  AGENT_STATE_SLEPT,
   AGENT_STATE_BUSY,
   MESSAGE_ROLE_USER,
   MESSAGE_ROLE_AGENT
@@ -94,18 +94,18 @@ module.exports = (program) => {
       await agentCreateCommand(name, options);
     });
 
-  // Restore subcommand
+  // Wake subcommand
   agentCmd
-    .command('restore <agent-name>')
-    .description('Restore an existing agent by name')
-    .option('-p, --prompt <text>', 'Prompt to send after restoring')
+    .command('wake <agent-name>')
+    .description('Wake an existing agent by name')
+    .option('-p, --prompt <text>', 'Prompt to send after waking')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc agent restore abc123           # Restore by name\n' +
-      '  $ raworc agent restore my-agent       # Restore by name\n' +
-      '  $ raworc agent restore my-agent -p "Continue work" # Restore with prompt\n')
+      '  $ raworc agent wake abc123           # Wake by name\n' +
+      '  $ raworc agent wake my-agent       # Wake by name\n' +
+      '  $ raworc agent wake my-agent -p "Continue work" # Wake with prompt\n')
     .action(async (agentName, options) => {
-      await agentRestoreCommand(agentName, options);
+      await agentWakeCommand(agentName, options);
     });
 
   // Remix subcommand  
@@ -155,16 +155,16 @@ module.exports = (program) => {
       await agentUnpublishCommand(agentName, options);
     });
 
-  // Close subcommand
+  // Sleep subcommand
   agentCmd
-    .command('close <agent-name>')
-    .description('Close an active agent')
+    .command('sleep <agent-name>')
+    .description('Sleep an active agent')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc agent close abc123            # Close by name\n' +
-      '  $ raworc agent close my-agent        # Close by name\n')
+      '  $ raworc agent sleep abc123            # Sleep by name\n' +
+      '  $ raworc agent sleep my-agent        # Sleep by name\n')
     .action(async (agentName, options) => {
-      await agentCloseCommand(agentName, options);
+      await agentSleepCommand(agentName, options);
     });
 };
 
@@ -302,7 +302,7 @@ async function agentCreateCommand(name, options) {
   }
 }
 
-async function agentRestoreCommand(agentName, options) {
+async function agentWakeCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -328,16 +328,16 @@ async function agentRestoreCommand(agentName, options) {
     agentName = agent.name;
 
     // Handle different agent states
-    if (agent.state === AGENT_STATE_CLOSED) {
-      const restorePayload = {};
+    if (agent.state === AGENT_STATE_SLEPT) {
+      const wakePayload = {};
       if (options.prompt) {
-        restorePayload.prompt = options.prompt;
+        wakePayload.prompt = options.prompt;
       }
 
-      const restoreResponse = await api.post(`/agents/${agentName}/restore`, restorePayload);
+      const wakeResponse = await api.post(`/agents/${agentName}/wake`, wakePayload);
 
-      if (!restoreResponse.success) {
-        console.error(chalk.red('✗ Error:'), restoreResponse.error);
+      if (!wakeResponse.success) {
+        console.error(chalk.red('✗ Error:'), wakeResponse.error);
         process.exit(1);
       }
 
@@ -850,7 +850,7 @@ function createPromptManager(agentName, userInput = '') {
       if (agentResponse.success) {
         const newState = agentResponse.data.state;
         
-        // Special handling for agents being restored from closed state
+        // Special handling for agents being restored from slept state
         if (isRestoringFromClosed) {
           // Stay in 'init' until server confirms agent is ready (idle or busy)
           if (newState === 'idle' || newState === 'busy') {
@@ -959,7 +959,7 @@ function showPrompt(state = 'init') {
     'init': '◯',      // empty circle - initializing
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working
-    'closed': '◻',    // empty square - closed/slept
+    'slept': '◻',    // empty square - slept/slept
     'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
@@ -968,7 +968,7 @@ function showPrompt(state = 'init') {
     'init': 'initializing',
     'idle': 'idle',
     'busy': 'working',
-    'closed': 'slept',
+    'slept': 'slept',
     'errored': 'error',
     'deleted': 'deleted'
   };
@@ -977,7 +977,7 @@ function showPrompt(state = 'init') {
     'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
-    'closed': chalk.cyan,     // brighter than gray
+    'slept': chalk.cyan,     // brighter than gray
     'errored': chalk.red,
     'deleted': chalk.magenta
   };
@@ -1003,7 +1003,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'init': '◯',      // empty circle - initializing
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working
-    'closed': '◻',    // empty square - closed/slept
+    'slept': '◻',    // empty square - slept/slept
     'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
@@ -1012,7 +1012,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'init': 'initializing',
     'idle': 'idle',
     'busy': 'working',
-    'closed': 'slept',
+    'slept': 'slept',
     'errored': 'error',
     'deleted': 'deleted'
   };
@@ -1021,7 +1021,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow,
-    'closed': chalk.cyan,     // brighter than gray
+    'slept': chalk.cyan,     // brighter than gray
     'errored': chalk.red,
     'deleted': chalk.magenta
   };
@@ -1098,13 +1098,13 @@ async function monitorForResponses(agentName, userMessageTime, getCurrentState, 
 
 async function chatLoop(agentName, options = {}) {
   const readline = require('readline');
-  // For restored agents from closed state, start with 'init' and wait for server to confirm ready
+  // For restored agents from slept state, start with 'init' and wait for server to confirm ready
   // For new agents, start with 'init' 
   // For other cases, use current agent state
   let currentAgentState = 'init';
   let currentUserInput = '';
   let promptVisible = false; // Track if prompt is currently displayed
-  let isRestoringFromClosed = options.isRestore && options.agentState === AGENT_STATE_CLOSED;
+  let isRestoringFromClosed = options.isRestore && options.agentState === AGENT_STATE_SLEPT;
 
   // Function to fetch and update agent state
   async function updateAgentState() {
@@ -1113,7 +1113,7 @@ async function chatLoop(agentName, options = {}) {
       if (agentResponse.success) {
         const newState = agentResponse.data.state;
         
-        // Special handling for agents being restored from closed state
+        // Special handling for agents being restored from slept state
         if (isRestoringFromClosed) {
           // Stay in 'init' until server confirms agent is ready (idle or busy)
           if (newState === 'idle' || newState === 'busy') {
@@ -1211,7 +1211,7 @@ async function chatLoop(agentName, options = {}) {
       clearPrompt();
       promptVisible = false;
       console.log(chalk.green('◊ Detached from agent. Agent continues running.'));
-      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc agent restore ${agentName}`));
+      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc agent wake ${agentName}`));
       process.exit(0);
     }
 
@@ -1262,7 +1262,7 @@ async function chatLoop(agentName, options = {}) {
     
     // Close the agent on the server silently
     try {
-      await api.post(`/agents/${agentName}/close`);
+      await api.post(`/agents/${agentName}/sleep`);
     } catch (error) {
       // Ignore all errors during cleanup
     }
@@ -1463,7 +1463,7 @@ async function agentUnpublishCommand(agentName, options) {
   }
 }
 
-async function agentCloseCommand(agentName, options) {
+async function agentSleepCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1491,27 +1491,27 @@ async function agentCloseCommand(agentName, options) {
     agentName = agent.name;
 console.log(chalk.gray('Current state:'), getStateDisplay(agent.state));
 
-    // Check if agent is already closed
-    if (agent.state === AGENT_STATE_CLOSED) {
-      display.info('Agent was already in closed state');
+    // Check if agent is already slept
+    if (agent.state === AGENT_STATE_SLEPT) {
+      display.info('Agent was already in slept state');
       return;
     }
 
     // Close the agent
-    const closeResponse = await api.post(`/agents/${agentName}/close`);
+    const sleepResponse = await api.post(`/agents/${agentName}/sleep`);
 
-    if (!closeResponse.success) {
-      display.error('Close failed: ' + closeResponse.error);
+    if (!sleepResponse.success) {
+      display.error('Sleep failed: ' + sleepResponse.error);
       process.exit(1);
     }
 
-    display.success(`Agent closed: ${agentName}`);
+    display.success(`Agent slept: ${agentName}`);
 
     console.log();
-    display.success('Agent has been closed and resources cleaned up');
+    display.success('Agent has been put to sleep and resources cleaned up');
     console.log();
     display.info('Agent Operations:');
-    console.log(chalk.gray('  • Restore:'), `raworc agent restore ${agentName}`);
+    console.log(chalk.gray('  • Restore:'), `raworc agent wake ${agentName}`);
     console.log(chalk.gray('  • Remix:'), `raworc agent remix ${agentName}`);
     console.log();
 
@@ -1526,7 +1526,7 @@ function getStateDisplay(state) {
     'init': '◯',      // empty circle - initializing
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working  
-    'closed': '◻',    // empty square - closed/slept
+    'slept': '◻',    // empty square - slept/slept
     'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
@@ -1535,7 +1535,7 @@ function getStateDisplay(state) {
     'init': chalk.blue,
     'idle': chalk.green,
     'busy': chalk.yellow, 
-    'closed': chalk.cyan,     // brighter than gray
+    'slept': chalk.cyan,     // brighter than gray
     'errored': chalk.red,
     'deleted': chalk.magenta
   };

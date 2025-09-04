@@ -227,7 +227,7 @@ git clone <this-repo>
 | Command | Description | Example |
 |---------|-------------|---------|
 | `raworc agent` | Start interactive agent | `raworc agent` |
-| `raworc agent restore <id>` | Restore agent | `raworc agent restore abc123` |
+| `raworc agent wake <id>` | Wake agent | `raworc agent wake abc123` |
 | `raworc agent remix <id>` | Remix agent | `raworc agent remix abc123` |
 | `raworc agent publish <id>` | Publish agent | `raworc agent publish abc123` |
 | `raworc agent unpublish <id>` | Unpublish agent | `raworc agent unpublish abc123` |
@@ -261,7 +261,7 @@ git clone <this-repo>
 
 **Agent Management:**
 - `raworc agent [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new agent
-- `raworc agent restore <agent-name> [-p/--prompt]` - Restore existing agent
+- `raworc agent wake <agent-name> [-p/--prompt]` - Wake existing agent
 - `raworc agent remix <agent-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
 - `raworc agent publish <agent-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish agent
 - `raworc agent unpublish <agent-name>` - Unpublish agent
@@ -387,12 +387,12 @@ Response:
 
 **Agent Actions**
 ```bash
-# Close agent
-POST /agents/{id}/close
+# Sleep agent
+POST /agents/{id}/sleep
 Authorization: Bearer <jwt-token>
 
-# Restore agent with optional prompt
-POST /agents/{id}/restore
+# Wake agent with optional prompt
+POST /agents/{id}/wake
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -719,7 +719,7 @@ type/brief-description
 ```
 
 Examples:
-- `feat/agent-close-restore`
+- `feat/agent-sleep-wake`
 - `fix/container-cleanup-race`
 - `docs/api-reference-update`
 
@@ -753,7 +753,7 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `●` (idle) - Agent idle state
 - `◉` (busy) - Agent processing  
 - `◎` (init) - Agent initializing
-- `◼` (closed) - Agent closed
+- `◼` (slept) - Agent slept
 - `◇` (errored) - Agent error state
 - `◼` (deleted) - Agent deleted
 

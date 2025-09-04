@@ -64,12 +64,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::agents::update_agent_to_idle),
         )
         .route(
-            "/agents/{id}/close",
-            post(handlers::agents::close_agent),
+            "/agents/{id}/sleep",
+            post(handlers::agents::sleep_agent),
         )
         .route(
-            "/agents/{id}/restore",
-            post(handlers::agents::restore_agent),
+            "/agents/{id}/wake",
+            post(handlers::agents::wake_agent),
         )
         .route(
             "/agents/{id}/remix",

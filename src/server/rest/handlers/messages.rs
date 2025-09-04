@@ -8,7 +8,7 @@ use std::sync::Arc;
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::shared::models::constants::{
-    AGENT_STATE_BUSY, AGENT_STATE_CLOSED, AGENT_STATE_IDLE, AGENT_STATE_INIT,
+    AGENT_STATE_BUSY, AGENT_STATE_SLEPT, AGENT_STATE_IDLE, AGENT_STATE_INIT,
 };
 use crate::shared::models::{
     AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse, AgentMessage,
@@ -26,10 +26,10 @@ pub async fn create_message(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
-    // Check if agent is closed and needs reactivation
-    if agent.state == crate::shared::models::constants::AGENT_STATE_CLOSED {
+    // Check if agent is sleeping and needs reactivation
+    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
         tracing::info!(
-            "Auto-restoring closed agent {} due to new message",
+            "Auto-waking sleeping agent {} due to new message",
             agent_name
         );
 
@@ -38,21 +38,21 @@ pub async fn create_message(
         )
         .bind(AGENT_STATE_INIT)
         .bind(&agent_name)
-        .bind(AGENT_STATE_CLOSED)
+        .bind(AGENT_STATE_SLEPT)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
 
         // Add task to reactivate container with this message queued
         let payload = serde_json::json!({
-            "auto_restore": true,
+            "auto_wake": true,
             "triggered_by_message": true
         });
 
         sqlx::query(
             r#"
             INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-            VALUES (?, 'restore_agent', ?, ?, 'pending')
+            VALUES (?, 'wake_agent', ?, ?, 'pending')
             "#,
         )
         .bind(&agent_name)
@@ -60,10 +60,10 @@ pub async fn create_message(
         .bind(payload.to_string())
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create restore task: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create wake task: {}", e)))?;
 
         tracing::info!(
-            "Restore task created for agent {} - container will be recreated",
+            "Wake task created for agent {} - container will be recreated",
             agent_name
         );
     } else if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE {

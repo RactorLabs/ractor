@@ -36,7 +36,7 @@ pub struct AgentResponse {
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
     pub timeout_seconds: i32,
-    pub auto_close_at: Option<String>,
+    pub auto_sleep_at: Option<String>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id
 }
@@ -61,7 +61,7 @@ impl AgentResponse {
             published_by: agent.published_by,
             publish_permissions: agent.publish_permissions,
             timeout_seconds: agent.timeout_seconds,
-            auto_close_at: agent.auto_close_at.map(|dt| dt.to_rfc3339()),
+            auto_sleep_at: agent.auto_sleep_at.map(|dt| dt.to_rfc3339()),
             content_port: agent.content_port,
         })
     }
@@ -358,7 +358,7 @@ pub async fn remix_agent(
     ))
 }
 
-pub async fn close_agent(
+pub async fn sleep_agent(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -369,7 +369,7 @@ pub async fn close_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can close any agent)
+    // Find agent by ID or name (admin can sleep any agent)
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, created_by, is_admin).await?;
 
@@ -380,10 +380,10 @@ pub async fn close_agent(
         .await
         .map_err(|e| {
             tracing::error!("Permission check failed: {:?}", e);
-            ApiError::Forbidden("Insufficient permissions to close agent".to_string())
+            ApiError::Forbidden("Insufficient permissions to sleep agent".to_string())
         })?;
 
-    // Allow closing own agents or admin can close any agent
+    // Allow closing own agents or admin can sleep any agent
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -392,21 +392,21 @@ pub async fn close_agent(
     let is_admin = is_admin_user(&auth);
     if !is_admin && agent.created_by != *username {
         return Err(ApiError::Forbidden(
-            "Can only close your own agents".to_string(),
+            "Can only sleep your own agents".to_string(),
         ));
     }
     tracing::info!("Permission check passed");
 
     // Check current state - cannot suspend if already suspended or in error
 
-    if agent.state == crate::shared::models::constants::AGENT_STATE_CLOSED {
+    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
         return Err(ApiError::BadRequest(
-            "Agent is already closed".to_string(),
+            "Agent is already sleeping".to_string(),
         ));
     }
     if agent.state == crate::shared::models::constants::AGENT_STATE_ERRORED {
         return Err(ApiError::BadRequest(
-            "Cannot close agent in error state".to_string(),
+            "Cannot sleep agent in error state".to_string(),
         ));
     }
 
@@ -418,13 +418,13 @@ pub async fn close_agent(
         WHERE id = ?
     "#,
     )
-    .bind(crate::shared::models::constants::AGENT_STATE_CLOSED)
+    .bind(crate::shared::models::constants::AGENT_STATE_SLEPT)
     .bind(&agent.name)
     .execute(&*state.db)
     .await
     .map_err(|e| {
         tracing::error!("Database error during suspend: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to close agent: {}", e))
+        ApiError::Internal(anyhow::anyhow!("Failed to sleep agent: {}", e))
     })?;
 
     tracing::info!(
@@ -440,7 +440,7 @@ pub async fn close_agent(
     sqlx::query(
         r#"
         INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'close_agent', ?, '{}', 'pending')
+        VALUES (?, 'sleep_agent', ?, '{}', 'pending')
         "#,
     )
     .bind(&agent.name)
@@ -465,7 +465,7 @@ pub async fn close_agent(
     ))
 }
 
-pub async fn restore_agent(
+pub async fn wake_agent(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -475,7 +475,7 @@ pub async fn restore_agent(
     check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
         .await
         .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to restore agent".to_string())
+            ApiError::Forbidden("Insufficient permissions to wake agent".to_string())
         })?;
 
     // Get username for ownership check
@@ -488,23 +488,23 @@ pub async fn restore_agent(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Check ownership: Even admins cannot restore other users' agents (only remix)
+    // Check ownership: Even admins cannot wake other users' agents (only remix)
     if agent.created_by != *username {
         if is_admin {
             return Err(ApiError::Forbidden(
-                "Admins cannot restore other users' agents. Use remix instead.".to_string(),
+                "Admins cannot wake other users' agents. Use remix instead.".to_string(),
             ));
         } else {
             return Err(ApiError::Forbidden(
-                "You can only restore your own agents.".to_string(),
+                "You can only wake your own agents.".to_string(),
             ));
         }
     }
 
-    // Check current state - can only resume if suspended
-    if agent.state != crate::shared::models::constants::AGENT_STATE_CLOSED {
+    // Check current state - can only wake if sleeping
+    if agent.state != crate::shared::models::constants::AGENT_STATE_SLEPT {
         return Err(ApiError::BadRequest(format!(
-            "Cannot restore agent in {} state - only closed agents can be restored",
+            "Cannot wake agent in {} state - only sleeping agents can be woken",
             agent.state
         )));
     }
@@ -521,7 +521,7 @@ pub async fn restore_agent(
     .bind(&agent.name)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restore agent: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake agent: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("Agent not found".to_string()));
@@ -541,7 +541,7 @@ pub async fn restore_agent(
     sqlx::query(
         r#"
         INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'restore_agent', ?, ?, 'pending')
+        VALUES (?, 'wake_agent', ?, ?, 'pending')
         "#,
     )
     .bind(&agent.name)
@@ -877,7 +877,7 @@ pub async fn update_agent_to_busy(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to busy using the new method that clears auto_close_at
+    // Update agent to busy using the new method that clears auto_sleep_at
     Agent::update_agent_to_busy(&state.db, &agent.name)
         .await
         .map_err(|e| {
@@ -906,7 +906,7 @@ pub async fn update_agent_to_idle(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to idle using the new method that sets auto_close_at
+    // Update agent to idle using the new method that sets auto_sleep_at
     Agent::update_agent_to_idle(&state.db, &agent.name)
         .await
         .map_err(|e| {
