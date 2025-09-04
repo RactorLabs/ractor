@@ -5,17 +5,52 @@ title: Changelog
 
 # Changelog
 
-## v0.4.0 (In Development)
+## v0.4.0
 
-- **Major Architecture Overhaul**: Complete system redesign using session name as primary key
-- **Remove Session IDs**: All operations now use session name directly, no more UUID IDs
-- **Remove Data Folder**: Simplified session structure to only code/, secrets/, and canvas/ folders
-- **Public Canvas Server**: Added HTTP server on port 8000 to serve published canvas content
-- **Persistent Public Volume**: Published canvas content persists across container rebuilds
-- **Container Naming by Name**: Containers named `raworc_session_{name}` instead of by ID
-- **Database Schema Overhaul**: Name as primary key, removed container_id and persistent_volume_id fields
-- **Simplified CLI**: Removed --data flag, removed name change capability, name required at creation
-- **No Backward Compatibility**: Complete data reset required for this major version
+**Major Release: Complete Architecture Redesign & Enhanced Interactive Experience**
+
+### 🚀 Major Architecture Changes
+- **Complete Session → Agent Renaming**: System now uses "agents" throughout, more accurate terminology
+- **Name-Based Primary Keys**: All operations use agent names directly, eliminating UUID complexity
+- **Canvas → Content Renaming**: Canvas folders renamed to content/ for clearer purpose
+- **Database Schema Overhaul**: Name as primary key, streamlined schema without container/volume IDs
+- **Sleep/Wake Terminology**: Changed close/restore to sleep/wake for better user understanding
+
+### ✨ New Interactive Agent Features
+- **Interactive Session Commands**: Added `/sleep`, `/wake`, `/open`, `/publish` commands within agent sessions
+- **Command Shortcuts**: Single-letter shortcuts (`/s`, `/w`, `/o`, `/p`) for faster interaction
+- **Agent Content URLs**: New `raworc agent open` command shows private and public content links
+- **Enhanced Help System**: Complete interactive command help with examples and shortcuts
+
+### 🔧 Version Management Enhancements
+- **Parameterized Pull Command**: `raworc pull [version]` supports specific version targeting
+- **Flexible Bump Options**: Support for patch/minor/major version increments and specific versions
+- **Smart Version Display**: Intelligent version formatting and CLI/Docker version coordination
+- **Docker Image Versioning**: Version-specific Docker image pulling and management
+
+### 🛠️ Infrastructure Improvements
+- **Docker Volume Standardization**: Renamed volumes with `raworc_` prefix for consistency
+- **Removed Unused Resources**: Eliminated unused `operator_data` volume and related configurations
+- **Permission System Overhaul**: Fixed comprehensive Docker volume and directory permissions
+- **Unpublish Functionality**: Fixed agent unpublishing to properly remove published content
+
+### 🎨 User Experience Improvements
+- **Dynamic Terminal Width**: Agent prompt separator lines adapt to full terminal width
+- **Improved CLI Design**: Consistent command boxes and status displays across all operations
+- **Better Error Handling**: Enhanced error messages and recovery suggestions
+- **Agent State Management**: Clear visual indicators for agent states (idle, busy, sleeping, etc.)
+
+### 🏗️ Developer Experience
+- **Simplified Container Management**: Streamlined Docker operations and volume handling
+- **Enhanced Documentation**: Updated CLI reference and API documentation
+- **Improved Build System**: Better version management and release automation
+- **Comprehensive Testing**: Improved error handling and edge case management
+
+### ⚠️ Breaking Changes
+- **Complete Data Reset Required**: Architecture changes require fresh installation
+- **CLI Command Changes**: Some command structures updated for consistency
+- **API Schema Changes**: Database and API schemas completely redesigned
+- **Container Naming**: New naming convention for Docker containers and volumes
 
 ## v0.3.8
 
