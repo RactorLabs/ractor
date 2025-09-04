@@ -1636,43 +1636,35 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let public_path = format!("/public/{}", agent_name);
 
         info!(
-            "Unpublishing content for agent {} from {}",
+            "Unpublishing content for agent {} from server container: {}",
             agent_name, public_path
         );
 
-        // Remove public directory
-        let remove_cmd = format!("rm -rf {}", public_path);
-        match std::process::Command::new("bash")
-            .arg("-c")
-            .arg(&remove_cmd)
+        // Remove public directory from server container using docker exec
+        let output = std::process::Command::new("docker")
+            .args(&["exec", "raworc_server", "rm", "-rf", &public_path])
             .output()
-        {
-            Ok(output) => {
-                if output.status.success() {
-                    info!(
-                        "Content unpublished successfully for agent {}",
-                        agent_name
-                    );
-                    Ok(())
-                } else {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    error!(
-                        "Failed to remove public directory for agent {}: {}",
-                        agent_name, stderr
-                    );
-                    Err(anyhow::anyhow!(
-                        "Failed to remove public directory: {}",
-                        stderr
-                    ))
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Failed to execute rm command for agent {}: {}",
-                    agent_name, e
-                );
-                Err(anyhow::anyhow!("Failed to execute rm: {}", e))
-            }
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to execute docker exec rm command for agent {}: {}", agent_name, e)
+            })?;
+
+        if output.status.success() {
+            info!(
+                "Content unpublished successfully for agent {}",
+                agent_name
+            );
+            Ok(())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            error!(
+                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
+                agent_name, stdout, stderr
+            );
+            Err(anyhow::anyhow!(
+                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
+                agent_name, stdout, stderr
+            ))
         }
     }
 }

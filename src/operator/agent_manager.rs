@@ -789,23 +789,36 @@ impl AgentManager {
         let agent_name = &task.agent_name;
         info!("Unpublishing content for agent {}", agent_name);
 
-        // Remove public directory for this agent
+        // Remove public directory for this agent from the server container
         let public_path = format!("/public/{}", agent_name);
+        info!(
+            "Executing: docker exec raworc_server rm -rf {}",
+            public_path
+        );
 
-        // Remove the published directory
-        let remove_cmd = format!("rm -rf {}", public_path);
-        tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&remove_cmd)
+        // Remove the published directory from server container
+        let remove_output = tokio::process::Command::new("docker")
+            .args(&["exec", "raworc_server", "rm", "-rf", &public_path])
             .output()
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to remove published content for agent {}: {}",
+                    "Failed to execute rm command for agent {}: {}",
                     agent_name,
                     e
                 )
             })?;
+
+        if !remove_output.status.success() {
+            let stderr = String::from_utf8_lossy(&remove_output.stderr);
+            let stdout = String::from_utf8_lossy(&remove_output.stdout);
+            return Err(anyhow::anyhow!(
+                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
+                agent_name,
+                stdout,
+                stderr
+            ));
+        }
 
         info!("Content unpublished for agent {}", agent_name);
         Ok(())

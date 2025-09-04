@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo.png" alt="Raworc Logo" width="200"/>
   
-  # Raworc Project Documentation for Claude
+# Raworc Project Documentation for Claude
   
   **Remote Agentic Work Orchestrator**
   
@@ -19,6 +19,7 @@ For complete project overview, features, and architecture, see [README.md](READM
 **Repository Status**: This repository is private and intentionally not licensed. Do not add or suggest adding license files.
 
 **Key Points for Development:**
+
 - Raworc is a Remote Agentic Work Orchestrator providing Computer use agents with dedicated computers
 - Published as npm package (`@raworc/cli`) with pre-built Docker images from Docker Hub
 - Uses Kubernetes-inspired control plane pattern for agent orchestration
@@ -48,6 +49,7 @@ raworc api version
 ```
 
 **Key Points:**
+
 - Uses published Docker images from Docker Hub (`raworc/raworc_server`, etc.)
 - No building required - everything is pre-built
 - Install via npm package manager (CLI is Node.js implementation from cli/ folder)
@@ -75,6 +77,7 @@ raworc agent  # Now uses your local build
 ```
 
 **Key Points:**
+
 - Builds Docker images locally from source
 - Full access to build, modify, and test changes
 - Uses shell scripts (scripts/ folder) for container management
@@ -137,6 +140,7 @@ raworc agent
 ### Publishing
 
 This repository publishes to:
+
 - **Docker Hub** - `raworc/raworc_server`, `raworc/raworc_operator`, `raworc/raworc_agent`
 - **npm** - `@raworc/cli` package
 
@@ -161,7 +165,7 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for Computer use age
                     ┌─────────────────────────────────┐
                     │    Computer Use Agents          │
                     │ ┌─────────────┐ ┌─────────────┐ │
-                    │ │   Agent +    │ │   Agent +    │ │
+                    │ │   Agent +   │ │   Agent +   │ │
                     │ │  Computer   │ │  Computer   │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
@@ -170,17 +174,18 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for Computer use age
 ### Development vs End User Usage
 
 **For Development (this repository):**
+
 - Use shell scripts (scripts/ folder) for local development with locally built images
 - Use linked CLI (Node.js implementation from cli/ folder) via `./scripts/link.sh`
 - Build images locally with shell scripts: `./scripts/build.sh`
 - All images are built locally (no registry dependency)
 
 **For End Users (published packages):**
+
 - Install CLI (Node.js/npm package) via npm: `npm install -g @raworc/cli`
 - Uses published Docker images from Docker Hub automatically
 - No building required - images are pulled as needed
 - Simple `raworc start` command handles everything
-
 
 ## CLI Reference
 
@@ -189,6 +194,7 @@ The Raworc CLI provides complete control over the orchestrator. Install globally
 ### Installation
 
 **End Users (Production)**
+
 ```bash
 npm install -g @raworc/cli
 export ANTHROPIC_API_KEY=sk-ant-your-actual-key
@@ -198,6 +204,7 @@ raworc auth -t <jwt-token-from-login>
 ```
 
 **Contributors (Development)**  
+
 ```bash
 git clone <this-repo>
 ./scripts/link.sh  # Link CLI for development
@@ -243,16 +250,19 @@ git clone <this-repo>
 ### CLI Options Reference
 
 **Global Options:**
+
 - `-v, --version` - Show version
 - `-h, --help` - Show help
 
 **Authentication:**
+
 - `raworc login [-u/--user] [-p/--pass] [-s/--server]` - Generate operator token
 - `raworc auth [-t/--token] [-s/--server]` - Authenticate with token or show status  
 - `raworc logout` - Clear authentication credentials
 - `raworc token [-p/--principal] [-t/--type]` - Create token for principal
 
 **Service Management:**
+
 - `raworc start [-r/--restart] [components...]` - Start services
 - `raworc stop [-c/--cleanup] [components...]` - Stop services
 - `raworc clean` - Clean agent containers (preserves core services)
@@ -260,6 +270,7 @@ git clone <this-repo>
 - `raworc pull [-c/--cli-only] [-i/--images-only]` - Update CLI and images
 
 **Agent Management:**
+
 - `raworc agent [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new agent
 - `raworc agent wake <agent-name> [-p/--prompt]` - Wake existing agent
 - `raworc agent remix <agent-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
@@ -267,6 +278,7 @@ git clone <this-repo>
 - `raworc agent unpublish <agent-name>` - Unpublish agent
 
 **API Access:**
+
 - `raworc api <endpoint> [-m/--method] [-b/--body] [-H/--headers] [-p/--pretty] [-s/--status]` - Execute API requests
 
 ## API Reference
@@ -274,6 +286,7 @@ git clone <this-repo>
 Raworc exposes a comprehensive REST API for programmatic access to all functionality.
 
 ### Base URL
+
 ```
 http://localhost:9000/api/v0
 ```
@@ -281,6 +294,7 @@ http://localhost:9000/api/v0
 ### Authentication
 
 **Operator Login**
+
 ```bash
 POST /operators/{name}/login
 Content-Type: application/json
@@ -300,6 +314,7 @@ Response:
 ```
 
 **Token Validation**
+
 ```bash
 GET /auth
 Authorization: Bearer <jwt-token>
@@ -312,6 +327,7 @@ Response:
 ```
 
 **Create Token**
+
 ```bash
 POST /auth/token
 Authorization: Bearer <jwt-token>
@@ -332,6 +348,7 @@ Response:
 ### Agents
 
 **List Agents**
+
 ```bash
 GET /agents
 Authorization: Bearer <jwt-token>
@@ -348,6 +365,7 @@ Response:
 ```
 
 **Create Agent**
+
 ```bash
 POST /agents
 Authorization: Bearer <jwt-token>
@@ -371,6 +389,7 @@ Response:
 ```
 
 **Get Agent**
+
 ```bash
 GET /agents/{id}
 Authorization: Bearer <jwt-token>
@@ -386,6 +405,7 @@ Response:
 ```
 
 **Agent Actions**
+
 ```bash
 # Sleep agent
 POST /agents/{id}/sleep
@@ -428,6 +448,7 @@ Authorization: Bearer <jwt-token>
 ### Messages
 
 **List Messages**
+
 ```bash
 GET /agents/{id}/messages
 Authorization: Bearer <jwt-token>
@@ -450,6 +471,7 @@ Response:
 ```
 
 **Send Message**
+
 ```bash
 POST /agents/{id}/messages
 Authorization: Bearer <jwt-token>
@@ -470,6 +492,7 @@ Response:
 ```
 
 **Message Count**
+
 ```bash
 GET /agents/{id}/messages/count
 Authorization: Bearer <jwt-token>
@@ -481,6 +504,7 @@ Response:
 ```
 
 **Clear Messages**
+
 ```bash
 DELETE /agents/{id}/messages
 Authorization: Bearer <jwt-token>
@@ -494,6 +518,7 @@ Response:
 ### Operators
 
 **List Operators**
+
 ```bash
 GET /operators
 Authorization: Bearer <jwt-token>
@@ -509,6 +534,7 @@ Response:
 ```
 
 **Create Operator**
+
 ```bash
 POST /operators
 Authorization: Bearer <jwt-token>
@@ -521,6 +547,7 @@ Content-Type: application/json
 ```
 
 **Update Operator Password**
+
 ```bash
 PUT /operators/{name}/password
 Authorization: Bearer <jwt-token>
@@ -532,6 +559,7 @@ Content-Type: application/json
 ```
 
 **Delete Operator**
+
 ```bash
 DELETE /operators/{name}
 Authorization: Bearer <jwt-token>
@@ -540,6 +568,7 @@ Authorization: Bearer <jwt-token>
 ### System
 
 **Health Check**
+
 ```bash
 GET /version
 
@@ -562,6 +591,7 @@ All API endpoints return consistent error responses:
 ```
 
 Common HTTP status codes:
+
 - `200` - Success
 - `201` - Created  
 - `400` - Bad Request
@@ -579,6 +609,7 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ5...
 ```
 
 Obtain tokens through:
+
 1. **Operator Login**: `POST /operators/{name}/login`
 2. **Token Creation**: `POST /auth/token` (requires existing auth)
 
@@ -587,6 +618,7 @@ Obtain tokens through:
 ### **🚨 CRITICAL CLI Usage Rule**
 
 **❌ NEVER DO THIS:**
+
 ```bash
 node index.js start                    # Wrong - direct Node.js execution
 cd cli && node index.js --help         # Wrong - manual CLI execution
@@ -594,6 +626,7 @@ node cli/index.js api health          # Wrong - bypasses linking
 ```
 
 **✅ ALWAYS DO THIS:**
+
 ```bash
 # First, link the CLI (Node.js implementation from cli/ folder) using shell script
 ./scripts/link.sh
@@ -605,6 +638,7 @@ raworc api health
 ```
 
 **Why?**
+
 - The shell script `./scripts/link.sh` properly links the Node.js CLI from cli/ folder
 - Direct `node index.js` execution runs from wrong directory context and may fail
 - Linked command matches production behavior exactly
@@ -619,6 +653,7 @@ For complete repository structure, see [README.md](README.md#repository-structur
 ### Development Guidelines
 
 **Key Development Patterns:**
+
 - **Error Handling**: Use `Result<T, E>` types with custom error types
 - **Async Code**: Uses Tokio runtime for async operations
 - **Database**: MySQL with sqlx for queries
@@ -626,6 +661,7 @@ For complete repository structure, see [README.md](README.md#repository-structur
 - **Testing**: Unit tests in modules, integration tests in `tests/`
 
 **Testing After Changes:**
+
 1. **Run unit tests**: `cargo test --lib`
 2. **Run integration tests**: `cargo test --test integration`  
 3. **Check formatting**: `cargo fmt --check`
@@ -639,6 +675,7 @@ This document provides Claude-specific development instructions. For general pro
 ## Communication Style Guidelines
 
 When writing commit messages and documentation:
+
 - **NEVER mention "Claude", "Claude Code", or any AI assistant references in commit messages, PRs, or code**
 - Do not use emojis in commits or code changes
 - Use direct, clear language without unnecessary emphasis
@@ -657,6 +694,7 @@ Optional longer description explaining the change.
 ```
 
 **CRITICAL: Do NOT include any of the following in commit messages:**
+
 - `🤖 Generated with [Claude Code](https://claude.ai/code)`
 - `Co-Authored-By: Claude <noreply@anthropic.com>`
 - Any mention of "Claude", "AI assistant", or automated generation
@@ -665,6 +703,7 @@ Optional longer description explaining the change.
 **Write commits as if made by a human developer - purely technical and professional.**
 
 ### Commit Types
+
 - `feat`: New feature or functionality
 - `fix`: Bug fix
 - `docs`: Documentation changes
@@ -676,6 +715,7 @@ Optional longer description explaining the change.
 - `remove`: Removing files or functionality
 
 ### Commit Guidelines
+
 - Keep the subject line under 50 characters
 - Use imperative mood ("add" not "added" or "adds")
 - Do not end the subject line with a period
@@ -685,11 +725,13 @@ Optional longer description explaining the change.
 ## Code Standards
 
 ### Before Committing
+
 - Run `cargo fmt` before committing
 - Run `cargo clippy` and address warnings
 - Test changes in development environment
 
 ### Making Changes (Critical Workflow)
+
 - **ALWAYS run `cargo check` immediately after completing any code changes**
 - **WAIT for user instruction before testing or committing changes**
 - Complete all changes first, then run cargo check to verify compilation
@@ -707,18 +749,22 @@ Optional longer description explaining the change.
 **For detailed version bump requirements and complete file list, see `.claude/commands/release.md`**
 
 **Quick Summary:**
+
 - Update version in 8 different files (Cargo.toml, package.json files, API response, docs)
 - Run `cargo build --release` to validate and update Cargo.lock
 - Run `npm install` in cli/ and website/ folders to update package-lock.json files
 - Commit all files including lock files to ensure consistency
 
 ### Branch Naming
+
 Use descriptive branch names:
+
 ```
 type/brief-description
 ```
 
 Examples:
+
 - `feat/agent-sleep-wake`
 - `fix/container-cleanup-race`
 - `docs/api-reference-update`
@@ -730,6 +776,7 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 ### Design Principles
 
 **Flat Icon System**: Uses simple geometric Unicode characters instead of emojis for terminal compatibility and professional appearance:
+
 - `◯` (clean) - Agent container cleanup
 - `◎` (auth) - Authentication operations  
 - `◐` (user) - User/operator login/logout
@@ -744,12 +791,14 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `◉` (chat) - Chat/messaging
 
 **Status Icons**:
+
 - `✓` (success) - Successful operations
 - `✗` (error) - Error conditions
 - `⚠` (warning) - Warning conditions  
 - `ℹ` (info) - Information messages
 
 **Agent State Visual Indicators**:
+
 - `●` (idle) - Agent idle state
 - `◉` (busy) - Agent processing  
 - `◎` (init) - Agent initializing
@@ -771,6 +820,7 @@ All CLI commands use a standardized command box format:
 ```
 
 **Box Structure**:
+
 - Title row with appropriate flat icon and command name
 - Server URL (when relevant)
 - Current authenticated user and type (when relevant)  
@@ -791,6 +841,7 @@ Interactive agents use a clean command box with essential information:
 ```
 
 **Agent Commands**:
+
 - `/help` - Show all available commands
 - `/status` - Display agent status with visual state indicators
 - `/timeout <s>` - Change agent timeout (1-3600 seconds)
@@ -801,12 +852,14 @@ Interactive agents use a clean command box with essential information:
 ### Implementation
 
 **Display Utility** (`cli/lib/display.js`):
+
 - Centralized icon definitions and display functions
 - `showCommandBox()` - Creates standardized command boxes
 - `success()`, `error()`, `warning()`, `info()` - Consistent status messaging
 - `icons` object - All flat icon mappings
 
 **Usage Pattern**:
+
 ```javascript
 const display = require('../lib/display');
 
