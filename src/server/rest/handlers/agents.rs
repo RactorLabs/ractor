@@ -198,10 +198,11 @@ pub async fn create_agent(
                 if let Some(code) = db_err.code() {
                     // Simplify the condition to catch the specific error
                     if code == "23000" || code == "1062" {
-                        tracing::info!("Detected database constraint violation for agent {}", req.name);
+                        let name_display = &req.name;
+                        tracing::info!("Detected database constraint violation for agent {}", name_display);
                         if db_err.message().contains("agents.PRIMARY") || db_err.message().contains("Duplicate entry") {
                             tracing::info!("Confirmed duplicate agent name constraint violation");
-                            return ApiError::BadRequest(format!("Agent name '{}' is already taken. Please choose a different name.", req.name));
+                            return ApiError::BadRequest(format!("Agent name '{}' is already taken. Please choose a different name.", name_display));
                         }
                     }
                 }

@@ -67,29 +67,31 @@ const {
 module.exports = (program) => {
   const agentCmd = program
     .command('agent')
-    .description('Agent management and interactive agents');
+    .description('Agent management and interactive agents')
+    .action(() => {
+      agentCmd.help();
+    });
 
-  // Default agent start (no subcommand)
+  // Default agent create [name]
   agentCmd
-    .command('start', { isDefault: true })
-    .description('Start a new interactive agent')
+    .command('create [name]')
+    .description('Create a new interactive agent (name is optional)')
     .option('-S, --secrets <secrets>', 'JSON string of secrets (key-value pairs) for new agents')
     .option('-i, --instructions <text>', 'Direct instructions text')
     .option('-if, --instructions-file <file>', 'Path to instructions file')
     .option('-s, --setup <text>', 'Direct setup script text')
     .option('-sf, --setup-file <file>', 'Path to setup script file')
     .option('-p, --prompt <text>', 'Prompt to send after agent creation')
-    .option('-n, --name <name>', 'Name for the agent')
     .option('-t, --timeout <seconds>', 'Agent timeout in seconds (default: 60)')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc agent                           # Start a new agent\n' +
-      '  $ raworc agent start -n "my-agent"    # Start with name\n' +
-      '  $ raworc agent start -S \'{"DB_URL":"postgres://..."}\' # Start with user secrets\n' +
-      '  $ raworc agent start -p "Hello" -n "test" # Start with prompt and name\n' +
-      '  $ raworc agent start -t 120             # Start with 2 minute timeout\n')
-    .action(async (options) => {
-      await agentStartCommand(options);
+      '  $ raworc agent create                    # Create agent with auto-generated name\n' +
+      '  $ raworc agent create my-agent          # Create agent with specific name\n' +
+      '  $ raworc agent create -S \'{"DB_URL":"postgres://..."}\' # Create with user secrets\n' +
+      '  $ raworc agent create my-agent -p "Hello" # Create with name and initial prompt\n' +
+      '  $ raworc agent create -t 120            # Create with 2 minute timeout\n')
+    .action(async (name, options) => {
+      await agentCreateCommand(name, options);
     });
 
   // Restore subcommand
@@ -166,7 +168,28 @@ module.exports = (program) => {
     });
 };
 
-async function agentStartCommand(options) {
+// Generate random agent name client-side
+function generateRandomAgentName() {
+  const adjectives = [
+    'swift', 'bold', 'keen', 'wise', 'calm', 'brave', 'quick', 'smart',
+    'bright', 'sharp', 'clear', 'cool', 'warm', 'soft', 'hard', 'fast',
+    'slow', 'deep', 'light', 'dark', 'rich', 'pure', 'fresh', 'clean'
+  ];
+
+  const nouns = [
+    'falcon', 'tiger', 'wolf', 'bear', 'eagle', 'lion', 'fox', 'hawk',
+    'shark', 'whale', 'raven', 'robin', 'swift', 'storm', 'river', 'ocean',
+    'mountain', 'forest', 'desert', 'valley', 'cloud', 'star', 'moon', 'sun'
+  ];
+
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const number = Math.floor(Math.random() * 900) + 100; // 100-999
+
+  return `${adjective}-${noun}-${number}`;
+}
+
+async function agentCreateCommand(name, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -228,19 +251,22 @@ async function agentStartCommand(options) {
       agentPayload.prompt = options.prompt;
     }
 
-    // Add name if provided
-    if (options.name) {
+    // Add name if provided (positional parameter), generate random name if not
+    if (name) {
       // Validate name format
-      if (options.name.length === 0 || options.name.length > 100) {
+      if (name.length === 0 || name.length > 100) {
         console.error(chalk.red('✗ Error:'), 'Agent name must be 1-100 characters long');
         process.exit(1);
       }
-      if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
+      if (!/^[a-zA-Z0-9-]+$/.test(name)) {
         console.error(chalk.red('✗ Error:'), 'Agent name must contain only alphanumeric characters and hyphens');
         console.log(chalk.gray('Examples:'), 'my-agent, data-analysis, project1, test-run');
         process.exit(1);
       }
-      agentPayload.name = options.name;
+      agentPayload.name = name;
+    } else {
+      // Generate random name client-side
+      agentPayload.name = generateRandomAgentName();
     }
 
     // Add timeout if provided

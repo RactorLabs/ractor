@@ -27,7 +27,7 @@ pub struct Agent {
 pub struct CreateAgentRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
-    #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
+    #[serde(deserialize_with = "deserialize_required_name")] // Required for now
     pub name: String,
     #[serde(default)]
     pub secrets: std::collections::HashMap<String, String>,
@@ -385,6 +385,73 @@ where
     deserializer.deserialize_str(RequiredNameVisitor)
 }
 
+// Custom deserializer for optional validated name
+fn deserialize_optional_validated_name<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Visitor};
+
+    struct OptionalValidatedNameVisitor;
+
+    impl<'de> Visitor<'de> for OptionalValidatedNameVisitor {
+        type Value = Option<String>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("an optional valid name (must start with letter, contain only lowercase letters/numbers/hyphens, max 64 chars) or null")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            if value.is_empty() {
+                return Ok(None);
+            }
+
+            if value.len() > 64 {
+                return Err(E::custom("name too long (max 64 characters)"));
+            }
+
+            // v0.4.0 strict validation: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
+            if !value.chars().next().unwrap_or(' ').is_ascii_lowercase() {
+                return Err(E::custom("name must start with a lowercase letter"));
+            }
+
+            if value.len() > 1 && !value.chars().last().unwrap_or(' ').is_ascii_alphanumeric() {
+                return Err(E::custom("name must end with a letter or number"));
+            }
+
+            if !value
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
+                return Err(E::custom(
+                    "name must contain only lowercase letters, numbers, and hyphens",
+                ));
+            }
+
+            Ok(Some(value.to_string()))
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+    }
+
+    deserializer.deserialize_any(OptionalValidatedNameVisitor)
+}
+
 // Database queries
 impl Agent {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Agent>, sqlx::Error> {
@@ -452,11 +519,62 @@ impl Agent {
         Ok(port)
     }
 
+    // Helper function to generate random unique agent name
+    async fn generate_random_name(pool: &sqlx::MySqlPool) -> Result<String, sqlx::Error> {
+        use rand::seq::SliceRandom;
+        use rand::Rng;
+
+        // Common adjectives that work well for agent names
+        let adjectives = [
+            "swift", "bold", "keen", "wise", "calm", "brave", "quick", "smart",
+            "bright", "sharp", "clear", "cool", "warm", "soft", "hard", "fast",
+            "slow", "deep", "light", "dark", "rich", "pure", "fresh", "clean"
+        ];
+
+        // Common nouns that work well for agent names  
+        let nouns = [
+            "falcon", "tiger", "wolf", "bear", "eagle", "lion", "fox", "hawk",
+            "shark", "whale", "raven", "robin", "swift", "storm", "river", "ocean",
+            "mountain", "forest", "desert", "valley", "cloud", "star", "moon", "sun"
+        ];
+
+        let mut rng = rand::thread_rng();
+        
+        // Try to generate a unique name (up to 10 attempts)
+        for _attempt in 0..10 {
+            let adjective = adjectives.choose(&mut rng).unwrap();
+            let noun = nouns.choose(&mut rng).unwrap();
+            let number: u16 = rng.gen_range(10..999);
+            
+            let candidate_name = format!("{}-{}-{}", adjective, noun, number);
+            
+            // Validate the name follows our pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
+            if candidate_name.len() <= 64 
+                && candidate_name.chars().next().unwrap().is_ascii_lowercase()
+                && candidate_name.chars().last().unwrap().is_ascii_alphanumeric()
+                && candidate_name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+                
+                // Check if name is available
+                if Self::find_by_name(pool, &candidate_name).await?.is_none() {
+                    return Ok(candidate_name);
+                }
+            }
+        }
+        
+        // Fallback to UUID-based name if we can't generate a unique readable name
+        let uuid = uuid::Uuid::new_v4().to_string();
+        let fallback_name = format!("agent-{}", &uuid[0..8]);
+        Ok(fallback_name)
+    }
+
     pub async fn create(
         pool: &sqlx::MySqlPool,
         req: CreateAgentRequest,
         created_by: &str,
     ) -> Result<Agent, sqlx::Error> {
+        // Use the provided name (random generation to be implemented later)
+        let agent_name = req.name;
+
         // Calculate timeout - auto_close_at will be set when agent becomes idle
         let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
         let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
@@ -473,7 +591,7 @@ impl Agent {
             VALUES (?, ?, ?, ?, ?, ?)
             "#
         )
-        .bind(&req.name)
+        .bind(&agent_name)
         .bind(created_by)
         .bind(&req.metadata)
         .bind(timeout)
@@ -483,7 +601,7 @@ impl Agent {
         .await?;
 
         // Fetch the created agent
-        let agent = Self::find_by_name(pool, &req.name).await?.unwrap();
+        let agent = Self::find_by_name(pool, &agent_name).await?.unwrap();
 
         Ok(agent)
     }
