@@ -5,9 +5,17 @@ title: Changelog
 
 # Changelog
 
-## [0.4.2] - TBD
+## [0.4.2] - 2025-09-04
 
-Development version - changes will be documented at release.
+**Docker Container Fix Release**
+
+### 🐛 Bug Fixes
+- **Docker Port Mapping**: Fixed public content server port 8000 not being exposed outside Docker container
+- **External Access**: Public content server now properly accessible at `http://localhost:8000` for published agent content
+
+### 🔧 Infrastructure Improvements  
+- **Container Configuration**: Added missing `-p 8000:8000` port mapping to server container in CLI Docker manager
+- **Published Content Access**: Users can now access published agent content externally as intended
 
 ## [0.4.1] - 2025-09-04
 
