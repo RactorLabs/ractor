@@ -5,9 +5,40 @@ title: Changelog
 
 # Changelog
 
-## [0.4.1] - TBD
+## [0.4.1] - 2025-09-04
 
-Development version - changes will be documented at release.
+**Documentation & Content System Enhancement Release**
+
+### 📚 Complete Documentation Overhaul
+- **Agent Terminology Migration**: Comprehensive update from "session" to "agent" terminology across all documentation files
+- **Website Build Fixes**: Resolved Docusaurus build errors and broken internal links throughout documentation site
+- **CLI Reference Updates**: Updated all command examples and usage patterns to reflect agent-based architecture
+- **Navigation Improvements**: Fixed sidebar configuration and document cross-references for seamless user experience
+
+### 🎨 Agent Content Display System
+- **Content Folder Instructions**: Enhanced agent system prompt to emphasize using `/agent/content/` folder for HTML display
+- **Rich Content Support**: Added comprehensive guidance for creating images, maps, tables, reports, charts, games, and interactive apps
+- **Example Content Page**: Created professional demonstration page showcasing 6 key content display categories with modern CSS
+- **Content Workflow**: Established index.html as main entry point with relative linking best practices
+
+### 🌐 Public Server Enhancement
+- **Minimal Homepage**: Added clean 200 OK response for public server on port 8000
+- **Professional Simplicity**: Streamlined public interface for better performance and user experience
+
+### 🔧 Infrastructure Improvements
+- **Terminal Width Adaptation**: Agent prompt separator lines now dynamically adapt to full terminal width
+- **Version Consistency**: Updated remaining version references from 0.4.0 to 0.4.1 across all configuration files
+- **Build System**: Enhanced release workflow with comprehensive file validation and lock file management
+
+### 💡 User Experience Enhancements
+- **Visual Content Creation**: Agents now guided to create rich HTML visualizations for better information display
+- **Interactive Demonstrations**: Example content page shows practical applications of agent content capabilities
+- **Simplified Public Interface**: Clean, minimal public server homepage reduces complexity
+
+### 🏗️ Developer Experience
+- **System Prompt Evolution**: Enhanced agent instructions for creating user-facing HTML content and visualizations
+- **Documentation Quality**: Verified every page, command, and line across website for accuracy and consistency
+- **Content Templates**: Provided comprehensive examples for various content display use cases
 
 ## v0.4.0
 
