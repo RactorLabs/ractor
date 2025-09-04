@@ -5,6 +5,10 @@ title: Changelog
 
 # Changelog
 
+## [0.4.3] - TBD
+
+Development version - changes will be documented at release.
+
 ## [0.4.2] - 2025-09-04
 
 **Docker Container Fix Release**
