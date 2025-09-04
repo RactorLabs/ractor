@@ -59,8 +59,9 @@ ENV NVM_DIR=/home/agent/.nvm
 USER root
 COPY target/release/raworc-agent /usr/local/bin/raworc-agent
 
-# Create agent directory structure (will be overridden by volume mount)
-RUN mkdir -p /agent && \
+# Create agent directory structure with proper permissions
+# This provides a fallback structure and ensures correct permissions
+RUN mkdir -p /agent/{code,secrets,logs,content} && \
     chown -R agent:agent /agent && \
     chmod -R 755 /agent
 

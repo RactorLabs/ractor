@@ -94,9 +94,11 @@ impl DockerManager {
             agent_name
         );
 
-        // Create base directories (no data folder in v0.4.0)
-        let init_script = "mkdir -p /agent/{code,secrets,logs,content}
-chmod -R 755 /agent
+        // Create base directories (no data folder in v0.4.0) with proper ownership
+        // Use sudo to ensure proper ownership since volume may be root-owned initially
+        let init_script = "sudo mkdir -p /agent/{code,secrets,logs,content}
+sudo chown -R agent:agent /agent
+sudo chmod -R 755 /agent
 echo 'Agent directories created (code, secrets, logs, content)'
 ";
 
@@ -314,7 +316,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let mut copy_commands = Vec::new();
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
-        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content && chown -R 1000:1000 /dest".to_string());
+        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content /dest/logs && chown -R 1000:1000 /dest".to_string());
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -524,7 +526,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let mut copy_commands = Vec::new();
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
-        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content && chown -R 1000:1000 /dest".to_string());
+        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content /dest/logs && chown -R 1000:1000 /dest".to_string());
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());

@@ -450,7 +450,7 @@ async function agentRemixCommand(sourceAgentName, options) {
 
     // Show detailed remix success info
     if (newAgent.name) {
-      console.log(chalk.green('✓') + ` Agent remixed as "${newAgent.name}": ${agentName}`);
+      // Success feedback is provided by the command box display
     }
 
 
