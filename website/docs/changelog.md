@@ -5,6 +5,10 @@ title: Changelog
 
 # Changelog
 
+## [0.4.1] - TBD
+
+Development version - changes will be documented at release.
+
 ## v0.4.0
 
 **Major Release: Complete Architecture Redesign & Enhanced Interactive Experience**
