@@ -1,6 +1,6 @@
 {
   "name": "@raworc/cli",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Raworc CLI - Computer use agents",
   "main": "index.js",
   "bin": {
