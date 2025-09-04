@@ -191,7 +191,7 @@ fi
 if [ "$VOLUMES" = true ]; then
     print_status "Removing volumes..."
     
-    for volume in mysql_data operator_data; do
+    for volume in raworc_mysql_data raworc_public_data; do
         if docker volume inspect "$volume" >/dev/null 2>&1; then
             print_status "Removing volume $volume..."
             if docker volume rm "$volume" 2>/dev/null; then

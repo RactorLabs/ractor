@@ -86,7 +86,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'operator_data']) {
+    for (const volume of ['raworc_mysql_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -117,7 +117,7 @@ class DockerManager {
           '--name', 'raworc_mysql',
           '--network', 'raworc_network',
           '-p', '3307:3306',
-          '-v', 'mysql_data:/var/lib/mysql',
+          '-v', 'raworc_mysql_data:/var/lib/mysql',
           '-e', 'MYSQL_ROOT_PASSWORD=root',
           '-e', 'MYSQL_DATABASE=raworc',
           '-e', 'MYSQL_USER=raworc',
@@ -156,7 +156,6 @@ class DockerManager {
           '--name', 'raworc_operator',
           '--network', 'raworc_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
-          '-v', 'operator_data:/var/lib/raworc/volumes',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
@@ -164,7 +163,6 @@ class DockerManager {
           '-e', 'AGENT_CPU_LIMIT=0.5',
           '-e', 'AGENT_MEMORY_LIMIT=536870912',
           '-e', 'AGENT_DISK_LIMIT=1073741824',
-          '-e', 'AGENT_VOLUMES_PATH=/var/lib/raworc/volumes',
           '-e', 'RUST_LOG=info',
           this.images.operator
         ]);

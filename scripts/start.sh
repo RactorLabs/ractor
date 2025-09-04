@@ -186,7 +186,7 @@ echo ""
 
 # Create volumes if they don't exist
 print_status "Creating Docker volumes..."
-for volume in mysql_data operator_data raworc_public; do
+for volume in raworc_mysql_data raworc_public_data; do
     if ! docker volume inspect "$volume" >/dev/null 2>&1; then
         if docker volume create "$volume"; then
             print_success "Created volume $volume"
@@ -228,7 +228,7 @@ for component in "${COMPONENTS[@]}"; do
             if eval "$docker_cmd --name raworc_mysql \
                 --network raworc_network \
                 -p 3307:3306 \
-                -v mysql_data:/var/lib/mysql \
+                -v raworc_mysql_data:/var/lib/mysql \
                 -e MYSQL_ROOT_PASSWORD=root \
                 -e MYSQL_DATABASE=raworc \
                 -e MYSQL_USER=raworc \
@@ -290,7 +290,7 @@ for component in "${COMPONENTS[@]}"; do
                 -p 9000:9000 \
                 -p 8000:8000 \
                 -v ./logs:/app/logs \
-                -v raworc_public:/public \
+                -v raworc_public_data:/public \
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e RUST_LOG=info \
@@ -355,7 +355,6 @@ for component in "${COMPONENTS[@]}"; do
                 --name raworc_operator \
                 --network raworc_network \
                 -v /var/run/docker.sock:/var/run/docker.sock \
-                -v operator_data:/var/lib/raworc/volumes \
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
@@ -363,7 +362,6 @@ for component in "${COMPONENTS[@]}"; do
                 -e AGENT_CPU_LIMIT="0.5" \
                 -e AGENT_MEMORY_LIMIT="536870912" \
                 -e AGENT_DISK_LIMIT="1073741824" \
-                -e AGENT_VOLUMES_PATH="/var/lib/raworc/volumes" \
                 -e RUST_LOG=info \
                 "$OPERATOR_IMAGE"; then
                 print_success "Operator service container started"
