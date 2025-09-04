@@ -86,7 +86,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['raworc_mysql_data']) {
+    for (const volume of ['raworc_mysql_data', 'raworc_public_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -144,6 +144,7 @@ class DockerManager {
           '-p', '9000:9000',
           '-p', '8000:8000',
           '-v', `${process.cwd()}/logs:/app/logs`,
+          '-v', 'raworc_public_data:/public',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',

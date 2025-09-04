@@ -5,9 +5,19 @@ title: Changelog
 
 # Changelog
 
-## [0.4.3] - TBD
+## [0.4.3] - 2025-09-04
 
-Development version - changes will be documented at release.
+**Docker Volume Fix Release**
+
+### 🐛 Bug Fixes
+- **Docker Public Volume**: Fixed missing `raworc_public_data` volume creation and mounting in CLI Docker manager
+- **CLI/Scripts Consistency**: CLI Docker configuration now mirrors scripts/start.sh behavior for volume management
+- **Published Content Storage**: Public content server now has proper persistent volume mounting
+
+### 🔧 Infrastructure Improvements
+- **Volume Management**: Added `raworc_public_data` to volume creation list in CLI
+- **Container Configuration**: Added `-v raworc_public_data:/public` mount to server container
+- **Data Persistence**: Published agent content now survives container restarts
 
 ## [0.4.2] - 2025-09-04
 
