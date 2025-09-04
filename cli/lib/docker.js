@@ -228,19 +228,31 @@ class DockerManager {
   }
 
   // Pull latest images from Docker Hub
-  async pull() {
+  async pull(version = 'latest') {
+    // Create version-specific image names
+    const versionedImages = {};
     for (const [component, image] of Object.entries(this.images)) {
-      // Skip mysql (official image) but include agent for proactive pulling
       if (component !== 'mysql') {
-        console.log(`📦 Pulling ${image}...`);
-        try {
-          await this.execDocker(['pull', image]);
-          console.log(`✅ Successfully pulled ${image}`);
-        } catch (error) {
-          console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
-          if (component === 'agent') {
-            console.warn(`   The operator will attempt to pull this image when needed.`);
-          }
+        // For raworc images, use the specified version tag
+        if (image.startsWith('raworc/')) {
+          const [repo] = image.split(':');
+          versionedImages[component] = `${repo}:${version}`;
+        } else {
+          // For non-raworc images, use original (like python:3.11-slim)
+          versionedImages[component] = image;
+        }
+      }
+    }
+
+    for (const [component, image] of Object.entries(versionedImages)) {
+      console.log(`📦 Pulling ${image}...`);
+      try {
+        await this.execDocker(['pull', image]);
+        console.log(`✅ Successfully pulled ${image}`);
+      } catch (error) {
+        console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
+        if (component === 'agent') {
+          console.warn(`   The operator will attempt to pull this image when needed.`);
         }
       }
     }
