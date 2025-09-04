@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 pub struct DockerManager {
     docker: Docker,
-    host_image: String,
+    agent_image: String,
     cpu_limit: f64,
     memory_limit: i64,
     db_pool: MySqlPool,
@@ -24,26 +24,26 @@ impl DockerManager {
         Self {
             docker,
             db_pool,
-            host_image: std::env::var("HOST_IMAGE")
-                .unwrap_or_else(|_| "raworc_host:latest".to_string()),
-            cpu_limit: std::env::var("HOST_CPU_LIMIT")
+            agent_image: std::env::var("AGENT_IMAGE")
+                .unwrap_or_else(|_| "raworc_agent:latest".to_string()),
+            cpu_limit: std::env::var("AGENT_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
                 .unwrap_or(0.5),
-            memory_limit: std::env::var("HOST_MEMORY_LIMIT")
+            memory_limit: std::env::var("AGENT_MEMORY_LIMIT")
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),
         }
     }
 
-    // NEW: Create session volume with explicit naming
-    async fn create_session_volume(&self, session_name: &str) -> Result<String> {
-        let volume_name = format!("raworc_session_data_{}", session_name);
+    // NEW: Create agent volume with explicit naming
+    async fn create_agent_volume(&self, agent_name: &str) -> Result<String> {
+        let volume_name = format!("raworc_agent_data_{}", agent_name);
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.session_name".to_string(), session_name.to_string());
-        labels.insert("raworc.type".to_string(), "host_session_volume".to_string());
+        labels.insert("raworc.agent_name".to_string(), agent_name.to_string());
+        labels.insert("raworc.type".to_string(), "agent_volume".to_string());
         labels.insert(
             "raworc.created_at".to_string(),
             chrono::Utc::now().to_rfc3339(),
@@ -57,55 +57,55 @@ impl DockerManager {
         };
 
         self.docker.create_volume(volume_config).await?;
-        info!("Created session volume: {}", volume_name);
+        info!("Created agent volume: {}", volume_name);
 
         Ok(volume_name)
     }
 
-    // Get session volume name (derived from session name)
-    fn get_session_volume_name(&self, session_name: &str) -> String {
-        format!("raworc_session_data_{}", session_name)
+    // Get agent volume name (derived from agent name)
+    fn get_agent_volume_name(&self, agent_name: &str) -> String {
+        format!("raworc_agent_data_{}", agent_name)
     }
 
-    // Get session container name (derived from session name)
-    fn get_session_container_name(&self, session_name: &str) -> String {
-        format!("raworc_session_{}", session_name)
+    // Get agent container name (derived from agent name)
+    fn get_agent_container_name(&self, agent_name: &str) -> String {
+        format!("raworc_agent_{}", agent_name)
     }
 
-    // Check if session volume exists
-    async fn session_volume_exists(&self, session_name: &str) -> Result<bool> {
-        let volume_name = self.get_session_volume_name(session_name);
+    // Check if agent volume exists
+    async fn agent_volume_exists(&self, agent_name: &str) -> Result<bool> {
+        let volume_name = self.get_agent_volume_name(agent_name);
         match self.docker.inspect_volume(&volume_name).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }
 
-    // Initialize session directory structure with secrets, instructions, and setup
-    async fn initialize_session_structure(
+    // Initialize agent directory structure with secrets, instructions, and setup
+    async fn initialize_agent_structure(
         &self,
-        session_name: &str,
+        agent_name: &str,
         secrets: &HashMap<String, String>,
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
         info!(
-            "Initializing session structure for session {}",
-            session_name
+            "Initializing agent structure for agent {}",
+            agent_name
         );
 
         // Create base directories (no data folder in v0.4.0)
-        let init_script = "mkdir -p /session/{code,secrets,logs,content}
-chmod -R 755 /session
-echo 'Session directories created (code, secrets, logs, content)'
+        let init_script = "mkdir -p /agent/{code,secrets,logs,content}
+chmod -R 755 /agent
+echo 'Agent directories created (code, secrets, logs, content)'
 ";
 
-        self.execute_command(session_name, init_script).await?;
+        self.execute_command(agent_name, init_script).await?;
 
-        // Write secrets to /session/secrets/ folder
+        // Write secrets to /agent/secrets/ folder
         for (key, value) in secrets {
-            let write_secret_command = format!("echo '{}' > /session/secrets/{}", value, key);
-            self.execute_command(session_name, &write_secret_command)
+            let write_secret_command = format!("echo '{}' > /agent/secrets/{}", value, key);
+            self.execute_command(agent_name, &write_secret_command)
                 .await?;
         }
 
@@ -113,10 +113,10 @@ echo 'Session directories created (code, secrets, logs, content)'
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
             let write_instructions_command = format!(
-                "echo '{}' > /session/code/instructions.md",
+                "echo '{}' > /agent/code/instructions.md",
                 escaped_instructions
             );
-            self.execute_command(session_name, &write_instructions_command)
+            self.execute_command(agent_name, &write_instructions_command)
                 .await?;
         }
 
@@ -124,37 +124,37 @@ echo 'Session directories created (code, secrets, logs, content)'
         if let Some(setup_content) = setup {
             let escaped_setup = setup_content.replace("'", "'\"'\"'");
             let write_setup_command = format!(
-                "echo '{}' > /session/code/setup.sh && chmod +x /session/code/setup.sh",
+                "echo '{}' > /agent/code/setup.sh && chmod +x /agent/code/setup.sh",
                 escaped_setup
             );
-            self.execute_command(session_name, &write_setup_command)
+            self.execute_command(agent_name, &write_setup_command)
                 .await?;
         }
 
         info!(
-            "Session structure initialized with {} secrets",
+            "Agent structure initialized with {} secrets",
             secrets.len()
         );
 
         Ok(())
     }
 
-    // NEW: Check if session is initialized
-    async fn session_initialized(&self, _volume_name: &str) -> Result<bool> {
+    // NEW: Check if agent is initialized
+    async fn agent_initialized(&self, _volume_name: &str) -> Result<bool> {
         // Skip initialization check for now - always initialize
         Ok(false)
     }
 
-    // NEW: Cleanup session volume
-    pub async fn cleanup_session_volume(&self, session_name: &str) -> Result<()> {
-        let expected_volume_name = format!("raworc_session_data_{}", session_name);
+    // NEW: Cleanup agent volume
+    pub async fn cleanup_agent_volume(&self, agent_name: &str) -> Result<()> {
+        let expected_volume_name = format!("raworc_agent_data_{}", agent_name);
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
-                info!("Removed session volume: {}", expected_volume_name);
+                info!("Removed agent volume: {}", expected_volume_name);
             }
             Err(e) => warn!(
-                "Failed to remove session volume {}: {}",
+                "Failed to remove agent volume {}: {}",
                 expected_volume_name, e
             ),
         }
@@ -164,20 +164,20 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     pub async fn create_container_with_volume_copy(
         &self,
-        session_name: &str,
-        parent_session_name: &str,
+        agent_name: &str,
+        parent_agent_name: &str,
     ) -> Result<String> {
         info!(
-            "Creating remix session {} with volume copy from {}",
-            session_name, parent_session_name
+            "Creating remix agent {} with volume copy from {}",
+            agent_name, parent_agent_name
         );
 
         // First create the container normally (this creates the empty target volume)
-        let container_name = self.create_container(session_name).await?;
+        let container_name = self.create_container(agent_name).await?;
 
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
-        let new_volume = format!("raworc_session_data_{}", session_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
+        let new_volume = format!("raworc_agent_data_{}", agent_name);
 
         info!(
             "Copying volume data from {} to {}",
@@ -185,10 +185,10 @@ echo 'Session directories created (code, secrets, logs, content)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
+        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
 
         let config = Config {
-            image: Some(self.host_image.clone()),
+            image: Some(self.agent_image.clone()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -288,22 +288,22 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     pub async fn create_container_with_selective_copy(
         &self,
-        session_name: &str,
-        parent_session_name: &str,
+        agent_name: &str,
+        parent_agent_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_secrets: bool,
         copy_content: bool,
     ) -> Result<String> {
-        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, secrets: {}, content: {})", 
-              session_name, parent_session_name, copy_data, copy_code, copy_secrets, copy_content);
+        info!("Creating remix agent {} with selective copy from {} (data: {}, code: {}, secrets: {}, content: {})", 
+              agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content);
 
-        // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_name).await?;
+        // First create the agent volume (without starting container)
+        let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
-        let new_volume = format!("raworc_session_data_{}", session_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
+        let new_volume = format!("raworc_agent_data_{}", agent_name);
 
         info!(
             "Copying selective data from {} to {}",
@@ -344,11 +344,11 @@ echo 'Session directories created (code, secrets, logs, content)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
+        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
 
         let config = Config {
-            image: Some(self.host_image.clone()),
-            user: Some("host".to_string()),
+            image: Some(self.agent_image.clone()),
+            user: Some("agent".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
                 mounts: Some(vec![
@@ -427,7 +427,7 @@ echo 'Session directories created (code, secrets, logs, content)'
 
         info!("Selective copy logs: {}", log_output.trim());
 
-        // Parse secrets from copy output (always copied for remix sessions)
+        // Parse secrets from copy output (always copied for remix agents)
         let mut secrets = std::collections::HashMap::new();
 
         // Parse SECRET:key=value lines from the copy output
@@ -483,7 +483,7 @@ echo 'Session directories created (code, secrets, logs, content)'
 
         // Now create and start the container with the copied secrets as environment variables
         let container_name = self
-            .create_container_internal(session_name, Some(secrets), instructions, setup)
+            .create_container_internal(agent_name, Some(secrets), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -491,8 +491,8 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     pub async fn create_container_with_selective_copy_and_tokens(
         &self,
-        session_name: &str,
-        parent_session_name: &str,
+        agent_name: &str,
+        parent_agent_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_secrets: bool,
@@ -504,16 +504,16 @@ echo 'Session directories created (code, secrets, logs, content)'
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
-            "Creating remix session {} with selective copy from {} and fresh tokens",
-            session_name, parent_session_name
+            "Creating remix agent {} with selective copy from {} and fresh tokens",
+            agent_name, parent_agent_name
         );
 
-        // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_name).await?;
+        // First create the agent volume (without starting container)
+        let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_session_data_{}", parent_session_name);
-        let new_volume = format!("raworc_session_data_{}", session_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
+        let new_volume = format!("raworc_agent_data_{}", agent_name);
 
         info!(
             "Copying selective data from {} to {}",
@@ -554,11 +554,11 @@ echo 'Session directories created (code, secrets, logs, content)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", session_name);
+        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
 
         let config = Config {
-            image: Some(self.host_image.clone()),
-            user: Some("host".to_string()),
+            image: Some(self.agent_image.clone()),
+            user: Some("agent".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
                 mounts: Some(vec![
@@ -694,7 +694,7 @@ echo 'Session directories created (code, secrets, logs, content)'
         // Now create and start the container with user secrets + generated system tokens
         let container_name = self
             .create_container_internal_with_tokens(
-                session_name,
+                agent_name,
                 Some(secrets),
                 instructions,
                 setup,
@@ -723,8 +723,8 @@ echo 'Session directories created (code, secrets, logs, content)'
         );
 
         let config = Config {
-            image: Some(self.host_image.clone()),
-            user: Some("host".to_string()),
+            image: Some(self.agent_image.clone()),
+            user: Some("agent".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -836,8 +836,8 @@ echo 'Session directories created (code, secrets, logs, content)'
         );
 
         let config = Config {
-            image: Some(self.host_image.clone()),
-            user: Some("host".to_string()),
+            image: Some(self.agent_image.clone()),
+            user: Some("agent".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -924,20 +924,20 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     pub async fn create_container_with_params(
         &self,
-        session_name: &str,
+        agent_name: &str,
         secrets: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_name, Some(secrets), instructions, setup)
+            .create_container_internal(agent_name, Some(secrets), instructions, setup)
             .await?;
         Ok(container_name)
     }
 
     pub async fn create_container_with_params_and_tokens(
         &self,
-        session_name: &str,
+        agent_name: &str,
         secrets: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -949,7 +949,7 @@ echo 'Session directories created (code, secrets, logs, content)'
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
-                session_name,
+                agent_name,
                 Some(secrets),
                 instructions,
                 setup,
@@ -963,27 +963,27 @@ echo 'Session directories created (code, secrets, logs, content)'
         Ok(container_name)
     }
 
-    pub async fn create_container(&self, session_name: &str) -> Result<String> {
+    pub async fn create_container(&self, agent_name: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_name, None, None, None)
+            .create_container_internal(agent_name, None, None, None)
             .await?;
         Ok(container_name)
     }
 
-    pub async fn restore_container(&self, session_name: &str) -> Result<String> {
+    pub async fn restore_container(&self, agent_name: &str) -> Result<String> {
         // Read existing secrets from the volume
-        let volume_name = format!("raworc_session_data_{}", session_name);
+        let volume_name = format!("raworc_agent_data_{}", agent_name);
         info!(
-            "Restoring container for session {} - reading secrets from volume {}",
-            session_name, volume_name
+            "Restoring container for agent {} - reading secrets from volume {}",
+            agent_name, volume_name
         );
 
         let secrets = match self.read_secrets_from_volume(&volume_name).await {
             Ok(s) => {
                 info!(
-                    "Found {} secrets in volume for session {}",
+                    "Found {} secrets in volume for agent {}",
                     s.len(),
-                    session_name
+                    agent_name
                 );
                 for key in s.keys() {
                     info!("  - Secret: {}", key);
@@ -992,8 +992,8 @@ echo 'Session directories created (code, secrets, logs, content)'
             }
             Err(e) => {
                 warn!(
-                    "Could not read secrets from volume for session {}: {}",
-                    session_name, e
+                    "Could not read secrets from volume for agent {}: {}",
+                    agent_name, e
                 );
                 None
             }
@@ -1010,14 +1010,14 @@ echo 'Session directories created (code, secrets, logs, content)'
             .ok();
 
         let container_name = self
-            .create_container_internal(session_name, secrets, instructions, setup)
+            .create_container_internal(agent_name, secrets, instructions, setup)
             .await?;
         Ok(container_name)
     }
 
     pub async fn restore_container_with_tokens(
         &self,
-        session_name: &str,
+        agent_name: &str,
         api_key: String,
         raworc_token: String,
         principal: String,
@@ -1025,25 +1025,25 @@ echo 'Session directories created (code, secrets, logs, content)'
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user secrets from the volume (but generate fresh system tokens)
-        let volume_name = format!("raworc_session_data_{}", session_name);
+        let volume_name = format!("raworc_agent_data_{}", agent_name);
         info!(
-            "Restoring container for session {} with fresh tokens",
-            session_name
+            "Restoring container for agent {} with fresh tokens",
+            agent_name
         );
 
         let secrets = match self.read_secrets_from_volume(&volume_name).await {
             Ok(s) => {
                 info!(
-                    "Found {} user secrets in volume for session {}",
+                    "Found {} user secrets in volume for agent {}",
                     s.len(),
-                    session_name
+                    agent_name
                 );
                 Some(s)
             }
             Err(e) => {
                 warn!(
-                    "Could not read secrets from volume for session {}: {}",
-                    session_name, e
+                    "Could not read secrets from volume for agent {}: {}",
+                    agent_name, e
                 );
                 None
             }
@@ -1061,7 +1061,7 @@ echo 'Session directories created (code, secrets, logs, content)'
 
         let container_name = self
             .create_container_internal_with_tokens(
-                session_name,
+                agent_name,
                 secrets,
                 instructions,
                 setup,
@@ -1077,50 +1077,50 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     async fn create_container_internal(
         &self,
-        session_name: &str,
+        agent_name: &str,
         secrets: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("raworc_session_{session_name}");
+        let container_name = format!("raworc_agent_{agent_name}");
 
-        // Get content port from session (already allocated during session creation)
+        // Get content port from agent (already allocated during agent creation)
         let content_port: i32 = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT content_port FROM sessions WHERE name = ?",
+            "SELECT content_port FROM agents WHERE name = ?",
         )
-        .bind(session_name)
+        .bind(agent_name)
         .fetch_one(&self.db_pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to get content port from session: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Session has no content port assigned"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
 
         info!(
-            "Using Content port {} from session {}",
-            content_port, session_name
+            "Using Content port {} from agent {}",
+            content_port, agent_name
         );
 
-        // Use host image directly for all sessions
-        let container_image = self.host_image.clone();
+        // Use agent image directly for all agents
+        let container_image = self.agent_image.clone();
         info!(
-            "Creating container {} with host image {}",
+            "Creating container {} with agent image {},",
             container_name, container_image
         );
 
-        info!("Creating container for session {}", session_name);
+        info!("Creating container for agent {}", agent_name);
 
-        // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_name).await? {
-            self.get_session_volume_name(session_name)
+        // Create or get existing agent volume
+        let agent_volume = if self.agent_volume_exists(agent_name).await? {
+            self.get_agent_volume_name(agent_name)
         } else {
-            self.create_session_volume(session_name).await?
+            self.create_agent_volume(agent_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.session".to_string(), session_name.to_string());
+        labels.insert("raworc.agent".to_string(), agent_name.to_string());
         labels.insert("raworc.managed".to_string(), "true".to_string());
-        labels.insert("raworc.volume".to_string(), session_volume.clone());
+        labels.insert("raworc.volume".to_string(), agent_volume.clone());
 
-        // Get user token from secrets (added automatically by session manager)
+        // Get user token from secrets (added automatically by agent manager)
         let user_token = secrets
             .as_ref()
             .and_then(|s| s.get("RAWORC_TOKEN"))
@@ -1133,8 +1133,8 @@ echo 'Session directories created (code, secrets, logs, content)'
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
             typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(session_volume.clone()),
-            target: Some("/session".to_string()),
+            source: Some(agent_volume.clone()),
+            target: Some("/agent".to_string()),
             read_only: Some(false),
             ..Default::default()
         }];
@@ -1152,11 +1152,11 @@ echo 'Session directories created (code, secrets, logs, content)'
         let mut exposed_ports = HashMap::new();
         exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
 
-        // Set environment variables for the session structure
+        // Set environment variables for the agent structure
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
-            format!("RAWORC_SESSION_NAME={}", session_name),
-            format!("RAWORC_SESSION_DIR=/session"),
+            format!("RAWORC_AGENT_NAME={}", agent_name),
+            format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
         // Add hint about setup script availability to avoid unnecessary waiting
@@ -1190,8 +1190,8 @@ echo 'Session directories created (code, secrets, logs, content)'
                     && key != "RAWORC_PRINCIPAL_TYPE"
                 {
                     info!(
-                        "Adding secret {} as environment variable for session {}",
-                        key, session_name
+                        "Adding secret {} as environment variable for agent {}",
+                        key, agent_name
                     );
                 }
             }
@@ -1199,23 +1199,23 @@ echo 'Session directories created (code, secrets, logs, content)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "raworc-host".to_string(),
+            "raworc-agent".to_string(),
             "--api-url".to_string(),
             "http://raworc_server:9000".to_string(),
-            "--session-name".to_string(),
-            session_name.to_string(),
+            "--agent-name".to_string(),
+            agent_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
-                "session-{}",
-                &session_name[..session_name.len().min(8)]
+                "agent-{}",
+                &agent_name[..agent_name.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
-            working_dir: Some("/session".to_string()), // User starts in their session
+            working_dir: Some("/agent".to_string()), // User starts in their agent
             exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1241,12 +1241,12 @@ echo 'Session directories created (code, secrets, logs, content)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize session structure after starting container so host can execute setup script
-        if !self.session_initialized(&session_volume).await? {
+        // Initialize agent structure after starting container so host can execute setup script
+        if !self.agent_initialized(&agent_volume).await? {
             let empty_secrets = HashMap::new();
             let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
-            self.initialize_session_structure(
-                session_name,
+            self.initialize_agent_structure(
+                agent_name,
                 secrets_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1255,15 +1255,15 @@ echo 'Session directories created (code, secrets, logs, content)'
         }
 
         info!(
-            "Container {} created with session volume {} using Content port {}",
-            container_name, session_volume, content_port
+            "Container {} created with agent volume {} using Content port {}",
+            container_name, agent_volume, content_port
         );
         Ok(container.id)
     }
 
     async fn create_container_internal_with_tokens(
         &self,
-        session_name: &str,
+        agent_name: &str,
         secrets: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -1273,52 +1273,52 @@ echo 'Session directories created (code, secrets, logs, content)'
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("raworc_session_{session_name}");
+        let container_name = format!("raworc_agent_{agent_name}");
 
-        // Get content port from session (already allocated during session creation)
+        // Get content port from agent (already allocated during agent creation)
         let content_port: i32 = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT content_port FROM sessions WHERE name = ?",
+            "SELECT content_port FROM agents WHERE name = ?",
         )
-        .bind(session_name)
+        .bind(agent_name)
         .fetch_one(&self.db_pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to get content port from session: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Session has no content port assigned"))?;
+        .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
+        .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
 
         info!(
-            "Using Content port {} from session {}",
-            content_port, session_name
+            "Using Content port {} from agent {}",
+            content_port, agent_name
         );
 
-        // Use host image directly for all sessions
-        let container_image = self.host_image.clone();
+        // Use agent image directly for all agents
+        let container_image = self.agent_image.clone();
         info!(
-            "Creating container {} with host image and generated tokens",
+            "Creating container {} with agent image and generated tokens",
             container_name
         );
 
         info!(
-            "Creating container for session {} with fresh tokens",
-            session_name
+            "Creating container for agent {} with fresh tokens",
+            agent_name
         );
 
-        // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_name).await? {
-            self.get_session_volume_name(session_name)
+        // Create or get existing agent volume
+        let agent_volume = if self.agent_volume_exists(agent_name).await? {
+            self.get_agent_volume_name(agent_name)
         } else {
-            self.create_session_volume(session_name).await?
+            self.create_agent_volume(agent_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.session".to_string(), session_name.to_string());
+        labels.insert("raworc.agent".to_string(), agent_name.to_string());
         labels.insert("raworc.managed".to_string(), "true".to_string());
-        labels.insert("raworc.volume".to_string(), session_volume.clone());
+        labels.insert("raworc.volume".to_string(), agent_volume.clone());
 
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
             typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(session_volume.clone()),
-            target: Some("/session".to_string()),
+            source: Some(agent_volume.clone()),
+            target: Some("/agent".to_string()),
             read_only: Some(false),
             ..Default::default()
         }];
@@ -1336,11 +1336,11 @@ echo 'Session directories created (code, secrets, logs, content)'
         let mut exposed_ports = HashMap::new();
         exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
 
-        // Set environment variables for the session structure
+        // Set environment variables for the agent structure
         let mut env = vec![
             format!("RAWORC_API_URL=http://raworc_server:9000"),
-            format!("RAWORC_SESSION_NAME={}", session_name),
-            format!("RAWORC_SESSION_DIR=/session"),
+            format!("RAWORC_AGENT_NAME={}", agent_name),
+            format!("RAWORC_AGENT_DIR=/agent"),
             // Set the generated system tokens directly as environment variables
             format!("ANTHROPIC_API_KEY={}", api_key),
             format!("RAWORC_TOKEN={}", raworc_token),
@@ -1373,31 +1373,31 @@ echo 'Session directories created (code, secrets, logs, content)'
                 }
                 env.push(format!("{}={}", key, value));
                 info!(
-                    "Adding user secret {} as environment variable for session {}",
-                    key, session_name
+                    "Adding user secret {} as environment variable for agent {}",
+                    key, agent_name
                 );
             }
         }
 
         // Set the command with required arguments
         let cmd = vec![
-            "raworc-host".to_string(),
+            "raworc-agent".to_string(),
             "--api-url".to_string(),
             "http://raworc_server:9000".to_string(),
-            "--session-name".to_string(),
-            session_name.to_string(),
+            "--agent-name".to_string(),
+            agent_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
-                "session-{}",
-                &session_name[..session_name.len().min(8)]
+                "agent-{}",
+                &agent_name[..agent_name.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
-            working_dir: Some("/session".to_string()), // User starts in their session
+            working_dir: Some("/agent".to_string()), // User starts in their agent
             exposed_ports: Some(exposed_ports),
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1423,13 +1423,13 @@ echo 'Session directories created (code, secrets, logs, content)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize session structure after starting container so host can execute setup script
+        // Initialize agent structure after starting container so host can execute setup script
         // Only initialize with user secrets (system tokens are already in environment)
-        if !self.session_initialized(&session_volume).await? {
+        if !self.agent_initialized(&agent_volume).await? {
             let empty_secrets = HashMap::new();
             let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
-            self.initialize_session_structure(
-                session_name,
+            self.initialize_agent_structure(
+                agent_name,
                 secrets_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1437,13 +1437,13 @@ echo 'Session directories created (code, secrets, logs, content)'
             .await?;
         }
 
-        info!("Container {} created with session volume {} using Content port {}, and fresh system tokens", container_name, session_volume, content_port);
+        info!("Container {} created with agent volume {} using Content port {}, and fresh system tokens", container_name, agent_volume, content_port);
         Ok(container.id)
     }
 
-    // Close container but retain persistent volume (for session pause/close)
-    pub async fn close_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_name}");
+    // Close container but retain persistent volume (for agent pause/close)
+    pub async fn close_container(&self, agent_name: &str) -> Result<()> {
+        let container_name = format!("raworc_agent_{agent_name}");
 
         info!("Closing container {}", container_name);
 
@@ -1479,9 +1479,9 @@ echo 'Session directories created (code, secrets, logs, content)'
         }
     }
 
-    // Delete container and remove persistent volume (for session deletion)
-    pub async fn delete_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{session_name}");
+    // Delete container and remove persistent volume (for agent deletion)
+    pub async fn delete_container(&self, agent_name: &str) -> Result<()> {
+        let container_name = format!("raworc_agent_{agent_name}");
 
         info!("Deleting container {}", container_name);
 
@@ -1498,11 +1498,11 @@ echo 'Session directories created (code, secrets, logs, content)'
             Ok(_) => {
                 info!("Container {} deleted", container_name);
 
-                // Cleanup the session volume
-                if let Err(e) = self.cleanup_session_volume(session_name).await {
+                // Cleanup the agent volume
+                if let Err(e) = self.cleanup_agent_volume(agent_name).await {
                     warn!(
-                        "Failed to cleanup session volume for {}: {}",
-                        session_name, e
+                        "Failed to cleanup agent volume for {}: {}",
+                        agent_name, e
                     );
                 }
 
@@ -1512,11 +1512,11 @@ echo 'Session directories created (code, secrets, logs, content)'
                 if e.to_string().contains("404") || e.to_string().contains("No such container") {
                     warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
 
-                    // Still try to cleanup the session volume
-                    if let Err(e) = self.cleanup_session_volume(session_name).await {
+                    // Still try to cleanup the agent volume
+                    if let Err(e) = self.cleanup_agent_volume(agent_name).await {
                         warn!(
-                            "Failed to cleanup session volume for {}: {}",
-                            session_name, e
+                            "Failed to cleanup agent volume for {}: {}",
+                            agent_name, e
                         );
                     }
 
@@ -1531,13 +1531,13 @@ echo 'Session directories created (code, secrets, logs, content)'
 
     // Legacy method - kept for backward compatibility, but deprecated
     // Use close_container or delete_container instead
-    pub async fn destroy_container(&self, session_name: &str) -> Result<()> {
+    pub async fn destroy_container(&self, agent_name: &str) -> Result<()> {
         warn!("destroy_container is deprecated, use close_container or delete_container instead");
-        self.delete_container(session_name).await
+        self.delete_container(agent_name).await
     }
 
-    pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("raworc_session_{session_name}");
+    pub async fn execute_command(&self, agent_name: &str, command: &str) -> Result<String> {
+        let container_name = format!("raworc_agent_{agent_name}");
 
         info!(
             "Executing command in container {}: {}",
@@ -1569,13 +1569,13 @@ echo 'Session directories created (code, secrets, logs, content)'
         Ok(output_str)
     }
 
-    pub async fn publish_content(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("raworc_session_{}", session_name);
-        let public_path = format!("/public/{}", session_name);
+    pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
+        let container_name = format!("raworc_agent_{}", agent_name);
+        let public_path = format!("/public/{}", agent_name);
 
         info!(
-            "Publishing content for session {} to {}",
-            session_name, public_path
+            "Publishing content for agent {} to {}",
+            agent_name, public_path
         );
 
         // Create public directory
@@ -1591,7 +1591,7 @@ echo 'Session directories created (code, secrets, logs, content)'
 
         // Copy content files from container to public directory
         let copy_cmd = format!(
-            "docker cp {}:/session/content/. {}/",
+            "docker cp {}:/agent/content/. {}/",
             container_name, public_path
         );
         match std::process::Command::new("bash")
@@ -1602,19 +1602,19 @@ echo 'Session directories created (code, secrets, logs, content)'
             Ok(output) => {
                 if output.status.success() {
                     info!(
-                        "Content published successfully for session {}",
-                        session_name
+                        "Content published successfully for agent {}",
+                        agent_name
                     );
                     Ok(())
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.contains("No such file or directory") {
-                        info!("No content files found for session {}, creating empty public directory", session_name);
+                        info!("No content files found for agent {}, creating empty public directory", agent_name);
                         Ok(())
                     } else {
                         error!(
-                            "Failed to copy content files for session {}: {}",
-                            session_name, stderr
+                            "Failed to copy content files for agent {}: {}",
+                            agent_name, stderr
                         );
                         Err(anyhow::anyhow!("Failed to copy content files: {}", stderr))
                     }
@@ -1622,20 +1622,20 @@ echo 'Session directories created (code, secrets, logs, content)'
             }
             Err(e) => {
                 error!(
-                    "Failed to execute docker cp command for session {}: {}",
-                    session_name, e
+                    "Failed to execute docker cp command for agent {}: {}",
+                    agent_name, e
                 );
                 Err(anyhow::anyhow!("Failed to execute docker cp: {}", e))
             }
         }
     }
 
-    pub async fn unpublish_content(&self, session_name: &str) -> Result<()> {
-        let public_path = format!("/public/{}", session_name);
+    pub async fn unpublish_content(&self, agent_name: &str) -> Result<()> {
+        let public_path = format!("/public/{}", agent_name);
 
         info!(
-            "Unpublishing content for session {} from {}",
-            session_name, public_path
+            "Unpublishing content for agent {} from {}",
+            agent_name, public_path
         );
 
         // Remove public directory
@@ -1648,15 +1648,15 @@ echo 'Session directories created (code, secrets, logs, content)'
             Ok(output) => {
                 if output.status.success() {
                     info!(
-                        "Content unpublished successfully for session {}",
-                        session_name
+                        "Content unpublished successfully for agent {}",
+                        agent_name
                     );
                     Ok(())
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     error!(
-                        "Failed to remove public directory for session {}: {}",
-                        session_name, stderr
+                        "Failed to remove public directory for agent {}: {}",
+                        agent_name, stderr
                     );
                     Err(anyhow::anyhow!(
                         "Failed to remove public directory: {}",
@@ -1666,8 +1666,8 @@ echo 'Session directories created (code, secrets, logs, content)'
             }
             Err(e) => {
                 error!(
-                    "Failed to execute rm command for session {}: {}",
-                    session_name, e
+                    "Failed to execute rm command for agent {}: {}",
+                    agent_name, e
                 );
                 Err(anyhow::anyhow!("Failed to execute rm: {}", e))
             }

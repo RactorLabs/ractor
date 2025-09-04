@@ -34,12 +34,12 @@ CREATE TABLE IF NOT EXISTS role_bindings (
     INDEX idx_role_bindings_role_name (role_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Sessions - Name-based architecture with publishing and timeout functionality
-CREATE TABLE IF NOT EXISTS sessions (
+-- Agents - Name-based architecture with publishing and timeout functionality
+CREATE TABLE IF NOT EXISTS agents (
     name VARCHAR(64) PRIMARY KEY,
     created_by VARCHAR(255) NOT NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
-    parent_session_name VARCHAR(64) NULL,
+    parent_agent_name VARCHAR(64) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,
     metadata JSON DEFAULT ('{}'),
@@ -58,44 +58,44 @@ CREATE TABLE IF NOT EXISTS sessions (
     content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
     
     -- Constraints
-    CONSTRAINT sessions_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
-    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
-    CONSTRAINT sessions_publish_check CHECK (
+    CONSTRAINT agents_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
+    CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'closed', 'errored', 'deleted')),
+    CONSTRAINT agents_publish_check CHECK (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)
     ),
-    CONSTRAINT sessions_timeout_check CHECK (timeout_seconds > 0 AND timeout_seconds <= 604800),
-    CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_name) REFERENCES sessions(name) ON DELETE SET NULL,
+    CONSTRAINT agents_timeout_check CHECK (timeout_seconds > 0 AND timeout_seconds <= 604800),
+    CONSTRAINT fk_agents_parent FOREIGN KEY (parent_agent_name) REFERENCES agents(name) ON DELETE SET NULL,
     
     -- Indexes
-    INDEX idx_sessions_created_by (created_by),
-    INDEX idx_sessions_state (state),
-    INDEX idx_sessions_parent_session_name (parent_session_name),
-    INDEX idx_sessions_published (is_published, published_at),
-    INDEX idx_sessions_auto_close (auto_close_at, state),
-    INDEX idx_sessions_content_port (content_port)
+    INDEX idx_agents_created_by (created_by),
+    INDEX idx_agents_state (state),
+    INDEX idx_agents_parent_agent_name (parent_agent_name),
+    INDEX idx_agents_published (is_published, published_at),
+    INDEX idx_agents_auto_close (auto_close_at, state),
+    INDEX idx_agents_content_port (content_port)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Messages
-CREATE TABLE IF NOT EXISTS session_messages (
+-- Agent Messages
+CREATE TABLE IF NOT EXISTS agent_messages (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    session_name VARCHAR(64) NOT NULL,
+    agent_name VARCHAR(64) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'host', 'system')),
+    role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'agent', 'system')),
     content TEXT NOT NULL,
     metadata JSON DEFAULT ('{}'),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_messages_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
-    INDEX idx_session_messages_session_name (session_name),
-    INDEX idx_session_messages_created_by (created_by),
-    INDEX idx_session_messages_created_at (created_at)
+    CONSTRAINT fk_messages_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
+    INDEX idx_agent_messages_agent_name (agent_name),
+    INDEX idx_agent_messages_created_by (created_by),
+    INDEX idx_agent_messages_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Tasks
-CREATE TABLE IF NOT EXISTS session_tasks (
+-- Agent Tasks
+CREATE TABLE IF NOT EXISTS agent_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     task_type VARCHAR(50) NOT NULL,
-    session_name VARCHAR(64) NOT NULL,
+    agent_name VARCHAR(64) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     payload JSON NOT NULL DEFAULT ('{}'),
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -104,11 +104,11 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,
     error TEXT,
-    CONSTRAINT fk_tasks_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
-    INDEX idx_session_tasks_status (status),
-    INDEX idx_session_tasks_session_name (session_name),
-    INDEX idx_session_tasks_created_by (created_by),
-    INDEX idx_session_tasks_created_at (created_at)
+    CONSTRAINT fk_tasks_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
+    INDEX idx_agent_tasks_status (status),
+    INDEX idx_agent_tasks_agent_name (agent_name),
+    INDEX idx_agent_tasks_created_by (created_by),
+    INDEX idx_agent_tasks_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default admin operator (password: admin)

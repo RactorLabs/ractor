@@ -16,14 +16,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
         .route("/version", get(version))
         .route("/operators/{name}/login", post(auth::login))
-        // Public session endpoints (no auth required)
+        // Public agent endpoints (no auth required)
         .route(
-            "/published/sessions",
-            get(handlers::sessions::list_published_sessions),
+            "/published/agents",
+            get(handlers::agents::list_published_agents),
         )
         .route(
-            "/published/sessions/{id}",
-            get(handlers::sessions::get_published_session),
+            "/published/agents/{id}",
+            get(handlers::agents::get_published_agent),
         );
 
     // Protected routes
@@ -46,59 +46,59 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/operators/{name}/password",
             put(handlers::operators::update_operator_password),
         )
-        // Session endpoints
-        .route("/sessions", get(handlers::sessions::list_sessions))
-        .route("/sessions", post(handlers::sessions::create_session))
-        .route("/sessions/{id}", get(handlers::sessions::get_session))
-        .route("/sessions/{id}", put(handlers::sessions::update_session))
+        // Agent endpoints
+        .route("/agents", get(handlers::agents::list_agents))
+        .route("/agents", post(handlers::agents::create_agent))
+        .route("/agents/{id}", get(handlers::agents::get_agent))
+        .route("/agents/{id}", put(handlers::agents::update_agent))
         .route(
-            "/sessions/{id}/state",
-            put(handlers::sessions::update_session_state),
+            "/agents/{id}/state",
+            put(handlers::agents::update_agent_state),
         )
         .route(
-            "/sessions/{id}/busy",
-            post(handlers::sessions::update_session_to_busy),
+            "/agents/{id}/busy",
+            post(handlers::agents::update_agent_to_busy),
         )
         .route(
-            "/sessions/{id}/idle",
-            post(handlers::sessions::update_session_to_idle),
+            "/agents/{id}/idle",
+            post(handlers::agents::update_agent_to_idle),
         )
         .route(
-            "/sessions/{id}/close",
-            post(handlers::sessions::close_session),
+            "/agents/{id}/close",
+            post(handlers::agents::close_agent),
         )
         .route(
-            "/sessions/{id}/restore",
-            post(handlers::sessions::restore_session),
+            "/agents/{id}/restore",
+            post(handlers::agents::restore_agent),
         )
         .route(
-            "/sessions/{id}/remix",
-            post(handlers::sessions::remix_session),
+            "/agents/{id}/remix",
+            post(handlers::agents::remix_agent),
         )
         .route(
-            "/sessions/{id}/publish",
-            post(handlers::sessions::publish_session),
+            "/agents/{id}/publish",
+            post(handlers::agents::publish_agent),
         )
         .route(
-            "/sessions/{id}/unpublish",
-            post(handlers::sessions::unpublish_session),
+            "/agents/{id}/unpublish",
+            post(handlers::agents::unpublish_agent),
         )
-        .route("/sessions/{id}", delete(handlers::sessions::delete_session))
+        .route("/agents/{id}", delete(handlers::agents::delete_agent))
         // Message endpoints
         .route(
-            "/sessions/{id}/messages",
+            "/agents/{id}/messages",
             get(handlers::messages::list_messages),
         )
         .route(
-            "/sessions/{id}/messages",
+            "/agents/{id}/messages",
             post(handlers::messages::create_message),
         )
         .route(
-            "/sessions/{id}/messages/count",
+            "/agents/{id}/messages/count",
             get(handlers::messages::get_message_count),
         )
         .route(
-            "/sessions/{id}/messages",
+            "/agents/{id}/messages",
             delete(handlers::messages::clear_messages),
         )
         .layer(middleware::from_fn_with_state(

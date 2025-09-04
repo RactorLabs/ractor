@@ -82,7 +82,7 @@ jobs:
           ### Docker Hub Images
           - \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_operator:${{ steps.get_version.outputs.VERSION }}\`
-          - \`raworc/raworc_host:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
           
           All images are also tagged as \`:latest\`"
         env:

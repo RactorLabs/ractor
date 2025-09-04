@@ -8,40 +8,40 @@ use std::sync::Arc;
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::shared::models::constants::{
-    SESSION_STATE_BUSY, SESSION_STATE_CLOSED, SESSION_STATE_IDLE, SESSION_STATE_INIT,
+    AGENT_STATE_BUSY, AGENT_STATE_CLOSED, AGENT_STATE_IDLE, AGENT_STATE_INIT,
 };
 use crate::shared::models::{
-    AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse, SessionMessage,
+    AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse, AgentMessage,
 };
 
 pub async fn create_message(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(agent_name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateMessageRequest>,
 ) -> ApiResult<Json<MessageResponse>> {
-    // Verify session exists and user has access
-    let session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    // Verify agent exists and user has access
+    let agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
-    // Check if session is closed and needs reactivation
-    if session.state == crate::shared::models::constants::SESSION_STATE_CLOSED {
+    // Check if agent is closed and needs reactivation
+    if agent.state == crate::shared::models::constants::AGENT_STATE_CLOSED {
         tracing::info!(
-            "Auto-restoring closed session {} due to new message",
-            session_name
+            "Auto-restoring closed agent {} due to new message",
+            agent_name
         );
 
-        // Update session state to INIT (will be set to idle by host when ready)
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#
+        // Update agent state to INIT (will be set to idle by agent when ready)
+        sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#
         )
-        .bind(SESSION_STATE_INIT)
-        .bind(&session_name)
-        .bind(SESSION_STATE_CLOSED)
+        .bind(AGENT_STATE_INIT)
+        .bind(&agent_name)
+        .bind(AGENT_STATE_CLOSED)
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
 
         // Add task to reactivate container with this message queued
         let payload = serde_json::json!({
@@ -51,31 +51,31 @@ pub async fn create_message(
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
-            VALUES (?, 'restore_session', ?, ?, 'pending')
+            INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
+            VALUES (?, 'restore_agent', ?, ?, 'pending')
             "#,
         )
-        .bind(&session_name)
-        .bind(&session.created_by) // Use session owner for proper token generation
+        .bind(&agent_name)
+        .bind(&agent.created_by) // Use agent owner for proper token generation
         .bind(payload.to_string())
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create restore task: {}", e)))?;
 
         tracing::info!(
-            "Restore task created for session {} - container will be recreated",
-            session_name
+            "Restore task created for agent {} - container will be recreated",
+            agent_name
         );
-    } else if session.state == crate::shared::models::constants::SESSION_STATE_IDLE {
-        // Update session to BUSY when processing a message
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#
+    } else if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE {
+        // Update agent to BUSY when processing a message
+        sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#
         )
-        .bind(SESSION_STATE_BUSY)
-        .bind(&session_name)
-        .bind(SESSION_STATE_IDLE)
+        .bind(AGENT_STATE_BUSY)
+        .bind(&agent_name)
+        .bind(AGENT_STATE_IDLE)
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
     }
 
     // Get the principal name
@@ -85,7 +85,7 @@ pub async fn create_message(
     };
 
     // Create the message
-    let message = SessionMessage::create(&state.db, &session_name, created_by, req)
+    let message = AgentMessage::create(&state.db, &agent_name, created_by, req)
         .await
         .map_err(|e| {
             eprintln!("Database error creating message: {e:?}");
@@ -94,7 +94,7 @@ pub async fn create_message(
 
     Ok(Json(MessageResponse {
         id: message.id,
-        session_name: message.session_name,
+        agent_name: message.agent_name,
         role: message.role,
         content: message.content,
         metadata: message.metadata,
@@ -104,7 +104,7 @@ pub async fn create_message(
 
 pub async fn list_messages(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(agent_name): Path<String>,
     Query(query): Query<ListMessagesQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<MessageResponse>>> {
@@ -130,15 +130,15 @@ pub async fn list_messages(
         }
     }
 
-    // Verify session exists
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    // Verify agent exists
+    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
     // Get messages - simplified for now
     let messages =
-        SessionMessage::find_by_session(&state.db, &session_name, query.limit, query.offset)
+        AgentMessage::find_by_agent(&state.db, &agent_name, query.limit, query.offset)
             .await
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch messages: {}", e)))?;
 
@@ -147,7 +147,7 @@ pub async fn list_messages(
         .into_iter()
         .map(|msg| MessageResponse {
             id: msg.id,
-            session_name: msg.session_name,
+            agent_name: msg.agent_name,
             role: msg.role,
             content: msg.content,
             metadata: msg.metadata,
@@ -160,42 +160,42 @@ pub async fn list_messages(
 
 pub async fn get_message_count(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(agent_name): Path<String>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Verify session exists
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    // Verify agent exists
+    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
-    let count = SessionMessage::count_by_session(&state.db, &session_name)
+    let count = AgentMessage::count_by_agent(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count messages: {}", e)))?;
 
     Ok(Json(serde_json::json!({
         "count": count,
-        "session_name": session_name
+        "agent_name": agent_name
     })))
 }
 
 pub async fn clear_messages(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(agent_name): Path<String>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Verify session exists
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    // Verify agent exists
+    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
-    let deleted_count = SessionMessage::delete_by_session(&state.db, &session_name)
+    let deleted_count = AgentMessage::delete_by_agent(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete messages: {}", e)))?;
 
     Ok(Json(serde_json::json!({
         "deleted": deleted_count,
-        "session_name": session_name
+        "agent_name": agent_name
     })))
 }

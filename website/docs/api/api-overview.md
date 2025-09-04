@@ -5,7 +5,7 @@ title: API Overview
 
 # REST API Overview
 
-Raworc provides a comprehensive REST API for Computer Use automation. The API enables programmatic control over Host sessions, dedicated computers, and enterprise operations.
+Raworc provides a comprehensive REST API for Computer Use automation. The API enables programmatic control over Agent agents, dedicated computers, and enterprise operations.
 
 ## Base Information
 
@@ -18,15 +18,15 @@ Raworc provides a comprehensive REST API for Computer Use automation. The API en
 
 All API endpoints (except `/version` and `/auth/login`) require authentication using a JWT bearer token.
 
-## Sessions
+## Agents
 
-Raworc uses sessions to provide Computer Use automation. Each session includes a dedicated computer with a Host for automating manual work. Sessions support:
+Raworc uses agents to provide Computer Use automation. Each agent includes a dedicated computer with a Agent for automating manual work. Agents support:
 
-- **Named Sessions**: Use names instead of UUIDs for easier identification
-- **Session Publishing**: Share sessions publicly with configurable permissions
+- **Named Agents**: Use names instead of UUIDs for easier identification
+- **Session Publishing**: Share agents publicly with configurable permissions
 - **Auto-Timeouts**: Automatic resource management with idle-based timeouts
-- **Auto-Restore**: Seamless session restoration when messaging closed sessions
-- **Cross-User Access**: Admin privileges and published session access
+- **Auto-Restore**: Seamless agent restoration when messaging closed agents
+- **Cross-User Access**: Admin privileges and published agent access
 
 ### Obtaining a Token
 
@@ -97,39 +97,39 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 | [`/operators/{name}`](./rest-api-reference#delete-operatorsname) | DELETE | Delete operator |
 | [`/operators/{name}/password`](./rest-api-reference#put-operatorsnamepassword) | PUT | Update operator password |
 
-### Host Sessions
+### Agent Agents
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions`](./rest-api-reference#get-sessions) | GET | List Host sessions |
-| [`/sessions`](./rest-api-reference#post-sessions) | POST | Create new Host session |
-| [`/sessions/{id}`](./rest-api-reference#get-sessionsid) | GET | Get specific session |
-| [`/sessions/{id}`](./rest-api-reference#put-sessionsid) | PUT | Update session details |
-| [`/sessions/{id}/state`](./rest-api-reference#put-sessionsidstate) | PUT | Update session state |
-| [`/sessions/{id}/close`](./rest-api-reference#post-sessionsidclose) | POST | Close Host session |
-| [`/sessions/{id}/restore`](./rest-api-reference#post-sessionsidrestore) | POST | Restore Host session |
-| [`/sessions/{id}/remix`](./rest-api-reference#post-sessionsidremix) | POST | Fork Host session |
-| [`/sessions/{id}/publish`](./rest-api-reference#post-sessionsidpublish) | POST | Publish session |
-| [`/sessions/{id}/unpublish`](./rest-api-reference#post-sessionsidunpublish) | POST | Unpublish session |
-| [`/sessions/{id}/busy`](./rest-api-reference#post-sessionsidbusy) | POST | Mark session busy |
-| [`/sessions/{id}/idle`](./rest-api-reference#post-sessionsididle) | POST | Mark session idle |
-| [`/sessions/{id}`](./rest-api-reference#delete-sessionsid) | DELETE | Delete session |
+| [`/agents`](./rest-api-reference#get-agents) | GET | List Agent agents |
+| [`/agents`](./rest-api-reference#post-agents) | POST | Create new Agent agent |
+| [`/agents/{id}`](./rest-api-reference#get-agentsid) | GET | Get specific agent |
+| [`/agents/{id}`](./rest-api-reference#put-agentsid) | PUT | Update agent details |
+| [`/agents/{id}/state`](./rest-api-reference#put-agentsidstate) | PUT | Update agent state |
+| [`/agents/{id}/close`](./rest-api-reference#post-agentsidclose) | POST | Close Agent agent |
+| [`/agents/{id}/restore`](./rest-api-reference#post-agentsidrestore) | POST | Restore Agent agent |
+| [`/agents/{id}/remix`](./rest-api-reference#post-agentsidremix) | POST | Fork Agent agent |
+| [`/agents/{id}/publish`](./rest-api-reference#post-agentsidpublish) | POST | Publish agent |
+| [`/agents/{id}/unpublish`](./rest-api-reference#post-agentsidunpublish) | POST | Unpublish agent |
+| [`/agents/{id}/busy`](./rest-api-reference#post-agentsidbusy) | POST | Mark agent busy |
+| [`/agents/{id}/idle`](./rest-api-reference#post-agentsididle) | POST | Mark agent idle |
+| [`/agents/{id}`](./rest-api-reference#delete-agentsid) | DELETE | Delete agent |
 
-### Public Sessions
-
-| Endpoint | Method | Description |
-|----------|--------|--------------|
-| [`/published/sessions`](./rest-api-reference#get-publishedsessions) | GET | List published sessions |
-| [`/published/sessions/{id}`](./rest-api-reference#get-publishedsessionsid) | GET | Get published session |
-
-### Host Communication
+### Public Agents
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/sessions/{id}/messages`](./rest-api-reference#get-sessionsidmessages) | GET | List Host messages |
-| [`/sessions/{id}/messages`](./rest-api-reference#post-sessionsidmessages) | POST | Send message to Host |
-| [`/sessions/{id}/messages/count`](./rest-api-reference#get-sessionsidmessagescount) | GET | Get message count |
-| [`/sessions/{id}/messages`](./rest-api-reference#delete-sessionsidmessages) | DELETE | Clear all messages |
+| [`/published/agents`](./rest-api-reference#get-publishedagents) | GET | List published agents |
+| [`/published/agents/{id}`](./rest-api-reference#get-publishedagentsid) | GET | Get published agent |
+
+### Agent Communication
+
+| Endpoint | Method | Description |
+|----------|--------|--------------|
+| [`/agents/{id}/messages`](./rest-api-reference#get-agentsidmessages) | GET | List Agent messages |
+| [`/agents/{id}/messages`](./rest-api-reference#post-agentsidmessages) | POST | Send message to Agent |
+| [`/agents/{id}/messages/count`](./rest-api-reference#get-agentsidmessagescount) | GET | Get message count |
+| [`/agents/{id}/messages`](./rest-api-reference#delete-agentsidmessages) | DELETE | Clear all messages |
 
 ## Request Format
 
@@ -204,7 +204,7 @@ Currently, Raworc does not enforce rate limiting, but this may change in future 
 List endpoints support pagination:
 
 ```
-GET /sessions?limit=20&offset=0
+GET /agents?limit=20&offset=0
 GET /operators?limit=50&offset=100
 ```
 
@@ -226,7 +226,7 @@ X-Page-Limit: 50
 Some endpoints support filtering:
 
 ```
-GET /sessions?state=idle
+GET /agents?state=idle
 ```
 
 ## SDK Support

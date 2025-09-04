@@ -82,21 +82,21 @@ pub mod permissions {
     pub const OPERATOR_DELETE: PermissionRequirement =
         PermissionRequirement::new("api", "operators", "delete");
 
-    // Session permissions
+    // Agent permissions
     #[allow(dead_code)]
-    pub const SESSION_LIST: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "list");
+    pub const AGENT_LIST: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "list");
     #[allow(dead_code)]
-    pub const SESSION_GET: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "get");
+    pub const AGENT_GET: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "get");
     #[allow(dead_code)]
-    pub const SESSION_CREATE: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "create");
-    pub const SESSION_UPDATE: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "update");
-    pub const SESSION_DELETE: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "delete");
+    pub const AGENT_CREATE: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "create");
+    pub const AGENT_UPDATE: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "update");
+    pub const AGENT_DELETE: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "delete");
     #[allow(dead_code)]
-    pub const SESSION_LIST_ALL: PermissionRequirement =
-        PermissionRequirement::new("api", "sessions", "list-all");
+    pub const AGENT_LIST_ALL: PermissionRequirement =
+        PermissionRequirement::new("api", "agents", "list-all");
 }

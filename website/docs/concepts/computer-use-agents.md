@@ -3,13 +3,13 @@ sidebar_position: 2
 title: Computer Use Agents
 ---
 
-# Computer Use Agents (Host)
+# Computer Use Agents (Agent)
 
-Raworc provides Computer Use Agents through the Host - Raworc's Computer Use implementation that uses computers like humans do to automate manual work. Each Host comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
+Raworc provides Computer Use Agents through the Agent - Raworc's Computer Use implementation that uses computers like humans do to automate manual work. Each Agent comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
 
 ## What are Computer Use Agents?
 
-The Host is Raworc's Computer Use Agent implementation that interacts with computers using the same interfaces humans use:
+The Agent is Raworc's Computer Use Agent implementation that interacts with computers using the same interfaces humans use:
 
 - **Visual interfaces** - Click buttons, fill forms, navigate websites
 - **Command line tools** - Execute terminal commands, run scripts, manage files  
@@ -17,9 +17,9 @@ The Host is Raworc's Computer Use Agent implementation that interacts with compu
 - **File operations** - Create, edit, move, and organize files and folders
 - **Web browsing** - Navigate websites, extract data, interact with web applications
 
-## What the Host Can Do
+## What the Agent Can Do
 
-The Host can automate any manual work that involves using a computer. Here are the key categories:
+The Agent can automate any manual work that involves using a computer. Here are the key categories:
 
 ### 🤖 Build Agentic AI Products
 **Create intelligent agents and AI-powered applications:**
@@ -179,7 +179,7 @@ The Host can automate any manual work that involves using a computer. Here are t
 
 ## Integrated Tools
 
-The Host comes equipped with powerful Anthropic-compatible tools for comprehensive computer use:
+The Agent comes equipped with powerful Anthropic-compatible tools for comprehensive computer use:
 
 ### 🔧 Bash Tool
 **Execute terminal commands and system operations:**
@@ -193,7 +193,7 @@ The Host comes equipped with powerful Anthropic-compatible tools for comprehensi
 **Example Usage:**
 ```bash
 > Install Python dependencies and run the analysis script
-Host: I'll install the required packages and execute your analysis...
+Agent: I'll install the required packages and execute your analysis...
 ● Run
 └─ pip install pandas numpy matplotlib
 ● Run  
@@ -212,7 +212,7 @@ Host: I'll install the required packages and execute your analysis...
 **Example Usage:**
 ```bash
 > Update the database configuration in config.py
-Host: I'll update your database configuration...
+Agent: I'll update your database configuration...
 ● Edit
 └─ Updated database settings in config.py lines 15-18
 ```
@@ -228,39 +228,39 @@ Host: I'll update your database configuration...
 **Example Usage:**
 ```bash
 > What are the latest Python security best practices for 2024?
-Host: Let me search for the most current Python security guidelines...
+Agent: Let me search for the most current Python security guidelines...
 ● Search
 └─ Searching for: Python security best practices 2024
 ```
 
 ## How to Get Started
 
-### Basic Host Session
+### Basic Agent Agent
 ```bash
-# Start a general-purpose Host session
-raworc session
+# Start a general-purpose Agent agent
+raworc agent
 
 You: "Help me organize these files and create a summary report"
-Host: I'll help you organize your files and create a professional summary report...
+Agent: I'll help you organize your files and create a professional summary report...
 ```
 
-### Specialized Host Setup
+### Specialized Agent Setup
 ```bash
-# Host for web automation
-raworc session \
+# Agent for web automation
+raworc agent \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in web automation and data extraction."
 
-# Host for content creation
-raworc session \
+# Agent for content creation
+raworc agent \
   --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in content creation and social media management."
 ```
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first Host session
+- **[Getting Started](/docs/getting-started)** - Set up your first Agent agent
 - **[Dev Mode](/docs/guides/dev-mode)** - Enable Coding Agent for development tasks
-- **[Sessions](/docs/concepts/sessions)** - Understand session management
+- **[Agents](/docs/concepts/agents)** - Understand agent management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all CLI commands
 

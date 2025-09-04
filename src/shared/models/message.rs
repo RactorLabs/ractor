@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SessionMessage {
+pub struct AgentMessage {
     pub id: String,
-    pub session_name: String,
+    pub agent_name: String,
     pub created_by: String,
     pub role: String,
     pub content: String,
@@ -25,7 +25,7 @@ pub struct CreateMessageRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageResponse {
     pub id: String,
-    pub session_name: String,
+    pub agent_name: String,
     pub role: String,
     pub content: String,
     pub metadata: serde_json::Value,
@@ -58,7 +58,7 @@ where
     D: serde::Deserializer<'de>,
 {
     use crate::shared::models::constants::{
-        MESSAGE_ROLE_HOST, MESSAGE_ROLE_SYSTEM, MESSAGE_ROLE_USER,
+        MESSAGE_ROLE_AGENT, MESSAGE_ROLE_SYSTEM, MESSAGE_ROLE_USER,
     };
     use serde::de::{Error, Visitor};
 
@@ -68,7 +68,7 @@ where
         type Value = String;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a valid role: 'user', 'host', or 'system'")
+            formatter.write_str("a valid role: 'user', 'agent', or 'system'")
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -76,11 +76,11 @@ where
             E: Error,
         {
             match value {
-                MESSAGE_ROLE_USER | MESSAGE_ROLE_HOST | MESSAGE_ROLE_SYSTEM => {
+                MESSAGE_ROLE_USER | MESSAGE_ROLE_AGENT | MESSAGE_ROLE_SYSTEM => {
                     Ok(value.to_string())
                 }
                 _ => Err(E::custom(format!(
-                    "invalid role '{}', must be 'user', 'host', or 'system'",
+                    "invalid role '{}', must be 'user', 'agent', or 'system'",
                     value
                 ))),
             }
@@ -112,24 +112,24 @@ where
     deserializer.deserialize_str(StrictRoleVisitor)
 }
 
-impl SessionMessage {
+impl AgentMessage {
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        agent_name: &str,
         created_by: &str,
         req: CreateMessageRequest,
-    ) -> Result<SessionMessage, sqlx::Error> {
+    ) -> Result<AgentMessage, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
         sqlx::query(
             r#"
-            INSERT INTO session_messages (id, session_name, created_by, role, content, metadata, created_at)
+            INSERT INTO agent_messages (id, agent_name, created_by, role, content, metadata, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
-        .bind(session_name)
+        .bind(agent_name)
         .bind(created_by)
         .bind(&req.role)
         .bind(&req.content)
@@ -138,9 +138,9 @@ impl SessionMessage {
         .execute(pool)
         .await?;
 
-        Ok(SessionMessage {
+        Ok(AgentMessage {
             id,
-            session_name: session_name.to_string(),
+            agent_name: agent_name.to_string(),
             created_by: created_by.to_string(),
             role: req.role,
             content: req.content,
@@ -150,26 +150,26 @@ impl SessionMessage {
     }
 
     #[allow(dead_code)]
-    pub async fn find_by_session(
+    pub async fn find_by_agent(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        agent_name: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<SessionMessage>, sqlx::Error> {
+    ) -> Result<Vec<AgentMessage>, sqlx::Error> {
         let limit = limit.unwrap_or(100).min(1000); // Max 1000 messages
         let offset = offset.unwrap_or(0);
 
-        sqlx::query_as::<_, SessionMessage>(
+        sqlx::query_as::<_, AgentMessage>(
             r#"
-            SELECT id, session_name, created_by, role, content,
+            SELECT id, agent_name, created_by, role, content,
                    metadata, created_at
-            FROM session_messages
-            WHERE session_name = ?
+            FROM agent_messages
+            WHERE agent_name = ?
             ORDER BY created_at ASC
             LIMIT ? OFFSET ?
             "#,
         )
-        .bind(session_name)
+        .bind(agent_name)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -177,20 +177,20 @@ impl SessionMessage {
     }
 
     #[allow(dead_code)]
-    pub async fn find_by_session_with_filter(
+    pub async fn find_by_agent_with_filter(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        agent_name: &str,
         query: ListMessagesQuery,
-    ) -> Result<Vec<SessionMessage>, sqlx::Error> {
+    ) -> Result<Vec<AgentMessage>, sqlx::Error> {
         let limit = query.limit.unwrap_or(100).min(1000);
         let offset = query.offset.unwrap_or(0);
 
         let mut sql = String::from(
             r#"
-            SELECT id, session_name, created_by, role, content,
+            SELECT id, agent_name, created_by, role, content,
                    metadata, created_at
-            FROM session_messages
-            WHERE session_name = ?
+            FROM agent_messages
+            WHERE agent_name = ?
             "#,
         );
 
@@ -212,7 +212,7 @@ impl SessionMessage {
         param_count += 1;
         sql.push_str(&format!(" OFFSET ${param_count}"));
 
-        let mut query_builder = sqlx::query_as::<_, SessionMessage>(&sql).bind(session_name);
+        let mut query_builder = sqlx::query_as::<_, AgentMessage>(&sql).bind(agent_name);
 
         if let Some(role) = query.role {
             query_builder = query_builder.bind(role);
@@ -225,26 +225,26 @@ impl SessionMessage {
         query_builder.bind(limit).bind(offset).fetch_all(pool).await
     }
 
-    pub async fn count_by_session(
+    pub async fn count_by_agent(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        agent_name: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_messages WHERE session_name = ?",
+            "SELECT COUNT(*) FROM agent_messages WHERE agent_name = ?",
         )
-        .bind(session_name)
+        .bind(agent_name)
         .fetch_one(pool)
         .await?;
 
         Ok(result)
     }
 
-    pub async fn delete_by_session(
+    pub async fn delete_by_agent(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        agent_name: &str,
     ) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query(r#"DELETE FROM session_messages WHERE session_name = ?"#)
-            .bind(session_name)
+        let result = sqlx::query(r#"DELETE FROM agent_messages WHERE agent_name = ?"#)
+            .bind(agent_name)
             .execute(pool)
             .await?;
 

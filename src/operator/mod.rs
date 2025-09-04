@@ -1,7 +1,7 @@
 pub mod docker_manager;
-mod session_manager;
+mod agent_manager;
 
-pub use session_manager::SessionManager;
+pub use agent_manager::AgentManager;
 
 use anyhow::Result;
 
@@ -20,12 +20,12 @@ pub async fn run() -> Result<()> {
 
     tracing::info!("ANTHROPIC_API_KEY validated successfully");
 
-    // Initialize session manager
-    let session_manager = SessionManager::new(&database_url).await?;
+    // Initialize agent manager
+    let agent_manager = AgentManager::new(&database_url).await?;
 
-    // Run session manager
-    if let Err(e) = session_manager.run().await {
-        tracing::error!("Session manager error: {}", e);
+    // Run agent manager
+    if let Err(e) = agent_manager.run().await {
+        tracing::error!("Agent manager error: {}", e);
     }
 
     Ok(())

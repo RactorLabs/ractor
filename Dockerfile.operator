@@ -15,13 +15,13 @@ RUN apt-get update && \
 # Create Python symlink
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# Create host user
-RUN useradd -m -s /bin/bash host && \
-    echo 'host ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Create agent user
+RUN useradd -m -s /bin/bash agent && \
+    echo 'agent ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-USER host
-WORKDIR /home/host
-ENV HOME=/home/host
+USER agent
+WORKDIR /home/agent
+ENV HOME=/home/agent
 
 # Install Node.js via NVM
 RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash && \
@@ -36,17 +36,17 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 # Create global symlinks as root
 USER root
-RUN export NVM_DIR="/home/host/.nvm" && \
+RUN export NVM_DIR="/home/agent/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
     NODE_VERSION=$(nvm version default) && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/node /usr/local/bin/node && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/npm /usr/local/bin/npm && \
-    ln -sf /home/host/.cargo/bin/cargo /usr/local/bin/cargo && \
-    ln -sf /home/host/.cargo/bin/rustc /usr/local/bin/rustc
+    ln -sf /home/agent/.cargo/bin/cargo /usr/local/bin/cargo && \
+    ln -sf /home/agent/.cargo/bin/rustc /usr/local/bin/rustc
 
 # Setup environment for runtime builds
-ENV NVM_DIR=/home/host/.nvm
-ENV CARGO_HOME=/home/host/.cargo
+ENV NVM_DIR=/home/agent/.nvm
+ENV CARGO_HOME=/home/agent/.cargo
 
 # Copy the pre-built binary from local build
 COPY target/release/raworc-operator /usr/local/bin/raworc-operator

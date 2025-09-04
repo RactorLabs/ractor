@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::SESSION_STATE_INIT;
+pub use constants::AGENT_STATE_INIT;
 
 // Import shared modules
 #[path = "../shared/anthropic.rs"]
@@ -25,10 +25,10 @@ use rbac::{RbacClaims, SubjectType};
 use super::docker_manager::DockerManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct SessionTask {
+pub struct AgentTask {
     id: String,
     task_type: String,
-    session_name: String,
+    agent_name: String,
     created_by: String,
     payload: serde_json::Value,
     status: String,
@@ -39,14 +39,14 @@ pub struct SessionTask {
     error: Option<String>,
 }
 
-pub struct SessionManager {
+pub struct AgentManager {
     pool: Pool<MySql>,
     docker_manager: DockerManager,
     key_manager: AnthropicKeyManager,
     jwt_secret: String,
 }
 
-impl SessionManager {
+impl AgentManager {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
@@ -71,7 +71,7 @@ impl SessionManager {
     }
 
     pub async fn run(&self) -> Result<()> {
-        info!("Session Manager started, polling for tasks and auto-close monitoring...");
+        info!("Agent Manager started, polling for tasks and auto-close monitoring...");
 
         loop {
             // Process pending tasks
@@ -84,7 +84,7 @@ impl SessionManager {
             };
 
             // Process auto-close monitoring
-            let sessions_closed = match self.process_auto_close().await {
+            let agents_closed = match self.process_auto_close().await {
                 Ok(closed) => closed,
                 Err(e) => {
                     error!("Error processing auto-close: {}", e);
@@ -93,26 +93,26 @@ impl SessionManager {
             };
 
             // If no work was done, sleep before next iteration
-            if tasks_processed == 0 && sessions_closed == 0 {
+            if tasks_processed == 0 && agents_closed == 0 {
                 sleep(Duration::from_secs(10)).await;
             }
         }
     }
 
-    /// Generate a session-specific API key for Anthropic
-    async fn generate_session_api_key(&self, session_name: &str) -> Result<String> {
+    /// Generate a agent-specific API key for Anthropic
+    async fn generate_agent_api_key(&self, agent_name: &str) -> Result<String> {
         self.key_manager
-            .generate_session_api_key(session_name)
+            .generate_agent_api_key(agent_name)
             .await
     }
 
-    /// Process sessions that need auto-closing due to timeout
+    /// Process agents that need auto-closing due to timeout
     async fn process_auto_close(&self) -> Result<usize> {
-        // Find idle sessions that have passed their auto_close_at time
-        let sessions_to_close: Vec<(String,)> = sqlx::query_as(
+        // Find idle agents that have passed their auto_close_at time
+        let agents_to_close: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT name
-            FROM sessions
+            FROM agents
             WHERE auto_close_at <= NOW() 
               AND auto_close_at IS NOT NULL
               AND state = 'idle'
@@ -123,45 +123,45 @@ impl SessionManager {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-close: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to find agents to auto-close: {}", e))?;
 
         let mut closed_count = 0;
 
-        for (session_name,) in sessions_to_close {
-            info!("Auto-closing session {} due to timeout", session_name);
+        for (agent_name,) in agents_to_close {
+            info!("Auto-closing agent {} due to timeout", agent_name);
 
-            // Create close task for the session
+            // Create close task for the agent
             let task_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
-                VALUES (?, ?, 'close_session', 'system', '{"reason": "auto_close_timeout"}', 'pending')
+                INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+                VALUES (?, ?, 'close_agent', 'system', '{"reason": "auto_close_timeout"}', 'pending')
                 "#)
             .bind(&task_id)
-            .bind(&session_name)
+            .bind(&agent_name)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-close task for session {}: {}", session_name, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-close task for agent {}: {}", agent_name, e))?;
 
             info!(
-                "Created auto-close task {} for session {}",
-                task_id, session_name
+                "Created auto-close task {} for agent {}",
+                task_id, agent_name
             );
             closed_count += 1;
         }
 
         if closed_count > 0 {
-            info!("Scheduled {} sessions for auto-close", closed_count);
+            info!("Scheduled {} agents for auto-close", closed_count);
         }
 
         Ok(closed_count)
     }
 
-    /// Generate a session-specific RAWORC token for the given principal
-    fn generate_session_token(
+    /// Generate a agent-specific RAWORC token for the given principal
+    fn generate_agent_token(
         &self,
         principal: &str,
         principal_type: SubjectType,
-        session_name: &str,
+        agent_name: &str,
     ) -> Result<String> {
         let exp = chrono::Utc::now() + chrono::Duration::hours(24);
         let claims = RbacClaims {
@@ -169,7 +169,7 @@ impl SessionManager {
             sub_type: principal_type,
             exp: exp.timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
-            iss: "raworc-session-manager".to_string(),
+            iss: "raworc-agent-manager".to_string(),
         };
 
         let token = encode(
@@ -177,11 +177,11 @@ impl SessionManager {
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_ref()),
         )
-        .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to generate agent token: {}", e))?;
 
         info!(
-            "Generated session token for principal: {} (session: {})",
-            principal, session_name
+            "Generated agent token for principal: {} (agent: {})",
+            principal, agent_name
         );
         Ok(token)
     }
@@ -200,13 +200,13 @@ impl SessionManager {
         Ok(processed)
     }
 
-    async fn fetch_pending_tasks(&self) -> Result<Vec<SessionTask>> {
+    async fn fetch_pending_tasks(&self) -> Result<Vec<AgentTask>> {
         // MySQL doesn't support RETURNING, so we need to do this in two steps
         // First, get and lock the pending tasks
         let task_ids: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT id
-            FROM session_tasks
+            FROM agent_tasks
             WHERE status = 'pending'
             ORDER BY created_at
             LIMIT 5
@@ -224,7 +224,7 @@ impl SessionManager {
         let ids: Vec<String> = task_ids.into_iter().map(|(id,)| id).collect();
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query_str = format!(
-            "UPDATE session_tasks SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
+            "UPDATE agent_tasks SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
         );
 
         let mut query = sqlx::query(&query_str);
@@ -234,8 +234,8 @@ impl SessionManager {
         query.execute(&self.pool).await?;
 
         // Fetch the updated tasks
-        let query_str = format!("SELECT * FROM session_tasks WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_as::<_, SessionTask>(&query_str);
+        let query_str = format!("SELECT * FROM agent_tasks WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, AgentTask>(&query_str);
         for id in &ids {
             query = query.bind(id);
         }
@@ -244,17 +244,17 @@ impl SessionManager {
         Ok(tasks)
     }
 
-    async fn process_task(&self, task: SessionTask) -> Result<()> {
+    async fn process_task(&self, task: AgentTask) -> Result<()> {
         info!("Processing task {} of type {}", task.id, task.task_type);
 
         let result = match task.task_type.as_str() {
-            "create_session" => self.handle_create_session(task.clone()).await,
-            "destroy_session" => self.handle_destroy_session(task.clone()).await,
+            "create_agent" => self.handle_create_agent(task.clone()).await,
+            "destroy_agent" => self.handle_destroy_agent(task.clone()).await,
             "execute_command" => self.handle_execute_command(task.clone()).await,
-            "close_session" => self.handle_close_session(task.clone()).await,
-            "restore_session" => self.handle_restore_session(task.clone()).await,
-            "publish_session" => self.handle_publish_session(task.clone()).await,
-            "unpublish_session" => self.handle_unpublish_session(task.clone()).await,
+            "close_agent" => self.handle_close_agent(task.clone()).await,
+            "restore_agent" => self.handle_restore_agent(task.clone()).await,
+            "publish_agent" => self.handle_publish_agent(task.clone()).await,
+            "unpublish_agent" => self.handle_unpublish_agent(task.clone()).await,
             _ => {
                 warn!("Unknown task type: {}", task.task_type);
                 Err(anyhow::anyhow!("Unknown task type"))
@@ -275,10 +275,10 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_create_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = task.session_name.clone();
+    pub async fn handle_create_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name.clone();
 
-        // Parse the payload to get session creation parameters
+        // Parse the payload to get agent creation parameters
         let mut secrets = task
             .payload
             .get("secrets")
@@ -327,32 +327,32 @@ impl SessionManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic tokens for this session
-        info!("Generating dynamic tokens for session {}", session_name);
-        let session_api_key = self
-            .generate_session_api_key(&session_name)
+        // Generate dynamic tokens for this agent
+        info!("Generating dynamic tokens for agent {}", agent_name);
+        let agent_api_key = self
+            .generate_agent_api_key(&agent_name)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate session API key: {}", e))?;
-        let session_token = self
-            .generate_session_token(principal, principal_type, &session_name)
-            .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to generate agent API key: {}", e))?;
+        let agent_token = self
+            .generate_agent_token(principal, principal_type, &agent_name)
+            .map_err(|e| anyhow::anyhow!("Failed to generate agent token: {}", e))?;
 
         info!(
-            "Generated dynamic tokens for session {} (principal: {})",
-            session_name, principal
+            "Generated dynamic tokens for agent {} (principal: {})",
+            agent_name, principal
         );
 
-        info!("Creating session {} for principal {} ({:?}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
-              session_name, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating agent {} for principal {} ({:?}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
+              agent_name, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a remix session from task payload
+        // Check if this is a remix agent from task payload
         let is_remix = task
             .payload
             .get("remix")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // For remix sessions, extract prompt from task payload
+        // For remix agents, extract prompt from task payload
         let remix_prompt = if is_remix {
             task.payload
                 .get("prompt")
@@ -363,11 +363,11 @@ impl SessionManager {
         };
 
         if is_remix {
-            let parent_session_name = task
+            let parent_agent_name = task
                 .payload
-                .get("parent_session_name")
+                .get("parent_agent_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for remix"))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_agent_name for remix"))?;
 
             let copy_data = task
                 .payload
@@ -390,7 +390,7 @@ impl SessionManager {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            // For remix sessions, get principal info from remix task payload
+            // For remix agents, get principal info from remix task payload
             let remix_principal = task
                 .payload
                 .get("principal")
@@ -417,23 +417,23 @@ impl SessionManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}, copy_content: {}) for principal {} ({})", 
-                  session_name, parent_session_name, copy_data, copy_code, copy_secrets, copy_content, remix_principal, remix_principal_type_str);
+            info!("Creating remix agent {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}, copy_content: {}) for principal {} ({})", 
+                  agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content, remix_principal, remix_principal_type_str);
 
-            // For remix sessions, create container with selective volume copy from parent
-            // Generate fresh tokens for remix session
+            // For remix agents, create container with selective volume copy from parent
+            // Generate fresh tokens for remix agent
             let remix_api_key = self
-                .generate_session_api_key(&session_name)
+                .generate_agent_api_key(&agent_name)
                 .await
-                .map_err(|e| anyhow::anyhow!("Failed to generate remix session API key: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to generate remix agent API key: {}", e))?;
             let remix_token = self
-                .generate_session_token(remix_principal, remix_principal_type, &session_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate remix session token: {}", e))?;
+                .generate_agent_token(remix_principal, remix_principal_type, &agent_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate remix agent token: {}", e))?;
 
             self.docker_manager
                 .create_container_with_selective_copy_and_tokens(
-                    &session_name,
-                    parent_session_name,
+                    &agent_name,
+                    parent_agent_name,
                     copy_data,
                     copy_code,
                     copy_secrets,
@@ -446,17 +446,17 @@ impl SessionManager {
                 )
                 .await?;
         } else {
-            info!("Creating new session {}", session_name);
+            info!("Creating new agent {}", agent_name);
 
-            // For regular sessions, create container with session parameters and generated tokens
+            // For regular agents, create container with agent parameters and generated tokens
             self.docker_manager
                 .create_container_with_params_and_tokens(
-                    &session_name,
+                    &agent_name,
                     secrets,
                     instructions,
                     setup,
-                    session_api_key,
-                    session_token,
+                    agent_api_key,
+                    agent_token,
                     principal.to_string(),
                     principal_type_str.to_string(),
                     task.created_at,
@@ -467,68 +467,68 @@ impl SessionManager {
         // Send prompt if provided (BEFORE setting state to IDLE)
         let prompt_to_send = prompt.or(remix_prompt);
         if let Some(prompt) = prompt_to_send {
-            info!("Sending prompt to session {}: {}", session_name, prompt);
+            info!("Sending prompt to agent {}: {}", agent_name, prompt);
 
             // Create message record in database
             let message_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_messages (id, session_name, created_by, content, role, created_at)
+                INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
                 VALUES (?, ?, ?, ?, 'user', NOW())
                 "#)
             .bind(&message_id)
-            .bind(&session_name)
+            .bind(&agent_name)
             .bind(&principal)
             .bind(&prompt)
             .execute(&self.pool)
             .await?;
 
             info!(
-                "Prompt message {} created for session {}",
-                message_id, session_name
+                "Prompt message {} created for agent {}",
+                message_id, agent_name
             );
         }
 
-        // Set session state to INIT after container creation (host will set to IDLE when ready)
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE name = ?"#)
-            .bind(SESSION_STATE_INIT)
-            .bind(&session_name)
+        // Set agent state to INIT after container creation (agent will set to IDLE when ready)
+        sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = NOW() WHERE name = ?"#)
+            .bind(AGENT_STATE_INIT)
+            .bind(&agent_name)
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
 
-    pub async fn handle_destroy_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = task.session_name;
+    pub async fn handle_destroy_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name;
 
-        info!("Deleting container and volume for session {}", session_name);
-        self.docker_manager.delete_container(&session_name).await?;
+        info!("Deleting container and volume for agent {}", agent_name);
+        self.docker_manager.delete_container(&agent_name).await?;
 
-        // No need to update session state - DELETE endpoint already soft-deletes the session
+        // No need to update agent state - DELETE endpoint already soft-deletes the agent
 
         Ok(())
     }
 
-    pub async fn handle_execute_command(&self, task: SessionTask) -> Result<()> {
-        let session_name = task.session_name;
+    pub async fn handle_execute_command(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name;
         let command = task.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
-        info!("Executing command in session {}: {}", session_name, command);
+        info!("Executing command in agent {}: {}", agent_name, command);
         let output = self
             .docker_manager
-            .execute_command(&session_name, command)
+            .execute_command(&agent_name, command)
             .await?;
 
         sqlx::query(
             r#"
-            INSERT INTO command_results (id, session_name, command, output, created_at)
+            INSERT INTO command_results (id, agent_name, command, output, created_at)
             VALUES (?, ?, ?, ?, NOW())
             "#,
         )
         .bind(uuid::Uuid::new_v4().to_string())
-        .bind(session_name)
+        .bind(agent_name)
         .bind(command)
         .bind(output)
         .execute(&self.pool)
@@ -540,7 +540,7 @@ impl SessionManager {
     async fn mark_task_completed(&self, task_id: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_tasks
+            UPDATE agent_tasks
             SET status = 'completed',
                 completed_at = NOW(),
                 updated_at = NOW()
@@ -557,7 +557,7 @@ impl SessionManager {
     async fn mark_task_failed(&self, task_id: &str, error: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_tasks
+            UPDATE agent_tasks
             SET status = 'failed',
                 error = ?,
                 completed_at = NOW(),
@@ -573,52 +573,52 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_close_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = task.session_name;
+    pub async fn handle_close_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name;
 
-        info!("Closing container for session {}", session_name);
+        info!("Closing container for agent {}", agent_name);
 
         // Close the Docker container but keep the persistent volume
-        self.docker_manager.close_container(&session_name).await?;
+        self.docker_manager.close_container(&agent_name).await?;
 
-        // Update session state to closed
-        sqlx::query(r#"UPDATE sessions SET state = 'closed' WHERE name = ?"#)
-            .bind(&session_name)
+        // Update agent state to closed
+        sqlx::query(r#"UPDATE agents SET state = 'closed' WHERE name = ?"#)
+            .bind(&agent_name)
             .execute(&self.pool)
             .await?;
 
-        info!("Session {} state updated to closed", session_name);
+        info!("Agent {} state updated to closed", agent_name);
 
         Ok(())
     }
 
-    pub async fn handle_restore_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = task.session_name;
+    pub async fn handle_restore_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name;
         let principal = task.created_by.clone();
 
-        info!("Restoring container for session {}", session_name);
+        info!("Restoring container for agent {}", agent_name);
 
-        // Generate fresh tokens for restored session
+        // Generate fresh tokens for restored agent
         info!(
-            "Generating fresh tokens for restored session {}",
-            session_name
+            "Generating fresh tokens for restored agent {}",
+            agent_name
         );
         let restore_api_key = self
-            .generate_session_api_key(&session_name)
+            .generate_agent_api_key(&agent_name)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate restore session API key: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to generate restore agent API key: {}", e))?;
         let restore_token = self
-            .generate_session_token(&principal, SubjectType::Subject, &session_name)
-            .map_err(|e| anyhow::anyhow!("Failed to generate restore session token: {}", e))?;
+            .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
+            .map_err(|e| anyhow::anyhow!("Failed to generate restore agent token: {}", e))?;
 
-        // All restored sessions were closed (container destroyed), so recreate container
+        // All restored agents were closed (container destroyed), so recreate container
         info!(
-            "Session {} was closed, restoring container with persistent volume and fresh tokens",
-            session_name
+            "Agent {} was closed, restoring container with persistent volume and fresh tokens",
+            agent_name
         );
         self.docker_manager
             .restore_container_with_tokens(
-                &session_name,
+                &agent_name,
                 restore_api_key,
                 restore_token,
                 principal.clone(),
@@ -627,21 +627,21 @@ impl SessionManager {
             )
             .await?;
 
-        // Update last_activity_at and clear auto_close_at since session is being restored
+        // Update last_activity_at and clear auto_close_at since agent is being restored
         sqlx::query(
-            r#"UPDATE sessions SET last_activity_at = NOW(), auto_close_at = NULL WHERE name = ?"#,
+            r#"UPDATE agents SET last_activity_at = NOW(), auto_close_at = NULL WHERE name = ?"#,
         )
-        .bind(&session_name)
+        .bind(&agent_name)
         .execute(&self.pool)
         .await?;
 
-        info!("Container restored for session {}", session_name);
+        info!("Container restored for agent {}", agent_name);
 
         // Send prompt if provided
         if let Some(prompt) = task.payload.get("prompt").and_then(|v| v.as_str()) {
             info!(
-                "Sending prompt to restored session {}: {}",
-                session_name, prompt
+                "Sending prompt to restored agent {}: {}",
+                agent_name, prompt
             );
 
             // Get the principal name from the task
@@ -650,28 +650,28 @@ impl SessionManager {
             // Create message record in database
             let message_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_messages (id, session_name, created_by, content, role, created_at)
+                INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
                 VALUES (?, ?, ?, ?, 'user', NOW())
                 "#)
             .bind(&message_id)
-            .bind(&session_name)
+            .bind(&agent_name)
             .bind(&principal)
             .bind(prompt)
             .execute(&self.pool)
             .await?;
 
             info!(
-                "Prompt message {} created for restored session {}",
-                message_id, session_name
+                "Prompt message {} created for restored agent {}",
+                message_id, agent_name
             );
         }
 
         Ok(())
     }
 
-    async fn handle_publish_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = &task.session_name;
-        info!("Publishing content for session {}", session_name);
+    async fn handle_publish_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = &task.agent_name;
+        info!("Publishing content for agent {}", agent_name);
 
         // Check if docker command is available
         match tokio::process::Command::new("which")
@@ -689,10 +689,10 @@ impl SessionManager {
             }
         }
 
-        let session_container = format!("raworc_session_{}", session_name);
+        let agent_container = format!("raworc_agent_{}", agent_name);
 
         // First, create the public directory in the server container
-        let public_dir = format!("/public/{}", session_name);
+        let public_dir = format!("/public/{}", agent_name);
         info!(
             "Executing: docker exec raworc_server mkdir -p {}",
             public_dir
@@ -704,8 +704,8 @@ impl SessionManager {
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to execute mkdir command for session {}: {}",
-                    session_name,
+                    "Failed to execute mkdir command for agent {}: {}",
+                    agent_name,
                     e
                 )
             })?;
@@ -714,33 +714,33 @@ impl SessionManager {
             let stderr = String::from_utf8_lossy(&mkdir_output.stderr);
             let stdout = String::from_utf8_lossy(&mkdir_output.stdout);
             return Err(anyhow::anyhow!(
-                "Failed to create public directory for session {}: stdout: {}, stderr: {}",
-                session_name,
+                "Failed to create public directory for agent {}: stdout: {}, stderr: {}",
+                agent_name,
                 stdout,
                 stderr
             ));
         }
 
-        // Copy content files from session container directly to server container's public directory
-        // This uses docker cp to copy from session container to host, then from host to server container
-        let temp_dir = format!("/tmp/content_publish_{}", session_name);
+        // Copy content files from agent container directly to server container's public directory
+        // This uses docker cp to copy from agent container to filesystem, then from filesystem to server container
+        let temp_dir = format!("/tmp/content_publish_{}", agent_name);
 
-        // Create temp directory on host
+        // Create temp directory on filesystem
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| anyhow::anyhow!("Failed to create temp directory: {}", e))?;
 
-        // Copy from session container to host temp
+        // Copy from agent container to filesystem temp
         let copy1_output = tokio::process::Command::new("docker")
             .args(&[
                 "cp",
-                &format!("{}:/session/content/.", session_container),
+                &format!("{}:/agent/content/.", agent_container),
                 &format!("{}/", temp_dir),
             ])
             .output()
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to execute copy command from session container: {}",
+                    "Failed to execute copy command from agent container: {}",
                     e
                 )
             })?;
@@ -749,17 +749,17 @@ impl SessionManager {
             let _ = std::fs::remove_dir_all(&temp_dir);
             let stderr = String::from_utf8_lossy(&copy1_output.stderr);
             return Err(anyhow::anyhow!(
-                "Failed to copy content from session container: {}",
+                "Failed to copy content from agent container: {}",
                 stderr
             ));
         }
 
-        // Copy from host temp to server container
+        // Copy from filesystem temp to server container
         let copy2_output = tokio::process::Command::new("docker")
             .args(&[
                 "cp",
                 &format!("{}//.", temp_dir),
-                &format!("raworc_server:/public/{}/", session_name),
+                &format!("raworc_server:/public/{}/", agent_name),
             ])
             .output()
             .await
@@ -779,18 +779,18 @@ impl SessionManager {
         }
 
         info!(
-            "Content published for session {} to /public/{}/",
-            session_name, session_name
+            "Content published for agent {} to /public/{}/",
+            agent_name, agent_name
         );
         Ok(())
     }
 
-    async fn handle_unpublish_session(&self, task: SessionTask) -> Result<()> {
-        let session_name = &task.session_name;
-        info!("Unpublishing content for session {}", session_name);
+    async fn handle_unpublish_agent(&self, task: AgentTask) -> Result<()> {
+        let agent_name = &task.agent_name;
+        info!("Unpublishing content for agent {}", agent_name);
 
-        // Remove public directory for this session
-        let public_path = format!("/public/{}", session_name);
+        // Remove public directory for this agent
+        let public_path = format!("/public/{}", agent_name);
 
         // Remove the published directory
         let remove_cmd = format!("rm -rf {}", public_path);
@@ -801,13 +801,13 @@ impl SessionManager {
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to remove published content for session {}: {}",
-                    session_name,
+                    "Failed to remove published content for agent {}: {}",
+                    agent_name,
                     e
                 )
             })?;
 
-        info!("Content unpublished for session {}", session_name);
+        info!("Content unpublished for agent {}", agent_name);
         Ok(())
     }
 }

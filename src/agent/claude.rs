@@ -76,7 +76,7 @@ impl ClaudeClient {
         // Bash tool implementation following Anthropic specification bash_20250124
         Tool {
             name: "bash".to_string(),
-            description: "Execute shell commands in a persistent bash session, allowing system operations, script execution, and command-line automation. Commands are executed in the session directory (/session) and maintain state between calls.".to_string(),
+            description: "Execute shell commands in a persistent bash agent, allowing system operations, script execution, and command-line automation. Commands are executed in the agent directory (/agent) and maintain state between calls.".to_string(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -86,7 +86,7 @@ impl ClaudeClient {
                     },
                     "restart": {
                         "type": "boolean",
-                        "description": "Set to true to restart the bash session",
+                        "description": "Set to true to restart the bash agent",
                         "default": false
                     }
                 },
@@ -110,7 +110,7 @@ impl ClaudeClient {
                     },
                     "path": {
                         "type": "string",
-                        "description": "Path to the file (relative to /session/)"
+                        "description": "Path to the file (relative to /agent/)"
                     },
                     "file_text": {
                         "type": "string",
@@ -427,9 +427,9 @@ impl ClaudeClient {
 
         info!("Executing bash command: {} (restart: {})", command, restart);
 
-        // Handle session restart if requested
+        // Handle agent restart if requested
         if restart {
-            info!("Bash session restart requested - this is handled automatically per command");
+            info!("Bash agent restart requested - this is handled automatically per command");
             // Note: Our current implementation executes each command in a fresh process,
             // so restart doesn't change behavior. In a persistent shell implementation,
             // this would reset the shell state.
@@ -439,16 +439,16 @@ impl ClaudeClient {
         self.validate_bash_command(command)?;
 
         // Ensure logs directory exists
-        if let Err(e) = tokio::fs::create_dir_all("/session/logs").await {
+        if let Err(e) = tokio::fs::create_dir_all("/agent/logs").await {
             warn!("Failed to create logs directory: {}", e);
         }
 
-        // Execute the command in the session directory
+        // Execute the command in the agent directory
         let start_time = std::time::SystemTime::now();
         let output = tokio::process::Command::new("bash")
             .arg("-c")
             .arg(command)
-            .current_dir("/session")
+            .current_dir("/agent")
             .output()
             .await
             .map_err(|e| HostError::Claude(format!("Failed to execute bash command: {}", e)))?;
@@ -506,7 +506,7 @@ impl ClaudeClient {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let log_filename = format!("/session/logs/bash_{}.log", timestamp);
+        let log_filename = format!("/agent/logs/bash_{}.log", timestamp);
 
         let log_content = format!(
             "=== BASH COMMAND LOG ===\n\
@@ -555,7 +555,7 @@ impl ClaudeClient {
             .map(|d| d.as_secs())
             .unwrap_or(0);
 
-        let log_filename = format!("/session/logs/text_editor_{}.log", timestamp);
+        let log_filename = format!("/agent/logs/text_editor_{}.log", timestamp);
 
         // Extract additional parameters for logging
         let mut params = Vec::new();
@@ -684,7 +684,7 @@ impl ClaudeClient {
             )
         })?;
 
-        // Validate and normalize path (must be within /session/)
+        // Validate and normalize path (must be within /agent/)
         let full_path = self.validate_and_normalize_path(path)?;
 
         info!(
@@ -694,7 +694,7 @@ impl ClaudeClient {
         );
 
         // Ensure logs directory exists
-        if let Err(e) = tokio::fs::create_dir_all("/session/logs").await {
+        if let Err(e) = tokio::fs::create_dir_all("/agent/logs").await {
             warn!("Failed to create logs directory: {}", e);
         }
 
@@ -744,14 +744,14 @@ impl ClaudeClient {
             )));
         }
 
-        // Normalize path relative to /session/
-        let session_root = Path::new("/session");
-        let full_path = session_root.join(path);
+        // Normalize path relative to /agent/
+        let agent_root = Path::new("/agent");
+        let full_path = agent_root.join(path);
 
-        // Ensure the resolved path is still within /session/
-        if !full_path.starts_with(session_root) {
+        // Ensure the resolved path is still within /agent/
+        if !full_path.starts_with(agent_root) {
             return Err(HostError::Claude(format!(
-                "Invalid path: must be within /session/ ({})",
+                "Invalid path: must be within /agent/ ({})",
                 path
             )));
         }

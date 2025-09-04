@@ -47,7 +47,7 @@ usage() {
   echo "Components:"
   echo "  server      Build the server image"
   echo "  operator    Build the operator image"
-  echo "  host        Build the host image"
+  echo "  agent       Build the agent image"
   echo "  all         Build all components (default)"
   echo ""
   echo "Options:"
@@ -94,7 +94,7 @@ fi
 
 # Expand 'all' to actual components
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("server" "operator" "host")
+  COMPONENTS=("server" "operator" "agent")
 fi
 
 print_status "Building Raworc Docker images"
@@ -138,9 +138,9 @@ for component in "${COMPONENTS[@]}"; do
     image_name="raworc_operator:${TAG}"
     dockerfile="Dockerfile.operator"
     ;;
-  host)
-    image_name="raworc_host:${TAG}"
-    dockerfile="Dockerfile.host"
+  agent)
+    image_name="raworc_agent:${TAG}"
+    dockerfile="Dockerfile.agent"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -180,7 +180,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | operator | host)
+  server | operator | agent)
     echo "  raworc_${component}:${TAG}"
     ;;
   esac

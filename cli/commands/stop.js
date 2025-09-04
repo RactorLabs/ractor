@@ -7,7 +7,7 @@ module.exports = (program) => {
     .command('stop')
     .description('Stop Raworc services using direct Docker container management')
     .argument('[components...]', 'Components to stop (server, operator, mysql)', [])
-    .option('-c, --cleanup', 'Clean up session containers after stopping')
+    .option('-c, --cleanup', 'Clean up agent containers after stopping')
     .action(async (components, options) => {
       try {
         // Show command box with stop info
@@ -59,7 +59,7 @@ module.exports = (program) => {
         
         if (!options.cleanup && !services.length) {
           console.log();
-          display.info('Tip: Use --cleanup to also remove session containers');
+          display.info('Tip: Use --cleanup to also remove agent containers');
         }
 
         // Show final status

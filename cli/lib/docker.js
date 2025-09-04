@@ -8,7 +8,7 @@ class DockerManager {
       mysql: 'mysql:8.0',
       server: 'raworc/raworc_server:latest',
       operator: 'raworc/raworc_operator:latest',
-      host: 'raworc/raworc_host:latest'
+      agent: 'raworc/raworc_agent:latest'
     };
   }
 
@@ -160,11 +160,11 @@ class DockerManager {
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
-          '-e', `HOST_IMAGE=${this.images.host}`,
-          '-e', 'HOST_CPU_LIMIT=0.5',
-          '-e', 'HOST_MEMORY_LIMIT=536870912',
-          '-e', 'HOST_DISK_LIMIT=1073741824',
-          '-e', 'HOST_VOLUMES_PATH=/var/lib/raworc/volumes',
+          '-e', `AGENT_IMAGE=${this.images.agent}`,
+          '-e', 'AGENT_CPU_LIMIT=0.5',
+          '-e', 'AGENT_MEMORY_LIMIT=536870912',
+          '-e', 'AGENT_DISK_LIMIT=1073741824',
+          '-e', 'AGENT_VOLUMES_PATH=/var/lib/raworc/volumes',
           '-e', 'RUST_LOG=info',
           this.images.operator
         ]);
@@ -213,7 +213,7 @@ class DockerManager {
       }
     }
 
-    // Clean up session containers if requested
+    // Clean up agent containers if requested
     if (cleanup) {
       await this.cleanupContainers();
     }
@@ -232,7 +232,7 @@ class DockerManager {
   // Pull latest images from Docker Hub
   async pull() {
     for (const [component, image] of Object.entries(this.images)) {
-      // Skip mysql (official image) but include host for proactive pulling
+      // Skip mysql (official image) but include agent for proactive pulling
       if (component !== 'mysql') {
         console.log(`📦 Pulling ${image}...`);
         try {
@@ -240,7 +240,7 @@ class DockerManager {
           console.log(`✅ Successfully pulled ${image}`);
         } catch (error) {
           console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
-          if (component === 'host') {
+          if (component === 'agent') {
             console.warn(`   The operator will attempt to pull this image when needed.`);
           }
         }
@@ -264,10 +264,10 @@ class DockerManager {
     return this.checkDocker();
   }
 
-  // Clean up session containers
+  // Clean up agent containers
   async cleanupContainers() {
     try {
-      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=raworc_session_'], { silent: true });
+      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=raworc_agent_'], { silent: true });
       
       if (result.stdout.trim()) {
         const containerIds = result.stdout.trim().split('\n').filter(id => id);

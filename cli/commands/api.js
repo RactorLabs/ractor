@@ -74,7 +74,7 @@ async function apiCommand(endpoint, options) {
         console.log();
         display.info('Endpoint not found:');
         console.log('   Check the endpoint URL spelling');
-        console.log('   Available endpoints: /version, /sessions, /auth');
+        console.log('   Available endpoints: /version, /agents, /auth');
       } else if (response.status === 0) {
         console.log();
         display.info('Connection failed:');
@@ -117,13 +117,13 @@ async function apiCommand(endpoint, options) {
     if (endpoint === 'health' && response.success) {
       console.log();
       console.log(chalk.cyan('💡 Raworc is healthy! Try these commands:'));
-      console.log('  • List sessions: ' + chalk.white('raworc api sessions'));
+      console.log('  • List agents: ' + chalk.white('raworc api agents'));
       console.log('  • Check auth: ' + chalk.white('raworc api auth'));
-    } else if (endpoint === 'sessions' && response.success) {
+    } else if (endpoint === 'agents' && response.success) {
       console.log();
       display.info('Next steps:');
-      console.log('  • Create session: ' + chalk.white('raworc api sessions -m POST'));
-      console.log('  • Interactive session: ' + chalk.white('raworc session'));
+      console.log('  • Create agent: ' + chalk.white('raworc api agents -m POST'));
+      console.log('  • Interactive agent: ' + chalk.white('raworc agent'));
     }
 
   } catch (error) {

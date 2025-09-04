@@ -21,7 +21,7 @@ For complete project overview, features, and architecture, see [README.md](READM
 **Key Points for Development:**
 - Raworc is a Remote Agentic Work Orchestrator providing Computer use agents with dedicated computers
 - Published as npm package (`@raworc/cli`) with pre-built Docker images from Docker Hub
-- Uses Kubernetes-inspired control plane pattern for session orchestration
+- Uses Kubernetes-inspired control plane pattern for agent orchestration
 - Development repository for local development and contributions
 
 ## Two Ways to Use Raworc
@@ -43,7 +43,7 @@ raworc start
 # Authenticate and use the system
 raworc login -u admin -p admin
 raworc auth -t <jwt-token-from-login>
-raworc session
+raworc agent
 raworc api version
 ```
 
@@ -71,7 +71,7 @@ cd raworc
 
 # Link CLI for development (shell script links the Node.js CLI from cli/ folder)
 ./scripts/link.sh
-raworc session  # Now uses your local build
+raworc agent  # Now uses your local build
 ```
 
 **Key Points:**
@@ -99,8 +99,8 @@ raworc session  # Now uses your local build
 raworc/
 ├── src/           # Rust backend services
 │   ├── server/    # API server  
-│   ├── operator/  # Session orchestration
-│   └── host/      # Session runtime with Claude integration
+│   ├── operator/  # Agent orchestration
+│   └── agent/      # Agent runtime with Claude integration
 ├── cli/           # Node.js CLI (@raworc/cli)
 ├── scripts/       # Development automation
 ├── website/       # Documentation site (Docusaurus)
@@ -131,13 +131,13 @@ export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 ./scripts/link.sh
 raworc login -u admin -p admin
 raworc auth -t <jwt-token-from-login>
-raworc session
+raworc agent
 ```
 
 ### Publishing
 
 This repository publishes to:
-- **Docker Hub** - `raworc/raworc_server`, `raworc/raworc_operator`, `raworc/raworc_host`
+- **Docker Hub** - `raworc/raworc_server`, `raworc/raworc_operator`, `raworc/raworc_agent`
 - **npm** - `@raworc/cli` package
 
 ### Architecture
@@ -161,7 +161,7 @@ Raworc uses a **Kubernetes-inspired control plane** pattern for Computer use age
                     ┌─────────────────────────────────┐
                     │    Computer Use Agents          │
                     │ ┌─────────────┐ ┌─────────────┐ │
-                    │ │   Host +    │ │   Host +    │ │
+                    │ │   Agent +    │ │   Agent +    │ │
                     │ │  Computer   │ │  Computer   │ │
                     │ └─────────────┘ └─────────────┘ │
                     └─────────────────────────────────┘
@@ -222,23 +222,23 @@ git clone <this-repo>
 | `raworc reset` | **Nuclear option**: Clean everything | `raworc reset` |
 | `raworc pull` | Update CLI and Docker images | `raworc pull` |
 
-### Session Management
+### Agent Management
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `raworc session` | Start interactive session | `raworc session` |
-| `raworc session restore <id>` | Restore session | `raworc session restore abc123` |
-| `raworc session remix <id>` | Remix session | `raworc session remix abc123` |
-| `raworc session publish <id>` | Publish session | `raworc session publish abc123` |
-| `raworc session unpublish <id>` | Unpublish session | `raworc session unpublish abc123` |
+| `raworc agent` | Start interactive agent | `raworc agent` |
+| `raworc agent restore <id>` | Restore agent | `raworc agent restore abc123` |
+| `raworc agent remix <id>` | Remix agent | `raworc agent remix abc123` |
+| `raworc agent publish <id>` | Publish agent | `raworc agent publish abc123` |
+| `raworc agent unpublish <id>` | Unpublish agent | `raworc agent unpublish abc123` |
 
 ### API Access
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `raworc api <endpoint>` | Direct REST API calls | `raworc api sessions` |
+| `raworc api <endpoint>` | Direct REST API calls | `raworc api agents` |
 | `raworc api version` | Check server health | `raworc api version` |
-| `raworc api sessions -m POST` | Create session via API | `raworc api sessions -m POST` |
+| `raworc api agents -m POST` | Create agent via API | `raworc api agents -m POST` |
 
 ### CLI Options Reference
 
@@ -255,16 +255,16 @@ git clone <this-repo>
 **Service Management:**
 - `raworc start [-r/--restart] [components...]` - Start services
 - `raworc stop [-c/--cleanup] [components...]` - Stop services
-- `raworc clean` - Clean session containers (preserves core services)
+- `raworc clean` - Clean agent containers (preserves core services)
 - `raworc reset [-y/--yes] [-s/--services-only]` - Complete cleanup
 - `raworc pull [-c/--cli-only] [-i/--images-only]` - Update CLI and images
 
-**Session Management:**
-- `raworc session [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new session
-- `raworc session restore <session-name> [-p/--prompt]` - Restore existing session
-- `raworc session remix <session-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix session
-- `raworc session publish <session-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish session
-- `raworc session unpublish <session-name>` - Unpublish session
+**Agent Management:**
+- `raworc agent [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new agent
+- `raworc agent restore <agent-name> [-p/--prompt]` - Restore existing agent
+- `raworc agent remix <agent-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
+- `raworc agent publish <agent-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish agent
+- `raworc agent unpublish <agent-name>` - Unpublish agent
 
 **API Access:**
 - `raworc api <endpoint> [-m/--method] [-b/--body] [-H/--headers] [-p/--pretty] [-s/--status]` - Execute API requests
@@ -329,17 +329,17 @@ Response:
 }
 ```
 
-### Sessions
+### Agents
 
-**List Sessions**
+**List Agents**
 ```bash
-GET /sessions
+GET /agents
 Authorization: Bearer <jwt-token>
 
 Response:
 [
   {
-    "id": "session-abc123",
+    "id": "agent-abc123",
     "state": "running",
     "created_at": "2025-09-01T12:00:00Z",
     "updated_at": "2025-09-01T12:30:00Z"
@@ -347,9 +347,9 @@ Response:
 ]
 ```
 
-**Create Session**
+**Create Agent**
 ```bash
-POST /sessions
+POST /agents
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -357,27 +357,27 @@ Content-Type: application/json
   "instructions": "Analyze this data file",
   "setup": "pip install pandas",
   "secrets": {
-    "DATABASE_URL": "mysql://user:pass@host/db"
+    "DATABASE_URL": "mysql://user:pass@agent/db"
   },
   "prompt": "Hello, analyze this data"
 }
 
 Response:
 {
-  "id": "session-abc123",
+  "id": "agent-abc123",
   "state": "created",
   "created_at": "2025-09-01T12:00:00Z"
 }
 ```
 
-**Get Session**
+**Get Agent**
 ```bash
-GET /sessions/{id}
+GET /agents/{id}
 Authorization: Bearer <jwt-token>
 
 Response:
 {
-  "id": "session-abc123",
+  "id": "agent-abc123",
   "state": "running",
   "created_at": "2025-09-01T12:00:00Z",
   "updated_at": "2025-09-01T12:30:00Z",
@@ -385,14 +385,14 @@ Response:
 }
 ```
 
-**Session Actions**
+**Agent Actions**
 ```bash
-# Close session
-POST /sessions/{id}/close
+# Close agent
+POST /agents/{id}/close
 Authorization: Bearer <jwt-token>
 
-# Restore session with optional prompt
-POST /sessions/{id}/restore
+# Restore agent with optional prompt
+POST /agents/{id}/restore
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -400,8 +400,8 @@ Content-Type: application/json
   "prompt": "Let's continue working"
 }
 
-# Remix session with optional prompt
-POST /sessions/{id}/remix
+# Remix agent with optional prompt
+POST /agents/{id}/remix
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -411,8 +411,8 @@ Content-Type: application/json
   "prompt": "Try a different approach"
 }
 
-# Update session state
-PUT /sessions/{id}/state
+# Update agent state
+PUT /agents/{id}/state
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -420,8 +420,8 @@ Content-Type: application/json
   "state": "paused"
 }
 
-# Delete session
-DELETE /sessions/{id}
+# Delete agent
+DELETE /agents/{id}
 Authorization: Bearer <jwt-token>
 ```
 
@@ -429,7 +429,7 @@ Authorization: Bearer <jwt-token>
 
 **List Messages**
 ```bash
-GET /sessions/{id}/messages
+GET /agents/{id}/messages
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -451,7 +451,7 @@ Response:
 
 **Send Message**
 ```bash
-POST /sessions/{id}/messages
+POST /agents/{id}/messages
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -471,7 +471,7 @@ Response:
 
 **Message Count**
 ```bash
-GET /sessions/{id}/messages/count
+GET /agents/{id}/messages/count
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -482,7 +482,7 @@ Response:
 
 **Clear Messages**
 ```bash
-DELETE /sessions/{id}/messages
+DELETE /agents/{id}/messages
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -719,7 +719,7 @@ type/brief-description
 ```
 
 Examples:
-- `feat/session-close-restore`
+- `feat/agent-close-restore`
 - `fix/container-cleanup-race`
 - `docs/api-reference-update`
 
@@ -730,7 +730,7 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 ### Design Principles
 
 **Flat Icon System**: Uses simple geometric Unicode characters instead of emojis for terminal compatibility and professional appearance:
-- `◯` (clean) - Session container cleanup
+- `◯` (clean) - Agent container cleanup
 - `◎` (auth) - Authentication operations  
 - `◐` (user) - User/operator login/logout
 - `⬟` (token) - Token operations
@@ -739,7 +739,7 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `⇣` (pull) - Pull/download operations
 - `⟲` (reset) - Reset/restart operations
 - `◈` (api) - API operations
-- `◊` (session) - Session operations
+- `◊` (agent) - Agent operations
 - `≡` (history) - History/logs
 - `◉` (chat) - Chat/messaging
 
@@ -749,13 +749,13 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `⚠` (warning) - Warning conditions  
 - `ℹ` (info) - Information messages
 
-**Session State Visual Indicators**:
-- `●` (idle) - Session idle state
-- `◉` (busy) - Session processing  
-- `◎` (init) - Session initializing
-- `◼` (closed) - Session closed
-- `◇` (errored) - Session error state
-- `◼` (deleted) - Session deleted
+**Agent State Visual Indicators**:
+- `●` (idle) - Agent idle state
+- `◉` (busy) - Agent processing  
+- `◎` (init) - Agent initializing
+- `◼` (closed) - Agent closed
+- `◇` (errored) - Agent error state
+- `◼` (deleted) - Agent deleted
 
 ### Command Box Layout
 
@@ -775,28 +775,28 @@ All CLI commands use a standardized command box format:
 - Server URL (when relevant)
 - Current authenticated user and type (when relevant)  
 - Operation description explaining what the command does
-- Optional target/session information for specific operations
+- Optional target/agent information for specific operations
 
-### Session Interface
+### Agent Interface
 
-Interactive sessions use a clean command box with essential information:
+Interactive agents use a clean command box with essential information:
 
 ```
 ┌─────────────────────────────────────┐
-│ ◊ Session Start                     │
-│ Session: abc123                     │
+│ ◊ Agent Start                     │
+│ Agent: abc123                     │
 │ User: admin (Operator)              │
 │ Commands: /help (for commands)      │
 └─────────────────────────────────────┘
 ```
 
-**Session Commands**:
+**Agent Commands**:
 - `/help` - Show all available commands
-- `/status` - Display session status with visual state indicators
-- `/timeout <s>` - Change session timeout (1-3600 seconds)
-- `/name <name>` - Change session name (alphanumeric and hyphens)
-- `/detach` or `/d` - Detach from session (keeps session running)
-- `/quit` or `/q` - End the session completely
+- `/status` - Display agent status with visual state indicators
+- `/timeout <s>` - Change agent timeout (1-3600 seconds)
+- `/name <name>` - Change agent name (alphanumeric and hyphens)
+- `/detach` or `/d` - Detach from agent (keeps agent running)
+- `/quit` or `/q` - End the agent completely
 
 ### Implementation
 
@@ -830,5 +830,5 @@ display.warning('Some containers may not be running');
 2. **Consistent command boxes** for all operations showing context
 3. **Immediate feedback** with success/error/info/warning status messages
 4. **Professional terminal appearance** suitable for developer workflows
-5. **Session state indicators** use geometric shapes for clear status communication
+5. **Agent state indicators** use geometric shapes for clear status communication
 6. **Help-first approach** - commands show `/help (for commands)` to guide users

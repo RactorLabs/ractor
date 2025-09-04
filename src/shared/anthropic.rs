@@ -38,20 +38,20 @@ impl AnthropicKeyManager {
         Ok(Self { client, api_key })
     }
 
-    pub async fn generate_session_api_key(&self, session_name: &str) -> Result<String> {
+    pub async fn generate_agent_api_key(&self, agent_name: &str) -> Result<String> {
         info!(
-            "Using shared ANTHROPIC_API_KEY for session: {}",
-            session_name
+            "Using shared ANTHROPIC_API_KEY for agent: {}",
+            agent_name
         );
 
         // Since Anthropic does not support programmatic API key generation,
-        // we use the same regular API key for all sessions. This key is:
+        // we use the same regular API key for all agents. This key is:
         // 1. Set only as environment variable in each container
         // 2. Not persisted to disk
         // 3. Isolated per container
         // 4. Not accessible system-wide
 
-        info!("Providing regular API key for session: {}", session_name);
+        info!("Providing regular API key for agent: {}", agent_name);
         Ok(self.api_key.clone())
     }
 
@@ -96,10 +96,10 @@ impl AnthropicKeyManager {
 
     // This method will be implemented once Anthropic provides API key generation endpoints
     #[allow(dead_code)]
-    async fn create_api_key_via_api(&self, session_name: &str) -> Result<String> {
+    async fn create_api_key_via_api(&self, agent_name: &str) -> Result<String> {
         let request = CreateKeyRequest {
-            key_type: "session".to_string(),
-            name: format!("raworc-session-{}", session_name),
+            key_type: "agent".to_string(),
+            name: format!("raworc-agent-{}", agent_name),
         };
 
         let response = self

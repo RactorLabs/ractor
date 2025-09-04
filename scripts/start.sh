@@ -17,7 +17,7 @@ fi
 # Use local image names (built by build.sh)
 SERVER_IMAGE="raworc_server:${TAG}"
 OPERATOR_IMAGE="raworc_operator:${TAG}"
-HOST_IMAGE="raworc_host:${TAG}"
+AGENT_IMAGE="raworc_agent:${TAG}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -139,7 +139,7 @@ if [ "$BUILD" = true ]; then
     build_components=()
     for component in "${COMPONENTS[@]}"; do
         case $component in
-            server|operator|host)
+            server|operator|agent)
                 build_components+=("$component")
                 ;;
         esac
@@ -309,7 +309,7 @@ for component in "${COMPONENTS[@]}"; do
             if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
                 print_error "ANTHROPIC_API_KEY environment variable is required for the operator"
                 echo ""
-                echo "💡 The operator needs an Anthropic API key to provide to session containers."
+                echo "💡 The operator needs an Anthropic API key to provide to agent containers."
                 echo "   Set the environment variable and try again:"
                 echo ""
                 echo "   export ANTHROPIC_API_KEY=sk-ant-api03-..."
@@ -359,11 +359,11 @@ for component in "${COMPONENTS[@]}"; do
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
-                -e HOST_IMAGE="$HOST_IMAGE" \
-                -e HOST_CPU_LIMIT="0.5" \
-                -e HOST_MEMORY_LIMIT="536870912" \
-                -e HOST_DISK_LIMIT="1073741824" \
-                -e HOST_VOLUMES_PATH="/var/lib/raworc/volumes" \
+                -e AGENT_IMAGE="$AGENT_IMAGE" \
+                -e AGENT_CPU_LIMIT="0.5" \
+                -e AGENT_MEMORY_LIMIT="536870912" \
+                -e AGENT_DISK_LIMIT="1073741824" \
+                -e AGENT_VOLUMES_PATH="/var/lib/raworc/volumes" \
                 -e RUST_LOG=info \
                 "$OPERATOR_IMAGE"; then
                 print_success "Operator service container started"
@@ -408,7 +408,7 @@ if [ -n "$running_containers" ]; then
     echo "  • Check logs: docker logs raworc_server -f"
     echo "  • Authenticate: raworc auth login --token <token>"  
     echo "  • Check health: raworc api health"
-    echo "  • Start session: raworc session"
+    echo "  • Start agent: raworc agent"
     echo ""
     print_status "Container management:"
     echo "  • Stop services: ./scripts/stop.sh"

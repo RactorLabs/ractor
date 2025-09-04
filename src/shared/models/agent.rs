@@ -2,14 +2,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 // Removed uuid::Uuid - no longer using UUIDs in v0.4.0
-use super::constants::SESSION_STATE_DELETED;
+use super::constants::AGENT_STATE_DELETED;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct Session {
+pub struct Agent {
     pub name: String, // Primary key - no more UUID id
     pub created_by: String,
     pub state: String,
-    pub parent_session_name: Option<String>, // Changed from parent_session_id
+    pub parent_agent_name: Option<String>, // Changed from parent_agent_id
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
@@ -24,7 +24,7 @@ pub struct Session {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateSessionRequest {
+pub struct CreateAgentRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
     #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
@@ -45,7 +45,7 @@ pub struct CreateSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemixSessionRequest {
+pub struct RemixAgentRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
     #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
@@ -71,7 +71,7 @@ pub struct RemixSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PublishSessionRequest {
+pub struct PublishAgentRequest {
     // Removed data field - data folder no longer exists
     #[serde(
         default = "default_true",
@@ -91,7 +91,7 @@ pub struct PublishSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateSessionStateRequest {
+pub struct UpdateAgentStateRequest {
     pub state: String,
     #[serde(default)]
     pub content_port: Option<i32>,
@@ -99,7 +99,7 @@ pub struct UpdateSessionStateRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateSessionRequest {
+pub struct UpdateAgentRequest {
     // Removed name field - names cannot be changed in v0.4.0
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
@@ -108,7 +108,7 @@ pub struct UpdateSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoreSessionRequest {
+pub struct RestoreAgentRequest {
     #[serde(default)]
     pub prompt: Option<String>,
 }
@@ -386,15 +386,15 @@ where
 }
 
 // Database queries
-impl Session {
-    pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+impl Agent {
+    pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE state != 'deleted'
             ORDER BY created_at DESC
             "#,
@@ -406,14 +406,14 @@ impl Session {
     pub async fn find_by_name(
         pool: &sqlx::MySqlPool,
         name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+    ) -> Result<Option<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE name = ? AND state != 'deleted'
             "#,
         )
@@ -426,14 +426,14 @@ impl Session {
         pool: &sqlx::MySqlPool,
         name: &str,
         created_by: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+    ) -> Result<Option<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE name = ? AND created_by = ? AND state != 'deleted'
             "#,
         )
@@ -454,22 +454,22 @@ impl Session {
 
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        req: CreateSessionRequest,
+        req: CreateAgentRequest,
         created_by: &str,
-    ) -> Result<Session, sqlx::Error> {
-        // Calculate timeout - auto_close_at will be set when session becomes idle
+    ) -> Result<Agent, sqlx::Error> {
+        // Calculate timeout - auto_close_at will be set when agent becomes idle
         let timeout = req.timeout_seconds.unwrap_or(300); // Default 5 minutes (300 seconds)
-        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
+        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
 
         // Allocate Content port
         let content_port = Self::find_available_port()
             .await
             .map_err(|e| sqlx::Error::Io(e))?;
 
-        // Insert the session using name as primary key
+        // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO sessions (name, created_by, metadata, timeout_seconds, auto_close_at, content_port)
+            INSERT INTO agents (name, created_by, metadata, timeout_seconds, auto_close_at, content_port)
             VALUES (?, ?, ?, ?, ?, ?)
             "#
         )
@@ -482,35 +482,35 @@ impl Session {
         .execute(pool)
         .await?;
 
-        // Fetch the created session
-        let session = Self::find_by_name(pool, &req.name).await?.unwrap();
+        // Fetch the created agent
+        let agent = Self::find_by_name(pool, &req.name).await?.unwrap();
 
-        Ok(session)
+        Ok(agent)
     }
 
     pub async fn remix(
         pool: &sqlx::MySqlPool,
         parent_name: &str,
-        req: RemixSessionRequest,
+        req: RemixAgentRequest,
         created_by: &str,
-    ) -> Result<Session, sqlx::Error> {
-        // Get parent session
+    ) -> Result<Agent, sqlx::Error> {
+        // Get parent agent
         let parent = Self::find_by_name(pool, parent_name)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
-        // Create new session based on parent (inherit timeout)
-        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when session becomes idle
+        // Create new agent based on parent (inherit timeout)
+        let auto_close_at: Option<DateTime<Utc>> = None; // Will be calculated when agent becomes idle
 
-        // Allocate Content port for remix session
+        // Allocate Content port for remix agent
         let content_port = Self::find_available_port()
             .await
             .map_err(|e| sqlx::Error::Io(e))?;
 
         sqlx::query(
             r#"
-            INSERT INTO sessions (
-                name, created_by, parent_session_name,
+            INSERT INTO agents (
+                name, created_by, parent_agent_name,
                 metadata, timeout_seconds, auto_close_at, content_port
             )
             VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -526,25 +526,25 @@ impl Session {
         .execute(pool)
         .await?;
 
-        // Fetch the created session
-        let session = Self::find_by_name(pool, &req.name).await?.unwrap();
+        // Fetch the created agent
+        let agent = Self::find_by_name(pool, &req.name).await?.unwrap();
 
-        Ok(session)
+        Ok(agent)
     }
 
     #[allow(dead_code)]
     pub async fn update_state(
         pool: &sqlx::MySqlPool,
         name: &str,
-        req: UpdateSessionStateRequest,
-    ) -> Result<Option<Session>, sqlx::Error> {
+        req: UpdateAgentStateRequest,
+    ) -> Result<Option<Agent>, sqlx::Error> {
         // Check current state and validate transition
         let current = Self::find_by_name(pool, name).await?;
-        if let Some(session) = current {
-            if !super::state_helpers::can_transition_to(&session.state, &req.state) {
+        if let Some(agent) = current {
+            if !super::state_helpers::can_transition_to(&agent.state, &req.state) {
                 return Err(sqlx::Error::Protocol(format!(
                     "Invalid state transition from {:?} to {:?}",
-                    session.state, req.state
+                    agent.state, req.state
                 )));
             }
         } else {
@@ -552,7 +552,7 @@ impl Session {
         }
 
         let now = Utc::now();
-        let mut query_builder = String::from("UPDATE sessions SET state = ?, last_activity_at = ?");
+        let mut query_builder = String::from("UPDATE agents SET state = ?, last_activity_at = ?");
 
         // Removed container_id and persistent_volume_id - derived from name in v0.4.0
 
@@ -587,9 +587,9 @@ impl Session {
     pub async fn update(
         pool: &sqlx::MySqlPool,
         name: &str,
-        req: UpdateSessionRequest,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        let mut query_builder = String::from("UPDATE sessions SET");
+        req: UpdateAgentRequest,
+    ) -> Result<Option<Agent>, sqlx::Error> {
+        let mut query_builder = String::from("UPDATE agents SET");
         let mut updates = Vec::new();
 
         if req.metadata.is_some() {
@@ -634,10 +634,10 @@ impl Session {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(r#"UPDATE sessions SET state = ? WHERE name = ? AND state != ?"#)
-            .bind(SESSION_STATE_DELETED)
+        let result = sqlx::query(r#"UPDATE agents SET state = ? WHERE name = ? AND state != ?"#)
+            .bind(AGENT_STATE_DELETED)
             .bind(name)
-            .bind(SESSION_STATE_DELETED)
+            .bind(AGENT_STATE_DELETED)
             .execute(pool)
             .await?;
 
@@ -648,8 +648,8 @@ impl Session {
         pool: &sqlx::MySqlPool,
         name: &str,
         published_by: &str,
-        req: PublishSessionRequest,
-    ) -> Result<Option<Session>, sqlx::Error> {
+        req: PublishAgentRequest,
+    ) -> Result<Option<Agent>, sqlx::Error> {
         let publish_permissions = serde_json::json!({
             "code": req.code,
             "secrets": req.secrets,
@@ -658,7 +658,7 @@ impl Session {
 
         let result = sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE agents 
             SET is_published = true, 
                 published_at = NOW(), 
                 published_by = ?,
@@ -682,10 +682,10 @@ impl Session {
     pub async fn unpublish(
         pool: &sqlx::MySqlPool,
         name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
+    ) -> Result<Option<Agent>, sqlx::Error> {
         let result = sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE agents 
             SET is_published = false, 
                 published_at = NULL, 
                 published_by = NULL,
@@ -704,14 +704,14 @@ impl Session {
         }
     }
 
-    pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+    pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
             "#,
@@ -723,14 +723,14 @@ impl Session {
     pub async fn find_published_by_name(
         pool: &sqlx::MySqlPool,
         name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+    ) -> Result<Option<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE name = ? AND is_published = true AND state != 'deleted'
             ORDER BY published_at DESC
             LIMIT 1
@@ -741,16 +741,16 @@ impl Session {
         .await
     }
 
-    pub async fn find_sessions_to_auto_close(
+    pub async fn find_agents_to_auto_close(
         pool: &sqlx::MySqlPool,
-    ) -> Result<Vec<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
+    ) -> Result<Vec<Agent>, sqlx::Error> {
+        sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_session_name,
+            SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_close_at, content_port
-            FROM sessions
+            FROM agents
             WHERE auto_close_at <= NOW() 
               AND state IN ('init', 'idle', 'busy')
               AND state != 'deleted'
@@ -762,14 +762,14 @@ impl Session {
         .await
     }
 
-    pub async fn extend_session_timeout(
+    pub async fn extend_agent_timeout(
         pool: &sqlx::MySqlPool,
         name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
+    ) -> Result<Option<Agent>, sqlx::Error> {
         // Extend timeout based on last activity or current time
         let result = sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE agents 
             SET auto_close_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
                 last_activity_at = NOW()
             WHERE name = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
@@ -786,14 +786,14 @@ impl Session {
         }
     }
 
-    pub async fn update_session_to_idle(
+    pub async fn update_agent_to_idle(
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set session to idle and calculate auto_close_at from now
+        // Set agent to idle and calculate auto_close_at from now
         sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE agents 
             SET state = 'idle',
                 last_activity_at = NOW(),
                 auto_close_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
@@ -807,14 +807,14 @@ impl Session {
         Ok(())
     }
 
-    pub async fn update_session_to_busy(
+    pub async fn update_agent_to_busy(
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set session to busy and clear auto_close_at (no timeout while active)
+        // Set agent to busy and clear auto_close_at (no timeout while active)
         sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE agents 
             SET state = 'busy',
                 last_activity_at = NOW(),
                 auto_close_at = NULL

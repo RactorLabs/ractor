@@ -55,7 +55,7 @@ impl MessageHandler {
         let all_messages = self.api_client.get_messages(None, None).await?;
 
         if all_messages.is_empty() {
-            info!("No existing messages - fresh session");
+            info!("No existing messages - fresh agent");
             return Ok(());
         }
 
@@ -129,9 +129,9 @@ impl MessageHandler {
                         drop(processed_ids);
 
                         if !already_processed {
-                            // Check if this message already has a host response
+                            // Check if this message already has an agent response
                             let has_response = recent_messages.iter().any(|m| {
-                                m.role == MessageRole::Host && {
+                                m.role == MessageRole::Agent && {
                                     if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at)
                                     {
                                         let m_time_utc = m_time.with_timezone(&Utc);
@@ -163,9 +163,9 @@ impl MessageHandler {
         // Sort by creation time to process in order
         unprocessed_user_messages.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
-        // Update session state to BUSY (pauses timeout)
-        if let Err(e) = self.api_client.update_session_to_busy().await {
-            warn!("Failed to update session state to BUSY: {}", e);
+        // Update agent state to BUSY (pauses timeout)
+        if let Err(e) = self.api_client.update_agent_to_busy().await {
+            warn!("Failed to update agent state to BUSY: {}", e);
         }
 
         // Process each message
@@ -198,9 +198,9 @@ impl MessageHandler {
             processed_ids.insert(message.id.clone());
         }
 
-        // Update session state back to IDLE (starts timeout)
-        if let Err(e) = self.api_client.update_session_to_idle().await {
-            warn!("Failed to update session state to IDLE: {}", e);
+        // Update agent state back to IDLE (starts timeout)
+        if let Err(e) = self.api_client.update_agent_to_idle().await {
+            warn!("Failed to update agent state to IDLE: {}", e);
         }
 
         Ok(unprocessed_user_messages.len())
@@ -215,9 +215,9 @@ impl MessageHandler {
         // Use Claude API directly
         info!("Using Claude API for message processing");
 
-        // Fetch ALL messages from session for complete conversation history
+        // Fetch ALL messages from agent for complete conversation history
         info!("Fetching complete conversation history for Claude");
-        let all_messages = self.fetch_all_session_messages().await?;
+        let all_messages = self.fetch_all_agent_messages().await?;
 
         // Prepare conversation history for Claude
         let conversation = self.prepare_conversation_history(&all_messages, &message.id);
@@ -240,10 +240,10 @@ impl MessageHandler {
                 let fallback_response = format!(
                     "I'm currently experiencing technical difficulties with my AI processing. Here's what I can tell you:\n\n\
                     Your message was: \"{}\"\n\n\
-                    I'm a Raworc Host (Computer Use Agent) designed to help with various tasks including:\n\
+                    I'm a Raworc Agent (Computer Use Agent) designed to help with various tasks including:\n\
                     - Code generation and analysis\n\
                     - File operations\n\
-                    - Session management\n\n\
+                    - Agent management\n\n\
                     Please try your request again.",
                     message.content
                 );
@@ -265,8 +265,8 @@ impl MessageHandler {
         Ok(())
     }
 
-    async fn fetch_all_session_messages(&self) -> Result<Vec<Message>> {
-        // Fetch ALL messages in session without pagination limits
+    async fn fetch_all_agent_messages(&self) -> Result<Vec<Message>> {
+        // Fetch ALL messages in agent without pagination limits
         let all_messages = self.api_client.get_messages(None, None).await?;
 
         info!(
@@ -287,11 +287,11 @@ impl MessageHandler {
         let history: Vec<_> = messages
             .iter()
             .filter(|m| m.id != current_id)
-            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Host)
+            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
             .map(|m| {
                 let role = match m.role {
                     MessageRole::User => MESSAGE_ROLE_USER,
-                    MessageRole::Host => "assistant", // Claude expects "assistant" not "host"
+                    MessageRole::Agent => "assistant", // Claude expects "assistant" not "agent"
                     _ => MESSAGE_ROLE_USER,
                 };
                 (role.to_string(), m.content.clone())
@@ -314,36 +314,36 @@ impl MessageHandler {
 
     async fn build_system_prompt(&self) -> String {
         let mut prompt = String::from(
-            r#"You are a helpful AI assistant operating within a RemoteAgent session with bash command execution capabilities.
+            r#"You are a helpful AI assistant operating within a RemoteAgent agent with bash command execution capabilities.
 
 Key capabilities:
 - You can help users with various tasks and answer questions
-- You maintain conversation context within this session
-- You can create, read, and modify files within the session directory
+- You maintain conversation context within this agent
+- You can create, read, and modify files within the agent directory
 - You have access to a bash tool that can execute shell commands
 - You have access to a text_editor tool for precise file editing operations
 - You have access to a web_search tool for real-time information beyond your knowledge cutoff
 
 Bash Tool Usage:
 - Use the bash tool to execute shell commands when needed
-- Commands are executed in the /session/ directory with persistent state
+- Commands are executed in the /agent/ directory with persistent state
 - You can run any typical bash/shell commands: ls, cat, grep, find, python, npm, git, etc.
 - File operations, code execution, system administration, package management are all supported
 - The bash environment persists between commands within the conversation
 - For system package management (apt-get, yum, etc.), use sudo when needed but confirm with user first
 - Example: "I need to install a package with sudo apt-get. Is that okay?" before running privileged commands
-- All bash executions are automatically logged to /session/logs/ and Docker logs for debugging
+- All bash executions are automatically logged to /agent/logs/ and Docker logs for debugging
 
 Text Editor Tool Usage:
 - Use the text_editor tool for precise file editing operations
 - Available commands: view, create, str_replace, insert
-- All paths are relative to /session/ directory
+- All paths are relative to /agent/ directory
 - view: Examine file contents or list directory contents (supports line ranges)
 - create: Create new files with specified content
 - str_replace: Replace exact text strings in files (must be unique matches)
 - insert: Insert text at specific line numbers
 - Ideal for code editing, configuration files, and precise text modifications
-- All text editor operations are automatically logged to /session/logs/ and Docker logs for debugging
+- All text editor operations are automatically logged to /agent/logs/ and Docker logs for debugging
 
 Web Search Tool Usage:
 - Use the web_search tool to find current information beyond your knowledge cutoff
@@ -354,29 +354,29 @@ Web Search Tool Usage:
 - Use when users ask for current information or when your knowledge might be outdated
 
 Working Directory and File Operations:
-- Your working directory is /session/
-- When creating files, writing code, or performing file operations, use /session/ as your base directory
-- The session has persistent storage mounted at /session/ with the following structure and usage patterns:
+- Your working directory is /agent/
+- When creating files, writing code, or performing file operations, use /agent/ as your base directory
+- The agent has persistent storage mounted at /agent/ with the following structure and usage patterns:
 
-  /session/code/ - Code artifacts and development files:
+  /agent/code/ - Code artifacts and development files:
     - Store all source code files (Python, JavaScript, Rust, etc.)
     - Save scripts, automation tools, and executable files
     - Keep project configuration files (package.json, requirements.txt, Cargo.toml)
     - Place build artifacts and compiled outputs
     - Store development documentation and README files
-    - Example: /session/code/my_script.py, /session/code/package.json
+    - Example: /agent/code/my_script.py, /agent/code/package.json
 
-  /session/logs/ - Command execution logs and system activity:
+  /agent/logs/ - Command execution logs and system activity:
     - Automatically stores individual bash command execution logs
     - Each bash command creates a timestamped log file (bash_TIMESTAMP.log)
     - Contains command, exit code, stdout, stderr, and execution details
     - Useful for debugging, auditing, and reviewing command history
-    - Not copied during session remix - logs are unique per session instance
-    - Example: /session/logs/bash_1641234567.log
+    - Not copied during agent remix - logs are unique per agent instance
+    - Example: /agent/logs/bash_1641234567.log
 
-  /session/content/ - HTML display and visualization content:
+  /agent/content/ - HTML display and visualization content:
     - Store HTML files and supporting assets for displaying information to users
-    - ALWAYS create or update /session/content/index.html as the main entry point
+    - ALWAYS create or update /agent/content/index.html as the main entry point
     - Use index.html for summary, overview, intro, instructions, or navigation
     - Link to other files using relative URLs (e.g., <a href="report.html">Report</a>)
     - Create interactive visualizations, reports, charts, and data displays
@@ -386,29 +386,29 @@ Working Directory and File Operations:
     - Perfect for creating visual outputs that users can view in a browser
     - Example structure: index.html (main), report.html, chart.html, dashboard/
 
-  /session/secrets/ - Environment variables and configuration:
-    - Contains environment variables automatically sourced by the session
+  /agent/secrets/ - Environment variables and configuration:
+    - Contains environment variables automatically sourced by the agent
     - Secrets and API keys are loaded from this directory
     - Configuration files for authentication and external services
     - This directory is automatically processed - you typically don't need to manage it directly
 
 Special Files with Automatic Processing:
-  /session/code/instructions.md - Session instructions (auto-included in system prompt):
+  /agent/code/instructions.md - Agent instructions (auto-included in system prompt):
     - If this file exists, its contents are automatically appended to your system prompt
-    - Use this for persistent session-specific instructions or context
+    - Use this for persistent agent-specific instructions or context
     - Perfect for project requirements, coding standards, or ongoing task context
-    - Contents become part of your instructions for every message in the session
+    - Contents become part of your instructions for every message in the agent
 
-  /session/code/setup.sh - Session initialization script (auto-executed on container start):
-    - If this file exists, it's automatically executed when the session container starts
+  /agent/code/setup.sh - Agent initialization script (auto-executed on container start):
+    - If this file exists, it's automatically executed when the agent container starts
     - Use this for environment setup, package installation, or initial configuration
-    - Runs once at the beginning of each session (including session restores)
+    - Runs once at the beginning of each agent (including agent restores)
     - Perfect for installing dependencies, setting up tools, or preparing the environment
 
-- Use /session/code/ for all files including executables, data, project structure, and working files
-- Use /session/content/ for HTML files and web assets that provide visual displays to users
-- /session/logs/ contains automatic execution logs - not for user files
-- All file paths should be relative to /session/ unless specifically working with system files
+- Use /agent/code/ for all files including executables, data, project structure, and working files
+- Use /agent/content/ for HTML files and web assets that provide visual displays to users
+- /agent/logs/ contains automatic execution logs - not for user files
+- All file paths should be relative to /agent/ unless specifically working with system files
 
 Security and Safety:
 - The bash tool has built-in security restrictions to prevent dangerous operations
@@ -426,31 +426,31 @@ Guidelines:
 - Choose the right tool: bash for operations, text_editor for files, web_search for current info
 - Respect user privacy and security
 - When creating files, organize them appropriately:
-  - Save all files including source code, data, scripts, and project files to /session/code/
-  - Save HTML files and visual displays to /session/content/
-  - Create /session/code/instructions.md for persistent session context (auto-loaded)
-  - Create /session/code/setup.sh for environment initialization (auto-executed)
+  - Save all files including source code, data, scripts, and project files to /agent/code/
+  - Save HTML files and visual displays to /agent/content/
+  - Create /agent/code/instructions.md for persistent agent context (auto-loaded)
+  - Create /agent/code/setup.sh for environment initialization (auto-executed)
 - Content folder workflow (IMPORTANT for visual content):
-  - ALWAYS create /session/content/index.html as the main entry point
+  - ALWAYS create /agent/content/index.html as the main entry point
   - Use index.html for overview, summary, navigation, or standalone content
   - Link additional files using relative paths: href="report.html", src="data/chart.png"
   - Create supporting files: report.html, dashboard.html, styles.css, etc.
   - Organize subdirectories as needed: images/, data/, scripts/
   - Example: index.html -> links to -> report.html, chart.html, dashboard/
-- Assume the current working directory is /session/
+- Assume the current working directory is /agent/
 - Show command outputs to users when relevant
-- Organize files logically: all working files in /session/code/, visuals in /session/content/
+- Organize files logically: all working files in /agent/code/, visuals in /agent/content/
 
-Current session context:
-- This is an isolated session environment with persistent storage
+Current agent context:
+- This is an isolated agent environment with persistent storage
 - Messages are persisted in the Raworc system
-- You're operating as the Host (Computer Use Agent) within this session
-- Your session persists between container restarts
+- You're operating as the Agent (Computer Use Agent) within this container
+- Your agent persists between container restarts
 - You have full bash access for development, analysis, and automation tasks"#,
         );
 
-        // Read instructions from /session/code/instructions.md if it exists
-        let instructions_path = std::path::Path::new("/session/code/instructions.md");
+        // Read instructions from /agent/code/instructions.md if it exists
+        let instructions_path = std::path::Path::new("/agent/code/instructions.md");
         info!(
             "Checking for instructions file at: {}",
             instructions_path.display()
@@ -462,7 +462,7 @@ Current session context:
                     info!("Read instructions content: '{}'", instructions.trim());
                     prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
                     prompt.push_str(&instructions);
-                    info!("Loaded instructions from /session/code/instructions.md");
+                    info!("Loaded instructions from /agent/code/instructions.md");
                 }
                 Err(e) => {
                     warn!("Failed to read instructions file: {}", e);

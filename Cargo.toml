@@ -42,5 +42,5 @@ name = "raworc-operator"
 path = "src/operator/main.rs"
 
 [[bin]]
-name = "raworc-host"
-path = "src/host/main.rs"
+name = "raworc-agent"
+path = "src/agent/main.rs"

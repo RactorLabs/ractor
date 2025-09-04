@@ -18,7 +18,7 @@ const icons = {
   
   // Communication icons
   api: '◈',          // replaces 🌐
-  session: '◊',      // replaces session box
+  agent: '◊',        // replaces agent box
   history: '≡',      // replaces 📜
   chat: '◉',         // replaces 💬
   
@@ -46,8 +46,8 @@ function showCommandBox(title, info = {}) {
     lines.push(`User: ${userName}${userType}`);
   }
   
-  if (info.session) {
-    lines.push(`Session: ${info.session}`);
+  if (info.agent) {
+    lines.push(`Agent: ${info.agent}`);
   }
   
   if (info.operation) {

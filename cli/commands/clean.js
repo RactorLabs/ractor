@@ -7,12 +7,12 @@ const display = require('../lib/display');
 module.exports = (program) => {
   program
     .command('clean')
-    .description('Clean all session containers (preserves core services and volumes)')
+    .description('Clean all agent containers (preserves core services and volumes)')
     .action(async (options) => {
       try {
         // Show command box with clean info
-        display.showCommandBox(`${display.icons.clean} Session Container Cleanup`, {
-          operation: 'Clean all session containers'
+        display.showCommandBox(`${display.icons.clean} Agent Container Cleanup`, {
+          operation: 'Clean all agent containers'
         });
 
         // Check Docker availability
@@ -25,12 +25,12 @@ module.exports = (program) => {
         let containersToClean = [];
 
         // Get running containers
-        display.info('Finding session containers...');
+        display.info('Finding agent containers...');
         
         try {
-          // Find only raworc_session containers (running and stopped)
+          // Find only raworc_agent containers (running and stopped)
           const containerResult = await docker.execDocker([
-            'ps', '-a', '--filter', 'name=raworc_session', '--format', '{{.Names}}\t{{.Status}}\t{{.Image}}'
+            'ps', '-a', '--filter', 'name=raworc_agent', '--format', '{{.Names}}\t{{.Status}}\t{{.Image}}'
           ], { silent: true });
 
           if (containerResult.stdout && containerResult.stdout.trim()) {
@@ -42,11 +42,11 @@ module.exports = (program) => {
           }
 
           if (containersToClean.length === 0) {
-            display.success('No session containers found');
+            display.success('No agent containers found');
             return;
           }
 
-          console.log(chalk.yellow(`Found ${containersToClean.length} session container(s):`));
+          console.log(chalk.yellow(`Found ${containersToClean.length} agent container(s):`));
           containersToClean.forEach((container, i) => {
             console.log(`  ${i + 1}. ${container.name} (${container.status})`);
           });
@@ -55,9 +55,9 @@ module.exports = (program) => {
           let totalCleaned = 0;
           let totalFailed = 0;
 
-          // Clean up session containers
+          // Clean up agent containers
           if (containersToClean.length > 0) {
-            display.info(`Cleaning up ${containersToClean.length} session containers...`);
+            display.info(`Cleaning up ${containersToClean.length} agent containers...`);
 
             for (const container of containersToClean) {
               try {
@@ -77,18 +77,18 @@ module.exports = (program) => {
               }
             }
 
-            display.success(`Cleaned up ${totalCleaned} session containers`);
+            display.success(`Cleaned up ${totalCleaned} agent containers`);
           }
 
-          // No image cleanup - sessions only
+          // No image cleanup - agents only
 
           if (totalFailed > 0) {
-            display.warning(`Failed to clean ${totalFailed} session containers`);
+            display.warning(`Failed to clean ${totalFailed} agent containers`);
           }
 
           console.log();
           if (totalCleaned > 0) {
-            display.success('Session cleanup completed!');
+            display.success('Agent cleanup completed!');
           }
 
           console.log();

@@ -14,14 +14,14 @@ pub use constants::*;
 #[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     User,
-    Host,
+    Agent,
     System,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub id: String,
-    pub session_name: String, // Changed from session_id in v0.4.0
+    pub agent_name: String, // Changed from agent_id in v0.4.0
     pub role: MessageRole,
     pub content: String,
     pub metadata: Option<serde_json::Value>,
@@ -38,16 +38,16 @@ pub struct CreateMessageRequest {
 // Import constants from shared models
 
 #[derive(Debug, Serialize)]
-pub struct UpdateSessionStateRequest {
+pub struct UpdateAgentStateRequest {
     pub state: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Session {
+pub struct Agent {
     pub name: String, // Primary key in v0.4.0
     pub created_by: String,
     pub state: String,
-    pub parent_session_name: Option<String>, // Changed from parent_session_id
+    pub parent_agent_name: Option<String>, // Changed from parent_agent_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -76,14 +76,14 @@ impl RaworcClient {
         Self { client, config }
     }
 
-    /// Get session information including content_port
-    pub async fn get_session(&self) -> Result<Session> {
+    /// Get agent information including content_port
+    pub async fn get_agent(&self) -> Result<Agent> {
         let url = format!(
-            "{}/api/v0/sessions/{}",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}",
+            self.config.api_url, self.config.agent_name
         );
 
-        debug!("Fetching session info from: {}", url);
+        debug!("Fetching agent info from: {}", url);
 
         let response = self
             .client
@@ -94,16 +94,16 @@ impl RaworcClient {
 
         match response.status() {
             StatusCode::OK => {
-                let session = response.json::<Session>().await?;
-                debug!("Fetched session info for: {}", session.name);
-                Ok(session)
+                let agent = response.json::<Agent>().await?;
+                debug!("Fetched agent info for: {}", agent.name);
+                Ok(agent)
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response
@@ -118,15 +118,15 @@ impl RaworcClient {
         }
     }
 
-    /// Get messages for the current session
+    /// Get messages for the current agent
     pub async fn get_messages(
         &self,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Message>> {
         let mut url = format!(
-            "{}/api/v0/sessions/{}/messages",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}/messages",
+            self.config.api_url, self.config.agent_name
         );
 
         let mut params = vec![];
@@ -161,8 +161,8 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response
@@ -177,19 +177,19 @@ impl RaworcClient {
         }
     }
 
-    /// Send a message as the Host
+    /// Send a message as the Agent
     pub async fn send_message(
         &self,
         content: String,
         metadata: Option<serde_json::Value>,
     ) -> Result<Message> {
         let url = format!(
-            "{}/api/v0/sessions/{}/messages",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}/messages",
+            self.config.api_url, self.config.agent_name
         );
 
         let request = CreateMessageRequest {
-            role: MessageRole::Host,
+            role: MessageRole::Agent,
             content,
             metadata,
         };
@@ -214,8 +214,8 @@ impl RaworcClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response
@@ -230,18 +230,18 @@ impl RaworcClient {
         }
     }
 
-    /// Update session state (generic)
-    pub async fn update_session_state(&self, state: String) -> Result<()> {
+    /// Update agent state (generic)
+    pub async fn update_agent_state(&self, state: String) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/state",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}/state",
+            self.config.api_url, self.config.agent_name
         );
 
-        let request = UpdateSessionStateRequest {
+        let request = UpdateAgentStateRequest {
             state: state.clone(),
         };
 
-        debug!("Updating session state to: {:?}", state);
+        debug!("Updating agent state to: {:?}", state);
 
         let response = self
             .client
@@ -253,15 +253,15 @@ impl RaworcClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Session state updated to: {:?}", state);
+                info!("Agent state updated to: {:?}", state);
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response
@@ -276,11 +276,11 @@ impl RaworcClient {
         }
     }
 
-    /// Update session to busy (clears auto_close_at)
-    pub async fn update_session_to_busy(&self) -> Result<()> {
+    /// Update agent to busy (clears auto_close_at)
+    pub async fn update_agent_to_busy(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/busy",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}/busy",
+            self.config.api_url, self.config.agent_name
         );
 
         let response = self
@@ -292,15 +292,15 @@ impl RaworcClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Session state updated to: busy (timeout paused)");
+                info!("Agent state updated to: busy (timeout paused)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response
@@ -315,11 +315,11 @@ impl RaworcClient {
         }
     }
 
-    /// Update session to idle (sets auto_close_at)
-    pub async fn update_session_to_idle(&self) -> Result<()> {
+    /// Update agent to idle (sets auto_close_at)
+    pub async fn update_agent_to_idle(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/idle",
-            self.config.api_url, self.config.session_name
+            "{}/api/v0/agents/{}/idle",
+            self.config.api_url, self.config.agent_name
         );
 
         let response = self
@@ -331,15 +331,15 @@ impl RaworcClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Session state updated to: idle (timeout started)");
+                info!("Agent state updated to: idle (timeout started)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
+                "Agent {} not found",
+                self.config.agent_name
             ))),
             status => {
                 let error_text = response

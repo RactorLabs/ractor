@@ -49,7 +49,7 @@ usage() {
   echo "Components:"
   echo "  server      Push the server image"
   echo "  operator    Push the operator image"
-  echo "  host        Push the host image"
+  echo "  agent       Push the agent image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -97,7 +97,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("server" "operator" "host")
+  COMPONENTS=("server" "operator" "agent")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -132,8 +132,8 @@ for component in "${COMPONENTS[@]}"; do
   operator)
     image_name="${REGISTRY}/raworc_operator:${TAG}"
     ;;
-  host)
-    image_name="${REGISTRY}/raworc_host:${TAG}"
+  agent)
+    image_name="${REGISTRY}/raworc_agent:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -197,7 +197,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | operator | host)
+  server | operator | agent)
     echo "  ${REGISTRY}/raworc_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_${component}:latest"

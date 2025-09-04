@@ -1,4 +1,4 @@
-// Host (Computer Use Agent) modules
+// Agent (Computer Use Agent) modules
 mod api;
 mod claude;
 mod config;
@@ -10,12 +10,12 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
-    tracing::info!("Starting Raworc Host...");
+pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
+    tracing::info!("Starting Raworc Agent...");
     tracing::info!("Connecting to API: {}", api_url);
-    tracing::info!("Session Name: {}", session_name);
+    tracing::info!("Agent Name: {}", agent_name);
 
-    // Log which principal this Host is running as
+    // Log which principal this Agent is running as
     if let Ok(principal) = std::env::var("RAWORC_PRINCIPAL") {
         let principal_type =
             std::env::var("RAWORC_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
@@ -56,7 +56,7 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
 
     // Initialize configuration
     let config = Arc::new(config::Config {
-        session_name: session_name.to_string(),
+        agent_name: agent_name.to_string(),
         api_url: api_url.to_string(),
         api_token,
         polling_interval: std::time::Duration::from_secs(2),
@@ -81,15 +81,15 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
-    // Initialize session directories
-    let session_dirs = [
-        "/session",
-        "/session/code",
-        "/session/secrets",
-        "/session/content",
+    // Initialize agent directories
+    let agent_dirs = [
+        "/agent",
+        "/agent/code",
+        "/agent/secrets",
+        "/agent/content",
     ];
 
-    for dir in session_dirs.iter() {
+    for dir in agent_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {
             warn!("Failed to create directory {}: {}", dir, e);
         }
@@ -104,7 +104,7 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     });
 
     // Wait for and execute setup script if it becomes available
-    let setup_script = std::path::Path::new("/session/code/setup.sh");
+    let setup_script = std::path::Path::new("/agent/code/setup.sh");
 
     // Check if a setup script is expected based on environment variable
     let has_setup_script = std::env::var("RAWORC_HAS_SETUP").is_ok();
@@ -125,10 +125,10 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     }
 
     if setup_script.exists() {
-        info!("Executing setup script: /session/code/setup.sh");
+        info!("Executing setup script: /agent/code/setup.sh");
         match std::process::Command::new("bash")
-            .arg("/session/code/setup.sh")
-            .current_dir("/session")
+            .arg("/agent/code/setup.sh")
+            .current_dir("/agent")
             .output()
         {
             Ok(output) => {
@@ -152,14 +152,14 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
             }
         }
     } else {
-        info!("No setup script found at /session/code/setup.sh");
+        info!("No setup script found at /agent/code/setup.sh");
     }
 
-    // Set working directory to session directory
-    if let Err(e) = std::env::set_current_dir("/session") {
-        warn!("Failed to set working directory to /session: {}", e);
+    // Set working directory to agent directory
+    if let Err(e) = std::env::set_current_dir("/agent") {
+        warn!("Failed to set working directory to /agent: {}", e);
     } else {
-        info!("Set working directory to /session");
+        info!("Set working directory to /agent");
     }
 
     // Initialize message handler
@@ -177,12 +177,12 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
         );
     }
 
-    info!("Host initialized, getting Content port information...");
+    info!("Agent initialized, getting Content port information...");
 
-    // Get session info to display Content URL
-    match api_client.get_session().await {
-        Ok(session) => {
-            if let Some(content_port) = session.content_port {
+    // Get agent info to display Content URL
+    match api_client.get_agent().await {
+        Ok(agent) => {
+            if let Some(content_port) = agent.content_port {
                 // Extract hostname from API URL instead of hardcoding localhost
                 let server_hostname = if let Ok(url) = url::Url::parse(&config.api_url) {
                     url.host_str().unwrap_or("localhost").to_string()
@@ -193,23 +193,23 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
                     "Content HTTP server available at: http://{}:{}/",
                     server_hostname, content_port
                 );
-                info!("Content folder: /session/content/ - Create HTML files here for visual displays");
+                info!("Content folder: /agent/content/ - Create HTML files here for visual displays");
             } else {
-                warn!("Content port not available for this session");
+                warn!("Content port not available for this agent");
             }
         }
         Err(e) => {
-            warn!("Failed to get session info for Content port: {}", e);
+            warn!("Failed to get agent info for Content port: {}", e);
         }
     }
 
-    info!("Setting session to idle to start timeout...");
+    info!("Setting agent to idle to start timeout...");
 
-    // Set session to idle after initialization to start timeout
-    if let Err(e) = api_client.update_session_to_idle().await {
-        warn!("Failed to set session to idle after initialization: {}", e);
+    // Set agent to idle after initialization to start timeout
+    if let Err(e) = api_client.update_agent_to_idle().await {
+        warn!("Failed to set agent to idle after initialization: {}", e);
     } else {
-        info!("Session set to idle - timeout started");
+        info!("Agent set to idle - timeout started");
     }
 
     info!("Starting message polling loop...");
@@ -255,11 +255,11 @@ async fn start_content_server() -> Result<()> {
 
         // Default to index.html for root path
         let file_path = if path == "/" {
-            "/session/content/index.html"
+            "/agent/content/index.html"
         } else {
             // Remove leading slash and prepend content directory
             let clean_path = path.trim_start_matches('/');
-            &format!("/session/content/{}", clean_path)
+            &format!("/agent/content/{}", clean_path)
         };
 
         // Check if file exists and serve it
@@ -311,7 +311,7 @@ async fn start_content_server() -> Result<()> {
     let server = Server::bind(&addr).serve(make_svc);
 
     info!("Content HTTP server listening on http://0.0.0.0:8000");
-    info!("Content directory: /session/content/");
+    info!("Content directory: /agent/content/");
 
     if let Err(e) = server.await {
         error!("Content HTTP server error: {}", e);

@@ -39,7 +39,7 @@ module.exports = (program) => {
           if (!process.env.ANTHROPIC_API_KEY) {
             display.error('ANTHROPIC_API_KEY environment variable is required for the operator');
             console.log('');
-            display.info('The operator needs an Anthropic API key to provide to session containers.');
+            display.info('The operator needs an Anthropic API key to provide to agent containers.');
             console.log('   Set the environment variable and try again:');
             console.log('');
             console.log('   ' + chalk.white('export ANTHROPIC_API_KEY=sk-ant-api03-...'));
@@ -92,7 +92,7 @@ module.exports = (program) => {
           console.log(chalk.cyan('Next steps:'));
           console.log('  • Authenticate: ' + chalk.white('raworc login --user admin --pass admin'));
           console.log('  • Check health: ' + chalk.white('raworc api version'));
-          console.log('  • Start session: ' + chalk.white('raworc session'));
+          console.log('  • Start agent: ' + chalk.white('raworc agent'));
           console.log();
           console.log(chalk.gray('API Server: http://localhost:9000'));
           console.log(chalk.gray('MySQL Port: 3307'));

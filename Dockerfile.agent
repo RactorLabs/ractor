@@ -13,13 +13,13 @@ RUN apt-get update && \
 # Create Python symlink
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# Create host user
-RUN useradd -m -s /bin/bash host && \
-    echo 'host ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Create agent user
+RUN useradd -m -s /bin/bash agent && \
+    echo 'agent ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-USER host
-WORKDIR /home/host
-ENV HOME=/home/host
+USER agent
+WORKDIR /home/agent
+ENV HOME=/home/agent
 
 # Install Node.js via NVM
 RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash && \
@@ -34,15 +34,15 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 # Create global symlinks as root
 USER root
-RUN export NVM_DIR="/home/host/.nvm" && \
+RUN export NVM_DIR="/home/agent/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
     NODE_VERSION=$(nvm version default) && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/node /usr/local/bin/node && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/npm /usr/local/bin/npm && \
-    ln -sf /home/host/.cargo/bin/cargo /usr/local/bin/cargo && \
-    ln -sf /home/host/.cargo/bin/rustc /usr/local/bin/rustc
+    ln -sf /home/agent/.cargo/bin/cargo /usr/local/bin/cargo && \
+    ln -sf /home/agent/.cargo/bin/rustc /usr/local/bin/rustc
 
-USER host
+USER agent
 
 # Setup environment for interactive and non-interactive shells
 RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
@@ -53,22 +53,22 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '. "$HOME/.cargo/env"' >> ~/.profile
 
 # Set environment variables for runtime
-ENV NVM_DIR=/home/host/.nvm
+ENV NVM_DIR=/home/agent/.nvm
 
 # Copy pre-built binary from local build
 USER root
-COPY target/release/raworc-host /usr/local/bin/raworc-host
+COPY target/release/raworc-agent /usr/local/bin/raworc-agent
 
-# Create session directory structure (will be overridden by volume mount)
-RUN mkdir -p /session && \
-    chown -R host:host /session && \
-    chmod -R 755 /session
+# Create agent directory structure (will be overridden by volume mount)
+RUN mkdir -p /agent && \
+    chown -R agent:agent /agent && \
+    chmod -R 755 /agent
 
-# Switch back to host user and set working directory to /session
-USER host
-WORKDIR /session
+# Switch back to agent user and set working directory to /agent
+USER agent
+WORKDIR /agent
 
-# Configure environment variables for session structure
-ENV RAWORC_SESSION_DIR=/session
+# Configure environment variables for agent structure
+ENV RAWORC_AGENT_DIR=/agent
 
-CMD ["raworc-host", "--api-url", "http://raworc_server:9000", "--session-name", "unknown", "--api-key", "unknown"]
+CMD ["raworc-agent", "--api-url", "http://raworc_server:9000", "--agent-name", "unknown", "--api-key", "unknown"]

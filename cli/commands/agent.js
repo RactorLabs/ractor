@@ -57,116 +57,116 @@ function formatMarkdown(text) {
 }
 
 const {
-  SESSION_STATE_IDLE,
-  SESSION_STATE_CLOSED,
-  SESSION_STATE_BUSY,
+  AGENT_STATE_IDLE,
+  AGENT_STATE_CLOSED,
+  AGENT_STATE_BUSY,
   MESSAGE_ROLE_USER,
-  MESSAGE_ROLE_HOST
+  MESSAGE_ROLE_AGENT
 } = require('../lib/constants');
 
 module.exports = (program) => {
-  const sessionCmd = program
-    .command('session')
-    .description('Session management and interactive sessions');
+  const agentCmd = program
+    .command('agent')
+    .description('Agent management and interactive agents');
 
-  // Default session start (no subcommand)
-  sessionCmd
+  // Default agent start (no subcommand)
+  agentCmd
     .command('start', { isDefault: true })
-    .description('Start a new interactive session')
-    .option('-S, --secrets <secrets>', 'JSON string of secrets (key-value pairs) for new sessions')
+    .description('Start a new interactive agent')
+    .option('-S, --secrets <secrets>', 'JSON string of secrets (key-value pairs) for new agents')
     .option('-i, --instructions <text>', 'Direct instructions text')
     .option('-if, --instructions-file <file>', 'Path to instructions file')
     .option('-s, --setup <text>', 'Direct setup script text')
     .option('-sf, --setup-file <file>', 'Path to setup script file')
-    .option('-p, --prompt <text>', 'Prompt to send after session creation')
-    .option('-n, --name <name>', 'Name for the session')
-    .option('-t, --timeout <seconds>', 'Session timeout in seconds (default: 60)')
+    .option('-p, --prompt <text>', 'Prompt to send after agent creation')
+    .option('-n, --name <name>', 'Name for the agent')
+    .option('-t, --timeout <seconds>', 'Agent timeout in seconds (default: 60)')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session                           # Start a new session\n' +
-      '  $ raworc session start -n "my-session"    # Start with name\n' +
-      '  $ raworc session start -S \'{"DB_URL":"postgres://..."}\' # Start with user secrets\n' +
-      '  $ raworc session start -p "Hello" -n "test" # Start with prompt and name\n' +
-      '  $ raworc session start -t 120             # Start with 2 minute timeout\n')
+      '  $ raworc agent                           # Start a new agent\n' +
+      '  $ raworc agent start -n "my-agent"    # Start with name\n' +
+      '  $ raworc agent start -S \'{"DB_URL":"postgres://..."}\' # Start with user secrets\n' +
+      '  $ raworc agent start -p "Hello" -n "test" # Start with prompt and name\n' +
+      '  $ raworc agent start -t 120             # Start with 2 minute timeout\n')
     .action(async (options) => {
-      await sessionStartCommand(options);
+      await agentStartCommand(options);
     });
 
   // Restore subcommand
-  sessionCmd
-    .command('restore <session-name>')
-    .description('Restore an existing session by name')
+  agentCmd
+    .command('restore <agent-name>')
+    .description('Restore an existing agent by name')
     .option('-p, --prompt <text>', 'Prompt to send after restoring')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session restore abc123           # Restore by name\n' +
-      '  $ raworc session restore my-session       # Restore by name\n' +
-      '  $ raworc session restore my-session -p "Continue work" # Restore with prompt\n')
-    .action(async (sessionName, options) => {
-      await sessionRestoreCommand(sessionName, options);
+      '  $ raworc agent restore abc123           # Restore by name\n' +
+      '  $ raworc agent restore my-agent       # Restore by name\n' +
+      '  $ raworc agent restore my-agent -p "Continue work" # Restore with prompt\n')
+    .action(async (agentName, options) => {
+      await agentRestoreCommand(agentName, options);
     });
 
   // Remix subcommand  
-  sessionCmd
-    .command('remix <session-name>')
-    .description('Create a new session remixing an existing session')
-    .option('-n, --name <name>', 'Name for the new session')
+  agentCmd
+    .command('remix <agent-name>')
+    .description('Create a new agent remixing an existing agent')
+    .option('-n, --name <name>', 'Name for the new agent')
     .option('-c, --code <boolean>', 'Include code files (default: true)')
     .option('-s, --secrets <boolean>', 'Include secrets (default: true)')
     .option('-p, --prompt <text>', 'Prompt to send after creation')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session remix abc123             # Remix by name\n' +
-      '  $ raworc session remix my-session         # Remix by name\n' +
-      '  $ raworc session remix my-session -n "new-name" # Remix with new name\n' +
-      '  $ raworc session remix my-session -s false # Remix without secrets\n' +
-      '  $ raworc session remix my-session --code false # Copy only secrets\n')
-    .action(async (sessionName, options) => {
-      await sessionRemixCommand(sessionName, options);
+      '  $ raworc agent remix abc123             # Remix by name\n' +
+      '  $ raworc agent remix my-agent         # Remix by name\n' +
+      '  $ raworc agent remix my-agent -n "new-name" # Remix with new name\n' +
+      '  $ raworc agent remix my-agent -s false # Remix without secrets\n' +
+      '  $ raworc agent remix my-agent --code false # Copy only secrets\n')
+    .action(async (agentName, options) => {
+      await agentRemixCommand(agentName, options);
     });
 
   // Publish subcommand
-  sessionCmd
-    .command('publish <session-name>')
-    .description('Publish a session for public access')
+  agentCmd
+    .command('publish <agent-name>')
+    .description('Publish a agent for public access')
     .option('-c, --code <boolean>', 'Allow code remix (default: true)')
     .option('-s, --secrets <boolean>', 'Allow secrets remix (default: true)')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session publish abc123           # Publish with all permissions\n' +
-      '  $ raworc session publish my-session       # Publish by name\n' +
-      '  $ raworc session publish abc123 --secrets false # Publish without secrets remix\n' +
-      '  $ raworc session publish abc123 --secrets false # Only allow code remix\n')
-    .action(async (sessionName, options) => {
-      await sessionPublishCommand(sessionName, options);
+      '  $ raworc agent publish abc123           # Publish with all permissions\n' +
+      '  $ raworc agent publish my-agent       # Publish by name\n' +
+      '  $ raworc agent publish abc123 --secrets false # Publish without secrets remix\n' +
+      '  $ raworc agent publish abc123 --secrets false # Only allow code remix\n')
+    .action(async (agentName, options) => {
+      await agentPublishCommand(agentName, options);
     });
 
   // Unpublish subcommand
-  sessionCmd
-    .command('unpublish <session-name>')
-    .description('Remove session from public access')
+  agentCmd
+    .command('unpublish <agent-name>')
+    .description('Remove agent from public access')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session unpublish abc123         # Unpublish by name\n' +
-      '  $ raworc session unpublish my-session     # Unpublish by name\n')
-    .action(async (sessionName, options) => {
-      await sessionUnpublishCommand(sessionName, options);
+      '  $ raworc agent unpublish abc123         # Unpublish by name\n' +
+      '  $ raworc agent unpublish my-agent     # Unpublish by name\n')
+    .action(async (agentName, options) => {
+      await agentUnpublishCommand(agentName, options);
     });
 
   // Close subcommand
-  sessionCmd
-    .command('close <session-name>')
-    .description('Close an active session')
+  agentCmd
+    .command('close <agent-name>')
+    .description('Close an active agent')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc session close abc123            # Close by name\n' +
-      '  $ raworc session close my-session        # Close by name\n')
-    .action(async (sessionName, options) => {
-      await sessionCloseCommand(sessionName, options);
+      '  $ raworc agent close abc123            # Close by name\n' +
+      '  $ raworc agent close my-agent        # Close by name\n')
+    .action(async (agentName, options) => {
+      await agentCloseCommand(agentName, options);
     });
 };
 
-async function sessionStartCommand(options) {
+async function agentStartCommand(options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -176,18 +176,18 @@ async function sessionStartCommand(options) {
   }
 
 
-  let sessionName = null;
+  let agentName = null;
 
   try {
-    // Create a new session
+    // Create a new agent
 
-    // Prepare session creation payload
-    const sessionPayload = {};
+    // Prepare agent creation payload
+    const agentPayload = {};
 
     // Add secrets if provided
     if (options.secrets) {
       try {
-        sessionPayload.secrets = JSON.parse(options.secrets);
+        agentPayload.secrets = JSON.parse(options.secrets);
       } catch (error) {
         console.error(chalk.red('✗ Error:'), 'Secrets must be valid JSON');
         process.exit(1);
@@ -199,11 +199,11 @@ async function sessionStartCommand(options) {
 
     // Add instructions if provided
     if (options.instructions) {
-      sessionPayload.instructions = options.instructions;
+      agentPayload.instructions = options.instructions;
     } else if (options.instructionsFile) {
       try {
         const fs = require('fs');
-        sessionPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
+        agentPayload.instructions = fs.readFileSync(options.instructionsFile, 'utf8');
       } catch (error) {
         console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
@@ -212,11 +212,11 @@ async function sessionStartCommand(options) {
 
     // Add setup if provided
     if (options.setup) {
-      sessionPayload.setup = options.setup;
+      agentPayload.setup = options.setup;
     } else if (options.setupFile) {
       try {
         const fs = require('fs');
-        sessionPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
+        agentPayload.setup = fs.readFileSync(options.setupFile, 'utf8');
       } catch (error) {
         console.error(chalk.red('✗ Error:'), error.message);
         process.exit(1);
@@ -225,22 +225,22 @@ async function sessionStartCommand(options) {
 
     // Add prompt if provided
     if (options.prompt) {
-      sessionPayload.prompt = options.prompt;
+      agentPayload.prompt = options.prompt;
     }
 
     // Add name if provided
     if (options.name) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
-        console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
+        console.error(chalk.red('✗ Error:'), 'Agent name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
-        console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
-        console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
+        console.error(chalk.red('✗ Error:'), 'Agent name must contain only alphanumeric characters and hyphens');
+        console.log(chalk.gray('Examples:'), 'my-agent, data-analysis, project1, test-run');
         process.exit(1);
       }
-      sessionPayload.name = options.name;
+      agentPayload.name = options.name;
     }
 
     // Add timeout if provided
@@ -250,25 +250,25 @@ async function sessionStartCommand(options) {
         console.error(chalk.red('✗ Error:'), 'Timeout must be a positive number in seconds');
         process.exit(1);
       }
-      sessionPayload.timeout_seconds = timeoutSeconds;
+      agentPayload.timeout_seconds = timeoutSeconds;
     }
 
-    const createResponse = await api.post('/sessions', sessionPayload);
+    const createResponse = await api.post('/agents', agentPayload);
 
     if (!createResponse.success) {
       console.error(chalk.red('✗ Error:'), createResponse.error);
 
       if (createResponse.status === 400) {
         console.log();
-        console.log(chalk.yellow('ℹ') + ' Check if your session parameters are valid');
+        console.log(chalk.yellow('ℹ') + ' Check if your agent parameters are valid');
       }
 
       process.exit(1);
     }
 
-    sessionName = createResponse.data.name;
+    agentName = createResponse.data.name;
 
-    await startInteractiveSession(sessionName, options);
+    await startInteractiveAgent(agentName, options);
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -276,7 +276,7 @@ async function sessionStartCommand(options) {
   }
 }
 
-async function sessionRestoreCommand(sessionName, options) {
+async function agentRestoreCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -288,40 +288,40 @@ async function sessionRestoreCommand(sessionName, options) {
 
   try {
 
-    // Get session details first
-    const sessionResponse = await api.get(`/sessions/${sessionName}`);
+    // Get agent details first
+    const agentResponse = await api.get(`/agents/${agentName}`);
 
-    if (!sessionResponse.success) {
-      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
+    if (!agentResponse.success) {
+      console.error(chalk.red('✗ Error:'), agentResponse.error || 'Agent does not exist');
       process.exit(1);
     }
 
-    const session = sessionResponse.data;
+    const agent = agentResponse.data;
 
-    // Update sessionName to actual name for consistent display
-    sessionName = session.name;
+    // Update agentName to actual name for consistent display
+    agentName = agent.name;
 
-    // Handle different session states
-    if (session.state === SESSION_STATE_CLOSED) {
+    // Handle different agent states
+    if (agent.state === AGENT_STATE_CLOSED) {
       const restorePayload = {};
       if (options.prompt) {
         restorePayload.prompt = options.prompt;
       }
 
-      const restoreResponse = await api.post(`/sessions/${sessionName}/restore`, restorePayload);
+      const restoreResponse = await api.post(`/agents/${agentName}/restore`, restorePayload);
 
       if (!restoreResponse.success) {
         console.error(chalk.red('✗ Error:'), restoreResponse.error);
         process.exit(1);
       }
 
-    } else if (session.state === SESSION_STATE_IDLE) {
+    } else if (agent.state === AGENT_STATE_IDLE) {
 
-      // If prompt provided for already-running session, send it as a message
+      // If prompt provided for already-running agent, send it as a message
       if (options.prompt) {
-        console.log(chalk.blue('Sending prompt to running session:'), options.prompt);
+        console.log(chalk.blue('Sending prompt to running agent:'), options.prompt);
         try {
-          const messageResponse = await api.post(`/sessions/${sessionName}/messages`, {
+          const messageResponse = await api.post(`/agents/${agentName}/messages`, {
             content: options.prompt,
             role: 'user'
           });
@@ -336,14 +336,14 @@ async function sessionRestoreCommand(sessionName, options) {
         }
         console.log();
       }
-    } else if (session.state === SESSION_STATE_BUSY) {
-      console.log(chalk.yellow('ℹ') + ' Session is currently processing. You can observe ongoing activity.');
+    } else if (agent.state === AGENT_STATE_BUSY) {
+      console.log(chalk.yellow('ℹ') + ' Agent is currently processing. You can observe ongoing activity.');
       console.log();
     } else {
       process.exit(1);
     }
 
-    await startInteractiveSession(sessionName, { ...options, isRestore: true, sessionState: session.state });
+    await startInteractiveAgent(agentName, { ...options, isRestore: true, agentState: agent.state });
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -351,7 +351,7 @@ async function sessionRestoreCommand(sessionName, options) {
   }
 }
 
-async function sessionRemixCommand(sourceSessionName, options) {
+async function agentRemixCommand(sourceAgentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -362,17 +362,17 @@ async function sessionRemixCommand(sourceSessionName, options) {
 
 
   try {
-    // Get session details first
-    const sessionResponse = await api.get(`/sessions/${sourceSessionName}`);
+    // Get agent details first
+    const agentResponse = await api.get(`/agents/${sourceAgentName}`);
 
-    if (!sessionResponse.success) {
-      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
+    if (!agentResponse.success) {
+      console.error(chalk.red('✗ Error:'), agentResponse.error || 'Agent does not exist');
       process.exit(1);
     }
 
-    const sourceSession = sessionResponse.data;
-    // Update sessionName to actual name for consistent display
-    sourceSessionName = sourceSession.name;
+    const sourceAgent = agentResponse.data;
+    // Update agentName to actual name for consistent display
+    sourceAgentName = sourceAgent.name;
 
     // Prepare remix payload
     const remixPayload = {};
@@ -397,35 +397,35 @@ async function sessionRemixCommand(sourceSessionName, options) {
     if (options.name) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
-        console.error(chalk.red('✗ Error:'), 'Session name must be 1-100 characters long');
+        console.error(chalk.red('✗ Error:'), 'Agent name must be 1-100 characters long');
         process.exit(1);
       }
       if (!/^[a-zA-Z0-9-]+$/.test(options.name)) {
-        console.error(chalk.red('✗ Error:'), 'Session name must contain only alphanumeric characters and hyphens');
-        console.log(chalk.gray('Examples:'), 'my-session, data-analysis, project1, test-run');
+        console.error(chalk.red('✗ Error:'), 'Agent name must contain only alphanumeric characters and hyphens');
+        console.log(chalk.gray('Examples:'), 'my-agent, data-analysis, project1, test-run');
         process.exit(1);
       }
       remixPayload.name = options.name;
     }
 
-    // Create remix session
-    const remixResponse = await api.post(`/sessions/${sourceSessionName}/remix`, remixPayload);
+    // Create remix agent
+    const remixResponse = await api.post(`/agents/${sourceAgentName}/remix`, remixPayload);
 
     if (!remixResponse.success) {
       console.error(chalk.red('✗ Error:'), remixResponse.error);
       process.exit(1);
     }
 
-    const sessionName = remixResponse.data.name;
-    const newSession = remixResponse.data;
+    const agentName = remixResponse.data.name;
+    const newAgent = remixResponse.data;
 
     // Show detailed remix success info
-    if (newSession.name) {
-      console.log(chalk.green('✓') + ` Session remixed as "${newSession.name}": ${sessionName}`);
+    if (newAgent.name) {
+      console.log(chalk.green('✓') + ` Agent remixed as "${newAgent.name}": ${agentName}`);
     }
 
 
-    await startInteractiveSession(sessionName, { ...options, sourceSessionName: sourceSessionName });
+    await startInteractiveAgent(agentName, { ...options, sourceAgentName: sourceAgentName });
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -433,33 +433,33 @@ async function sessionRemixCommand(sourceSessionName, options) {
   }
 }
 
-async function showSessionBox(sessionName, mode, user, source = null) {
+async function showAgentBox(agentName, mode, user, source = null) {
   // Create descriptive title based on mode
   const modeIcons = {
-    'New': `${display.icons.session} Session Start`,
-    'Restore': `${display.icons.session} Session Restore`, 
-    'Remix': `${display.icons.session} Session Remix`
+    'New': `${display.icons.agent} Agent Start`,
+    'Restore': `${display.icons.agent} Agent Restore`, 
+    'Remix': `${display.icons.agent} Agent Remix`
   };
   
-  const title = modeIcons[mode] || `${display.icons.session} Session`;
+  const title = modeIcons[mode] || `${display.icons.agent} Agent`;
   const commands = '/help (for commands)';
   
   // Build base lines
   const lines = [
-    `Session: ${sessionName}`,
+    `Agent: ${agentName}`,
     source ? `Source: ${source}` : null,
     `User: ${user}`,
     `Commands: ${commands}`
   ].filter(line => line !== null);
   
-  // Try to get Content URL from session info
+  // Try to get Content URL from agent info
   try {
-    const sessionResponse = await api.get(`/sessions/${sessionName}`);
-    if (sessionResponse.success && sessionResponse.data && sessionResponse.data.content_port) {
+    const agentResponse = await api.get(`/agents/${agentName}`);
+    if (agentResponse.success && agentResponse.data && agentResponse.data.content_port) {
       // Extract hostname from server URL instead of hardcoding localhost
       const serverUrl = config.getServerUrl();
       const serverHostname = new URL(serverUrl).hostname;
-      const contentUrl = `http://${serverHostname}:${sessionResponse.data.content_port}/`;
+      const contentUrl = `http://${serverHostname}:${agentResponse.data.content_port}/`;
       lines.splice(-1, 0, `Content: ${contentUrl}`); // Insert before Commands line
     }
   } catch (error) {
@@ -486,7 +486,7 @@ async function showSessionBox(sessionName, mode, user, source = null) {
   console.log('└' + '─'.repeat(boxWidth - 2) + '┘');
 }
 
-async function startInteractiveSession(sessionName, options) {
+async function startInteractiveAgent(agentName, options) {
   // Get user info and determine mode
   const authData = config.getAuth();
   const userName = authData.user?.user || authData.user || 'Unknown';
@@ -498,17 +498,17 @@ async function startInteractiveSession(sessionName, options) {
   
   if (options.isRestore) {
     mode = 'Restore';
-  } else if (options.sourceSessionName) {
+  } else if (options.sourceAgentName) {
     mode = 'Remix';
-    source = options.sourceSessionName;
+    source = options.sourceAgentName;
   }
   
-  await showSessionBox(sessionName, mode, user, source);
+  await showAgentBox(agentName, mode, user, source);
 
-  // Show recent conversation history for restored sessions
+  // Show recent conversation history for restored agents
   if (options.isRestore) {
     try {
-      const messagesResponse = await api.get(`/sessions/${sessionName}/messages`);
+      const messagesResponse = await api.get(`/agents/${agentName}/messages`);
 
       if (messagesResponse.success && messagesResponse.data && messagesResponse.data.length > 0) {
         const messages = messagesResponse.data;
@@ -535,7 +535,7 @@ async function startInteractiveSession(sessionName, options) {
               }
             });
           } else {
-            // Host messages: show content without "> " prefix, just normal text
+            // Agent messages: show content without "> " prefix, just normal text
             const lines = content.split('\n');
             lines.forEach(line => {
               console.log(line);
@@ -555,19 +555,19 @@ async function startInteractiveSession(sessionName, options) {
 
   console.log();
 
-  // Handle prompt if provided (for any session type)
+  // Handle prompt if provided (for any agent type)
   if (options.prompt) {
     console.log(chalk.green('> ') + chalk.white(options.prompt));
 
     // Create comprehensive prompt manager
-    const promptManager = createPromptManager(sessionName);
+    const promptManager = createPromptManager(agentName);
     await promptManager.show();
     promptManager.startMonitoring();
     
     try {
       // Send the prompt message to the API
       const sendTime = Date.now();
-      const sendResponse = await api.post(`/sessions/${sessionName}/messages`, {
+      const sendResponse = await api.post(`/agents/${agentName}/messages`, {
         content: options.prompt,
         role: 'user'
       });
@@ -578,8 +578,8 @@ async function startInteractiveSession(sessionName, options) {
         return;
       }
       
-      // Wait for all host responses to the prompt (tool calls + final response)
-      await waitForAllHostResponses(sessionName, sendTime, 60000, {
+      // Wait for all agent responses to the prompt (tool calls + final response)
+      await waitForAllAgentResponses(agentName, sendTime, 60000, {
         clearPromptFn: () => promptManager.hide(),
         showPromptFn: (state) => {
           showPrompt(state);
@@ -600,33 +600,33 @@ async function startInteractiveSession(sessionName, options) {
     }
   }
 
-  // If connecting to a busy session, start monitoring for ongoing activity
-  if (options.sessionState === SESSION_STATE_BUSY) {
-    console.log(chalk.blue('ℹ') + ' Monitoring ongoing session activity...');
+  // If connecting to a busy agent, start monitoring for ongoing activity
+  if (options.agentState === AGENT_STATE_BUSY) {
+    console.log(chalk.blue('ℹ') + ' Monitoring ongoing agent activity...');
     console.log();
 
     // Start monitoring without a user message time (will show any new messages)
-    const monitoringPromise = monitorForResponses(sessionName, 0);
+    const monitoringPromise = monitorForResponses(agentName, 0);
 
     // Start chat loop concurrently so user can still interact
-    const chatPromise = chatLoop(sessionName, options);
+    const chatPromise = chatLoop(agentName, options);
 
-    // Wait for either to complete (though monitoring should complete when host finishes)
+    // Wait for either to complete (though monitoring should complete when agent finishes)
     await Promise.race([monitoringPromise, chatPromise]);
   } else {
     // Start synchronous chat loop - don't skip initial prompt, let chatLoop show the correct state
-    await chatLoop(sessionName, { ...options, skipInitialPrompt: false });
+    await chatLoop(agentName, { ...options, skipInitialPrompt: false });
   }
 }
 
-async function waitForHostResponse(sessionName, userMessageTime, timeoutMs = 60000) {
+async function waitForAgentResponse(agentName, userMessageTime, timeoutMs = 60000) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastCheckedCount = 0;
 
   // Get initial message count to detect new messages
   try {
-    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
+    const initialResponse = await api.get(`/agents/${agentName}/messages`);
     if (initialResponse.success && initialResponse.data) {
       const messages = Array.isArray(initialResponse.data) ? initialResponse.data : initialResponse.data.messages || [];
       lastCheckedCount = messages.length;
@@ -637,17 +637,17 @@ async function waitForHostResponse(sessionName, userMessageTime, timeoutMs = 600
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      const response = await api.get(`/sessions/${sessionName}/messages`);
+      const response = await api.get(`/agents/${agentName}/messages`);
 
       if (response.success && response.data) {
         const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
 
         // Check if we have new messages
         if (messages.length > lastCheckedCount) {
-          // Look for the newest host message that was created after our user message
+          // Look for the newest agent message that was created after our user message
           for (let i = messages.length - 1; i >= 0; i--) {
             const message = messages[i];
-            if (message.role === MESSAGE_ROLE_HOST) {
+            if (message.role === MESSAGE_ROLE_AGENT) {
               const messageTime = new Date(message.created_at).getTime();
               if (messageTime > userMessageTime) {
                 return message;
@@ -666,11 +666,11 @@ async function waitForHostResponse(sessionName, userMessageTime, timeoutMs = 600
     await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
 
-  throw new Error('Timeout waiting for host response');
+  throw new Error('Timeout waiting for agent response');
 }
 
-// Shared function to display host messages (tool calls + final response)
-function displayHostMessage(message, options = {}) {
+// Shared function to display agent messages (tool calls + final response)
+function displayAgentMessage(message, options = {}) {
   const { clearPromptFn, showPromptFn, updateStateFn, setPromptVisibleFn } = options;
   const metadata = message.metadata;
   
@@ -743,7 +743,7 @@ function displayHostMessage(message, options = {}) {
   }
 }
 
-async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs = 60000, promptOptions = {}) {
+async function waitForAllAgentResponses(agentName, userMessageTime, timeoutMs = 60000, promptOptions = {}) {
   const startTime = Date.now();
   const pollInterval = 1500; // Check every 1.5 seconds
   let lastMessageCount = 0;
@@ -751,7 +751,7 @@ async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs =
 
   // Get initial message count
   try {
-    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
+    const initialResponse = await api.get(`/agents/${agentName}/messages`);
     if (initialResponse.success && initialResponse.data) {
       const messages = Array.isArray(initialResponse.data) ? initialResponse.data : initialResponse.data.messages || [];
       lastMessageCount = messages.length;
@@ -762,7 +762,7 @@ async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs =
 
   while (Date.now() - startTime < timeoutMs && !foundFinalResponse) {
     try {
-      const response = await api.get(`/sessions/${sessionName}/messages`);
+      const response = await api.get(`/agents/${agentName}/messages`);
 
       if (response.success && response.data) {
         const messages = Array.isArray(response.data) ? response.data : response.data.messages || [];
@@ -772,10 +772,10 @@ async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs =
           const newMessages = messages.slice(lastMessageCount);
           
           for (const message of newMessages) {
-            if (message.role === MESSAGE_ROLE_HOST) {
+            if (message.role === MESSAGE_ROLE_AGENT) {
               const messageTime = new Date(message.created_at).getTime();
               if (messageTime > userMessageTime) {
-                const result = displayHostMessage(message, {
+                const result = displayAgentMessage(message, {
                   clearPromptFn: promptOptions.clearPromptFn,
                   showPromptFn: promptOptions.showPromptFn,
                   updateStateFn: null, // No state update needed in prompt context
@@ -810,7 +810,7 @@ async function waitForAllHostResponses(sessionName, userMessageTime, timeoutMs =
 }
 
 // Comprehensive prompt manager - handles all prompt operations
-function createPromptManager(sessionName, userInput = '') {
+function createPromptManager(agentName, userInput = '') {
   let currentState = 'init';
   let currentUserInput = userInput;
   let promptVisible = false;
@@ -820,13 +820,13 @@ function createPromptManager(sessionName, userInput = '') {
   
   const updateState = async () => {
     try {
-      const sessionResponse = await api.get(`/sessions/${sessionName}`);
-      if (sessionResponse.success) {
-        const newState = sessionResponse.data.state;
+      const agentResponse = await api.get(`/agents/${agentName}`);
+      if (agentResponse.success) {
+        const newState = agentResponse.data.state;
         
-        // Special handling for sessions being restored from closed state
+        // Special handling for agents being restored from closed state
         if (isRestoringFromClosed) {
-          // Stay in 'init' until server confirms session is ready (idle or busy)
+          // Stay in 'init' until server confirms agent is ready (idle or busy)
           if (newState === 'idle' || newState === 'busy') {
             isRestoringFromClosed = false; // Clear the flag
             currentState = newState;
@@ -860,7 +860,7 @@ function createPromptManager(sessionName, userInput = '') {
     
     if (stateMonitorInterval || dotAnimationInterval) return; // Already started
     
-    // Monitor session state changes every 2 seconds
+    // Monitor agent state changes every 2 seconds
     stateMonitorInterval = setInterval(updateState, 2000);
     
     // Animation interval for dots (every 500ms)
@@ -1028,11 +1028,11 @@ function clearPrompt() {
   process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear empty line
 }
 
-async function monitorForResponses(sessionName, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
+async function monitorForResponses(agentName, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
   let lastMessageCount = 0;
 
   try {
-    const initialResponse = await api.get(`/sessions/${sessionName}/messages`);
+    const initialResponse = await api.get(`/agents/${agentName}/messages`);
     if (initialResponse.success) {
       lastMessageCount = initialResponse.data.length;
     }
@@ -1042,13 +1042,13 @@ async function monitorForResponses(sessionName, userMessageTime, getCurrentState
 
   while (true) {
     try {
-      const response = await api.get(`/sessions/${sessionName}/messages`);
+      const response = await api.get(`/agents/${agentName}/messages`);
       if (response.success && response.data.length > lastMessageCount) {
         const newMessages = response.data.slice(lastMessageCount);
 
         for (const message of newMessages) {
-          if (message.role === 'host') {
-            const result = displayHostMessage(message, {
+          if (message.role === 'agent') {
+            const result = displayAgentMessage(message, {
               clearPromptFn: getPromptVisible() ? clearPrompt : null,
               showPromptFn: showPrompt,
               updateStateFn: updateState,
@@ -1070,54 +1070,54 @@ async function monitorForResponses(sessionName, userMessageTime, getCurrentState
   }
 }
 
-async function chatLoop(sessionName, options = {}) {
+async function chatLoop(agentName, options = {}) {
   const readline = require('readline');
-  // For restored sessions from closed state, start with 'init' and wait for server to confirm ready
-  // For new sessions, start with 'init' 
-  // For other cases, use current session state
-  let currentSessionState = 'init';
+  // For restored agents from closed state, start with 'init' and wait for server to confirm ready
+  // For new agents, start with 'init' 
+  // For other cases, use current agent state
+  let currentAgentState = 'init';
   let currentUserInput = '';
   let promptVisible = false; // Track if prompt is currently displayed
-  let isRestoringFromClosed = options.isRestore && options.sessionState === SESSION_STATE_CLOSED;
+  let isRestoringFromClosed = options.isRestore && options.agentState === AGENT_STATE_CLOSED;
 
-  // Function to fetch and update session state
-  async function updateSessionState() {
+  // Function to fetch and update agent state
+  async function updateAgentState() {
     try {
-      const sessionResponse = await api.get(`/sessions/${sessionName}`);
-      if (sessionResponse.success) {
-        const newState = sessionResponse.data.state;
+      const agentResponse = await api.get(`/agents/${agentName}`);
+      if (agentResponse.success) {
+        const newState = agentResponse.data.state;
         
-        // Special handling for sessions being restored from closed state
+        // Special handling for agents being restored from closed state
         if (isRestoringFromClosed) {
-          // Stay in 'init' until server confirms session is ready (idle or busy)
+          // Stay in 'init' until server confirms agent is ready (idle or busy)
           if (newState === 'idle' || newState === 'busy') {
             isRestoringFromClosed = false; // Clear the flag
-            currentSessionState = newState;
+            currentAgentState = newState;
           }
           // Otherwise keep showing 'init' state
         } else {
           // Normal state transitions
-          if (newState !== currentSessionState) {
-            currentSessionState = newState;
+          if (newState !== currentAgentState) {
+            currentAgentState = newState;
           }
         }
         
         // Only redraw if prompt is currently visible
         if (promptVisible) {
           clearPrompt();
-          showPromptWithInput(currentSessionState, currentUserInput);
+          showPromptWithInput(currentAgentState, currentUserInput);
         }
         
-        return currentSessionState;
+        return currentAgentState;
       }
     } catch (error) {
       // Keep current state if API fails
     }
-    return currentSessionState;
+    return currentAgentState;
   }
 
-  // Get initial session state
-  await updateSessionState();
+  // Get initial agent state
+  await updateAgentState();
 
   // Enable keypress events
   readline.emitKeypressEvents(process.stdin);
@@ -1130,20 +1130,20 @@ async function chatLoop(sessionName, options = {}) {
     output: process.stdout
   });
 
-  // Monitor session state changes every 2 seconds
-  const stateMonitorInterval = setInterval(updateSessionState, 2000);
+  // Monitor agent state changes every 2 seconds
+  const stateMonitorInterval = setInterval(updateAgentState, 2000);
   
   // Animation interval for dots (every 500ms)
   const dotAnimationInterval = setInterval(() => {
-    if (promptVisible && (currentSessionState === 'init' || currentSessionState === 'busy')) {
+    if (promptVisible && (currentAgentState === 'init' || currentAgentState === 'busy')) {
       clearPrompt();
-      showPromptWithInput(currentSessionState, currentUserInput);
+      showPromptWithInput(currentAgentState, currentUserInput);
     }
   }, 500);
 
   // Only show initial prompt if not skipping it
   if (!options.skipInitialPrompt) {
-    showPrompt(currentSessionState);
+    showPrompt(currentAgentState);
     promptVisible = true;
   }
 
@@ -1167,7 +1167,7 @@ async function chatLoop(sessionName, options = {}) {
     if (!userInput) {
       clearPrompt();
       promptVisible = false;
-      showPrompt(currentSessionState);
+      showPrompt(currentAgentState);
       promptVisible = true;
       return;
     }
@@ -1180,12 +1180,12 @@ async function chatLoop(sessionName, options = {}) {
       return;
     }
 
-    // Handle detach command - exit interactive mode without closing session
+    // Handle detach command - exit interactive mode without closing agent
     if (userInput.toLowerCase() === '/detach' || userInput.toLowerCase() === '/d') {
       clearPrompt();
       promptVisible = false;
-      console.log(chalk.green('◊ Detached from session. Session continues running.'));
-      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc session restore ${sessionName}`));
+      console.log(chalk.green('◊ Detached from agent. Agent continues running.'));
+      console.log(chalk.gray('Reconnect with: ') + chalk.white(`raworc agent restore ${agentName}`));
       process.exit(0);
     }
 
@@ -1196,7 +1196,7 @@ async function chatLoop(sessionName, options = {}) {
     if (userInput === '/status') {
       clearPrompt(); // Short command, no enter to clear
       promptVisible = false;
-      await showSessionStatus(sessionName);
+      await showAgentStatus(agentName);
       shouldSendMessage = false;
     }
     // Handle help command
@@ -1212,20 +1212,20 @@ async function chatLoop(sessionName, options = {}) {
       if (timeoutMatch) {
         clearPrompt(); // Short command, no enter to clear
         promptVisible = false;
-        await handleTimeoutCommand(sessionName, parseInt(timeoutMatch[1], 10));
+        await handleTimeoutCommand(agentName, parseInt(timeoutMatch[1], 10));
         shouldSendMessage = false;
       }
     }
     
     // Show prompt after command execution or send message
     if (!shouldSendMessage) {
-      showPrompt(currentSessionState);
+      showPrompt(currentAgentState);
       promptVisible = true;
     } else {
-      // Send message to session - clear with enter since it's regular input
+      // Send message to agent - clear with enter since it's regular input
       clearPrompt();
       promptVisible = false;
-      await sendMessage(sessionName, userInput);
+      await sendMessage(agentName, userInput);
     }
   });
 
@@ -1234,9 +1234,9 @@ async function chatLoop(sessionName, options = {}) {
     clearInterval(dotAnimationInterval);
     rl.close();
     
-    // Close the session on the server silently
+    // Close the agent on the server silently
     try {
-      await api.post(`/sessions/${sessionName}/close`);
+      await api.post(`/agents/${agentName}/close`);
     } catch (error) {
       // Ignore all errors during cleanup
     }
@@ -1250,15 +1250,15 @@ async function chatLoop(sessionName, options = {}) {
   process.on('SIGINT', () => cleanup());
   process.on('SIGTERM', () => cleanup());
 
-  async function sendMessage(sessionName, userInput) {
+  async function sendMessage(agentName, userInput) {
     console.log(chalk.green('> ') + chalk.white(userInput));
     
     // Show prompt with current actual state
-    showPrompt(currentSessionState);
+    showPrompt(currentAgentState);
     promptVisible = true;
 
     try {
-      const sendResponse = await api.post(`/sessions/${sessionName}/messages`, {
+      const sendResponse = await api.post(`/agents/${agentName}/messages`, {
         content: userInput,
         role: 'user'
       });
@@ -1268,21 +1268,21 @@ async function chatLoop(sessionName, options = {}) {
         promptVisible = false;
         console.log(chalk.red('✗ Failed to send message:'), sendResponse.error);
         // Update state from server after error
-        await updateSessionState();
-        showPrompt(currentSessionState);
+        await updateAgentState();
+        showPrompt(currentAgentState);
         promptVisible = true;
         return;
       }
 
-      await monitorForResponses(sessionName, Date.now(), () => currentSessionState, updateSessionState, () => promptVisible, (visible) => { promptVisible = visible; });
+      await monitorForResponses(agentName, Date.now(), () => currentAgentState, updateAgentState, () => promptVisible, (visible) => { promptVisible = visible; });
 
     } catch (error) {
       clearPrompt();
       promptVisible = false;
       console.log(chalk.red('✗ Error sending message:'), error.message);
       // Update state from server after error
-      await updateSessionState();
-      showPrompt(currentSessionState);
+      await updateAgentState();
+      showPrompt(currentAgentState);
       promptVisible = true;
     }
   }
@@ -1292,43 +1292,43 @@ async function chatLoop(sessionName, options = {}) {
   });
 }
 
-async function showSessionStatus(sessionName) {
+async function showAgentStatus(agentName) {
   try {
-    const statusResponse = await api.get(`/sessions/${sessionName}`);
+    const statusResponse = await api.get(`/agents/${agentName}`);
     if (statusResponse.success) {
       console.log();
-      console.log(chalk.blue('ℹ') + ' Session Status:');
+      console.log(chalk.blue('ℹ') + ' Agent Status:');
       console.log(chalk.gray('  Name:'), statusResponse.data.name || 'Unnamed');
       console.log(chalk.gray('  State:'), getStateDisplay(statusResponse.data.state));
       console.log(chalk.gray('  Created:'), new Date(statusResponse.data.created_at).toLocaleString());
       console.log(chalk.gray('  Updated:'), new Date(statusResponse.data.updated_at).toLocaleString());
       console.log();
     } else {
-      console.log(chalk.red('✗ Failed to get session status:'), statusResponse.error);
+      console.log(chalk.red('✗ Failed to get agent status:'), statusResponse.error);
     }
   } catch (error) {
-    console.log(chalk.red('✗ Error getting session status:'), error.message);
+    console.log(chalk.red('✗ Error getting agent status:'), error.message);
   }
 }
 
 function showHelp() {
   console.log(chalk.blue('ℹ') + ' Available Commands:');
   console.log(chalk.gray('  /help       '), 'Show this help message');
-  console.log(chalk.gray('  /status     '), 'Show session status');
-  console.log(chalk.gray('  /timeout <s>'), 'Change session timeout (1-3600 seconds)');
-  console.log(chalk.gray('  /name <name>'), 'Change session name (alphanumeric and hyphens)');
-  console.log(chalk.gray('  /detach     '), 'Detach from session (keeps session running)');
-  console.log(chalk.gray('  /quit       '), 'End the session');
+  console.log(chalk.gray('  /status     '), 'Show agent status');
+  console.log(chalk.gray('  /timeout <s>'), 'Change agent timeout (1-3600 seconds)');
+  console.log(chalk.gray('  /name <name>'), 'Change agent name (alphanumeric and hyphens)');
+  console.log(chalk.gray('  /detach     '), 'Detach from agent (keeps agent running)');
+  console.log(chalk.gray('  /quit       '), 'End the agent');
 }
 
-async function handleTimeoutCommand(sessionName, timeoutSeconds) {
+async function handleTimeoutCommand(agentName, timeoutSeconds) {
   if (timeoutSeconds >= 1 && timeoutSeconds <= 3600) {
     try {
-      const updateResponse = await api.put(`/sessions/${sessionName}`, {
+      const updateResponse = await api.put(`/agents/${agentName}`, {
         timeout_seconds: timeoutSeconds
       });
       if (updateResponse.success) {
-        console.log(chalk.green('✓') + ` Session timeout updated to ${timeoutSeconds} seconds`);
+        console.log(chalk.green('✓') + ` Agent timeout updated to ${timeoutSeconds} seconds`);
       } else {
         console.log(chalk.red('✗ Failed to update timeout:'), updateResponse.error || 'Unknown error');
       }
@@ -1341,7 +1341,7 @@ async function handleTimeoutCommand(sessionName, timeoutSeconds) {
 }
 
 
-async function sessionPublishCommand(sessionName, options) {
+async function agentPublishCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1350,8 +1350,8 @@ async function sessionPublishCommand(sessionName, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('📢 Publishing Raworc Session'));
-  console.log(chalk.gray('Session:'), sessionName);
+  console.log(chalk.blue('📢 Publishing Raworc Agent'));
+  console.log(chalk.gray('Agent:'), agentName);
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
   console.log(chalk.gray('User:'), userName + userType);
@@ -1377,22 +1377,22 @@ async function sessionPublishCommand(sessionName, options) {
       content: content
     };
 
-    const response = await api.post(`/sessions/${sessionName}/publish`, publishPayload);
+    const response = await api.post(`/agents/${agentName}/publish`, publishPayload);
 
     if (!response.success) {
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    console.log(chalk.green('✓') + ` Session published: ${sessionName}`);
+    console.log(chalk.green('✓') + ` Agent published: ${agentName}`);
 
     console.log();
-    console.log(chalk.green('✓') + ' Session is now publicly accessible!');
+    console.log(chalk.green('✓') + ' Agent is now publicly accessible!');
     console.log();
     console.log(chalk.blue('📋 Public Access:'));
-    console.log(chalk.gray('  • View:'), `raworc api published/sessions/${sessionName}`);
-    console.log(chalk.gray('  • List all:'), 'raworc api published/sessions');
-    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionName}`);
+    console.log(chalk.gray('  • View:'), `raworc api published/agents/${agentName}`);
+    console.log(chalk.gray('  • List all:'), 'raworc api published/agents');
+    console.log(chalk.gray('  • Remix:'), `raworc agent remix ${agentName}`);
     console.log();
 
   } catch (error) {
@@ -1401,7 +1401,7 @@ async function sessionPublishCommand(sessionName, options) {
   }
 }
 
-async function sessionUnpublishCommand(sessionName, options) {
+async function agentUnpublishCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1410,8 +1410,8 @@ async function sessionUnpublishCommand(sessionName, options) {
     process.exit(1);
   }
 
-  console.log(chalk.blue('🔒 Unpublishing Raworc Session'));
-  console.log(chalk.gray('Session:'), sessionName);
+  console.log(chalk.blue('🔒 Unpublishing Raworc Agent'));
+  console.log(chalk.gray('Agent:'), agentName);
   const userName = authData.user?.user || authData.user || 'Unknown';
   const userType = authData.user?.type ? ` (${authData.user.type})` : '';
   console.log(chalk.gray('User:'), userName + userType);
@@ -1419,17 +1419,17 @@ async function sessionUnpublishCommand(sessionName, options) {
 
   try {
 
-    const response = await api.post(`/sessions/${sessionName}/unpublish`);
+    const response = await api.post(`/agents/${agentName}/unpublish`);
 
     if (!response.success) {
       console.error(chalk.red('✗ Error:'), response.error);
       process.exit(1);
     }
 
-    console.log(chalk.green('✓') + ` Session unpublished: ${sessionName}`);
+    console.log(chalk.green('✓') + ` Agent unpublished: ${agentName}`);
 
     console.log();
-    console.log(chalk.green('✓') + ' Session is now private again');
+    console.log(chalk.green('✓') + ' Agent is now private again');
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
@@ -1437,7 +1437,7 @@ async function sessionUnpublishCommand(sessionName, options) {
   }
 }
 
-async function sessionCloseCommand(sessionName, options) {
+async function agentCloseCommand(agentName, options) {
   // Check authentication
   const authData = config.getAuth();
   if (!authData) {
@@ -1446,47 +1446,47 @@ async function sessionCloseCommand(sessionName, options) {
     process.exit(1);
   }
 
-  display.showCommandBox(`${display.icons.stop} Session Close`, {
-    session: sessionName,
+  display.showCommandBox(`${display.icons.stop} Agent Close`, {
+    agent: agentName,
     operation: 'Close and cleanup resources'
   });
 
   try {
-    // Get session details first (to show current state)
-    const sessionResponse = await api.get(`/sessions/${sessionName}`);
+    // Get agent details first (to show current state)
+    const agentResponse = await api.get(`/agents/${agentName}`);
 
-    if (!sessionResponse.success) {
-      console.error(chalk.red('✗ Error:'), sessionResponse.error || 'Session does not exist');
+    if (!agentResponse.success) {
+      console.error(chalk.red('✗ Error:'), agentResponse.error || 'Agent does not exist');
       process.exit(1);
     }
 
-    const session = sessionResponse.data;
-    // Update sessionName to actual name for consistent display
-    sessionName = session.name;
-console.log(chalk.gray('Current state:'), getStateDisplay(session.state));
+    const agent = agentResponse.data;
+    // Update agentName to actual name for consistent display
+    agentName = agent.name;
+console.log(chalk.gray('Current state:'), getStateDisplay(agent.state));
 
-    // Check if session is already closed
-    if (session.state === SESSION_STATE_CLOSED) {
-      display.info('Session was already in closed state');
+    // Check if agent is already closed
+    if (agent.state === AGENT_STATE_CLOSED) {
+      display.info('Agent was already in closed state');
       return;
     }
 
-    // Close the session
-    const closeResponse = await api.post(`/sessions/${sessionName}/close`);
+    // Close the agent
+    const closeResponse = await api.post(`/agents/${agentName}/close`);
 
     if (!closeResponse.success) {
       display.error('Close failed: ' + closeResponse.error);
       process.exit(1);
     }
 
-    display.success(`Session closed: ${sessionName}`);
+    display.success(`Agent closed: ${agentName}`);
 
     console.log();
-    display.success('Session has been closed and resources cleaned up');
+    display.success('Agent has been closed and resources cleaned up');
     console.log();
-    display.info('Session Operations:');
-    console.log(chalk.gray('  • Restore:'), `raworc session restore ${sessionName}`);
-    console.log(chalk.gray('  • Remix:'), `raworc session remix ${sessionName}`);
+    display.info('Agent Operations:');
+    console.log(chalk.gray('  • Restore:'), `raworc agent restore ${agentName}`);
+    console.log(chalk.gray('  • Remix:'), `raworc agent remix ${agentName}`);
     console.log();
 
   } catch (error) {

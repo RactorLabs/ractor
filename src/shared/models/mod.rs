@@ -3,13 +3,13 @@ use thiserror::Error;
 
 pub mod constants;
 pub mod message;
-pub mod session;
+pub mod agent;
 pub mod state_helpers;
 
-pub use message::{CreateMessageRequest, ListMessagesQuery, MessageResponse, SessionMessage};
-pub use session::{
-    CreateSessionRequest, PublishSessionRequest, RemixSessionRequest, RestoreSessionRequest,
-    Session, UpdateSessionRequest, UpdateSessionStateRequest,
+pub use message::{CreateMessageRequest, ListMessagesQuery, MessageResponse, AgentMessage};
+pub use agent::{
+    CreateAgentRequest, PublishAgentRequest, RemixAgentRequest, RestoreAgentRequest,
+    Agent, UpdateAgentRequest, UpdateAgentStateRequest,
 };
 
 // Database errors

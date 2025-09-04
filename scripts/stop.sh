@@ -43,7 +43,7 @@ usage() {
     echo "  (default)   Stop all services"
     echo ""
     echo "Options:"
-    echo "  -c, --cleanup           Clean up session containers after stopping"
+    echo "  -c, --cleanup           Clean up agent containers after stopping"
     echo "  -r, --remove            Remove containers after stopping"
     echo "  -v, --volumes           Remove named volumes after stopping"
     echo "  -n, --network           Remove Docker network after stopping"
@@ -52,7 +52,7 @@ usage() {
     echo "Examples:"
     echo "  $0                      Stop all services"
     echo "  $0 server               Stop only server"
-    echo "  $0 --cleanup            Stop all and clean session containers"
+    echo "  $0 --cleanup            Stop all and clean agent containers"
     echo "  $0 --remove             Stop all and remove containers"
     echo "  $0 --remove --volumes   Stop all, remove containers and volumes"
 }
@@ -104,7 +104,7 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
 fi
 
 print_status "Stopping Raworc services with direct Docker management"
-print_status "Cleanup session containers: $CLEANUP"
+print_status "Cleanup agent containers: $CLEANUP"
 print_status "Remove containers: $REMOVE"
 print_status "Remove volumes: $VOLUMES"
 print_status "Remove network: $NETWORK"
@@ -165,24 +165,24 @@ for component in "${stop_order[@]}"; do
     echo ""
 done
 
-# Clean up session containers if requested
+# Clean up agent containers if requested
 if [ "$CLEANUP" = true ]; then
-    print_status "Cleaning up session containers..."
+    print_status "Cleaning up agent containers..."
     
-    # Find and stop session containers
-    session_containers=$(docker ps -q --filter "name=raworc_session_" 2>/dev/null || true)
+    # Find and stop agent containers
+    agent_containers=$(docker ps -q --filter "name=raworc_agent_" 2>/dev/null || true)
     
-    if [ -n "$session_containers" ]; then
-        container_count=$(echo "$session_containers" | wc -w)
-        print_status "Found $container_count session container(s) to clean up"
+    if [ -n "$agent_containers" ]; then
+        container_count=$(echo "$agent_containers" | wc -w)
+        print_status "Found $container_count agent container(s) to clean up"
         
-        if docker stop $session_containers 2>/dev/null && docker rm $session_containers 2>/dev/null; then
-            print_success "Cleaned up $container_count session containers"
+        if docker stop $agent_containers 2>/dev/null && docker rm $agent_containers 2>/dev/null; then
+            print_success "Cleaned up $container_count agent containers"
         else
-            print_warning "Some session containers could not be cleaned up"
+            print_warning "Some agent containers could not be cleaned up"
         fi
     else
-        print_success "No session containers found"
+        print_success "No agent containers found"
     fi
     echo ""
 fi

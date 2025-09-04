@@ -163,7 +163,7 @@ echo "  raworc --help           # Show help"
 echo "  raworc start            # Start services"
 echo "  raworc auth login       # Authenticate"
 echo "  raworc api health       # Check API"
-echo "  raworc session          # Interactive session"
+echo "  raworc agent            # Interactive agent"
 
 # Show installed version
 package_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
