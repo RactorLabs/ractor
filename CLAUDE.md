@@ -276,6 +276,8 @@ git clone <this-repo>
 - `raworc agent remix <agent-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
 - `raworc agent publish <agent-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish agent
 - `raworc agent unpublish <agent-name>` - Unpublish agent
+- `raworc agent open <agent-name>` - Show content links (private and public)
+- `raworc agent sleep <agent-name>` - Sleep an active agent
 
 **API Access:**
 

@@ -155,6 +155,18 @@ module.exports = (program) => {
       await agentUnpublishCommand(agentName, options);
     });
 
+  // Open subcommand
+  agentCmd
+    .command('open <agent-name>')
+    .description('Show content links for an agent (private and public if published)')
+    .addHelpText('after', '\n' +
+      'Examples:\n' +
+      '  $ raworc agent open abc123              # Show links by name\n' +
+      '  $ raworc agent open my-agent          # Show links by name\n')
+    .action(async (agentName, options) => {
+      await agentOpenCommand(agentName, options);
+    });
+
   // Sleep subcommand
   agentCmd
     .command('sleep <agent-name>')
@@ -1235,6 +1247,34 @@ async function chatLoop(agentName, options = {}) {
       showHelp();
       shouldSendMessage = false;
     }
+    // Handle sleep command
+    else if (userInput === '/sleep' || userInput === '/s') {
+      clearPrompt();
+      promptVisible = false;
+      await handleSleepCommand(agentName);
+      shouldSendMessage = false;
+    }
+    // Handle wake command
+    else if (userInput === '/wake' || userInput === '/w') {
+      clearPrompt();
+      promptVisible = false;
+      await handleWakeCommand(agentName);
+      shouldSendMessage = false;
+    }
+    // Handle open command
+    else if (userInput === '/open' || userInput === '/o') {
+      clearPrompt();
+      promptVisible = false;
+      await handleOpenCommand(agentName);
+      shouldSendMessage = false;
+    }
+    // Handle publish command
+    else if (userInput === '/publish' || userInput === '/p') {
+      clearPrompt();
+      promptVisible = false;
+      await handlePublishCommand(agentName);
+      shouldSendMessage = false;
+    }
     // Handle timeout commands
     else {
       const timeoutMatch = userInput.match(/^(?:\/t|\/timeout|timeout)\s+(\d+)$/);
@@ -1342,12 +1382,16 @@ async function showAgentStatus(agentName) {
 
 function showHelp() {
   console.log(chalk.blue('ℹ') + ' Available Commands:');
-  console.log(chalk.gray('  /help       '), 'Show this help message');
+  console.log(chalk.gray('  /help, /h   '), 'Show this help message');
   console.log(chalk.gray('  /status     '), 'Show agent status');
   console.log(chalk.gray('  /timeout <s>'), 'Change agent timeout (1-3600 seconds)');
   console.log(chalk.gray('  /name <name>'), 'Change agent name (alphanumeric and hyphens)');
-  console.log(chalk.gray('  /detach     '), 'Detach from agent (keeps agent running)');
-  console.log(chalk.gray('  /quit       '), 'End the agent');
+  console.log(chalk.gray('  /sleep, /s  '), 'Sleep the agent');
+  console.log(chalk.gray('  /wake, /w   '), 'Wake the agent');
+  console.log(chalk.gray('  /open, /o   '), 'Show agent content URLs');
+  console.log(chalk.gray('  /publish, /p'), 'Publish agent to public directory');
+  console.log(chalk.gray('  /detach, /d '), 'Detach from agent (keeps agent running)');
+  console.log(chalk.gray('  /quit, /q   '), 'End the agent');
 }
 
 async function handleTimeoutCommand(agentName, timeoutSeconds) {
@@ -1366,6 +1410,90 @@ async function handleTimeoutCommand(agentName, timeoutSeconds) {
     }
   } else {
     console.log(chalk.red('✗') + ' Invalid timeout value. Must be between 1 and 3600 seconds (1 hour).');
+  }
+}
+
+async function handleSleepCommand(agentName) {
+  try {
+    const sleepResponse = await api.post(`/agents/${agentName}/sleep`);
+    if (sleepResponse.success) {
+      console.log(chalk.green('✓') + ` Agent ${agentName} put to sleep`);
+    } else {
+      console.log(chalk.red('✗ Failed to sleep agent:'), sleepResponse.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.log(chalk.red('✗ Failed to sleep agent:'), error.message);
+  }
+}
+
+async function handleWakeCommand(agentName) {
+  try {
+    const wakeResponse = await api.post(`/agents/${agentName}/wake`, {});
+    if (wakeResponse.success) {
+      console.log(chalk.green('✓') + ` Agent ${agentName} woken up`);
+    } else {
+      console.log(chalk.red('✗ Failed to wake agent:'), wakeResponse.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.log(chalk.red('✗ Failed to wake agent:'), error.message);
+  }
+}
+
+async function handleOpenCommand(agentName) {
+  try {
+    const agentResponse = await api.get(`/agents/${agentName}`);
+    if (agentResponse.success) {
+      const agent = agentResponse.data;
+      const configData = config.getConfig();
+      const serverUrl = configData.server || 'http://localhost:9000';
+      const serverUrlObj = new URL(serverUrl);
+      const serverHost = serverUrlObj.hostname;
+
+      console.log(chalk.blue('ℹ') + ` Agent Content URLs:`);
+      
+      if (agent.content_port) {
+        console.log(chalk.gray('  Private:  ') + chalk.blue(`http://${serverHost}:${agent.content_port}/`));
+      } else {
+        console.log(chalk.gray('  Private:  ') + chalk.yellow('Not available'));
+      }
+      
+      if (agent.is_published) {
+        console.log(chalk.gray('  Public:   ') + chalk.blue(`http://${serverHost}:8000/${agent.name}/`));
+      } else {
+        console.log(chalk.gray('  Public:   ') + chalk.yellow('Not published'));
+      }
+      
+      if (agent.state) {
+        console.log(chalk.gray('  Status:   ') + getStateDisplay(agent.state));
+      }
+    } else {
+      console.log(chalk.red('✗ Failed to get agent info:'), agentResponse.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.log(chalk.red('✗ Failed to get agent info:'), error.message);
+  }
+}
+
+async function handlePublishCommand(agentName) {
+  try {
+    const publishResponse = await api.post(`/agents/${agentName}/publish`, {
+      content: true
+    });
+    if (publishResponse.success) {
+      console.log(chalk.green('✓') + ` Agent ${agentName} published to public directory`);
+      
+      // Show the public URL
+      const configData = config.getConfig();
+      const serverUrl = configData.server || 'http://localhost:9000';
+      const serverUrlObj = new URL(serverUrl);
+      const serverHost = serverUrlObj.hostname;
+      
+      console.log(chalk.gray('  Public URL: ') + chalk.blue(`http://${serverHost}:8000/${agentName}/`));
+    } else {
+      console.log(chalk.red('✗ Failed to publish agent:'), publishResponse.error || 'Unknown error');
+    }
+  } catch (error) {
+    console.log(chalk.red('✗ Failed to publish agent:'), error.message);
   }
 }
 
@@ -1517,6 +1645,89 @@ console.log(chalk.gray('Current state:'), getStateDisplay(agent.state));
     console.log(chalk.gray('  • Restore:'), `raworc agent wake ${agentName}`);
     console.log(chalk.gray('  • Remix:'), `raworc agent remix ${agentName}`);
     console.log();
+
+  } catch (error) {
+    console.error(chalk.red('✗ Error:'), error.message);
+    process.exit(1);
+  }
+}
+
+async function agentOpenCommand(agentName, options) {
+  // Check authentication
+  const authData = config.getAuth();
+  if (!authData) {
+    console.log(chalk.red('✗ Authentication required'));
+    console.log('Run: ' + chalk.white('raworc login') + ' to authenticate first');
+    process.exit(1);
+  }
+
+  // Get server configuration
+  const configData = config.getConfig();
+  const serverUrl = configData.server || 'http://localhost:9000';
+
+  display.showCommandBox(`${display.icons.agent} Agent Links`, {
+    agent: agentName,
+    operation: 'Show content access links'
+  });
+
+  try {
+    // Get agent details
+    const agentResponse = await api.get(`/agents/${agentName}`);
+
+    if (!agentResponse.success) {
+      console.error(chalk.red('✗ Error:'), agentResponse.error || 'Agent does not exist');
+      process.exit(1);
+    }
+
+    const agent = agentResponse.data;
+    
+    // Extract hostname from server URL for building content URLs
+    const serverUrlObj = new URL(serverUrl);
+    const serverHost = serverUrlObj.hostname;
+    
+    console.log();
+    console.log(chalk.bold('Agent Information:'));
+    console.log(`  Name: ${chalk.cyan(agent.name)}`);
+    console.log(`  State: ${getStateDisplay(agent.state)}`);
+    console.log(`  Created: ${new Date(agent.created_at).toLocaleString()}`);
+    
+    console.log();
+    console.log(chalk.bold('Content Access:'));
+    
+    // Private content link (always available if agent has content_port)
+    if (agent.content_port) {
+      console.log(chalk.gray('  • Private Content:'));
+      console.log(`    ${chalk.blue(`http://${serverHost}:${agent.content_port}/`)}`);
+      console.log(chalk.gray('    (Direct access to agent\'s content directory)'));
+    } else {
+      console.log(chalk.gray('  • Private Content: Not available (agent may be sleeping)'));
+    }
+    
+    console.log();
+    
+    // Public content link (only if published)
+    if (agent.is_published) {
+      console.log(chalk.gray('  • Public Content:'));
+      console.log(`    ${chalk.blue(`http://${serverHost}:8000/${agent.name}/`)}`);
+      console.log(chalk.gray('    (Published content available to everyone)'));
+      
+      if (agent.published_at) {
+        console.log(`    Published: ${new Date(agent.published_at).toLocaleString()}`);
+      }
+    } else {
+      console.log(chalk.gray('  • Public Content: Not published'));
+      console.log(`    To publish: ${chalk.white(`raworc agent publish ${agent.name}`)}`);
+    }
+    
+    console.log();
+    
+    // Additional info based on state
+    if (agent.state === 'slept') {
+      console.log(chalk.yellow('ℹ Agent is sleeping. To access private content:'));
+      console.log(`  ${chalk.white(`raworc agent wake ${agent.name}`)}`);
+    } else if (agent.state === 'init') {
+      console.log(chalk.yellow('ℹ Agent is initializing. Content may not be ready yet.'));
+    }
 
   } catch (error) {
     console.error(chalk.red('✗ Error:'), error.message);
