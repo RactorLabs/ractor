@@ -313,8 +313,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Build copy commands based on what should be copied
         let mut copy_commands = Vec::new();
 
-        // Always create base directory structure with proper ownership
-        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets /dest/content && sudo chown -R host:host /dest".to_string());
+        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
+        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content && chown -R 1000:1000 /dest".to_string());
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -348,7 +348,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(self.agent_image.clone()),
-            user: Some("agent".to_string()),
+            user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
                 mounts: Some(vec![
@@ -523,8 +523,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Build copy commands based on what should be copied
         let mut copy_commands = Vec::new();
 
-        // Always create base directory structure with proper ownership
-        copy_commands.push("sudo mkdir -p /dest/code /dest/data /dest/secrets /dest/content && sudo chown -R host:host /dest".to_string());
+        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
+        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content && chown -R 1000:1000 /dest".to_string());
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -558,7 +558,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(self.agent_image.clone()),
-            user: Some("agent".to_string()),
+            user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
                 mounts: Some(vec![
@@ -724,7 +724,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(self.agent_image.clone()),
-            user: Some("agent".to_string()),
+            user: Some("root".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -837,7 +837,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(self.agent_image.clone()),
-            user: Some("agent".to_string()),
+            user: Some("root".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),

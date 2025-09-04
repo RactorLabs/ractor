@@ -112,15 +112,15 @@ module.exports = (program) => {
   agentCmd
     .command('remix <agent-name>')
     .description('Create a new agent remixing an existing agent')
-    .option('-n, --name <name>', 'Name for the new agent')
+    .option('-n, --name [name]', 'Name for the new agent (generates random name if not provided)')
     .option('-c, --code <boolean>', 'Include code files (default: true)')
     .option('-s, --secrets <boolean>', 'Include secrets (default: true)')
     .option('-p, --prompt <text>', 'Prompt to send after creation')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc agent remix abc123             # Remix by name\n' +
-      '  $ raworc agent remix my-agent         # Remix by name\n' +
-      '  $ raworc agent remix my-agent -n "new-name" # Remix with new name\n' +
+      '  $ raworc agent remix abc123             # Remix with random name\n' +
+      '  $ raworc agent remix my-agent         # Remix with random name\n' +
+      '  $ raworc agent remix my-agent -n "new-name" # Remix with specific name\n' +
       '  $ raworc agent remix my-agent -s false # Remix without secrets\n' +
       '  $ raworc agent remix my-agent --code false # Copy only secrets\n')
     .action(async (agentName, options) => {
@@ -419,7 +419,7 @@ async function agentRemixCommand(sourceAgentName, options) {
       remixPayload.prompt = options.prompt;
     }
 
-    // Add name if provided
+    // Add name if provided, or generate random name
     if (options.name) {
       // Validate name format
       if (options.name.length === 0 || options.name.length > 100) {
@@ -432,6 +432,9 @@ async function agentRemixCommand(sourceAgentName, options) {
         process.exit(1);
       }
       remixPayload.name = options.name;
+    } else {
+      // Generate random name client-side
+      remixPayload.name = generateRandomAgentName();
     }
 
     // Create remix agent
