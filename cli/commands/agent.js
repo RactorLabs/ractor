@@ -585,7 +585,7 @@ async function startInteractiveAgent(agentName, options) {
         });
 
         console.log();
-        console.log(chalk.gray('─'.repeat(50)));
+        console.log(chalk.gray('─'.repeat(getTerminalWidth())));
 
       } else {
       }
@@ -969,6 +969,11 @@ function createPromptManager(agentName, userInput = '') {
   };
 }
 
+// Get terminal width with fallback
+function getTerminalWidth() {
+  return process.stdout.columns || 80;
+}
+
 function showPrompt(state = 'init') {
   const stateIcons = {
     'init': '◯',      // empty circle - initializing
@@ -1009,7 +1014,7 @@ function showPrompt(state = 'init') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('─'.repeat(50)));
+  console.log(chalk.gray('─'.repeat(getTerminalWidth())));
   process.stdout.write(chalk.cyanBright('> '));
 }
 
@@ -1053,7 +1058,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
   const color = stateColors[state] || chalk.gray;
   console.log();
   console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('─'.repeat(50)));
+  console.log(chalk.gray('─'.repeat(getTerminalWidth())));
   process.stdout.write(chalk.cyanBright('> ') + userInput);
 }
 
