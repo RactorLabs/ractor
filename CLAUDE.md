@@ -576,7 +576,7 @@ GET /version
 
 Response:
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "api": "v0"
 }
 ```

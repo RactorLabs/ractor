@@ -5,6 +5,10 @@ title: Changelog
 
 # Changelog
 
+## [0.4.2] - TBD
+
+Development version - changes will be documented at release.
+
 ## [0.4.1] - 2025-09-04
 
 **Documentation & Content System Enhancement Release**
