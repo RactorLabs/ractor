@@ -5,7 +5,7 @@ title: Changelog
 
 # Changelog
 
-## [0.4.4] - TBD
+## [0.5.0] - TBD
 
 Development version - changes will be documented at release.
 
