@@ -974,6 +974,32 @@ function getTerminalWidth() {
   return process.stdout.columns || 80;
 }
 
+// Track the last rendered prompt layout to clear accurately
+let __lastPromptLayout = null;
+
+function stripAnsi(input) {
+  if (!input) return '';
+  // Strip common SGR ANSI sequences (colors/styles)
+  return input.replace(/\x1B\[[0-9;]*m/g, '');
+}
+
+function calcRowsForText(text, width) {
+  const visible = stripAnsi(text);
+  if (width <= 0) return 1;
+  const len = [...visible].length; // count code points
+  return Math.max(1, Math.ceil(len / width));
+}
+
+function capturePromptLayout({ stateText, dashedText, promptText, width }) {
+  const lines = [
+    { name: 'empty', text: '', rows: 1 },
+    { name: 'state', text: stateText, rows: calcRowsForText(stateText, width) },
+    { name: 'dash', text: dashedText, rows: calcRowsForText(dashedText, width) },
+    { name: 'prompt', text: promptText, rows: calcRowsForText(promptText, width) },
+  ];
+  return { width, lines };
+}
+
 function showPrompt(state = 'init') {
   const stateIcons = {
     'init': '◯',      // empty circle - initializing
@@ -1009,10 +1035,24 @@ function showPrompt(state = 'init') {
   }
   
   const color = stateColors[state] || chalk.gray;
+  const width = getTerminalWidth();
+  const stateText = color(`${icon} ${label}`);
+  const dashText = chalk.gray('─'.repeat(width));
+  const promptText = chalk.cyanBright('> ');
+
+  // Render
   console.log();
-  console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('─'.repeat(getTerminalWidth())));
-  process.stdout.write(chalk.cyanBright('> '));
+  console.log(stateText);
+  console.log(dashText);
+  process.stdout.write(promptText);
+
+  // Capture layout for robust clearing
+  __lastPromptLayout = capturePromptLayout({
+    stateText: `${icon} ${label}`,
+    dashedText: '─'.repeat(width),
+    promptText: '> ',
+    width,
+  });
 }
 
 function showPromptWithInput(state = 'init', userInput = '') {
@@ -1050,22 +1090,55 @@ function showPromptWithInput(state = 'init', userInput = '') {
   }
   
   const color = stateColors[state] || chalk.gray;
+  const width = getTerminalWidth();
+  const stateText = color(`${icon} ${label}`);
+  const dashText = chalk.gray('─'.repeat(width));
+  const promptText = chalk.cyanBright('> ') + userInput;
+
+  // Render
   console.log();
-  console.log(color(`${icon} ${label}`));
-  console.log(chalk.gray('─'.repeat(getTerminalWidth())));
-  process.stdout.write(chalk.cyanBright('> ') + userInput);
+  console.log(stateText);
+  console.log(dashText);
+  process.stdout.write(promptText);
+
+  // Capture layout for robust clearing
+  __lastPromptLayout = capturePromptLayout({
+    stateText: `${icon} ${label}`,
+    dashedText: '─'.repeat(width),
+    promptText: '> ' + userInput,
+    width,
+  });
 }
 
 function clearPrompt() {
-  // Clear the 4-line prompt structure:
-  // Line 4: "> " cursor (current line, no newline)
-  // Line 3: dash line 
-  // Line 2: state line
-  // Line 1: empty line
-  process.stdout.write('\r\x1b[2K');      // Clear current line (cursor line)
-  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear dash line
-  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear state line  
-  process.stdout.write('\x1b[1A\x1b[2K'); // Move up and clear empty line
+  // Clear the entire prompt block reliably, accounting for wrapped lines.
+  const layout = __lastPromptLayout;
+  if (!layout || !layout.lines) {
+    // Fallback: clear 4 lines (original behavior)
+    process.stdout.write('\r\x1b[2K');      // current
+    process.stdout.write('\x1b[1A\x1b[2K'); // dash
+    process.stdout.write('\x1b[1A\x1b[2K'); // state
+    process.stdout.write('\x1b[1A\x1b[2K'); // empty
+    return;
+  }
+
+  // Start at the prompt (bottom-most), which is where the cursor is
+  const promptRows = layout.lines.find(l => l.name === 'prompt')?.rows || 1;
+  // Clear current physical line first
+  process.stdout.write('\r\x1b[2K');
+  // Clear additional wrapped rows of the prompt
+  for (let i = 1; i < promptRows; i++) {
+    process.stdout.write('\x1b[1A\x1b[2K');
+  }
+
+  // Then clear the dash, state, and leading empty line, accounting for wraps
+  const order = ['dash', 'state', 'empty'];
+  for (const name of order) {
+    const rows = layout.lines.find(l => l.name === name)?.rows || 1;
+    for (let i = 0; i < rows; i++) {
+      process.stdout.write('\x1b[1A\x1b[2K');
+    }
+  }
 }
 
 async function monitorForResponses(agentName, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
