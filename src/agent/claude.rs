@@ -394,7 +394,7 @@ impl ClaudeClient {
                             .get("path")
                             .and_then(|v| v.as_str())
                             .unwrap_or("unknown");
-                        path.to_string()
+                        format!("{} {}", cmd, path)
                     }
                     _ => format!("Executing {} tool", tool_name),
                 };
@@ -606,6 +606,36 @@ impl ClaudeClient {
             params.push(format!("max_characters: {}", max_chars));
         }
 
+        // Prepare pretty-printed raw tool input
+        let raw_input = match serde_json::to_string_pretty(input) {
+            Ok(s) => s,
+            Err(_) => "<unserializable input>".to_string(),
+        };
+
+        // If this was a successful create, try to read the created file's content
+        let mut created_file_section = String::new();
+        if command == "create" && success {
+            use tokio::fs;
+            use std::path::Path;
+            let full_path = Path::new("/agent").join(path);
+            match fs::read_to_string(&full_path).await {
+                Ok(contents) => {
+                    created_file_section = format!(
+                        "\n\n=== CREATED FILE CONTENT ({}) ===\n{}",
+                        full_path.display(),
+                        contents
+                    );
+                }
+                Err(e) => {
+                    created_file_section = format!(
+                        "\n\n=== CREATED FILE CONTENT ({}) ===\n<failed to read file: {}>",
+                        full_path.display(),
+                        e
+                    );
+                }
+            }
+        }
+
         let log_content = format!(
             "=== TEXT EDITOR COMMAND LOG ===\n\
             Timestamp: {}\n\
@@ -614,8 +644,11 @@ impl ClaudeClient {
             Success: {}\n\
             Parameters: {}\n\
             \n\
-            === RESULT ===\n\
+            === TOOL INPUT ===\n\
             {}\n\
+            \n\
+            === RESULT ===\n\
+            {}{}\n\
             \n\
             === END LOG ===\n",
             chrono::DateTime::from_timestamp(timestamp as i64, 0)
@@ -624,12 +657,10 @@ impl ClaudeClient {
             command,
             path,
             success,
-            if params.is_empty() {
-                "None".to_string()
-            } else {
-                params.join(", ")
-            },
-            result_msg
+            if params.is_empty() { "None".to_string() } else { params.join(", ") },
+            raw_input,
+            result_msg,
+            created_file_section
         );
 
         if let Err(e) = tokio::fs::write(&log_filename, log_content).await {
