@@ -358,6 +358,7 @@ for component in "${COMPONENTS[@]}"; do
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+                ${BRAVE_API_KEY:+-e BRAVE_API_KEY="$BRAVE_API_KEY"} \
                 -e AGENT_IMAGE="$AGENT_IMAGE" \
                 -e AGENT_CPU_LIMIT="0.5" \
                 -e AGENT_MEMORY_LIMIT="536870912" \
