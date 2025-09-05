@@ -277,6 +277,45 @@ impl MessageHandler {
                 if preview.len() > 300 { preview.truncate(300); preview.push_str("…"); }
                 info!("Tool call: {} input: {}", tool, preview);
 
+                // Send tool execution notification to user
+                let tool_description = match tool.as_str() {
+                    "bash" => {
+                        if let Some(s) = input.get("cmd").and_then(|v| v.as_str()) {
+                            s.to_string()
+                        } else if let Some(s) = input.get("command").and_then(|v| v.as_str()) {
+                            s.to_string()
+                        } else if let Some(s) = input.as_str() {
+                            s.to_string()
+                        } else if let Some(args) = input.get("args") {
+                            if let Some(arr) = args.as_array() {
+                                let parts: Vec<String> = arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+                                parts.join(" ")
+                            } else if let Some(s) = args.as_str() {
+                                s.to_string()
+                            } else {
+                                "unknown command".to_string()
+                            }
+                        } else {
+                            "unknown command".to_string()
+                        }
+                    },
+                    "text_editor" => {
+                        let action = input.get("action")
+                            .or_else(|| input.get("command"))
+                            .or_else(|| input.get("operation"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("edit");
+                        let path = input.get("path")
+                            .or_else(|| input.get("file_path"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
+                        format!("{} {}", action, path)
+                    },
+                    _ => format!("Executing {} tool", tool),
+                };
+
+                self.send_tool_message(&tool_description, &tool).await?;
+
                 // Execute tool
                 let tool_result = match tool.as_str() {
                     "bash" => {
@@ -641,6 +680,23 @@ Current agent context:
         }
 
         prompt
+    }
+
+    async fn send_tool_message(&self, description: &str, tool_name: &str) -> Result<()> {
+        // Log tool execution notification to Docker logs
+        println!("TOOL_EXECUTION: {}: {}", tool_name, description);
+
+        // Send tool execution message to user
+        let metadata = serde_json::json!({
+            "type": "tool_execution",
+            "tool_type": tool_name
+        });
+
+        self.api_client
+            .send_message(description.to_string(), Some(metadata))
+            .await?;
+
+        Ok(())
     }
 }
 
