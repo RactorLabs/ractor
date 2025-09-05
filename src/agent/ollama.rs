@@ -209,6 +209,13 @@ impl OllamaClient {
             .await
             .map_err(|e| HostError::Model(format!("Failed to parse Ollama response: {}", e)))?;
 
+        tracing::info!("Ollama response parsed successfully, content length: {}", parsed.message.content.len());
+        tracing::info!("Content preview: {:?}", if parsed.message.content.len() > 100 { 
+            format!("{}...", &parsed.message.content[..100]) 
+        } else { 
+            parsed.message.content.clone() 
+        });
+
         Ok(parsed.message.content)
     }
 }
