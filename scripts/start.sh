@@ -71,6 +71,7 @@ usage() {
     echo "  -d, --detached          Run in detached mode (default)"
     echo "  -f, --foreground        Run MySQL in foreground mode"
     echo "  -h, --help              Show this help message"
+    echo "  --require-gpu           Require GPU for Ollama (fail if missing)"
     echo ""
     echo "Examples:"
     echo "  $0                      Start server and operator"
@@ -83,6 +84,7 @@ usage() {
 BUILD=false
 PULL=false
 DETACHED=true
+REQUIRE_GPU=false
 COMPONENTS=()
 
 while [[ $# -gt 0 ]]; do
@@ -107,6 +109,10 @@ while [[ $# -gt 0 ]]; do
             usage
             exit 0
             ;;
+        --require-gpu)
+            REQUIRE_GPU=true
+            shift
+            ;;
         -*)
             print_error "Unknown option: $1"
             usage
@@ -129,6 +135,7 @@ print_status "Image tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
 print_status "Build images: $BUILD"
 print_status "Pull base images: $PULL"
 print_status "Detached mode: $DETACHED"
+print_status "Require GPU for Ollama: $REQUIRE_GPU"
 print_status "Components: ${COMPONENTS[*]}"
 
 # Change to project root
@@ -273,11 +280,42 @@ for component in "${COMPONENTS[@]}"; do
                 docker rm raworc_ollama >/dev/null 2>&1 || true
             fi
 
-            # Optional GPU support
+            # Optional GPU support (default enabled if not set), with auto-fallback or hard-require
             GPU_FLAGS=""
+            CPU_ENV=""
+            if [ -z "${OLLAMA_ENABLE_GPU:-}" ]; then
+                OLLAMA_ENABLE_GPU=true
+                print_status "No OLLAMA_ENABLE_GPU set; defaulting to true"
+            fi
+            # If CLI requires GPU, propagate into env for clarity
+            if [ "$REQUIRE_GPU" = true ]; then
+                OLLAMA_REQUIRE_GPU=true
+            fi
+            # Detect whether Docker has GPU runtime available
+            GPU_AVAILABLE=false
+            if docker info --format '{{json .Runtimes}}' 2>/dev/null | grep -qi 'nvidia'; then
+                GPU_AVAILABLE=true
+            elif docker info --format '{{json .DefaultRuntime}}' 2>/dev/null | grep -qi 'nvidia'; then
+                GPU_AVAILABLE=true
+            fi
             if [ "${OLLAMA_ENABLE_GPU:-}" = "true" ]; then
-                GPU_FLAGS="--gpus all"
-                print_status "GPU enabled for Ollama"
+                if [ "$GPU_AVAILABLE" = true ]; then
+                    GPU_FLAGS="--gpus all"
+                    print_status "GPU enabled for Ollama"
+                else
+                    if [ "${OLLAMA_REQUIRE_GPU:-false}" = "true" ]; then
+                        print_error "GPU required for Ollama, but Docker GPU runtime is not available. Aborting."
+                        print_error "Hint: install NVIDIA drivers + NVIDIA Container Toolkit, or run without --require-gpu."
+                        exit 1
+                    else
+                        print_warning "GPU requested but Docker GPU runtime not available; falling back to CPU. Set OLLAMA_ENABLE_GPU=false or use --require-gpu to enforce."
+                        OLLAMA_ENABLE_GPU=false
+                    fi
+                fi
+            fi
+            if [ "${OLLAMA_ENABLE_GPU:-}" = "false" ]; then
+                CPU_ENV="-e OLLAMA_NO_GPU=1"
+                print_status "Running Ollama in CPU-only mode"
             fi
 
             # Optional resource limits
@@ -300,12 +338,12 @@ for component in "${COMPONENTS[@]}"; do
 
             # Provide sane defaults if not provided via env
             if [ -z "${OLLAMA_MEMORY:-}" ]; then
-                OLLAMA_MEMORY="24g"
+                OLLAMA_MEMORY="16g"
                 MEM_FLAG="--memory ${OLLAMA_MEMORY} --memory-swap ${OLLAMA_MEMORY}"
                 print_status "No OLLAMA_MEMORY set; defaulting to ${OLLAMA_MEMORY}"
             fi
             if [ -z "${OLLAMA_SHM_SIZE:-}" ]; then
-                OLLAMA_SHM_SIZE="24g"
+                OLLAMA_SHM_SIZE="16g"
                 SHM_FLAG="--shm-size ${OLLAMA_SHM_SIZE}"
                 print_status "No OLLAMA_SHM_SIZE set; defaulting to ${OLLAMA_SHM_SIZE}"
             fi
@@ -324,6 +362,7 @@ for component in "${COMPONENTS[@]}"; do
                 ${PUBLISH_FLAG} \
                 -v raworc_ollama_data:/root/.ollama \
                 -e OLLAMA_KEEP_ALIVE=1h \
+                $CPU_ENV \
                 $GPU_FLAGS \
                 $CPU_FLAG \
                 $MEM_FLAG \
