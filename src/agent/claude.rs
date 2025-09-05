@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Serialize)]
 struct ClaudeRequest {
@@ -380,7 +380,10 @@ impl ClaudeClient {
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
                     "text_editor" => self.execute_text_editor_tool(&tool_input).await,
-                    _ => Err(HostError::Claude(format!("Unknown tool: {}", tool_name))),
+                    _ => {
+                        error!("Unknown tool requested: {} with input: {}", tool_name, tool_input);
+                        Err(HostError::Claude(format!("Unknown tool: {}", tool_name)))
+                    },
                 };
 
                 let result_content = match tool_result {
