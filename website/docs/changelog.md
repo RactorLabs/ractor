@@ -5,6 +5,10 @@ title: Changelog
 
 # Changelog
 
+## [0.5.1] - TBD
+
+Development version - changes will be documented at release.
+
 ## [0.5.0] - 2025-09-05
 
 **Major Ollama Migration & Tool Call Restoration Release**
