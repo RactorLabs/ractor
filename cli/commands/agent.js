@@ -983,10 +983,21 @@ function stripAnsi(input) {
 }
 
 function calcRowsForText(text, width) {
-  const visible = stripAnsi(text);
+  const visible = stripAnsi(text || '');
   if (width <= 0) return 1;
-  const len = [...visible].length; // count code points
-  return Math.max(1, Math.ceil(len / width));
+  // Handle explicit newlines and wrapping per line
+  const lines = visible.split('\n');
+  let rows = 0;
+  for (const line of lines) {
+    const len = [...line].length; // count code points
+    // Empty line still occupies one row
+    if (len === 0) {
+      rows += 1;
+    } else {
+      rows += Math.ceil(len / width);
+    }
+  }
+  return Math.max(1, rows);
 }
 
 function capturePromptLayout({ stateText, dashedText, promptText, width }) {
