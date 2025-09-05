@@ -25,7 +25,7 @@ async function apiCommand(endpoint, options) {
   
   const authData = config.getAuth();
   
-  if (!authData && endpoint !== 'health') {
+  if (!authData && endpoint !== 'version') {
     display.warning('This endpoint may require authentication');
     console.log(chalk.gray('Run:'), chalk.white('raworc login'), chalk.gray('to authenticate first'));
     console.log();
@@ -114,9 +114,9 @@ async function apiCommand(endpoint, options) {
     }
 
     // Show helpful next steps for common endpoints
-    if (endpoint === 'health' && response.success) {
+    if (endpoint === 'version' && response.success) {
       console.log();
-      console.log(chalk.cyan('💡 Raworc is healthy! Try these commands:'));
+      console.log(chalk.cyan('💡 Version endpoint OK. Try these commands:'));
       console.log('  • List agents: ' + chalk.white('raworc api agents'));
       console.log('  • Check auth: ' + chalk.white('raworc api auth'));
     } else if (endpoint === 'agents' && response.success) {

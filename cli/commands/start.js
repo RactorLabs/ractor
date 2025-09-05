@@ -92,7 +92,7 @@ module.exports = (program) => {
           console.log(chalk.cyan('Next steps:'));
           console.log('  • Authenticate: ' + chalk.white('raworc login --user admin --pass admin'));
           console.log('  • Check health: ' + chalk.white('raworc api version'));
-          console.log('  • Start agent: ' + chalk.white('raworc agent'));
+          console.log('  • Start agent: ' + chalk.white('raworc agent create'));
           console.log();
           console.log(chalk.gray('API Server: http://localhost:9000'));
           console.log(chalk.gray('MySQL Port: 3307'));

@@ -99,9 +99,9 @@ async function useTokenCommand(options) {
       
       console.log();
       console.log(chalk.cyan('Next steps:'));
-      console.log('  • Check health: ' + chalk.white('raworc api health'));
+      console.log('  • Check version: ' + chalk.white('raworc api version'));
       console.log('  • List agents: ' + chalk.white('raworc api agents'));
-      console.log('  • Start agent: ' + chalk.white('raworc agent'));
+      console.log('  • Start agent: ' + chalk.white('raworc agent create'));
     } else {
       display.error('Token authentication failed');
       console.log();

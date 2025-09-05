@@ -202,7 +202,7 @@ if "$START_SCRIPT" "${start_args[@]}"; then
         print_status "Next steps:"
         echo "  • Check logs: docker logs raworc_server -f"
         echo "  • Check status: docker ps --filter 'name=raworc_'"
-        echo "  • Test API: raworc api health"
+        echo "  • Test API: raworc api version"
     else
         print_status "Running in foreground mode. Press Ctrl+C to stop services."
     fi

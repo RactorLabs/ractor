@@ -44,7 +44,7 @@ raworc start
 # Authenticate and use the system
 raworc login -u admin -p admin
 raworc auth -t <jwt-token-from-login>
-raworc agent
+raworc agent create
 raworc api version
 ```
 
@@ -73,7 +73,7 @@ cd raworc
 
 # Link CLI for development (shell script links the Node.js CLI from cli/ folder)
 ./scripts/link.sh
-raworc agent  # Now uses your local build
+raworc agent create  # Now uses your local build
 ```
 
 **Key Points:**
@@ -103,12 +103,11 @@ raworc/
 ├── src/           # Rust backend services
 │   ├── server/    # API server  
 │   ├── operator/  # Agent orchestration
-│   └── agent/      # Agent runtime with Claude integration
+│   └── agent/     # Agent runtime
 ├── cli/           # Node.js CLI (@raworc/cli)
 ├── scripts/       # Development automation
 ├── website/       # Documentation site (Docusaurus)
-├── migrations/    # Database schema
-└── docker/        # Docker configurations
+├── db/            # Database schema (migrations)
 ```
 
 ### Development Scripts
@@ -134,7 +133,7 @@ export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 ./scripts/link.sh
 raworc login -u admin -p admin
 raworc auth -t <jwt-token-from-login>
-raworc agent
+raworc agent create
 ```
 
 ### Publishing
@@ -233,11 +232,11 @@ git clone <this-repo>
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `raworc agent` | Start interactive agent | `raworc agent` |
-| `raworc agent wake <id>` | Wake agent | `raworc agent wake abc123` |
-| `raworc agent remix <id>` | Remix agent | `raworc agent remix abc123` |
-| `raworc agent publish <id>` | Publish agent | `raworc agent publish abc123` |
-| `raworc agent unpublish <id>` | Unpublish agent | `raworc agent unpublish abc123` |
+| `raworc agent create [name]` | Start interactive agent | `raworc agent create my-agent` |
+| `raworc agent wake <agent-name>` | Wake agent | `raworc agent wake my-agent` |
+| `raworc agent remix <agent-name>` | Remix agent | `raworc agent remix my-agent` |
+| `raworc agent publish <agent-name>` | Publish agent | `raworc agent publish my-agent` |
+| `raworc agent unpublish <agent-name>` | Unpublish agent | `raworc agent unpublish my-agent` |
 
 ### API Access
 
@@ -271,10 +270,10 @@ git clone <this-repo>
 
 **Agent Management:**
 
-- `raworc agent [-n/--name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new agent
+- `raworc agent create [name] [-t/--timeout] [-S/--secrets] [-i/--instructions] [-if/--instructions-file] [-s/--setup] [-sf/--setup-file] [-p/--prompt]` - Start new agent
 - `raworc agent wake <agent-name> [-p/--prompt]` - Wake existing agent
-- `raworc agent remix <agent-name> [-n/--name] [-d/--data] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
-- `raworc agent publish <agent-name> [-d/--data] [-c/--code] [-s/--secrets]` - Publish agent
+- `raworc agent remix <agent-name> [-n/--name] [-c/--code] [-s/--secrets] [-p/--prompt]` - Create remix agent
+- `raworc agent publish <agent-name> [-c/--code] [-s/--secrets]` - Publish agent
 - `raworc agent unpublish <agent-name>` - Unpublish agent
 - `raworc agent open <agent-name>` - Show content links (private and public)
 - `raworc agent sleep <agent-name>` - Sleep an active agent
@@ -349,6 +348,15 @@ Response:
 
 ### Agents
 
+**Agent Naming Rules**
+
+- Must start with a lowercase letter
+- Only lowercase letters, numbers, and hyphens
+- Must end with a letter or number
+- Maximum 64 characters
+
+CLI generates a valid random name if omitted. API callers must provide a valid `name`.
+
 **List Agents**
 
 ```bash
@@ -358,7 +366,7 @@ Authorization: Bearer <jwt-token>
 Response:
 [
   {
-    "id": "agent-abc123",
+    "name": "my-agent",
     "state": "running",
     "created_at": "2025-09-01T12:00:00Z",
     "updated_at": "2025-09-01T12:30:00Z"
@@ -374,17 +382,19 @@ Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
 {
+  "name": "my-agent",
   "instructions": "Analyze this data file",
   "setup": "pip install pandas",
   "secrets": {
     "DATABASE_URL": "mysql://user:pass@agent/db"
   },
-  "prompt": "Hello, analyze this data"
+  "prompt": "Hello, analyze this data",
+  "timeout_seconds": 300
 }
 
 Response:
 {
-  "id": "agent-abc123",
+  "name": "my-agent",
   "state": "created",
   "created_at": "2025-09-01T12:00:00Z"
 }
@@ -393,12 +403,12 @@ Response:
 **Get Agent**
 
 ```bash
-GET /agents/{id}
+GET /agents/{name}
 Authorization: Bearer <jwt-token>
 
 Response:
 {
-  "id": "agent-abc123",
+  "name": "my-agent",
   "state": "running",
   "created_at": "2025-09-01T12:00:00Z",
   "updated_at": "2025-09-01T12:30:00Z",
@@ -410,11 +420,11 @@ Response:
 
 ```bash
 # Sleep agent
-POST /agents/{id}/sleep
+POST /agents/{name}/sleep
 Authorization: Bearer <jwt-token>
 
 # Wake agent with optional prompt
-POST /agents/{id}/wake
+POST /agents/{name}/wake
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -423,18 +433,19 @@ Content-Type: application/json
 }
 
 # Remix agent with optional prompt
-POST /agents/{id}/remix
+POST /agents/{name}/remix
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
 {
-  "data": true,
+  "name": "new-agent-name",
+  "content": true,
   "code": false,
   "prompt": "Try a different approach"
 }
 
 # Update agent state
-PUT /agents/{id}/state
+PUT /agents/{name}/state
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -443,7 +454,7 @@ Content-Type: application/json
 }
 
 # Delete agent
-DELETE /agents/{id}
+DELETE /agents/{name}
 Authorization: Bearer <jwt-token>
 ```
 
@@ -452,7 +463,7 @@ Authorization: Bearer <jwt-token>
 **List Messages**
 
 ```bash
-GET /agents/{id}/messages
+GET /agents/{name}/messages
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -475,7 +486,7 @@ Response:
 **Send Message**
 
 ```bash
-POST /agents/{id}/messages
+POST /agents/{name}/messages
 Authorization: Bearer <jwt-token>
 Content-Type: application/json
 
@@ -496,7 +507,7 @@ Response:
 **Message Count**
 
 ```bash
-GET /agents/{id}/messages/count
+GET /agents/{name}/messages/count
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -508,7 +519,7 @@ Response:
 **Clear Messages**
 
 ```bash
-DELETE /agents/{id}/messages
+DELETE /agents/{name}/messages
 Authorization: Bearer <jwt-token>
 
 Response:
@@ -624,7 +635,7 @@ Obtain tokens through:
 ```bash
 node index.js start                    # Wrong - direct Node.js execution
 cd cli && node index.js --help         # Wrong - manual CLI execution
-node cli/index.js api health          # Wrong - bypasses linking
+node cli/index.js api version         # Wrong - bypasses linking
 ```
 
 **✅ ALWAYS DO THIS:**
@@ -636,7 +647,7 @@ node cli/index.js api health          # Wrong - bypasses linking
 # Then use the raworc command (linked Node.js CLI)
 raworc start
 raworc --help 
-raworc api health
+raworc api version
 ```
 
 **Why?**
@@ -805,7 +816,6 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `◉` (busy) - Agent processing  
 - `◎` (init) - Agent initializing
 - `◼` (slept) - Agent slept
-- `◼` (deleted) - Agent deleted
 
 ### Command Box Layout
 
@@ -891,7 +901,7 @@ display.warning('Some containers may not be running');
 
 **Agent Error Handling**: Raworc uses a comprehensive error handling system that ensures agents never fail silently:
 
-- **No Error State**: The system does NOT use an "errored" state. Agents use a clean 5-state model: `init → idle → busy → slept → deleted`
+- **No Error State**: The system does NOT use an "errored" state. Agents use a clean 4-state model: `init → idle → busy → slept`
 - **Top-Level Error Catching**: Agent host catches ALL errors at the highest level and sends them as messages to users instead of crashing
 - **Automatic Recovery**: Agents automatically restart on crashes with exponential backoff, ensuring continuous operation
 - **Operator Health Monitoring**: The operator continuously monitors non-sleeping agents and marks unreachable containers as "slept" for recovery
