@@ -1159,6 +1159,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let ollama_host = std::env::var("OLLAMA_HOST")
             .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
+        let ollama_model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        env.push(format!("OLLAMA_MODEL={}", ollama_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1354,6 +1356,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let ollama_host = std::env::var("OLLAMA_HOST")
             .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
+        let ollama_model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        env.push(format!("OLLAMA_MODEL={}", ollama_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 

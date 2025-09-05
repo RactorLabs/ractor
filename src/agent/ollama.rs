@@ -189,8 +189,9 @@ impl OllamaClient {
             },
         ];
 
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         let req = ChatRequest {
-            model: "gpt-oss",
+            model: &model,
             messages: chat_messages,
             stream: false,
             tools: Some(tools),

@@ -361,11 +361,11 @@ for component in "${COMPONENTS[@]}"; do
             print_success "Ollama is ready"
 
             # Ensure gpt-oss model is available
-            print_status "Pulling gpt-oss model (if needed)..."
-            if docker exec raworc_ollama ollama pull gpt-oss >/dev/null 2>&1; then
-                print_success "gpt-oss model available"
+            print_status "Pulling gpt-oss:20b model (if needed)..."
+            if docker exec raworc_ollama ollama pull gpt-oss:20b >/dev/null 2>&1; then
+                print_success "gpt-oss:20b model available"
             else
-                print_warning "Failed to pull gpt-oss model. You may need to pull manually."
+                print_warning "Failed to pull gpt-oss:20b model. You may need to pull manually."
             fi
 
             ;;
@@ -474,6 +474,7 @@ for component in "${COMPONENTS[@]}"; do
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
                 -e OLLAMA_HOST="$OLLAMA_HOST" \
+                -e OLLAMA_MODEL="${OLLAMA_MODEL:-gpt-oss:20b}" \
                 -e AGENT_IMAGE="$AGENT_IMAGE" \
                 -e AGENT_CPU_LIMIT="0.5" \
                 -e AGENT_MEMORY_LIMIT="536870912" \
