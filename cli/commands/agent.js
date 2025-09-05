@@ -1125,10 +1125,13 @@ function clearPrompt() {
 
   // Use current terminal width for recalculation to handle resizes
   const currentWidth = getTerminalWidth();
+  const prevWidth = layout.width || currentWidth;
   const rowsFor = (name) => {
     const line = layout.lines.find(l => l.name === name);
     if (!line) return 1;
-    return calcRowsForText(line.text, currentWidth);
+    const now = calcRowsForText(line.text, currentWidth);
+    const then = calcRowsForText(line.text, prevWidth);
+    return Math.max(now, then);
   };
 
   // Start at the prompt (bottom-most), which is where the cursor is
