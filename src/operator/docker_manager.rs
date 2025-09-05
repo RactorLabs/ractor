@@ -1667,4 +1667,74 @@ echo 'Agent directories created (code, secrets, logs, content)'
             ))
         }
     }
+
+    /// Check if an agent container exists and is running healthily
+    pub async fn is_container_healthy(&self, agent_name: &str) -> Result<bool> {
+        let container_name = format!("raworc_agent_{}", agent_name);
+
+        // First check if container exists
+        match self.docker.inspect_container(&container_name, None).await {
+            Ok(container_info) => {
+                // Container exists, check if it's running
+                if let Some(state) = container_info.state {
+                    if let Some(running) = state.running {
+                        if running {
+                            // Container is running, do a basic health check by trying to exec a command
+                            return self.ping_container(&container_name).await;
+                        } else {
+                            // Container exists but is not running
+                            info!("Agent {} container exists but is not running", agent_name);
+                            return Ok(false);
+                        }
+                    }
+                }
+                // Container state is unclear, assume unhealthy
+                warn!("Agent {} container state is unclear", agent_name);
+                Ok(false)
+            }
+            Err(bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }) => {
+                // Container doesn't exist
+                info!("Agent {} container does not exist", agent_name);
+                Ok(false)
+            }
+            Err(e) => {
+                // Other Docker API error
+                error!("Failed to inspect agent {} container: {}", agent_name, e);
+                Err(anyhow::anyhow!("Docker API error for agent {}: {}", agent_name, e))
+            }
+        }
+    }
+
+    /// Ping a container to verify it's responding
+    async fn ping_container(&self, container_name: &str) -> Result<bool> {
+        let exec_config = CreateExecOptions {
+            cmd: Some(vec!["echo", "ping"]),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        };
+
+        match self.docker.create_exec(container_name, exec_config).await {
+            Ok(exec_info) => {
+                match self.docker.start_exec(&exec_info.id, None).await {
+                    Ok(StartExecResults::Attached { .. }) => {
+                        // Command executed successfully
+                        Ok(true)
+                    }
+                    Ok(StartExecResults::Detached) => {
+                        // Command was detached, assume success
+                        Ok(true)
+                    }
+                    Err(e) => {
+                        warn!("Failed to ping container {}: {}", container_name, e);
+                        Ok(false)
+                    }
+                }
+            }
+            Err(e) => {
+                warn!("Failed to create exec for container {}: {}", container_name, e);
+                Ok(false)
+            }
+        }
+    }
 }

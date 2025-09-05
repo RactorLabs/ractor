@@ -805,7 +805,6 @@ The Raworc CLI uses a consistent, professional design system with flat geometric
 - `◉` (busy) - Agent processing  
 - `◎` (init) - Agent initializing
 - `◼` (slept) - Agent slept
-- `◇` (errored) - Agent error state
 - `◼` (deleted) - Agent deleted
 
 ### Command Box Layout
@@ -887,3 +886,15 @@ display.warning('Some containers may not be running');
 4. **Professional terminal appearance** suitable for developer workflows
 5. **Agent state indicators** use geometric shapes for clear status communication
 6. **Help-first approach** - commands show `/help (for commands)` to guide users
+
+## Error Handling Philosophy
+
+**Agent Error Handling**: Raworc uses a comprehensive error handling system that ensures agents never fail silently:
+
+- **No Error State**: The system does NOT use an "errored" state. Agents use a clean 5-state model: `init → idle → busy → slept → deleted`
+- **Top-Level Error Catching**: Agent host catches ALL errors at the highest level and sends them as messages to users instead of crashing
+- **Automatic Recovery**: Agents automatically restart on crashes with exponential backoff, ensuring continuous operation
+- **Operator Health Monitoring**: The operator continuously monitors non-sleeping agents and marks unreachable containers as "slept" for recovery
+- **Message-Based Error Reporting**: All errors are communicated to users through the message system, maintaining transparency while ensuring system reliability
+
+This approach ensures agents remain operational and users are informed of any issues without system-level failures.

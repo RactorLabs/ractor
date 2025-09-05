@@ -26,6 +26,22 @@ async fn main() -> Result<()> {
     // Initialize service logging
     let _ = logging::init_service_logging("/app/logs", "raworc_agent");
 
-    // Run the Agent (Computer Use Agent)
-    agent::run(&args.api_url, &args.agent_name).await
+    // Run the Agent (Computer Use Agent) with comprehensive error handling
+    loop {
+        match agent::run(&args.api_url, &args.agent_name).await {
+            Ok(()) => {
+                // Agent run completed successfully (should not happen in normal operation)
+                tracing::warn!("Agent run completed unexpectedly, restarting...");
+            }
+            Err(e) => {
+                tracing::error!("Agent crashed with error: {}", e);
+                tracing::error!("Attempting to restart agent in 5 seconds...");
+                
+                // Wait before restart to prevent tight crash loops
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+        
+        tracing::info!("Restarting agent...");
+    }
 }

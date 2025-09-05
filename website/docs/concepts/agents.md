@@ -38,9 +38,9 @@ interface Agent {
 Agents follow a validated state machine with controlled transitions:
 
 ```
-init → idle → busy → sleeping → errored
-  ↓      ↓      ↓         ↓         ↓
-  ✓      ✓      ✓         ✓         ✓
+init → idle → busy → slept
+  ↓      ↓      ↓      ↓
+  ✓      ✓      ✓      ✓
   └─── deleted (soft delete with cleanup)
 ```
 
@@ -49,8 +49,7 @@ init → idle → busy → sleeping → errored
 - **`init`** - Container being created and Agent initialized
 - **`idle`** - Ready to receive and process messages
 - **`busy`** - Processing messages and executing tasks
-- **`sleeping`** - Container stopped, volume preserved (can be woken)
-- **`errored`** - Container failed, requires intervention
+- **`slept`** - Container stopped, volume preserved (can be woken)
 - **`deleted`** - Agent marked for deletion, resources cleaned up
 
 ### State Transitions
@@ -60,10 +59,8 @@ init → idle → busy → sleeping → errored
 | `init` | `idle` | Container ready | Agent polling starts |
 | `idle` | `busy` | Message received | Agent processing |
 | `busy` | `idle` | Task completed | Ready for next message |
-| `idle` | `sleeping` | Manual sleep | Container stopped |
-| `sleeping` | `idle` | Wake request | Container restarted |
-| `idle` | `errored` | Error condition | Container marked failed |
-| `errored` | `idle` | Manual recovery | Container recreated |
+| `idle` | `slept` | Manual sleep | Container stopped |
+| `slept` | `idle` | Wake request | Container restarted |
 
 ## Agent Architecture
 

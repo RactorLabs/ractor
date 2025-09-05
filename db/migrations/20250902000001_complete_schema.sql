@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS agents (
     
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
-    CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept', 'errored', 'deleted')),
+    CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept', 'deleted')),
     CONSTRAINT agents_publish_check CHECK (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)

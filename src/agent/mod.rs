@@ -214,7 +214,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
 
     info!("Starting message polling loop...");
 
-    // Main polling loop
+    // Main polling loop with comprehensive error handling
     loop {
         match message_handler.poll_and_process().await {
             Ok(count) => {
@@ -224,7 +224,16 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
             }
             Err(e) => {
                 error!("Error processing messages: {}", e);
-                // Continue polling even on errors
+                
+                // Send error as message to user instead of crashing
+                let error_message = format!("Agent encountered an error: {}", e);
+                if let Err(send_err) = api_client.send_message(error_message, None).await {
+                    error!("Failed to send error message to user: {}", send_err);
+                } else {
+                    info!("Sent error message to user, continuing operation");
+                }
+                
+                // Continue polling - agent should never die silently
             }
         }
 

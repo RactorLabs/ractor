@@ -155,7 +155,7 @@ Development version - changes will be documented at release.
 - **Website Documentation Overhaul**: Comprehensive update of all website documentation to reflect 100+ commits of CLI and feature improvements
 - **CLI Interface Documentation**: Updated all interactive session examples with new geometric icon design system and visual state indicators
 - **Tool Integration Documentation**: Added comprehensive documentation for bash, text_editor, and web_search tools with visual execution examples
-- **Session Management Updates**: Updated session state machine documentation to include all six states (init/idle/busy/closed/errored/deleted)
+- **Session Management Updates**: Updated session state machine documentation to include all states (init/idle/busy/closed/deleted)
 - **Interactive Command Reference**: Complete documentation of interactive session commands (/help, /status, /timeout, /name, /detach, /quit)
 - **API Documentation Verification**: Updated version references and verified all endpoints match actual API implementation
 - **Command Syntax Fixes**: Fixed troubleshooting commands and authentication flow examples throughout documentation
@@ -184,7 +184,7 @@ Development version - changes will be documented at release.
 - **Session Detach Functionality**: Added `/detach` and `/d` commands to detach from sessions while keeping them running in background
 - **Session Name Resolution**: Enhanced session name handling with alphanumeric validation and automatic ID resolution
 - **Markdown Formatting**: Integrated marked-terminal for proper markdown rendering in CLI session output
-- **Visual State Indicators**: Added geometric shape indicators for session states (idle, busy, init, closed, errored, deleted)
+- **Visual State Indicators**: Added geometric shape indicators for session states (idle, busy, init, closed, deleted)
 - **Conversation History**: Implemented clean conversation history display with user input prefixes and improved readability
 - **Command Box Layout**: Standardized command box format across all CLI operations with consistent server/user context
 - **Session Commands**: Added comprehensive session management commands (`/help`, `/status`, `/timeout`, `/name`, `/quit`)

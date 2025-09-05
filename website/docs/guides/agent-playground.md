@@ -222,8 +222,8 @@ raworc api "agents?state=idle"
 Agents follow a controlled state machine:
 
 ```
-init → idle → busy → slept → errored
-  ↓      ↓      ↓       ↓         ↓
+init → idle → busy → slept
+  ↓      ↓      ↓       ↓
   └─── deleted (soft delete with cleanup)
 ```
 
@@ -232,7 +232,6 @@ init → idle → busy → slept → errored
 - `●` (idle) - Agent ready for messages  
 - `◉` (busy) - Agent processing messages
 - `◼` (slept) - Agent sleeping, can be woken
-- `◇` (errored) - Agent in error state
 - `◼` (deleted) - Agent permanently deleted
 
 Monitor state transitions:

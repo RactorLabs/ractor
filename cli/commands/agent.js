@@ -980,7 +980,6 @@ function showPrompt(state = 'init') {
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working
     'slept': '◻',    // empty square - slept/slept
-    'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
 
@@ -989,7 +988,6 @@ function showPrompt(state = 'init') {
     'idle': 'idle',
     'busy': 'working',
     'slept': 'slept',
-    'errored': 'error',
     'deleted': 'deleted'
   };
   
@@ -998,7 +996,6 @@ function showPrompt(state = 'init') {
     'idle': chalk.green,
     'busy': chalk.yellow,
     'slept': chalk.cyan,     // brighter than gray
-    'errored': chalk.red,
     'deleted': chalk.magenta
   };
   
@@ -1024,7 +1021,6 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working
     'slept': '◻',    // empty square - slept/slept
-    'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
 
@@ -1033,7 +1029,6 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'idle': 'idle',
     'busy': 'working',
     'slept': 'slept',
-    'errored': 'error',
     'deleted': 'deleted'
   };
   
@@ -1042,7 +1037,6 @@ function showPromptWithInput(state = 'init', userInput = '') {
     'idle': chalk.green,
     'busy': chalk.yellow,
     'slept': chalk.cyan,     // brighter than gray
-    'errored': chalk.red,
     'deleted': chalk.magenta
   };
   
@@ -1746,7 +1740,6 @@ function getStateDisplay(state) {
     'idle': '●',      // solid circle - ready
     'busy': '◐',      // half circle - working  
     'slept': '◻',    // empty square - slept/slept
-    'errored': '◆',   // diamond - error
     'deleted': '◼'    // filled square - deleted
   };
 
@@ -1755,7 +1748,6 @@ function getStateDisplay(state) {
     'idle': chalk.green,
     'busy': chalk.yellow, 
     'slept': chalk.cyan,     // brighter than gray
-    'errored': chalk.red,
     'deleted': chalk.magenta
   };
   

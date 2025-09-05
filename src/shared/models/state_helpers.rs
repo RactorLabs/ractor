@@ -4,23 +4,20 @@ pub fn can_transition_to(from: &str, to: &str) -> bool {
     match (from, to) {
         // From INIT
         (AGENT_STATE_INIT, AGENT_STATE_IDLE) => true,
-        (AGENT_STATE_INIT, AGENT_STATE_ERRORED) => true,
 
         // From IDLE (ready and waiting)
-        (AGENT_STATE_IDLE, AGENT_STATE_SLEPT) => true, // User sleeps
+        (AGENT_STATE_IDLE, AGENT_STATE_SLEPT) => true, // User sleeps or operator detects failure
         (AGENT_STATE_IDLE, AGENT_STATE_BUSY) => true,   // Processing request
-        (AGENT_STATE_IDLE, AGENT_STATE_ERRORED) => true,
 
         // From SLEPT (container destroyed, volume preserved)
         (AGENT_STATE_SLEPT, AGENT_STATE_IDLE) => true, // User wakes, recreate container
-        (AGENT_STATE_SLEPT, AGENT_STATE_ERRORED) => true,
 
         // From BUSY (actively processing)
         (AGENT_STATE_BUSY, AGENT_STATE_IDLE) => true, // Processing complete
-        (AGENT_STATE_BUSY, AGENT_STATE_ERRORED) => true,
+        (AGENT_STATE_BUSY, AGENT_STATE_SLEPT) => true, // Operator detects container failure
 
-        // Terminal states: error and deleted
-        // These states have no outgoing transitions (can only be remixed)
+        // Terminal state: deleted
+        // This state has no outgoing transitions (can only be remixed)
 
         // Cannot transition to same state
         _ => false,

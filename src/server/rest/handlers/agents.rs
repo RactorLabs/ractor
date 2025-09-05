@@ -397,16 +397,11 @@ pub async fn sleep_agent(
     }
     tracing::info!("Permission check passed");
 
-    // Check current state - cannot sleep if already sleeping or in error
+    // Check current state - cannot sleep if already sleeping
 
     if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
         return Err(ApiError::BadRequest(
             "Agent is already sleeping".to_string(),
-        ));
-    }
-    if agent.state == crate::shared::models::constants::AGENT_STATE_ERRORED {
-        return Err(ApiError::BadRequest(
-            "Cannot sleep agent in error state".to_string(),
         ));
     }
 

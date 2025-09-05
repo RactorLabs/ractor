@@ -3,7 +3,6 @@ const AGENT_STATE_INIT = 'init';
 const AGENT_STATE_IDLE = 'idle';
 const AGENT_STATE_BUSY = 'busy';
 const AGENT_STATE_SLEPT = 'slept';
-const AGENT_STATE_ERRORED = 'errored';
 const AGENT_STATE_DELETED = 'deleted';
 
 // Message role constants
@@ -17,7 +16,6 @@ module.exports = {
   AGENT_STATE_IDLE,
   AGENT_STATE_BUSY,
   AGENT_STATE_SLEPT,
-  AGENT_STATE_ERRORED,
   AGENT_STATE_DELETED,
 
   // Message roles

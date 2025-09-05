@@ -71,7 +71,7 @@ impl AgentManager {
     }
 
     pub async fn run(&self) -> Result<()> {
-        info!("Agent Manager started, polling for tasks and auto-sleep monitoring...");
+        info!("Agent Manager started, polling for tasks, auto-sleep monitoring, and health checks...");
 
         loop {
             // Process pending tasks
@@ -92,8 +92,17 @@ impl AgentManager {
                 }
             };
 
+            // Check health of active agents
+            let agents_recovered = match self.check_agent_health().await {
+                Ok(recovered) => recovered,
+                Err(e) => {
+                    error!("Error checking agent health: {}", e);
+                    0
+                }
+            };
+
             // If no work was done, sleep before next iteration
-            if tasks_processed == 0 && agents_slept == 0 {
+            if tasks_processed == 0 && agents_slept == 0 && agents_recovered == 0 {
                 sleep(Duration::from_secs(10)).await;
             }
         }
@@ -822,5 +831,81 @@ impl AgentManager {
 
         info!("Content unpublished for agent {}", agent_name);
         Ok(())
+    }
+
+    /// Check health of all non-sleeping agents and mark failed containers as slept
+    async fn check_agent_health(&self) -> Result<usize> {
+        // Find all agents that are not sleeping or deleted (active agents)
+        let active_agents: Vec<(String, String)> = sqlx::query_as(
+            r#"
+            SELECT name, state
+            FROM agents
+            WHERE state != 'slept' 
+              AND state != 'deleted'
+            ORDER BY name
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        if active_agents.is_empty() {
+            return Ok(0);
+        }
+
+        info!("Checking health of {} active agents", active_agents.len());
+        let mut recovered_count = 0;
+
+        for (agent_name, current_state) in active_agents {
+            // Check if container exists and is running
+            match self.docker_manager.is_container_healthy(&agent_name).await {
+                Ok(true) => {
+                    // Container is healthy, no action needed
+                    continue;
+                }
+                Ok(false) => {
+                    // Container is unhealthy or doesn't exist
+                    warn!(
+                        "Agent {} container is unhealthy or missing, marking as slept for recovery", 
+                        agent_name
+                    );
+                    
+                    // Mark agent as slept so it can be woken up later
+                    if let Err(e) = sqlx::query(
+                        r#"UPDATE agents SET state = 'slept' WHERE name = ?"#,
+                    )
+                    .bind(&agent_name)
+                    .execute(&self.pool)
+                    .await
+                    {
+                        error!(
+                            "Failed to mark unhealthy agent {} as slept: {}", 
+                            agent_name, e
+                        );
+                    } else {
+                        info!(
+                            "Agent {} marked as slept due to container failure (was: {})",
+                            agent_name, current_state
+                        );
+                        recovered_count += 1;
+                    }
+                }
+                Err(e) => {
+                    // Health check failed, likely Docker connection issues
+                    error!(
+                        "Health check failed for agent {}: {}, will retry next cycle", 
+                        agent_name, e
+                    );
+                }
+            }
+        }
+
+        if recovered_count > 0 {
+            info!(
+                "Marked {} agents as slept due to container failures", 
+                recovered_count
+            );
+        }
+
+        Ok(recovered_count)
     }
 }

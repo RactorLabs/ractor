@@ -285,7 +285,7 @@ List computer use agents. Regular users see only their own agents, admin users s
 **Authentication**: Required
 
 **Query Parameters**:
-- `state` (optional) - Filter agents by state (init, idle, busy, sleeping, errored, deleted)
+- `state` (optional) - Filter agents by state (init, idle, busy, slept, deleted)
 
 **Response**: `200 OK`
 ```json
