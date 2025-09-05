@@ -1111,7 +1111,8 @@ function showPromptWithInput(state = 'init', userInput = '') {
 }
 
 function clearPrompt() {
-  // Clear the entire prompt block reliably, accounting for wrapped lines.
+  // Clear the entire prompt block reliably, accounting for wrapped lines
+  // and terminal resizes (recompute rows using current width).
   const layout = __lastPromptLayout;
   if (!layout || !layout.lines) {
     // Fallback: clear 4 lines (original behavior)
@@ -1122,8 +1123,16 @@ function clearPrompt() {
     return;
   }
 
+  // Use current terminal width for recalculation to handle resizes
+  const currentWidth = getTerminalWidth();
+  const rowsFor = (name) => {
+    const line = layout.lines.find(l => l.name === name);
+    if (!line) return 1;
+    return calcRowsForText(line.text, currentWidth);
+  };
+
   // Start at the prompt (bottom-most), which is where the cursor is
-  const promptRows = layout.lines.find(l => l.name === 'prompt')?.rows || 1;
+  const promptRows = rowsFor('prompt');
   // Clear current physical line first
   process.stdout.write('\r\x1b[2K');
   // Clear additional wrapped rows of the prompt
@@ -1134,7 +1143,7 @@ function clearPrompt() {
   // Then clear the dash, state, and leading empty line, accounting for wraps
   const order = ['dash', 'state', 'empty'];
   for (const name of order) {
-    const rows = layout.lines.find(l => l.name === name)?.rows || 1;
+    const rows = rowsFor(name);
     for (let i = 0; i < rows; i++) {
       process.stdout.write('\x1b[1A\x1b[2K');
     }
@@ -1429,6 +1438,22 @@ async function chatLoop(agentName, options = {}) {
   }
 
   return new Promise((resolve) => {
+    // Handle terminal resizes: re-render the prompt to avoid ghost lines
+    if (process.stdout && process.stdout.isTTY && typeof process.stdout.on === 'function') {
+      process.stdout.on('resize', () => {
+        // Only act if our prompt is currently on screen
+        if (promptVisible) {
+          try {
+            clearPrompt();
+            showPromptWithInput(currentAgentState, currentUserInput);
+            promptVisible = true;
+          } catch (_) {
+            // Best-effort; ignore if terminal cannot handle controls
+          }
+        }
+      });
+    }
+
     rl.on('close', resolve);
   });
 }
