@@ -259,11 +259,18 @@ impl OllamaClient {
         // Check if content contains JSON that looks like a tool call
         if content.trim().starts_with("{") && content.trim().ends_with("}") {
             tracing::info!("Content looks like JSON, attempting to parse as tool call");
-            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(content) {
-                // Check if it has tool call structure
-                if json_val.get("tool").is_some() || json_val.get("function").is_some() {
-                    tracing::info!("Content appears to be a tool call JSON: {}", content);
-                    return Ok(content.clone());
+            match serde_json::from_str::<serde_json::Value>(content) {
+                Ok(json_val) => {
+                    // Check if it has tool call structure
+                    if json_val.get("tool").is_some() || json_val.get("function").is_some() {
+                        tracing::info!("Content appears to be a tool call JSON - returning as tool call");
+                        return Ok(content.clone());
+                    } else {
+                        tracing::info!("JSON parsed but no tool/function field found: {:?}", json_val.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!("Failed to parse content as JSON: {} | Content: {}", e, content);
                 }
             }
         }
