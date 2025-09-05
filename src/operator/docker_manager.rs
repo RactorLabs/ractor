@@ -499,7 +499,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
         copy_code: bool,
         copy_secrets: bool,
         copy_content: bool,
-        api_key: String,
         raworc_token: String,
         principal: String,
         principal_type: String,
@@ -700,7 +699,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 Some(secrets),
                 instructions,
                 setup,
-                api_key,
                 raworc_token,
                 principal,
                 principal_type,
@@ -943,7 +941,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
         secrets: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
-        api_key: String,
         raworc_token: String,
         principal: String,
         principal_type: String,
@@ -955,7 +952,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 Some(secrets),
                 instructions,
                 setup,
-                api_key,
                 raworc_token,
                 principal,
                 principal_type,
@@ -1020,7 +1016,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
     pub async fn wake_container_with_tokens(
         &self,
         agent_name: &str,
-        api_key: String,
         raworc_token: String,
         principal: String,
         principal_type: String,
@@ -1067,7 +1062,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 secrets,
                 instructions,
                 setup,
-                api_key,
                 raworc_token,
                 principal,
                 principal_type,
@@ -1161,6 +1155,11 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
+        // Configure Ollama host for model inference (default to host.docker.internal)
+        let ollama_host = std::env::var("OLLAMA_HOST")
+            .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+        env.push(format!("OLLAMA_HOST={}", ollama_host));
+
         // No web_search tool; do not propagate BRAVE_API_KEY
 
         // Add hint about setup script availability to avoid unnecessary waiting
@@ -1229,6 +1228,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: Some(port_bindings),
+                extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1271,7 +1271,6 @@ echo 'Agent directories created (code, secrets, logs, content)'
         secrets: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
-        api_key: String,
         raworc_token: String,
         principal: String,
         principal_type: String,
@@ -1346,11 +1345,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_NAME={}", agent_name),
             format!("RAWORC_AGENT_DIR=/agent"),
             // Set the generated system tokens directly as environment variables
-            format!("ANTHROPIC_API_KEY={}", api_key),
             format!("RAWORC_TOKEN={}", raworc_token),
             format!("RAWORC_PRINCIPAL={}", principal),
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
+
+        // Configure Ollama host for model inference (default to host.docker.internal)
+        let ollama_host = std::env::var("OLLAMA_HOST")
+            .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+        env.push(format!("OLLAMA_HOST={}", ollama_host));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1364,15 +1367,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
             env.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
-        info!("Set system-generated ANTHROPIC_API_KEY and RAWORC_TOKEN as environment variables");
+        info!("Set RAWORC_TOKEN and OLLAMA_HOST as environment variables");
 
-        // Add user secrets as environment variables (but NOT ANTHROPIC_API_KEY or RAWORC_TOKEN)
+        // Add user secrets as environment variables (but NOT RAWORC_TOKEN or OLLAMA_HOST)
         if let Some(secrets_map) = &secrets {
             for (key, value) in secrets_map {
-                // Skip if user provided their own ANTHROPIC_API_KEY or RAWORC_TOKEN - we use system ones
-                if key == "ANTHROPIC_API_KEY" || key == "RAWORC_TOKEN" {
+                // Skip if user provided their own RAWORC_TOKEN or OLLAMA_HOST - we use system-managed values
+                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
-                        "Skipping user-provided {} - using system-generated token instead",
+                        "Skipping user-provided {} - using system-managed value instead",
                         key
                     );
                     continue;
@@ -1413,6 +1416,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: Some(port_bindings),
+                extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
                 ..Default::default()
             }),
             ..Default::default()

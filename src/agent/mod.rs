@@ -1,6 +1,6 @@
 // Agent (Computer Use Agent) modules
 mod api;
-mod claude;
+mod ollama;
 mod config;
 mod error;
 mod guardrails;
@@ -38,21 +38,10 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     };
     tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
 
-    // Get Claude API key from environment - ANTHROPIC_API_KEY is required
-    let claude_api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| anyhow::anyhow!("ANTHROPIC_API_KEY environment variable is required"))?;
-
-    // Debug: Log the API key being used (partially masked for security)
-    let masked_key = if claude_api_key.len() > 10 {
-        format!(
-            "{}...{}",
-            &claude_api_key[..10],
-            &claude_api_key[claude_api_key.len() - 4..]
-        )
-    } else {
-        "<too-short>".to_string()
-    };
-    tracing::info!("Using ANTHROPIC_API_KEY: {}", masked_key);
+    // Resolve Ollama host from environment or default to host.docker.internal
+    let ollama_host = std::env::var("OLLAMA_HOST")
+        .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
     // Initialize configuration
     let config = Arc::new(config::Config {
@@ -65,18 +54,18 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     // Initialize API client
     let api_client = Arc::new(api::RaworcClient::new(config.clone()));
 
-    // Initialize Claude client
-    let mut claude_client = match claude::ClaudeClient::new(&claude_api_key) {
+    // Initialize Ollama client
+    let mut ollama_client = match ollama::OllamaClient::new(&ollama_host) {
         Ok(client) => client,
         Err(e) => {
-            tracing::error!("Failed to initialize Claude client: {}", e);
-            return Err(anyhow::anyhow!("Failed to initialize Claude client: {}", e));
+            tracing::error!("Failed to initialize Ollama client: {}", e);
+            return Err(anyhow::anyhow!("Failed to initialize Ollama client: {}", e));
         }
     };
 
     // Set the API client for tool message sending
-    claude_client.set_api_client(api_client.clone());
-    let claude_client = Arc::new(claude_client);
+    ollama_client.set_api_client(api_client.clone());
+    let ollama_client = Arc::new(ollama_client);
 
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
@@ -163,11 +152,8 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 
     // Initialize message handler
-    let message_handler = message_handler::MessageHandler::new(
-        api_client.clone(),
-        claude_client.clone(),
-        guardrails.clone(),
-    );
+    let message_handler =
+        message_handler::MessageHandler::new(api_client.clone(), ollama_client.clone(), guardrails.clone());
 
     // Initialize processed message tracking to prevent reprocessing on restore
     if let Err(e) = message_handler.initialize_processed_tracking().await {

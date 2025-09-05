@@ -1,4 +1,3 @@
-pub mod anthropic;
 pub mod database;
 pub mod logging;
 pub mod models;

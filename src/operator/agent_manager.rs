@@ -13,10 +13,7 @@ use tracing::{error, info, warn};
 pub mod constants;
 pub use constants::AGENT_STATE_INIT;
 
-// Import shared modules
-#[path = "../shared/anthropic.rs"]
-pub mod anthropic;
-use anthropic::AnthropicKeyManager;
+// Using local Ollama via OLLAMA_HOST
 
 #[path = "../shared/rbac.rs"]
 pub mod rbac;
@@ -42,7 +39,6 @@ pub struct AgentTask {
 pub struct AgentManager {
     pool: Pool<MySql>,
     docker_manager: DockerManager,
-    key_manager: AnthropicKeyManager,
     jwt_secret: String,
 }
 
@@ -56,16 +52,12 @@ impl AgentManager {
         let docker = Docker::connect_with_socket_defaults()?;
         let docker_manager = DockerManager::new(docker, pool.clone());
 
-        let key_manager = AnthropicKeyManager::new()
-            .map_err(|e| anyhow::anyhow!("Failed to initialize Anthropic key manager: {}", e))?;
-
         let jwt_secret = std::env::var("JWT_SECRET")
             .unwrap_or_else(|_| "default-secret-change-in-production".to_string());
 
         Ok(Self {
             pool,
             docker_manager,
-            key_manager,
             jwt_secret,
         })
     }
@@ -108,12 +100,7 @@ impl AgentManager {
         }
     }
 
-    /// Generate a agent-specific API key for Anthropic
-    async fn generate_agent_api_key(&self, agent_name: &str) -> Result<String> {
-        self.key_manager
-            .generate_agent_api_key(agent_name)
-            .await
-    }
+    // No external API key required for local Ollama
 
     /// Process agents that need auto-closing due to timeout
     async fn process_auto_sleep(&self) -> Result<usize> {
@@ -336,12 +323,8 @@ impl AgentManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic tokens for this agent
-        info!("Generating dynamic tokens for agent {}", agent_name);
-        let agent_api_key = self
-            .generate_agent_api_key(&agent_name)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate agent API key: {}", e))?;
+        // Generate dynamic token for this agent (for Raworc auth)
+        info!("Generating dynamic token for agent {}", agent_name);
         let agent_token = self
             .generate_agent_token(principal, principal_type, &agent_name)
             .map_err(|e| anyhow::anyhow!("Failed to generate agent token: {}", e))?;
@@ -430,11 +413,7 @@ impl AgentManager {
                   agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content, remix_principal, remix_principal_type_str);
 
             // For remix agents, create container with selective volume copy from parent
-            // Generate fresh tokens for remix agent
-            let remix_api_key = self
-                .generate_agent_api_key(&agent_name)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to generate remix agent API key: {}", e))?;
+            // Generate fresh token for remix agent
             let remix_token = self
                 .generate_agent_token(remix_principal, remix_principal_type, &agent_name)
                 .map_err(|e| anyhow::anyhow!("Failed to generate remix agent token: {}", e))?;
@@ -447,7 +426,6 @@ impl AgentManager {
                     copy_code,
                     copy_secrets,
                     copy_content,
-                    remix_api_key,
                     remix_token,
                     remix_principal.to_string(),
                     remix_principal_type_str.to_string(),
@@ -464,7 +442,6 @@ impl AgentManager {
                     secrets,
                     instructions,
                     setup,
-                    agent_api_key,
                     agent_token,
                     principal.to_string(),
                     principal_type_str.to_string(),
@@ -612,10 +589,6 @@ impl AgentManager {
             "Generating fresh tokens for woken agent {}",
             agent_name
         );
-        let wake_api_key = self
-            .generate_agent_api_key(&agent_name)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to generate wake agent API key: {}", e))?;
         let wake_token = self
             .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
             .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
@@ -628,7 +601,6 @@ impl AgentManager {
         self.docker_manager
             .wake_container_with_tokens(
                 &agent_name,
-                wake_api_key,
                 wake_token,
                 principal.clone(),
                 "User".to_string(),

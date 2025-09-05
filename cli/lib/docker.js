@@ -160,7 +160,7 @@ class DockerManager {
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
-          '-e', `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
+          ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
           '-e', `AGENT_IMAGE=${this.images.agent}`,
           '-e', 'AGENT_CPU_LIMIT=0.5',
           '-e', 'AGENT_MEMORY_LIMIT=536870912',

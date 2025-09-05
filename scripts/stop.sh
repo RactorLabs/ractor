@@ -100,7 +100,7 @@ done
 
 # Default to all components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-    COMPONENTS=("server" "operator" "mysql")
+    COMPONENTS=("server" "operator" "ollama" "mysql")
 fi
 
 print_status "Stopping Raworc services with direct Docker management"
@@ -123,10 +123,11 @@ declare -A component_containers
 component_containers[mysql]="raworc_mysql"
 component_containers[server]="raworc_server"
 component_containers[operator]="raworc_operator"
+component_containers[ollama]="raworc_ollama"
 
 # Reverse order for stopping
 stop_order=()
-for component in operator server mysql; do
+for component in operator server ollama mysql; do
     if [[ " ${COMPONENTS[*]} " =~ " ${component} " ]]; then
         stop_order+=("$component")
     fi
@@ -191,7 +192,7 @@ fi
 if [ "$VOLUMES" = true ]; then
     print_status "Removing volumes..."
     
-    for volume in raworc_mysql_data raworc_public_data; do
+    for volume in raworc_mysql_data raworc_public_data raworc_ollama_data; do
         if docker volume inspect "$volume" >/dev/null 2>&1; then
             print_status "Removing volume $volume..."
             if docker volume rm "$volume" 2>/dev/null; then

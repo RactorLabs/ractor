@@ -111,7 +111,7 @@ done
 
 # Default to all components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-    COMPONENTS=("mysql" "server" "operator")
+    COMPONENTS=("mysql" "ollama" "server" "operator")
 fi
 
 print_status "Starting Raworc services with direct Docker management"
@@ -186,7 +186,7 @@ echo ""
 
 # Create volumes if they don't exist
 print_status "Creating Docker volumes..."
-for volume in raworc_mysql_data raworc_public_data; do
+for volume in raworc_mysql_data raworc_public_data raworc_ollama_data; do
     if ! docker volume inspect "$volume" >/dev/null 2>&1; then
         if docker volume create "$volume"; then
             print_success "Created volume $volume"
@@ -247,6 +247,106 @@ for component in "${COMPONENTS[@]}"; do
                 exit 1
             fi
             ;;
+
+        ollama)
+            print_status "Starting Ollama runtime..."
+
+            # Stop existing container if running
+            if docker ps -q --filter "name=raworc_ollama" | grep -q .; then
+                print_status "Stopping existing Ollama container..."
+                docker stop raworc_ollama >/dev/null 2>&1 || true
+            fi
+
+            # Remove existing container if exists
+            if docker ps -aq --filter "name=raworc_ollama" | grep -q .; then
+                print_status "Removing existing Ollama container..."
+                docker rm raworc_ollama >/dev/null 2>&1 || true
+            fi
+
+            # Optional GPU support
+            GPU_FLAGS=""
+            if [ "${OLLAMA_ENABLE_GPU:-}" = "true" ]; then
+                GPU_FLAGS="--gpus all"
+                print_status "GPU enabled for Ollama"
+            fi
+
+            # Optional resource limits
+            CPU_FLAG=""
+            MEM_FLAG=""
+            SHM_FLAG=""
+            if [ -n "${OLLAMA_CPUS:-}" ]; then
+                CPU_FLAG="--cpus ${OLLAMA_CPUS}"
+                print_status "Allocating CPUs to Ollama: ${OLLAMA_CPUS}"
+            fi
+            if [ -n "${OLLAMA_MEMORY:-}" ]; then
+                MEM_FLAG="--memory ${OLLAMA_MEMORY} --memory-swap ${OLLAMA_MEMORY}"
+                print_status "Allocating memory to Ollama: ${OLLAMA_MEMORY}"
+            fi
+            # Larger shared memory can help with big models
+            if [ -n "${OLLAMA_SHM_SIZE:-}" ]; then
+                SHM_FLAG="--shm-size ${OLLAMA_SHM_SIZE}"
+                print_status "Shared memory size for Ollama: ${OLLAMA_SHM_SIZE}"
+            fi
+
+            # Use host port mapping only if 11434 is free
+            PUBLISH_FLAG="-p 11434:11434"
+            if ss -ltn 2>/dev/null | awk '{print $4}' | grep -q ':11434$'; then
+                print_warning "Host port 11434 is in use; starting without host port mapping"
+                PUBLISH_FLAG=""
+            fi
+
+            # Start Ollama container
+            if docker run -d \
+                --name raworc_ollama \
+                --network raworc_network \
+                ${PUBLISH_FLAG} \
+                -v raworc_ollama_data:/root/.ollama \
+                -e OLLAMA_KEEP_ALIVE=1h \
+                $GPU_FLAGS \
+                $CPU_FLAG \
+                $MEM_FLAG \
+                $SHM_FLAG \
+                ollama/ollama:latest; then
+                print_success "Ollama container started"
+            else
+                print_error "Failed to start Ollama container"
+                exit 1
+            fi
+
+            # Wait for Ollama to be ready
+            timeout=120
+            if [ -n "${PUBLISH_FLAG}" ]; then
+                print_status "Waiting for Ollama to be ready on host :11434..."
+                until curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1; do
+                    sleep 2
+                    timeout=$((timeout-2))
+                    if [ $timeout -le 0 ]; then
+                        print_error "Ollama did not become ready in time (host port)"
+                        exit 1
+                    fi
+                done
+            else
+                print_status "Waiting for Ollama container to be ready (no host port)..."
+                until docker exec raworc_ollama ollama list >/dev/null 2>&1; do
+                    sleep 2
+                    timeout=$((timeout-2))
+                    if [ $timeout -le 0 ]; then
+                        print_error "Ollama did not become ready in time (container)"
+                        exit 1
+                    fi
+                done
+            fi
+            print_success "Ollama is ready"
+
+            # Ensure gpt-oss model is available
+            print_status "Pulling gpt-oss model (if needed)..."
+            if docker exec raworc_ollama ollama pull gpt-oss >/dev/null 2>&1; then
+                print_success "gpt-oss model available"
+            else
+                print_warning "Failed to pull gpt-oss model. You may need to pull manually."
+            fi
+
+            ;;
             
         server)
             print_status "Starting API server..."
@@ -304,18 +404,12 @@ for component in "${COMPONENTS[@]}"; do
             
         operator)
             print_status "Starting operator service..."
-            
-            # Validate required environment variables for operator
-            if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
-                print_error "ANTHROPIC_API_KEY environment variable is required for the operator"
-                echo ""
-                echo "💡 The operator needs an Anthropic API key to provide to agent containers."
-                echo "   Set the environment variable and try again:"
-                echo ""
-                echo "   export ANTHROPIC_API_KEY=sk-ant-api03-..."
-                echo "   ./scripts/start.sh operator"
-                echo ""
-                exit 1
+
+            # Set OLLAMA_HOST default: prefer raworc_ollama if running
+            if docker ps -q --filter "name=raworc_ollama" | grep -q .; then
+                : "${OLLAMA_HOST:=http://raworc_ollama:11434}"
+            else
+                : "${OLLAMA_HOST:=http://host.docker.internal:11434}"
             fi
             
             # Check if MySQL is running and healthy (if it was requested)
@@ -357,7 +451,7 @@ for component in "${COMPONENTS[@]}"; do
                 -v /var/run/docker.sock:/var/run/docker.sock \
                 -e DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc \
                 -e JWT_SECRET="${JWT_SECRET:-development-secret-key}" \
-                -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+                -e OLLAMA_HOST="$OLLAMA_HOST" \
                 -e AGENT_IMAGE="$AGENT_IMAGE" \
                 -e AGENT_CPU_LIMIT="0.5" \
                 -e AGENT_MEMORY_LIMIT="536870912" \

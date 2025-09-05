@@ -5,8 +5,8 @@ pub enum HostError {
     #[error("API error: {0}")]
     Api(String),
 
-    #[error("Claude API error: {0}")]
-    Claude(String),
+    #[error("Model error: {0}")]
+    Model(String),
 
     #[error("Guardrail violation: {0}")]
     Guardrail(String),

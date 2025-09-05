@@ -755,7 +755,7 @@ function displayAgentMessage(message, options = {}) {
     }
     return 'tool_execution';
   } else if (metadata && metadata.type === 'assistant_reasoning') {
-    // Handle Claude's reasoning/explanation before tool execution
+    // Handle model reasoning/explanation before tool execution
     if (clearPromptFn) {
       clearPromptFn();
       if (setPromptVisibleFn) setPromptVisibleFn(false);

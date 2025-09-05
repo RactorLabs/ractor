@@ -10,15 +10,10 @@ pub async fn run() -> Result<()> {
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Validate required environment variables early
-    if std::env::var("ANTHROPIC_API_KEY").is_err() {
-        tracing::error!("ANTHROPIC_API_KEY environment variable is required but not set");
-        return Err(anyhow::anyhow!(
-            "ANTHROPIC_API_KEY environment variable is required"
-        ));
-    }
-
-    tracing::info!("ANTHROPIC_API_KEY validated successfully");
+    // Resolve OLLAMA_HOST or use default inside Docker network
+    let ollama_host = std::env::var("OLLAMA_HOST")
+        .unwrap_or_else(|_| "http://raworc_ollama:11434".to_string());
+    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
     // Initialize agent manager
     let agent_manager = AgentManager::new(&database_url).await?;

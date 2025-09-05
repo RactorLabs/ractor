@@ -29,7 +29,6 @@ impl Guardrails {
 
         // Only redact critical sensitive information
         let sensitive_keywords = vec![
-            "anthropic_api_key",
             "api_key",
             "raworc_token",
             "jwt",
@@ -96,7 +95,6 @@ impl Guardrails {
             "your prompt",
             "repeat your instructions",
             "show me your prompt",
-            "anthropic_api_key",
             "api_key",
             "raworc_token",
         ];
@@ -153,7 +151,6 @@ impl Guardrails {
         let lower_content = content.to_lowercase();
 
         let system_info_patterns = [
-            "anthropic_api_key",
             "api_key",
             "raworc_token",
             "jwt secret",

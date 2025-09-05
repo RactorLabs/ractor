@@ -1,5 +1,5 @@
 use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
-use super::claude::ClaudeClient;
+use super::ollama::OllamaClient;
 use super::error::Result;
 use super::guardrails::Guardrails;
 use chrono::{DateTime, Utc};
@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 
 pub struct MessageHandler {
     api_client: Arc<RaworcClient>,
-    claude_client: Arc<ClaudeClient>,
+    ollama_client: Arc<OllamaClient>,
     guardrails: Arc<Guardrails>,
     processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
     task_created_at: DateTime<Utc>,
@@ -19,7 +19,7 @@ pub struct MessageHandler {
 impl MessageHandler {
     pub fn new(
         api_client: Arc<RaworcClient>,
-        claude_client: Arc<ClaudeClient>,
+        ollama_client: Arc<OllamaClient>,
         guardrails: Arc<Guardrails>,
     ) -> Self {
         // Try to read task creation timestamp from environment, fallback to current time
@@ -39,7 +39,7 @@ impl MessageHandler {
 
         Self {
             api_client,
-            claude_client,
+            ollama_client,
             guardrails,
             processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
             task_created_at,
@@ -212,31 +212,31 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
 
-        // Use Claude API directly
-        info!("Using Claude API for message processing");
+        // Use Ollama API directly
+        info!("Using Ollama API for message processing");
 
         // Fetch ALL messages from agent for complete conversation history
-        info!("Fetching complete conversation history for Claude");
+        info!("Fetching complete conversation history for Ollama");
         let all_messages = self.fetch_all_agent_messages().await?;
 
-        // Prepare conversation history for Claude
+        // Prepare conversation history for Ollama
         let conversation = self.prepare_conversation_history(&all_messages, &message.id);
 
-        // Get Claude's response with fallback
+        // Get model response with fallback
         let system_prompt = self.build_system_prompt().await;
         let response_result = self
-            .claude_client
+            .ollama_client
             .complete(conversation, Some(system_prompt))
             .await;
 
         let (response_text, response_type) = match response_result {
-            Ok(claude_response) => {
+            Ok(model_response) => {
                 // Validate and sanitize output
-                let sanitized_response = self.guardrails.validate_output(&claude_response)?;
-                (sanitized_response, "claude_response")
+                let sanitized_response = self.guardrails.validate_output(&model_response)?;
+                (sanitized_response, "model_response")
             }
             Err(e) => {
-                warn!("Claude API failed: {}, using fallback response", e);
+                warn!("Ollama API failed: {}, using fallback response", e);
                 let fallback_response = format!(
                     "I'm currently experiencing technical difficulties with my AI processing. Here's what I can tell you:\n\n\
                     Your message was: \"{}\"\n\n\
@@ -257,7 +257,7 @@ impl MessageHandler {
                 response_text,
                 Some(serde_json::json!({
                     "type": response_type,
-                    "model": "claude-sonnet-4-20250514"
+                    "model": "gpt-oss"
                 })),
             )
             .await?;
@@ -291,7 +291,7 @@ impl MessageHandler {
             .map(|m| {
                 let role = match m.role {
                     MessageRole::User => MESSAGE_ROLE_USER,
-                    MessageRole::Agent => "assistant", // Claude expects "assistant" not "agent"
+                    MessageRole::Agent => "assistant", // Model expects "assistant" not "agent"
                     _ => MESSAGE_ROLE_USER,
                 };
                 (role.to_string(), m.content.clone())

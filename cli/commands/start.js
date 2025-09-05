@@ -34,25 +34,14 @@ module.exports = (program) => {
           process.exit(1);
         }
 
-        // Check for required environment variables when starting operator
-        if (components.length === 0 || components.includes('operator')) {
-          if (!process.env.ANTHROPIC_API_KEY) {
-            display.error('ANTHROPIC_API_KEY environment variable is required for the operator');
-            console.log('');
-            display.info('The operator needs an Anthropic API key to provide to agent containers.');
-            console.log('   Set the environment variable and try again:');
-            console.log('');
-            console.log('   ' + chalk.white('export ANTHROPIC_API_KEY=sk-ant-api03-...'));
-            console.log('   ' + chalk.white('raworc start'));
-            process.exit(1);
-          }
-        }
+        // Note: Operator now uses Ollama. Optionally set OLLAMA_HOST or start the ollama component.
 
         // Map component names to service names
         const serviceMap = {
           'server': 'raworc_server',
           'operator': 'raworc_operator',
-          'mysql': 'raworc_mysql'
+          'mysql': 'raworc_mysql',
+          'ollama': 'raworc_ollama'
         };
 
         // Convert component names to service names
