@@ -1476,10 +1476,8 @@ async function chatLoop(agentName, options = {}) {
 
   async function sendMessage(agentName, userInput) {
     console.log(chalk.green('> ') + chalk.white(userInput));
-    
-    // Show prompt with current actual state
-    showPrompt(currentAgentState);
-    promptVisible = true;
+    // Do not re-show the prompt immediately; wait for agent responses
+    // to avoid flicker (idle prompt) before state transitions to busy
 
     try {
       const sendResponse = await api.post(`/agents/${agentName}/messages`, {
