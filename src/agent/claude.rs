@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
+use tokio::time::{sleep, Duration};
+use url::form_urlencoded;
 
 #[derive(Debug, Serialize)]
 struct ClaudeRequest {
@@ -256,28 +258,79 @@ impl ClaudeClient {
                 iteration_count
             );
 
-            let response = self
-                .client
-                .post("https://api.anthropic.com/v1/messages")
-                .header("x-api-key", &self.api_key)
-                .header("anthropic-version", "2023-06-01")
-                .header("content-type", "application/json")
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| HostError::Claude(format!("Request failed: {}", e)))?;
+            // Retry/backoff for transient errors
+            let max_retries = 3;
+            let mut response_opt = None;
+            for attempt in 0..=max_retries {
+                let resp_res = self
+                    .client
+                    .post("https://api.anthropic.com/v1/messages")
+                    .header("x-api-key", &self.api_key)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("content-type", "application/json")
+                    .json(&request)
+                    .send()
+                    .await;
 
-            if !response.status().is_success() {
-                let status = response.status();
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                return Err(HostError::Claude(format!(
-                    "API error ({}): {}",
-                    status, error_text
-                )));
+                match resp_res {
+                    Ok(resp) => {
+                        if resp.status().is_success() {
+                            response_opt = Some(resp);
+                            break;
+                        }
+                        let status = resp.status();
+                        let recoverable = status.as_u16() == 408
+                            || status.as_u16() == 429
+                            || status.is_server_error();
+                        if recoverable && attempt < max_retries {
+                            let backoff_ms = 300u64 * 3u64.pow(attempt as u32);
+                            warn!(
+                                "Claude API HTTP {}. Retrying in {}ms (attempt {}/{})",
+                                status.as_u16(),
+                                backoff_ms,
+                                attempt + 1,
+                                max_retries
+                            );
+                            sleep(Duration::from_millis(backoff_ms)).await;
+                            continue;
+                        } else {
+                            let error_text = resp
+                                .text()
+                                .await
+                                .unwrap_or_else(|_| "Unknown error".to_string());
+                            return Err(HostError::Claude(format!(
+                                "API error ({}): {}",
+                                status, error_text
+                            )));
+                        }
+                    }
+                    Err(e) => {
+                        let msg = e.to_string();
+                        let recoverable = e.is_timeout() || e.is_connect();
+                        if recoverable && attempt < max_retries {
+                            let backoff_ms = 300u64 * 3u64.pow(attempt as u32);
+                            warn!(
+                                "Claude API request failed: {}. Retrying in {}ms (attempt {}/{})",
+                                msg,
+                                backoff_ms,
+                                attempt + 1,
+                                max_retries
+                            );
+                            sleep(Duration::from_millis(backoff_ms)).await;
+                            continue;
+                        } else {
+                            return Err(HostError::Claude(format!(
+                                "Request failed: {}",
+                                msg
+                            )));
+                        }
+                    }
+                }
             }
+
+            let response = response_opt.ok_or_else(|| {
+                HostError::Claude("Request failed after retries".to_string())
+            })?;
 
             let claude_response: ClaudeResponse = response
                 .json()
@@ -380,6 +433,7 @@ impl ClaudeClient {
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
                     "text_editor" => self.execute_text_editor_tool(&tool_input).await,
+                    "web_search" => self.execute_web_search_tool(&tool_input).await,
                     _ => {
                         error!("Unknown tool requested: {} with input: {}", tool_name, tool_input);
                         Err(HostError::Claude(format!("Unknown tool: {}", tool_name)))
@@ -1122,5 +1176,112 @@ impl ClaudeClient {
         }
 
         Ok(())
+    }
+
+    async fn execute_web_search_tool(&self, input: &Value) -> Result<String> {
+        let query = input
+            .get("query")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| HostError::Claude("Missing 'query' parameter for web_search tool".to_string()))?;
+
+        let api_key = match std::env::var("BRAVE_API_KEY") {
+            Ok(v) if !v.is_empty() => v,
+            _ => {
+                return Ok("Web search is not configured. Set BRAVE_API_KEY in the environment to enable web search.".to_string());
+            }
+        };
+
+        let encoded_query: String = form_urlencoded::byte_serialize(query.as_bytes()).collect();
+        let url = format!(
+            "https://api.search.brave.com/res/v1/web/search?q={}&count=5&country=US&source=web",
+            encoded_query
+        );
+
+        // Small retry on search as well
+        let max_retries = 2;
+        let mut last_err: Option<String> = None;
+        for attempt in 0..=max_retries {
+            let resp = self
+                .client
+                .get(&url)
+                .header("X-Subscription-Token", &api_key)
+                .header("Accept", "application/json")
+                .send()
+                .await;
+
+            match resp {
+                Ok(rsp) => {
+                    if !rsp.status().is_success() {
+                        let status = rsp.status();
+                        let body = rsp.text().await.unwrap_or_default();
+                        let msg = format!("Brave API error ({}): {}", status.as_u16(), body);
+                        let recoverable = status.as_u16() == 429 || status.is_server_error();
+                        if recoverable && attempt < max_retries {
+                            let backoff = 300u64 * 3u64.pow(attempt as u32);
+                            warn!("{} Retrying in {}ms", msg, backoff);
+                            sleep(Duration::from_millis(backoff)).await;
+                            continue;
+                        }
+                        return Ok(format!("Web search failed: {}", msg));
+                    }
+
+                    let v: Value = match rsp.json().await {
+                        Ok(j) => j,
+                        Err(e) => return Ok(format!("Web search parse error: {}", e)),
+                    };
+
+                    let mut lines = Vec::new();
+                    lines.push(format!("Top results for '{}':", query));
+
+                    let results_opt = v
+                        .get("web")
+                        .and_then(|w| w.get("results"))
+                        .and_then(|r| r.as_array());
+
+                    if let Some(results) = results_opt {
+                        for (i, item) in results.iter().take(5).enumerate() {
+                            let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("");
+                            let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                            let desc = item
+                                .get("description")
+                                .and_then(|d| d.as_str())
+                                .unwrap_or("");
+                            if !title.is_empty() || !url.is_empty() {
+                                lines.push(format!("{}. {} — {}", i + 1, title, url));
+                                if !desc.is_empty() {
+                                    let snippet = if desc.len() > 200 { &desc[..200] } else { desc };
+                                    lines.push(format!("   {}", snippet));
+                                }
+                            }
+                        }
+                    }
+
+                    if lines.len() == 1 {
+                        lines.push("No results found.".to_string());
+                    }
+
+                    return Ok(lines.join("\n"));
+                }
+                Err(e) => {
+                    let recoverable = e.is_timeout() || e.is_connect();
+                    let msg = e.to_string();
+                    last_err = Some(msg.clone());
+                    if recoverable && attempt < max_retries {
+                        let backoff = 300u64 * 3u64.pow(attempt as u32);
+                        warn!("Brave API request failed: {}. Retrying in {}ms", msg, backoff);
+                        sleep(Duration::from_millis(backoff)).await;
+                        continue;
+                    }
+                    return Ok(format!("Web search failed: {}", msg));
+                }
+            }
+        }
+
+        Ok(format!(
+            "Web search failed after retries: {}",
+            last_err.unwrap_or_else(|| "Unknown error".to_string())
+        ))
     }
 }

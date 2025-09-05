@@ -42,6 +42,7 @@
 ## Security & Configuration Tips
 - Copy `.env.example` to `.env`; do not commit secrets.
 - Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`; operator needs `ANTHROPIC_API_KEY`.
+- Optional tools: set `BRAVE_API_KEY` to enable web search via Brave API.
 - Example local DB: `mysql://raworc:raworc@localhost:3307/raworc`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
