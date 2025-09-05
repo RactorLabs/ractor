@@ -6,7 +6,6 @@ use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use tokio::time::{sleep, Duration};
-use url::form_urlencoded;
 
 #[derive(Debug, Serialize)]
 struct ClaudeRequest {
@@ -151,23 +150,7 @@ impl ClaudeClient {
         }
     }
 
-    fn get_web_search_tool() -> Tool {
-        // Web search tool implementation following Anthropic specification
-        Tool {
-            name: "web_search".to_string(),
-            description: "Search the web for real-time information beyond my knowledge cutoff. Automatically provides citations and sources.".to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query to execute"
-                    }
-                },
-                "required": ["query"]
-            }),
-        }
-    }
+    // Removed web_search tool (no server-side web search provided)
 
     pub async fn complete(
         &self,
@@ -235,11 +218,7 @@ impl ClaudeClient {
             iteration_count += 1;
 
             let tools = if enable_tools {
-                Some(vec![
-                    Self::get_bash_tool(),
-                    Self::get_text_editor_tool(),
-                    Self::get_web_search_tool(),
-                ])
+                Some(vec![Self::get_bash_tool(), Self::get_text_editor_tool()])
             } else {
                 None
             };
@@ -417,13 +396,6 @@ impl ClaudeClient {
                             .unwrap_or("unknown");
                         path.to_string()
                     }
-                    "web_search" => {
-                        let query = tool_input
-                            .get("query")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        format!("Searching the web for: {}", query)
-                    }
                     _ => format!("Executing {} tool", tool_name),
                 };
 
@@ -433,7 +405,6 @@ impl ClaudeClient {
                 let tool_result = match tool_name.as_str() {
                     "bash" => self.execute_bash_tool(&tool_input).await,
                     "text_editor" => self.execute_text_editor_tool(&tool_input).await,
-                    "web_search" => self.execute_web_search_tool(&tool_input).await,
                     _ => {
                         error!("Unknown tool requested: {} with input: {}", tool_name, tool_input);
                         Err(HostError::Claude(format!("Unknown tool: {}", tool_name)))
@@ -1178,110 +1149,4 @@ impl ClaudeClient {
         Ok(())
     }
 
-    async fn execute_web_search_tool(&self, input: &Value) -> Result<String> {
-        let query = input
-            .get("query")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| HostError::Claude("Missing 'query' parameter for web_search tool".to_string()))?;
-
-        let api_key = match std::env::var("BRAVE_API_KEY") {
-            Ok(v) if !v.is_empty() => v,
-            _ => {
-                return Ok("Web search is not configured. Set BRAVE_API_KEY in the environment to enable web search.".to_string());
-            }
-        };
-
-        let encoded_query: String = form_urlencoded::byte_serialize(query.as_bytes()).collect();
-        let url = format!(
-            "https://api.search.brave.com/res/v1/web/search?q={}&count=5&country=US&source=web",
-            encoded_query
-        );
-
-        // Small retry on search as well
-        let max_retries = 2;
-        let mut last_err: Option<String> = None;
-        for attempt in 0..=max_retries {
-            let resp = self
-                .client
-                .get(&url)
-                .header("X-Subscription-Token", &api_key)
-                .header("Accept", "application/json")
-                .send()
-                .await;
-
-            match resp {
-                Ok(rsp) => {
-                    if !rsp.status().is_success() {
-                        let status = rsp.status();
-                        let body = rsp.text().await.unwrap_or_default();
-                        let msg = format!("Brave API error ({}): {}", status.as_u16(), body);
-                        let recoverable = status.as_u16() == 429 || status.is_server_error();
-                        if recoverable && attempt < max_retries {
-                            let backoff = 300u64 * 3u64.pow(attempt as u32);
-                            warn!("{} Retrying in {}ms", msg, backoff);
-                            sleep(Duration::from_millis(backoff)).await;
-                            continue;
-                        }
-                        return Ok(format!("Web search failed: {}", msg));
-                    }
-
-                    let v: Value = match rsp.json().await {
-                        Ok(j) => j,
-                        Err(e) => return Ok(format!("Web search parse error: {}", e)),
-                    };
-
-                    let mut lines = Vec::new();
-                    lines.push(format!("Top results for '{}':", query));
-
-                    let results_opt = v
-                        .get("web")
-                        .and_then(|w| w.get("results"))
-                        .and_then(|r| r.as_array());
-
-                    if let Some(results) = results_opt {
-                        for (i, item) in results.iter().take(5).enumerate() {
-                            let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("");
-                            let url = item.get("url").and_then(|u| u.as_str()).unwrap_or("");
-                            let desc = item
-                                .get("description")
-                                .and_then(|d| d.as_str())
-                                .unwrap_or("");
-                            if !title.is_empty() || !url.is_empty() {
-                                lines.push(format!("{}. {} — {}", i + 1, title, url));
-                                if !desc.is_empty() {
-                                    let snippet = if desc.len() > 200 { &desc[..200] } else { desc };
-                                    lines.push(format!("   {}", snippet));
-                                }
-                            }
-                        }
-                    }
-
-                    if lines.len() == 1 {
-                        lines.push("No results found.".to_string());
-                    }
-
-                    return Ok(lines.join("\n"));
-                }
-                Err(e) => {
-                    let recoverable = e.is_timeout() || e.is_connect();
-                    let msg = e.to_string();
-                    last_err = Some(msg.clone());
-                    if recoverable && attempt < max_retries {
-                        let backoff = 300u64 * 3u64.pow(attempt as u32);
-                        warn!("Brave API request failed: {}. Retrying in {}ms", msg, backoff);
-                        sleep(Duration::from_millis(backoff)).await;
-                        continue;
-                    }
-                    return Ok(format!("Web search failed: {}", msg));
-                }
-            }
-        }
-
-        Ok(format!(
-            "Web search failed after retries: {}",
-            last_err.unwrap_or_else(|| "Unknown error".to_string())
-        ))
-    }
 }

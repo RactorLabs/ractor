@@ -725,8 +725,7 @@ function displayAgentMessage(message, options = {}) {
     let toolType = message.metadata?.tool_type || 'unknown';
     const toolNameMap = {
       'text_editor': 'Text Editor',
-      'bash': 'Run Bash',
-      'web_search': 'Web Search'
+      'bash': 'Run Bash'
     };
     toolType = toolNameMap[toolType] || toolType;
     console.log();
