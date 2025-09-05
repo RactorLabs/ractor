@@ -5,6 +5,7 @@ mod config;
 mod error;
 mod guardrails;
 mod message_handler;
+mod tools;
 
 use anyhow::Result;
 use std::sync::Arc;

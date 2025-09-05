@@ -15,6 +15,35 @@ pub struct OllamaClient {
 struct ChatRequestMessage<'a> {
     role: &'a str,
     content: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<&'a str>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ToolType {
+    Function,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolFunction {
+    name: String,
+    description: String,
+    parameters: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+struct ToolDef {
+    #[serde(rename = "type")]
+    typ: ToolType,
+    function: ToolFunction,
 }
 
 #[derive(Debug, Serialize)]
@@ -22,22 +51,35 @@ struct ChatRequest<'a> {
     model: &'a str,
     messages: Vec<ChatRequestMessage<'a>>,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<ToolDef>>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatResponseMessage {
+    #[serde(default)]
+    role: String,
     content: String,
+    #[serde(default)]
+    thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ChatResponse {
     message: ChatResponseMessage,
+    #[serde(flatten)]
+    extra: serde_json::Value,
 }
 
 impl OllamaClient {
     pub fn new(base_url: &str) -> Result<Self> {
+        let timeout_secs = std::env::var("OLLAMA_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(120);
+
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+            .timeout(std::time::Duration::from_secs(timeout_secs))
             .build()
             .map_err(|e| HostError::Model(format!("Failed to create client: {}", e)))?;
 
@@ -54,7 +96,7 @@ impl OllamaClient {
 
     pub async fn complete(
         &self,
-        messages: Vec<(String, String)>, // (role, content)
+        messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
     ) -> Result<String> {
         // Build chat messages for Ollama
@@ -63,20 +105,24 @@ impl OllamaClient {
             chat_messages.push(ChatRequestMessage {
                 role: "system",
                 content: sp,
+                name: None,
             });
         }
 
-        for (role, content) in messages.iter() {
-            let role = match role.as_str() {
-                "assistant" | "HOST" => "assistant",
+        for msg in messages.iter() {
+            // allow roles: user, assistant, tool
+            let role = match msg.role.as_str() {
+                "assistant" => "assistant",
+                "tool" => "tool",
                 _ => "user",
             };
-            if content.trim().is_empty() {
+            if msg.content.trim().is_empty() {
                 continue;
             }
             chat_messages.push(ChatRequestMessage {
                 role,
-                content: content.trim(),
+                content: msg.content.trim(),
+                name: msg.name.as_deref(),
             });
         }
 
@@ -84,10 +130,57 @@ impl OllamaClient {
             return Err(HostError::Model("No messages provided".to_string()));
         }
 
+        // Advertise tools per cookbook so the model emits structured tool calls
+        let tools = vec![
+            ToolDef {
+                typ: ToolType::Function,
+                function: ToolFunction {
+                    name: "bash".to_string(),
+                    description: "Execute a bash shell command in /agent".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "cmd": {"type": "string", "description": "Command to run"},
+                            "args": {"oneOf": [{"type":"array","items":{"type":"string"}}, {"type":"string"}]},
+                            "command": {"type": "string"}
+                        }
+                    }),
+                },
+            },
+            ToolDef {
+                typ: ToolType::Function,
+                function: ToolFunction {
+                    name: "text_editor".to_string(),
+                    description: "View/create/replace/insert in files under /agent".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "action": {"type": "string", "enum": ["view","create","str_replace","insert"]},
+                            "operation": {"type":"string"},
+                            "path": {"type": "string"},
+                            "file_path": {"type":"string"},
+                            "content": {"type": "string"},
+                            "file_text": {"type":"string"},
+                            "target": {"type": "string"},
+                            "old_str": {"type":"string"},
+                            "replacement": {"type": "string"},
+                            "new_str": {"type":"string"},
+                            "line": {"type": "integer", "minimum": 1},
+                            "insert_line": {"type":"integer","minimum":1},
+                            "start_line": {"type": "integer", "minimum": 1},
+                            "end_line": {"type": "integer", "minimum": 1},
+                            "view_range": {"type":"array","items":{"type":"integer"},"minItems":2,"maxItems":2}
+                        }
+                    }),
+                },
+            },
+        ];
+
         let req = ChatRequest {
             model: "gpt-oss",
             messages: chat_messages,
             stream: false,
+            tools: Some(tools),
         };
 
         let url = format!("{}/api/chat", self.base_url);
@@ -119,4 +212,3 @@ impl OllamaClient {
         Ok(parsed.message.content)
     }
 }
-

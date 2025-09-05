@@ -1,5 +1,6 @@
 use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
-use super::ollama::OllamaClient;
+use super::ollama::{ChatMessage, OllamaClient};
+use super::tools::{run_bash, text_edit, TextEditAction};
 use super::error::Result;
 use super::guardrails::Guardrails;
 use chrono::{DateTime, Utc};
@@ -212,56 +213,222 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
 
-        // Use Ollama API directly
-        info!("Using Ollama API for message processing");
+        // Tool-enabled loop (no streaming): supports bash and text_editor actions.
+        // Protocol: If the model needs a tool, it must respond with a single-line JSON object:
+        //   {"tool":"bash","input":{"cmd":"..."}}
+        //   {"tool":"text_editor","input":{"action":"create","path":"...","content":"..."}}
+        // Otherwise, it responds with the final text answer.
 
-        // Fetch ALL messages from agent for complete conversation history
-        info!("Fetching complete conversation history for Ollama");
+        // Fetch full conversation
         let all_messages = self.fetch_all_agent_messages().await?;
+        let mut conversation = self.prepare_conversation_history(&all_messages, &message.id);
 
-        // Prepare conversation history for Ollama
-        let conversation = self.prepare_conversation_history(&all_messages, &message.id);
+        // Build enhanced system prompt (adds strict tool protocol)
+        let mut system_prompt = self.build_system_prompt().await;
+        system_prompt.push_str(
+            "\n\nTool protocol (STRICT):\n- If you need to run a shell command, respond ONLY with JSON: {\"tool\":\"bash\",\"input\":{\"cmd\":\"...\"}}\n- If you need to edit files, respond ONLY with JSON: {\"tool\":\"text_editor\",\"input\":{\"action\":\"view|create|str_replace|insert\", ...}}\n- Do NOT include any additional text when calling tools.\n- If no tool is needed, respond with your final answer as plain text.\n- Paths must be relative to /agent.\n- str_replace must match exactly once.\n- insert uses 1-based line numbers.\n"
+        );
+        system_prompt.push_str("\nForbidden: Do NOT use any other tool names (e.g., python). Use only 'bash' or 'text_editor' via the JSON with keys {tool,input}.\n");
+        system_prompt.push_str("Strict output rules when using tools:\n");
+        system_prompt.push_str("- Respond with ONE raw JSON object only (no prose, no code fences).\n");
+        system_prompt.push_str("- JSON shape: {\\\"tool\\\":\\\"bash|text_editor\\\",\\\"input\\\":{...}} exactly.\n");
+        system_prompt.push_str("- Do NOT include keys: function_call, tool_calls, function, name, arguments, tool_name.\n");
+        system_prompt.push_str("- Do NOT wrap JSON in ```json ... ``` or any other formatting.\n");
+        system_prompt.push_str("- If no tool is required, produce ONLY a plain text answer (no JSON at all).\n");
 
-        // Get model response with fallback
-        let system_prompt = self.build_system_prompt().await;
-        let response_result = self
-            .ollama_client
-            .complete(conversation, Some(system_prompt))
-            .await;
-
-        let (response_text, response_type) = match response_result {
-            Ok(model_response) => {
-                // Validate and sanitize output
-                let sanitized_response = self.guardrails.validate_output(&model_response)?;
-                (sanitized_response, "model_response")
+        // Loop for tool usage up to max_steps
+        let max_steps = 20; // adopt higher iteration cap similar to Claude integration
+        let mut steps = 0;
+        // Keep a thread-local conversation for this message
+        loop {
+            steps += 1;
+            // Simple retry/backoff for transient failures
+            let mut resp = Err(super::error::HostError::Model("uninitialized".to_string()));
+            for attempt in 0..=2 {
+                let try_resp = self
+                    .ollama_client
+                    .complete(conversation.clone(), Some(system_prompt.clone()))
+                    .await;
+                match try_resp {
+                    Ok(t) => { resp = Ok(t); break; }
+                    Err(e) => {
+                        if attempt < 2 { let delay = 300u64 * 3u64.pow(attempt); tokio::time::sleep(std::time::Duration::from_millis(delay)).await; resp = Err(e); continue; } else { resp = Err(e); }
+                    }
+                }
             }
-            Err(e) => {
-                warn!("Ollama API failed: {}, using fallback response", e);
-                let fallback_response = format!(
-                    "I'm currently experiencing technical difficulties with my AI processing. Here's what I can tell you:\n\n\
-                    Your message was: \"{}\"\n\n\
-                    I'm a Raworc Agent (Computer Use Agent) designed to help with various tasks including:\n\
-                    - Code generation and analysis\n\
-                    - File operations\n\
-                    - Agent management\n\n\
-                    Please try your request again.",
-                    message.content
-                );
-                (fallback_response, "fallback_response")
-            }
-        };
 
-        // Send response back via API
+            let model_text = match resp {
+                Ok(t) => t,
+                Err(e) => {
+                    warn!("Ollama API failed: {}", e);
+                    self.finalize_with_fallback(&message.content).await?;
+                    return Ok(());
+                }
+            };
+
+            // Try to parse as a tool call JSON
+            if let Some((tool, input)) = parse_tool_call(&model_text) {
+                // Log parsed tool call (with truncated preview to avoid leaking data)
+                let mut preview = if let Some(s) = input.as_str() {
+                    s.to_string()
+                } else {
+                    serde_json::to_string(&input).unwrap_or_else(|_| "<unprintable>".to_string())
+                };
+                if preview.len() > 300 { preview.truncate(300); preview.push_str("…"); }
+                info!("Tool call: {} input: {}", tool, preview);
+
+                // Execute tool
+                let tool_result = match tool.as_str() {
+                    "bash" => {
+                        let cmd = if let Some(s) = input.get("cmd").and_then(|v| v.as_str()) {
+                            s.to_string()
+                        } else if let Some(s) = input.get("command").and_then(|v| v.as_str()) {
+                            s.to_string()
+                        } else if let Some(s) = input.as_str() {
+                            s.to_string()
+                        } else if let Some(args) = input.get("args") {
+                            if let Some(arr) = args.as_array() {
+                                let parts: Vec<String> = arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+                                parts.join(" ")
+                            } else if let Some(s) = args.as_str() {
+                                s.to_string()
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            String::new()
+                        };
+                        match run_bash(&cmd).await {
+                            Ok(o) => format!("[bash ok]\n{}", o),
+                            Err(e) => format!("[bash error] {}", e),
+                        }
+                    }
+                    "text_editor" => {
+                        let mut normalized = input.clone();
+                        // Map alternate field names from previous Claude tool schema
+                        if normalized.get("action").is_none() && normalized.get("command").is_some() {
+                            let cmd_owned = normalized.get("command").and_then(|v| v.as_str()).map(|s| s.to_string());
+                            if let Some(cmd) = cmd_owned.as_deref() {
+                                let mapped = match cmd { "view"=>"view", "create"=>"create", "str_replace"=>"str_replace", "insert"=>"insert", other=>other };
+                                if let Some(obj) = normalized.as_object_mut() { obj.insert("action".to_string(), serde_json::Value::String(mapped.to_string())); }
+                            }
+                        }
+                        // Map path alias
+                        if normalized.get("path").is_none() && normalized.get("file_path").is_some() {
+                            if let Some(fp) = normalized.get("file_path").cloned() { if let Some(obj)=normalized.as_object_mut(){ obj.insert("path".to_string(), fp);} }
+                        }
+                        // Map content aliases
+                        if normalized.get("content").is_none() {
+                            if let Some(ft)=normalized.get("file_text").cloned(){ if let Some(obj)=normalized.as_object_mut(){ obj.insert("content".to_string(), ft);} }
+                        }
+                        // Map str_replace aliases
+                        if normalized.get("target").is_none() {
+                            if let Some(old)=normalized.get("old_str").cloned(){ if let Some(obj)=normalized.as_object_mut(){ obj.insert("target".to_string(), old);} }
+                        }
+                        if normalized.get("replacement").is_none() {
+                            if let Some(new)=normalized.get("new_str").cloned(){ if let Some(obj)=normalized.as_object_mut(){ obj.insert("replacement".to_string(), new);} }
+                        }
+                        // Map insert line alias
+                        if normalized.get("line").is_none() {
+                            if let Some(il)=normalized.get("insert_line").cloned(){ if let Some(obj)=normalized.as_object_mut(){ obj.insert("line".to_string(), il);} }
+                        }
+                        // Map view range alias
+                        if normalized.get("start_line").is_none() && normalized.get("end_line").is_none() {
+                            if let Some(vr)=normalized.get("view_range").and_then(|v| v.as_array()).cloned(){
+                                if vr.len()>=2 { if let Some(obj)=normalized.as_object_mut(){ obj.insert("start_line".to_string(), vr[0].clone()); obj.insert("end_line".to_string(), vr[1].clone()); } }
+                            }
+                        }
+                        if normalized.get("action").is_none() {
+                            let op_owned = normalized
+                                .get("operation")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            if let Some(op) = op_owned.as_deref() {
+                                let mapped = match op {
+                                    "write" | "create" => "create",
+                                    "read" | "view" => "view",
+                                    "replace" | "str_replace" => "str_replace",
+                                    "insert" => "insert",
+                                    other => other,
+                                };
+                                if let Some(obj) = normalized.as_object_mut() {
+                                    obj.insert("action".to_string(), serde_json::Value::String(mapped.to_string()));
+                                }
+                            }
+                        }
+                        match parse_text_edit(&normalized) {
+                            Ok(action) => match text_edit(action).await {
+                                Ok(o) => format!("[text_editor ok]\n{}", o),
+                                Err(e) => format!("[text_editor error] {}", e),
+                            },
+                            Err(e) => format!("[text_editor error] {}", e),
+                        }
+                    }
+                    other => {
+                        format!("[error] unknown tool: {}", other)
+                    }
+                };
+
+                // Summarize result length for logging (content logged below is truncated inside tools)
+                info!("Tool result: {} ({} bytes)", tool, tool_result.len());
+                // Cookbook alignment: feed tool result as role "tool" with name
+                conversation.push(ChatMessage { role: "tool".to_string(), content: tool_result, name: Some(tool.clone()) });
+
+                if steps >= max_steps {
+                    warn!("Max tool steps reached; stopping tool loop");
+                    self.finalize_with_note("Stopped after max tool steps").await?;
+                    return Ok(());
+                }
+                continue;
+            } else {
+                // Treat as final answer
+                let sanitized = self.guardrails.validate_output(&model_text)?;
+                self.api_client
+                    .send_message(
+                        sanitized,
+                        Some(serde_json::json!({
+                            "type": "model_response",
+                            "model": "gpt-oss"
+                        })),
+                    )
+                    .await?;
+                return Ok(());
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn finalize_with_fallback(&self, original: &str) -> Result<()> {
+        let fallback_response = format!(
+            "I'm experiencing technical difficulties with AI processing. Your request was: \"{}\". Please try again later.",
+            original
+        );
+        let sanitized = self.guardrails.validate_output(&fallback_response)?;
         self.api_client
             .send_message(
-                response_text,
+                sanitized,
                 Some(serde_json::json!({
-                    "type": response_type,
+                    "type": "fallback_response",
                     "model": "gpt-oss"
                 })),
             )
             .await?;
+        Ok(())
+    }
 
+    async fn finalize_with_note(&self, note: &str) -> Result<()> {
+        let msg = format!("Tool loop terminated: {}", note);
+        let sanitized = self.guardrails.validate_output(&msg)?;
+        self.api_client
+            .send_message(
+                sanitized,
+                Some(serde_json::json!({
+                    "type": "tool_loop_stop",
+                    "model": "gpt-oss"
+                })),
+            )
+            .await?;
         Ok(())
     }
 
@@ -280,8 +447,8 @@ impl MessageHandler {
         &self,
         messages: &[Message],
         current_id: &str,
-    ) -> Vec<(String, String)> {
-        let mut conversation = Vec::new();
+    ) -> Vec<ChatMessage> {
+        let mut conversation: Vec<ChatMessage> = Vec::new();
 
         // Include ALL message history (excluding the current message being processed)
         let history: Vec<_> = messages
@@ -294,7 +461,7 @@ impl MessageHandler {
                     MessageRole::Agent => "assistant", // Model expects "assistant" not "agent"
                     _ => MESSAGE_ROLE_USER,
                 };
-                (role.to_string(), m.content.clone())
+                ChatMessage { role: role.to_string(), content: m.content.clone(), name: None }
             })
             .collect();
 
@@ -302,7 +469,7 @@ impl MessageHandler {
 
         // Add current message
         if let Some(current) = messages.iter().find(|m| m.id == current_id) {
-            conversation.push((MESSAGE_ROLE_USER.to_string(), current.content.clone()));
+            conversation.push(ChatMessage { role: MESSAGE_ROLE_USER.to_string(), content: current.content.clone(), name: None });
         }
 
         info!(
@@ -475,4 +642,117 @@ Current agent context:
 
         prompt
     }
+}
+
+// Parse a tool call JSON object from model output
+// Expected: {"tool":"bash"|"text_editor","input":{...}}
+fn parse_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
+    // Try multiple strategies:
+    // 1) Our protocol: {"tool": "bash"|"text_editor", "input": {...}}
+    // 2) Harmony/OpenAI-like: {"function_call": {"name": "tool.bash", "arguments": (obj|string) }}
+    // 3) OpenAI-like array: {"tool_calls": [{"function": {"name": "tool.bash", "arguments": (obj|string)}}]}
+
+    // Try to extract JSON blocks (plain or fenced) and parse
+    let candidates = extract_json_candidates(s);
+    for cand in candidates {
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&cand) {
+            // 1) Our protocol
+            if let (Some(tool), Some(input)) = (v.get("tool"), v.get("input")) {
+                if let Some(tool_str) = tool.as_str() {
+                    return Some((tool_str.to_string(), input.clone()));
+                }
+            }
+
+            // 2) Harmony/OpenAI function_call
+            if let Some(fc) = v.get("function_call") {
+                if let Some(name) = fc.get("name").and_then(|n| n.as_str()) {
+                    let mapped = map_tool_name(name);
+                    if let Some(mut tool_name) = mapped {
+                        let args_v = match fc.get("arguments") {
+                            Some(a) if a.is_object() => a.clone(),
+                            Some(a) if a.is_string() => {
+                                let s = a.as_str().unwrap();
+                                serde_json::from_str::<serde_json::Value>(s).unwrap_or(serde_json::json!({"raw": s}))
+                            }
+                            _ => serde_json::json!({}),
+                        };
+                        return Some((tool_name, args_v));
+                    }
+                }
+            }
+
+            // 3) tool_calls array
+            if let Some(tc) = v.get("tool_calls").and_then(|t| t.as_array()) {
+                if let Some(first) = tc.first() {
+                    if let Some(func) = first.get("function") {
+                        if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
+                            let mapped = map_tool_name(name);
+                            if let Some(tool_name) = mapped {
+                                let args_v = match func.get("arguments") {
+                                    Some(a) if a.is_object() => a.clone(),
+                                    Some(a) if a.is_string() => {
+                                        let s = a.as_str().unwrap();
+                                        serde_json::from_str::<serde_json::Value>(s).unwrap_or(serde_json::json!({"raw": s}))
+                                    }
+                                    _ => serde_json::json!({}),
+                                };
+                                return Some((tool_name, args_v));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn map_tool_name(name: &str) -> Option<String> {
+    match name {
+        "tool.bash" | "bash" => Some("bash".to_string()),
+        "tool.text_editor" | "text_editor" | "editor" => Some("text_editor".to_string()),
+        // Some models may emit a generic 'python' function; map it to bash for safety (user can run python via bash)
+        "python" => Some("bash".to_string()),
+        // Handle container-oriented aliases commonly emitted by models
+        "container.exec" => Some("bash".to_string()),
+        _ => None,
+    }
+}
+
+fn extract_json_candidates(s: &str) -> Vec<String> {
+    let trimmed = s.trim();
+    let mut out = Vec::new();
+    // If it already looks like JSON
+    if trimmed.starts_with('{') && trimmed.ends_with('}') {
+        out.push(trimmed.to_string());
+    }
+    // Look for fenced code blocks ```json ... ```
+    let fence = "```";
+    let mut idx = 0;
+    while let Some(start) = trimmed[idx..].find(fence) {
+        let a = idx + start + fence.len();
+        // Optional language tag
+        let after_lang = if trimmed[a..].starts_with("json") { a + 4 } else { a };
+        if let Some(end_rel) = trimmed[after_lang..].find(fence) {
+            let b = after_lang + end_rel;
+            let block = trimmed[after_lang..b].trim();
+            if block.starts_with('{') {
+                out.push(block.to_string());
+            }
+            idx = b + fence.len();
+        } else { break; }
+    }
+    // As a last resort, take the first { ... } span
+    if out.is_empty() {
+        if let Some(pos) = trimmed.find('{') {
+            out.push(trimmed[pos..].to_string());
+        }
+    }
+    out
+}
+
+fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> {
+    // Re-marshal and de to leverage enum tagging
+    let action: TextEditAction = serde_json::from_value(input.clone())?;
+    Ok(action)
 }

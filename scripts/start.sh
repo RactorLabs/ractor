@@ -6,6 +6,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Load environment from .env if present (so OLLAMA_* and others are honored)
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    # Export all variables defined in .env
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
 # Get project version from Cargo.toml
 if [ -f "$PROJECT_ROOT/Cargo.toml" ]; then
     PROJECT_VERSION=$(grep '^version = ' "$PROJECT_ROOT/Cargo.toml" | cut -d'"' -f2)
@@ -286,6 +295,18 @@ for component in "${COMPONENTS[@]}"; do
             if [ -n "${OLLAMA_SHM_SIZE:-}" ]; then
                 SHM_FLAG="--shm-size ${OLLAMA_SHM_SIZE}"
                 print_status "Shared memory size for Ollama: ${OLLAMA_SHM_SIZE}"
+            fi
+
+            # Provide sane defaults if not provided via env
+            if [ -z "${OLLAMA_MEMORY:-}" ]; then
+                OLLAMA_MEMORY="24g"
+                MEM_FLAG="--memory ${OLLAMA_MEMORY} --memory-swap ${OLLAMA_MEMORY}"
+                print_status "No OLLAMA_MEMORY set; defaulting to ${OLLAMA_MEMORY}"
+            fi
+            if [ -z "${OLLAMA_SHM_SIZE:-}" ]; then
+                OLLAMA_SHM_SIZE="12g"
+                SHM_FLAG="--shm-size ${OLLAMA_SHM_SIZE}"
+                print_status "No OLLAMA_SHM_SIZE set; defaulting to ${OLLAMA_SHM_SIZE}"
             fi
 
             # Use host port mapping only if 11434 is free
