@@ -1025,6 +1025,7 @@ function getTerminalWidth() {
 
 // Track the last rendered prompt layout to clear accurately
 let __lastPromptLayout = null;
+let __extraBlankLinesAbovePrompt = 0;
 
 function stripAnsi(input) {
   if (!input) return '';
@@ -1206,11 +1207,15 @@ function clearPrompt() {
   // Then clear the dash, state, and leading empty line, accounting for wraps
   const order = ['dash', 'state', 'empty'];
   for (const name of order) {
-    const rows = rowsFor(name);
+    let rows = rowsFor(name);
+    if (name === 'empty' && __extraBlankLinesAbovePrompt > 0) {
+      rows += __extraBlankLinesAbovePrompt;
+    }
     for (let i = 0; i < rows; i++) {
       process.stdout.write('\x1b[1A\x1b[2K');
     }
   }
+  __extraBlankLinesAbovePrompt = 0;
 }
 
 async function monitorForResponses(agentName, userMessageTime, getCurrentState, updateState, getPromptVisible, setPromptVisible) {
@@ -1354,7 +1359,8 @@ async function chatLoop(agentName, options = {}) {
     currentUserInput = ''; // Reset after line submitted
 
     if (!userInput) {
-      // Handle empty enters by restoring the prompt cleanly
+      // Handle empty enters by tracking the extra blank and restoring prompt
+      __extraBlankLinesAbovePrompt += 1;
       clearPrompt();
       promptVisible = false;
       showPrompt(currentAgentState);
