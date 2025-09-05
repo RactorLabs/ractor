@@ -1354,7 +1354,11 @@ async function chatLoop(agentName, options = {}) {
     currentUserInput = ''; // Reset after line submitted
 
     if (!userInput) {
-      // Skip empty enters: keep the current prompt as-is without clearing/redrawing
+      // Handle empty enters by restoring the prompt cleanly
+      clearPrompt();
+      promptVisible = false;
+      showPrompt(currentAgentState);
+      promptVisible = true;
       return;
     }
 
