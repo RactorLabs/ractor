@@ -25,7 +25,7 @@ const FeatureList: FeatureItem[] = [
     icon: '🚀',
     description: (
       <>
-        <strong>Intelligent Host with dedicated computers</strong> - web browsing, file management, software installation, and system operations.
+        <strong>Agent runtime with dedicated computers</strong> - web browsing, file management, software installation, and system operations.
         Full access to terminals, browsers, IDEs, and any software through conversational interfaces.
       </>
     ),
@@ -45,18 +45,18 @@ const FeatureList: FeatureItem[] = [
     icon: '🖥️',
     description: (
       <>
-        Each session provides <strong>a Computer use agent with dedicated computer</strong> and full OS access.
+        Each agent provides <strong>a dedicated computer</strong> with full OS access.
         Perfect for automation tasks that require dedicated computing environments and intelligent execution.
       </>
     ),
   },
   {
-    title: 'Persistent Work Sessions',
+    title: 'Persistent Agents',
     icon: '💾',
     description: (
       <>
-        <strong>Never lose work progress</strong> - pause long-running automation tasks and resume them later.
-        <strong>Session remix</strong> to branch automation workflows and try different approaches.
+        <strong>Never lose work progress</strong> — sleep long-running automation tasks and wake them later.
+        <strong>Agent remix</strong> to branch automation workflows and try different approaches.
       </>
     ),
   },

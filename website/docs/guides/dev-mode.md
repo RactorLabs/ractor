@@ -5,15 +5,15 @@ title: Dev Mode
 
 # Dev Mode - Code Development Environment
 
-Dev Mode provides direct access to the `/session/code` folder in your Host sessions, enabling you to write code, create scripts, build agents, perform analysis, and develop applications using any programming language or framework.
+Dev Mode provides direct access to the `/agent/code` folder in your agents, enabling you to write code, create scripts, build agents, perform analysis, and develop applications using any programming language or framework.
 
 ## What is Dev Mode?
 
-Dev Mode gives you access to a persistent code development environment within your Host sessions:
+Dev Mode gives you access to a persistent code development environment within your agents:
 
 ### **Code Folder Access**
-- Full read/write access to `/session/code` directory
-- Persistent storage across session close/restore cycles  
+- Full read/write access to `/agent/code` directory
+- Persistent storage across agent sleep/wake cycles  
 - Create files, scripts, applications, and projects
 - Install packages and dependencies as needed
 
@@ -26,10 +26,10 @@ Dev Mode gives you access to a persistent code development environment within yo
 
 ## Code Folder Structure
 
-Your session's code folder is available at `/session/code` with full development access:
+Your agent's code folder is available at `/agent/code` with full development access:
 
 ```
-/session/code/
+/agent/code/
 ├── scripts/          # Automation scripts and utilities
 ├── agents/           # AI agent implementations  
 ├── analysis/         # Data analysis and notebooks
@@ -45,20 +45,20 @@ Your session's code folder is available at `/session/code` with full development
 ### Enable Dev Mode
 
 ```bash
-# Start session with development focus
-raworc session
+# Start an agent with development focus
+raworc agent create
 ```
 
-All sessions have access to the code folder - there's no special "dev mode" to enable. Simply start working with files in `/session/code`.
+All agents have access to the code folder - there's no special "dev mode" to enable. Simply start working with files in `/agent/code`.
 
 ### Basic Development Commands
 
 ```bash
-# In any Host session, navigate to code folder
+# In any agent, navigate to code folder
 You: "Let's work in the code folder. Show me what's there."
 
 # Create a new Python script
-You: "Create a Python script in /session/code/scripts/data_processor.py"
+You: "Create a Python script in /agent/code/scripts/data_processor.py"
 
 # Install packages for development  
 You: "Install pandas, numpy, and matplotlib in this session"
@@ -75,13 +75,13 @@ Build intelligent agents using popular frameworks:
 
 ```bash
 # Create LangGraph agent
-You: "Create a LangGraph agent in /session/code/agents/ that processes customer emails and routes them to appropriate teams"
+You: "Create a LangGraph agent in /agent/code/agents/ that processes customer emails and routes them to appropriate teams"
 
 # Build CrewAI system
-You: "Set up a CrewAI project in /session/code/projects/content-crew that has agents for research, writing, and editing"
+You: "Set up a CrewAI project in /agent/code/projects/content-crew that has agents for research, writing, and editing"
 
 # AutoGen multi-agent system
-You: "Create an AutoGen multi-agent conversation system for code review in /session/code/agents/code-review"
+You: "Create an AutoGen multi-agent conversation system for code review in /agent/code/agents/code-review"
 ```
 
 ### 2. Script Development
@@ -131,8 +131,8 @@ You: "Create a React application that consumes our API and displays interactive 
 
 ## Code Persistence and Management
 
-### Session Persistence
-- **Code survives session close/restore** - Your code folder persists when you close and restore sessions
+### Agent Persistence
+- **Code survives sleep/wake** - Your code folder persists when you sleep and wake agents
 - **Version control ready** - Initialize git repositories in your code folder
 - **Package installations persist** - Installed packages remain available after restore
 
@@ -246,15 +246,15 @@ You: "Install monitoring tools to track application performance"
 - **Write tests early** - Create tests alongside your code
 - **Handle errors gracefully** - Implement proper error handling
 
-### Session Management
-- **Use descriptive session names** - Name sessions by project or purpose
-- **Close unused sessions** - Free up resources when not actively developing
+### Agent Management
+- **Use descriptive agent names** - Name agents by project or purpose
+- **Sleep unused agents** - Free up resources when not actively developing
 - **Backup important work** - Export code or push to external repositories
-- **Use session remixing** - Create variants for experimentation
+- **Use agent remixing** - Create variants for experimentation
 
 ## Getting Help
 
-Your Host is an expert developer that can help with:
+Your agent is an expert developer that can help with:
 
 ```bash
 # Code review and suggestions
@@ -272,7 +272,7 @@ You: "Teach me how to use LangGraph to build conversational AI agents"
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first development session
-- **[CLI Usage Guide](/docs/guides/cli-usage)** - Master session management commands
-- **[Sessions](/docs/concepts/agents)** - Understand session persistence and lifecycle
+- **[Getting Started](/docs/getting-started)** - Set up your first development agent
+- **[CLI Usage Guide](/docs/guides/cli-usage)** - Master agent management commands
+- **[Agents](/docs/concepts/agents)** - Understand agent persistence and lifecycle
 - **[API Reference](/docs/api/rest-api-reference)** - Integrate development workflows with APIs

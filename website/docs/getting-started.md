@@ -10,16 +10,46 @@ Get started with the Remote Agentic Work Orchestrator in just a few commands. Ra
 ## Prerequisites
 
 - **Node.js 16+**: For the Raworc CLI
-- **Docker**: Docker Engine 20.10+ and Docker Compose v2+ 
-- **Ollama**: Local model runtime (runs as a container via `raworc_ollama`)
+- **Docker**: Docker Engine 20.10+ and Docker Compose v2+
+- **Ollama + Model**: Local model runtime with the `gpt-oss:20b` model available
 
-### Environment Setup
+Notes about Ollama and models:
+- The Raworc Operator uses an Ollama server for AI inference.
+- If you run Ollama yourself, set `OLLAMA_HOST` for the Operator to reach it.
+- Ensure the `gpt-oss:20b` model is pulled on the Ollama server you use.
 
-You can run Ollama locally (recommended) or point to a remote Ollama server:
+### Ollama Setup
 
+You can run Ollama yourself (recommended for the CLI flow) or point to a remote Ollama server.
+
+Option A — Run Ollama in Docker (attach to Raworc network, CPU-only):
 ```bash
-# Optional: override the default if not using the built-in container
-export OLLAMA_HOST=http://raworc_ollama:11434   # or http://host.docker.internal:11434
+# Create network Raworc uses (if not already created by Raworc CLI later)
+docker network create raworc_network || true
+
+# Start Ollama attached to the same network
+docker run -d \
+  --name raworc_ollama \
+  --network raworc_network \
+  -p 11434:11434 \
+  -v raworc_ollama_data:/root/.ollama \
+  ollama/ollama:latest
+
+# Pull required model inside the container
+docker exec raworc_ollama ollama pull gpt-oss:20b
+
+# Tell Raworc Operator where Ollama is
+export OLLAMA_HOST=http://raworc_ollama:11434
+```
+
+Option B — Use a remote/hosted Ollama:
+```bash
+# Point Raworc to your Ollama server
+export OLLAMA_HOST=http://host.docker.internal:11434   # or your remote URL
+
+# Ensure the model is available on that server
+# (run on the Ollama server):
+ollama pull gpt-oss:20b
 ```
 
 ## Quick Start (30 seconds)
@@ -30,10 +60,10 @@ export OLLAMA_HOST=http://raworc_ollama:11434   # or http://host.docker.internal
 npm install -g @raworc/cli
 ```
 
-### 2. Start Services (including Ollama)
+### 2. Start Services (API + Operator + DB)
 
 ```bash
-raworc start ollama mysql server operator
+raworc start mysql server operator
 ```
 
 ### 3. Authenticate
@@ -49,10 +79,10 @@ raworc auth -t <jwt-token-from-step-1>
 ### 4. Start Your First Agent
 
 ```bash
-raworc agent
+raworc agent create
 ```
 
-Note: If you don't start the `ollama` component, set `OLLAMA_HOST` to a reachable Ollama instance.
+Note: The CLI does not manage Ollama itself. Make sure `OLLAMA_HOST` is set to a reachable Ollama instance and that `gpt-oss:20b` is available there.
 
 That's it! You now have a running agent.
 
@@ -62,19 +92,19 @@ That's it! You now have a running agent.
 
 ```bash
 # Create new agent (uses OLLAMA_HOST for model inference)
-raworc agent
+raworc agent create
 ```
 
 ### Agent with Instructions
 
 ```bash
-raworc agent --instructions "You are a helpful coding assistant specialized in Python"
+raworc agent create --instructions "You are a helpful coding assistant specialized in Python"
 ```
 
 ### Agent with Setup Script
 
 ```bash
-raworc agent --setup "pip install pandas numpy matplotlib"
+raworc agent create --setup "pip install pandas numpy matplotlib"
 ```
 
 For more advanced agent configuration options, see the [CLI Usage Guide](/docs/guides/cli-usage#4-agent-configuration-options).
@@ -84,7 +114,7 @@ For more advanced agent configuration options, see the [CLI Usage Guide](/docs/g
 Once in an agent, you can interact directly with the agent using the clean CLI interface:
 
 ```bash
-$ raworc agent
+$ raworc agent create
 
 ┌─────────────────────────────────────┐
 │ ◊ Agent Start                       │

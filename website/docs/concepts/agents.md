@@ -169,7 +169,7 @@ raworc api agents/{agent-name}/sleep -m post
 ```
 
 **Flow:**
-1. Agent state transitions to `sleeping`
+1. Agent state transitions to `slept`
 2. Container stopped and removed to free resources
 3. Persistent volume preserved with all agent data
 4. Agent can be woken later with full state
@@ -327,9 +327,9 @@ Agents can be named for easier identification and access:
 
 ```bash
 # Create agent with name
-raworc agent --name "my-analysis" 
+raworc agent create "my-analysis" 
 # Use name in all operations
-raworc agent restore my-analysis
+raworc agent wake my-analysis
 raworc agent remix my-analysis --name "experiment-1"
 raworc api agents/my-analysis
 ```
@@ -350,7 +350,7 @@ Automatic resource management through configurable timeouts:
 
 ```bash
 # Set timeout during creation (uses Ollama for AI inference)
-raworc agent --timeout 300
+raworc agent create --timeout 300
 # API with timeout
 raworc api agents -m post -b '{
   "timeout_seconds": 1800,

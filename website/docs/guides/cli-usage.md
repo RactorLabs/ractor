@@ -11,14 +11,14 @@ The Raworc CLI provides complete command-line access to all functionality for ma
 
 - **Node.js 16+**: For the Raworc CLI
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+
-- **Ollama**: Local model runtime (built-in `ollama` service) or remote `OLLAMA_HOST`
+- **Ollama**: Local model runtime (self-managed container) or remote `OLLAMA_HOST`
 
 ### Environment Setup
 
-Optional: set `OLLAMA_HOST` to point to your Ollama server if you aren't using the built-in container:
+Optional: set `OLLAMA_HOST` to point to your Ollama server:
 
 ```bash
-export OLLAMA_HOST=http://raworc_ollama:11434   # default when running the `ollama` component
+export OLLAMA_HOST=http://raworc_ollama:11434   # if you started an ollama container on raworc_network
 ```
 
 ## Installation
@@ -32,8 +32,8 @@ npm install -g @raworc/cli
 Start and manage Raworc services:
 
 ```bash
-# Start all services (explicit)
-raworc start ollama mysql server operator
+# Start core services (explicit)
+raworc start mysql server operator
 raworc start --pull             # Pull latest images first
 
 # Stop services
@@ -113,9 +113,8 @@ Create and manage computer use agents:
 ### Agent Commands
 
 ```bash
-# Start new agent (default subcommand)
-raworc agent [options]
-raworc agent start [options]              # Explicit 'start' command
+# Start new agent
+raworc agent create [name] [options]
 
 # Wake existing agent
 raworc agent wake <agent-name-or-id>
@@ -137,27 +136,25 @@ raworc agent sleep <agent-name-or-id>
 
 ```bash
 # Basic agent (uses OLLAMA_HOST for model inference)
-raworc agent
+raworc agent create
 
 # Agent with name and timeout
-raworc agent \
-  --name "my-analysis-agent" \
+raworc agent create "my-analysis-agent" \
   --timeout 300
 
 # Agent with instructions and setup
-raworc agent \
+raworc agent create \
   --instructions "You are a helpful coding agent" \
   --setup "pip install pandas numpy matplotlib"
 
 # Instructions from file
-raworc agent --instructions-file ./instructions.md
+raworc agent create --instructions-file ./instructions.md
 
 # Setup from file
-raworc agent --setup-file ./setup.sh
+raworc agent create --setup-file ./setup.sh
 
 # Full configuration with prompt
-raworc agent \
-  --name "data-project" \
+raworc agent create "data-project" \
   --secrets '{"DATABASE_URL":"mysql://user:pass@host/db"}' \
   --instructions "You are a data analyst agent" \
   --setup "#!/bin/bash\necho 'Setting up environment'\npip install pandas numpy" \
@@ -169,7 +166,7 @@ raworc agent \
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `-n, --name <name>` | Name for the agent | `--name "my-agent"` |
+| `name (positional)` | Name for the agent | `"my-agent"` |
 | `-t, --timeout <seconds>` | Agent timeout in seconds (default: 300) | `--timeout 600` |
 | `-S, --secrets <json>` | JSON secrets for agent environment | `--secrets '{"DB_URL":"..."}'` |
 | `-i, --instructions <text>` | Direct instructions text | `--instructions "You are a data analyst"` |
@@ -181,15 +178,15 @@ raworc agent \
 ### Restoring Agents
 
 ```bash
-# Restore by ID or name
-raworc agent restore abc123-def456-789
-raworc agent restore my-agent-name
+# Wake by ID or name
+raworc agent wake abc123-def456-789
+raworc agent wake my-agent-name
 
-# Restore with immediate prompt
-raworc agent restore my-agent --prompt "Continue the analysis from yesterday"
+# Wake with immediate prompt
+raworc agent wake my-agent --prompt "Continue the analysis from yesterday"
 ```
 
-### Agent Restore Options
+### Agent Wake Options
 
 | Option | Description | Example |
 |--------|-------------|---------|
@@ -244,21 +241,18 @@ raworc agent publish my-agent \
 # Unpublish agent
 raworc agent unpublish my-agent
 
-# Close active agent
-raworc agent close my-agent
-raworc agent close abc-123-def
+# Sleep active agent
+raworc agent sleep my-agent
+raworc agent sleep abc-123-def
 ```
 
-### Agent Close Management
+### Agent Sleep Management
 
-Closing agents saves system resources while preserving all data. Closed agents can be restored later:
+Sleeping agents saves system resources while preserving all data. Slept agents can be woken later:
 
 ```bash
-# Close any active agent
-raworc agent close my-agent
-
-# Close shows current state before closing
-# Provides instructions for restore/remix operations
+# Sleep any active agent
+raworc agent sleep my-agent
 ```
 
 ### Agent Publish Options
@@ -303,7 +297,7 @@ The CLI uses professional flat geometric icons to show agent status:
 #### Example Interactive Agent
 
 ```bash
-$ raworc agent --name "coding-project"
+$ raworc agent create "coding-project"
 
 ┌─────────────────────────────────────┐
 │ ◊ Agent Start                     │
@@ -332,7 +326,7 @@ Based on your request, I can help you with Python programming. What specific asp
 > /detach
 
 ◊ Detached from agent. Agent continues running.
-Reconnect with: raworc agent restore coding-project
+Reconnect with: raworc agent wake coding-project
 ```
 
 ### API-based Agent Management
@@ -367,10 +361,10 @@ raworc api agents/{agent-name}/messages
 # Get latest messages (limit to last 10)
 raworc api "agents/{agent-name}/messages?limit=10"
 
-# Close agent (saves resources, preserves data)
+# Sleep agent (saves resources, preserves data)
 raworc api agents/{agent-name}/sleep -m post
 
-# Restore sleeping agent (with optional prompt)
+# Wake sleeping agent (with optional prompt)
 raworc api agents/{agent-name-or-id}/wake -m post
 raworc api agents/{agent-name-or-id}/wake -m post -b '{"prompt":"Continue from where we left off"}'
 

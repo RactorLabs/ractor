@@ -3,13 +3,13 @@ sidebar_position: 2
 title: Computer Use Agents
 ---
 
-# Computer Use Agents (Agent)
+# Computer Use Agents
 
-Raworc provides Computer Use Agents through the Agent - Raworc's Computer Use implementation that uses computers like humans do to automate manual work. Each Agent comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
+Raworc provides Computer Use Agents through the agent runtime that uses computers like humans do to automate manual work. Each agent comes with a dedicated computer and can perform any task that a human worker can do through natural language instructions.
 
 ## What are Computer Use Agents?
 
-The Agent is Raworc's Computer Use Agent implementation that interacts with computers using the same interfaces humans use:
+The agent runtime interacts with computers using the same interfaces humans use:
 
 - **Visual interfaces** - Click buttons, fill forms, navigate websites
 - **Command line tools** - Execute terminal commands, run scripts, manage files  
@@ -235,10 +235,10 @@ Agent: Let me search for the most current Python security guidelines...
 
 ## How to Get Started
 
-### Basic Agent Agent
+### Basic Agent
 ```bash
-# Start a general-purpose Agent agent
-raworc agent
+# Start a general-purpose agent
+raworc agent create
 
 You: "Help me organize these files and create a summary report"
 Agent: I'll help you organize your files and create a professional summary report...
@@ -247,17 +247,17 @@ Agent: I'll help you organize your files and create a professional summary repor
 ### Specialized Agent Setup
 ```bash
 # Agent for web automation
-raworc agent \
+raworc agent create \
   --instructions "You specialize in web automation and data extraction."
 
 # Agent for content creation
-raworc agent \
+raworc agent create \
   --instructions "You specialize in content creation and social media management."
 ```
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first Agent agent
+- **[Getting Started](/docs/getting-started)** - Set up your first agent
 - **[Dev Mode](/docs/guides/dev-mode)** - Enable Coding Agent for development tasks
 - **[Agents](/docs/concepts/agents)** - Understand agent management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all CLI commands

@@ -6,16 +6,12 @@ This is the official documentation website for Raworc.
 
 ```bash
 npm install
-# or
-yarn
 ```
 
 ## Local Development
 
 ```bash
 npm start
-# or
-yarn start
 ```
 
 This command starts a local development server and opens up a browser window. Most changes are reflected live without having to restart the server.
@@ -24,8 +20,6 @@ This command starts a local development server and opens up a browser window. Mo
 
 ```bash
 npm run build
-# or
-yarn build
 ```
 
 This command generates static content into the `build` directory and can be served using any static contents hosting service.
@@ -51,9 +45,9 @@ USE_SSH=true yarn deploy
   - `/getting-started` - Installation and quick start guides
   - `/concepts` - Core concepts and architecture
   - `/guides` - User guides and tutorials
-  - `/admin` - Administrator documentation
+  - `/admin` - Administrator documentation (section not present yet)
   - `/api` - API reference
-- `/blog` - Blog posts and announcements
+- `/blog` - Blog posts and announcements (blog disabled)
 - `/src` - Website source code
   - `/components` - React components
   - `/pages` - Additional pages
@@ -79,4 +73,4 @@ USE_SSH=true yarn deploy
 
 ## License
 
-This documentation is licensed under the same license as the Raworc project.
+This documentation follows the same unlicensed status as the Raworc project.

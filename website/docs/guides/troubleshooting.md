@@ -37,27 +37,23 @@ docker logs raworc_mysql
 docker logs raworc_server | grep migration
 ```
 
-## Session containers
+## Agent containers
 
 ```bash
-# List running session containers
-docker ps --filter "name=raworc_session_"
+# List running agent containers
+docker ps --filter "name=raworc_agent_"
 
 # Clean restart
 raworc start --restart
 
-# Clean up all sessions
-raworc clean --all
+# Clean up all agents
+raworc clean
 
-# Manual cleanup of specific session
-docker rm -f raworc_session_{session-name}
+# Manual cleanup of specific agent container
+docker rm -f raworc_agent_{agent-name}
 
-# Check session container logs
-docker logs raworc_session_{session-name} --tail 50
-
-# Check Host logs inside session
-docker exec raworc_session_{session-name} ls -la /session/logs/
-docker exec raworc_session_{session-name} cat /session/logs/host_{timestamp}_stderr.log
+# Check agent container logs
+docker logs raworc_agent_{agent-name} --tail 50
 
 # Complete system reset
 raworc reset --yes
@@ -77,4 +73,3 @@ raworc auth
 raworc login --user admin --pass admin
 raworc auth --token <jwt-token-from-login>
 ```
-

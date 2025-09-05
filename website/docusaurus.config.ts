@@ -99,7 +99,7 @@ const config: Config = {
               to: '/docs/concepts/computer-use-agents',
             },
             {
-              label: 'Sessions',
+              label: 'Agents',
               to: '/docs/concepts/agents',
             },
             {

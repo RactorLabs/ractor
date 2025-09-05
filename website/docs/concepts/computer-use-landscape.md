@@ -5,7 +5,7 @@ title: Computer Use Landscape
 
 # Computer Use Landscape
 
-The computer use market is emerging with several platforms offering different approaches to automating computer-based tasks. True computer use platforms provide Host that can control computers like humans do - using visual interfaces, running software, and performing complex multi-step workflows.
+The computer use market is emerging with several platforms offering different approaches to automating computer-based tasks. True computer use platforms provide an agent runtime that can control computers like humans do — using visual interfaces, running software, and performing complex multi-step workflows.
 
 ## True Computer Use Platforms
 
@@ -19,12 +19,12 @@ The computer use market is emerging with several platforms offering different ap
 - **Best For**: Teams preferring local inference and data locality
 
 ### **Raworc (Computer Use Agents)**
-- **Purpose**: Complete computer use platform with dedicated computers and built-in Host
+- **Purpose**: Complete computer use platform with dedicated computers and built-in agent runtime
 - **Strengths**:
-  - **Dedicated computers** - Each session gets a full Ubuntu environment
-  - **Built-in Host** - Pre-configured to use local models via Ollama (default: gpt-oss)
-  - **Session persistence** - Close and restore long-running automation workflows
-  - **Natural language control** - Describe any task and the Host executes it
+  - **Dedicated computers** - Each agent gets a full environment
+  - **Built-in agent runtime** - Pre-configured to use local models via Ollama (default: gpt-oss:20b)
+  - **Agent persistence** - Sleep and wake long-running automation workflows
+  - **Natural language control** - Describe any task and the agent executes it
   - **No integration required** - Ready to automate any computer-based work immediately
 - **Best For**: Anyone needing to automate manual computer work without technical setup
 
@@ -82,9 +82,9 @@ The computer use market is emerging with several platforms offering different ap
 
 ## Computer Use Comparison Matrix
 
-| Platform | Computer Control | Dedicated Computers | Session Persistence | Natural Language | Setup Required |
-|----------|------------------|---------------------|---------------------|------------------|----------------|
-| **Raworc** | ✅ Full computer control | ✅ Dedicated per session | ✅ Close/restore workflows | ✅ Conversational interface | ❌ None |
+| Platform | Computer Control | Dedicated Computers | Agent Persistence | Natural Language | Setup Required |
+|----------|------------------|---------------------|-------------------|------------------|----------------|
+| **Raworc** | ✅ Full computer control | ✅ Dedicated per agent | ✅ Sleep/wake workflows | ✅ Conversational interface | ❌ None |
 | **Local AI (direct)** | ✅ Computer use model | ❌ User provides computer | ❌ No persistence | ✅ Natural language | ✅ Integration work |
 | **E2B** | ⚠️ Code execution only | ✅ VM sandboxes | ⚠️ Limited to code | ❌ API integration | ✅ SDK setup |
 | **Enterprise platforms** | ❌ API-based only | ❌ Shared infrastructure | ⚠️ Platform-specific | ⚠️ Platform UIs | ✅ Complex setup |
@@ -104,14 +104,14 @@ The computer use market is emerging with several platforms offering different ap
 ### **Complete Computer Use Solution**
 ```
 Other Platforms: [AI Model] + [Complex Setup] + [Limited Scope]
-Raworc:         [Host] + [Dedicated Computer] + [Any Task]
+Raworc:         [Agent Runtime] + [Dedicated Computer] + [Any Task]
 ```
 
 ### **Key Differentiators**
 
-1. **Instant Computer Use**: Get Host with dedicated computer in seconds, no setup
+1. **Instant Computer Use**: Get an agent with a dedicated computer in seconds, no setup
 2. **Universal Automation**: Automate any computer-based task, not just specific workflows  
-3. **Session Persistence**: Long-running automation that survives restarts
+3. **Agent Persistence**: Long-running automation that survives sleeps/wakes
 4. **Natural Language Control**: Conversational interface for any automation task
 5. **Zero Integration**: No APIs, SDKs, or complex setup required
 
@@ -136,21 +136,21 @@ Raworc:         [Host] + [Dedicated Computer] + [Any Task]
 - **Universal Compatibility**: Works with any software, even legacy applications
 - **Visual Interface Control**: Can handle any visual interface like humans do
 - **Robust Automation**: Adapts to interface changes and unexpected scenarios  
-- **Natural Language**: Describe what you want, Host figures out how to do it
+- **Natural Language**: Describe what you want; the agent figures out how to do it
 
 ## Getting Started
 
-Ready to automate manual computer work with the Host?
+Ready to automate manual computer work with agents?
 
 ```bash
 # Install Raworc
 npm install -g @raworc/cli
 
-# Start services  
-raworc start
+# Start core services  
+raworc start mysql server operator
 
-# Get your first Host session
-raworc session
+# Create your first agent
+raworc agent create
 
 # Describe any manual work you want automated
 You: "Help me organize these files and create a summary report"
@@ -158,6 +158,6 @@ You: "Help me organize these files and create a summary report"
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up your first Host session
+- **[Getting Started](/docs/getting-started)** - Set up your first agent
 - **[Agents](/docs/concepts/agents)** - Understand agent management
-- **[CLI Usage](/docs/guides/cli-usage)** - Master all commands for Host control
+- **[CLI Usage](/docs/guides/cli-usage)** - Master all commands for agent control

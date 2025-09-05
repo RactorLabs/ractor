@@ -16,7 +16,7 @@ Raworc provides a comprehensive REST API for Computer Use automation. The API en
 
 ## Authentication
 
-All API endpoints (except `/version` and `/auth/login`) require authentication using a JWT bearer token.
+All API endpoints (except `/version` and `/operators/{name}/login`) require authentication using a JWT bearer token.
 
 ## Agents
 
@@ -81,55 +81,55 @@ Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/version`](./rest-api-reference#get-version) | GET | API version and health info |
-| [`/auth/login`](./rest-api-reference#post-authlogin) | POST | Authenticate and get token |
-| [`/auth`](./rest-api-reference#get-auth) | GET | Get current user info |
-| [`/auth/token`](./rest-api-reference#post-authtoken) | POST | Create token for any principal (admin only) |
+| [`/version`](./rest-api-reference) | GET | API version and health info |
+| [`/operators/{name}/login`](./rest-api-reference) | POST | Authenticate and get token |
+| [`/auth`](./rest-api-reference) | GET | Get current user info |
+| [`/auth/token`](./rest-api-reference) | POST | Create token for any principal (admin only) |
 
 ### Operators
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| [`/operators`](./rest-api-reference#get-operators) | GET | List all operators |
-| [`/operators`](./rest-api-reference#post-operators) | POST | Create new operator |
-| [`/operators/{name}`](./rest-api-reference#get-operatorsname) | GET | Get specific operator |
-| [`/operators/{name}`](./rest-api-reference#put-operatorsname) | PUT | Update operator |
-| [`/operators/{name}`](./rest-api-reference#delete-operatorsname) | DELETE | Delete operator |
-| [`/operators/{name}/password`](./rest-api-reference#put-operatorsnamepassword) | PUT | Update operator password |
+| [`/operators`](./rest-api-reference) | GET | List all operators |
+| [`/operators`](./rest-api-reference) | POST | Create new operator |
+| [`/operators/{name}`](./rest-api-reference) | GET | Get specific operator |
+| [`/operators/{name}`](./rest-api-reference) | PUT | Update operator |
+| [`/operators/{name}`](./rest-api-reference) | DELETE | Delete operator |
+| [`/operators/{name}/password`](./rest-api-reference) | PUT | Update operator password |
 
 ### Computer Use Agents
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/agents`](./rest-api-reference#get-agents) | GET | List computer use agents |
-| [`/agents`](./rest-api-reference#post-agents) | POST | Create new agent |
-| [`/agents/{id}`](./rest-api-reference#get-agentsid) | GET | Get specific agent |
-| [`/agents/{id}`](./rest-api-reference#put-agentsid) | PUT | Update agent details |
-| [`/agents/{id}/state`](./rest-api-reference#put-agentsidstate) | PUT | Update agent state |
-| [`/agents/{id}/sleep`](./rest-api-reference#post-agentsidsleep) | POST | Sleep agent |
-| [`/agents/{id}/wake`](./rest-api-reference#post-agentsidwake) | POST | Wake agent |
-| [`/agents/{id}/remix`](./rest-api-reference#post-agentsidremix) | POST | Fork agent |
-| [`/agents/{id}/publish`](./rest-api-reference#post-agentsidpublish) | POST | Publish agent |
-| [`/agents/{id}/unpublish`](./rest-api-reference#post-agentsidunpublish) | POST | Unpublish agent |
-| [`/agents/{id}/busy`](./rest-api-reference#post-agentsidbusy) | POST | Mark agent busy |
-| [`/agents/{id}/idle`](./rest-api-reference#post-agentsididle) | POST | Mark agent idle |
-| [`/agents/{id}`](./rest-api-reference#delete-agentsid) | DELETE | Delete agent |
+| [`/agents`](./rest-api-reference) | GET | List computer use agents |
+| [`/agents`](./rest-api-reference) | POST | Create new agent |
+| [`/agents/{name}`](./rest-api-reference) | GET | Get specific agent |
+| [`/agents/{name}`](./rest-api-reference) | PUT | Update agent details |
+| [`/agents/{name}/state`](./rest-api-reference) | PUT | Update agent state |
+| [`/agents/{name}/sleep`](./rest-api-reference) | POST | Sleep agent |
+| [`/agents/{name}/wake`](./rest-api-reference) | POST | Wake agent |
+| [`/agents/{name}/remix`](./rest-api-reference) | POST | Fork agent |
+| [`/agents/{name}/publish`](./rest-api-reference) | POST | Publish agent |
+| [`/agents/{name}/unpublish`](./rest-api-reference) | POST | Unpublish agent |
+| [`/agents/{name}/busy`](./rest-api-reference) | POST | Mark agent busy |
+| [`/agents/{name}/idle`](./rest-api-reference) | POST | Mark agent idle |
+| [`/agents/{name}`](./rest-api-reference) | DELETE | Delete agent |
 
 ### Public Agents
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/published/agents`](./rest-api-reference#get-publishedagents) | GET | List published agents |
-| [`/published/agents/{id}`](./rest-api-reference#get-publishedagentsid) | GET | Get published agent |
+| [`/published/agents`](./rest-api-reference) | GET | List published agents |
+| [`/published/agents/{name}`](./rest-api-reference) | GET | Get published agent |
 
 ### Agent Communication
 
 | Endpoint | Method | Description |
 |----------|--------|--------------|
-| [`/agents/{id}/messages`](./rest-api-reference#get-agentsidmessages) | GET | List agent messages |
-| [`/agents/{id}/messages`](./rest-api-reference#post-agentsidmessages) | POST | Send message to agent |
-| [`/agents/{id}/messages/count`](./rest-api-reference#get-agentsidmessagescount) | GET | Get message count |
-| [`/agents/{id}/messages`](./rest-api-reference#delete-agentsidmessages) | DELETE | Clear all messages |
+| [`/agents/{name}/messages`](./rest-api-reference) | GET | List agent messages |
+| [`/agents/{name}/messages`](./rest-api-reference) | POST | Send message to agent |
+| [`/agents/{name}/messages/count`](./rest-api-reference) | GET | Get message count |
+| [`/agents/{name}/messages`](./rest-api-reference) | DELETE | Clear all messages |
 
 ## Request Format
 

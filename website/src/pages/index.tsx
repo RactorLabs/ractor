@@ -213,8 +213,8 @@ export default function Home(): ReactNode {
             <div style={{"textAlign": "center", "maxWidth": "800px", "margin": "0 auto"}}>
               <Heading as="h2">Remote Computer Use Agents</Heading>
               <p style={{"fontSize": "1.2rem", "marginBottom": "2rem"}}>
-                Raworc offers <strong>Computer use agents with dedicated computers for each session</strong>. 
-                Intelligent Host that uses computers like humans do - browsing, managing files, running software 
+                Raworc offers <strong>Computer use agents with dedicated computers</strong>. 
+                An agent runtime that uses computers like humans do — browsing, managing files, and running software 
                 through <strong>natural language commands</strong>.
               </p>
               <Link
@@ -236,20 +236,20 @@ export default function Home(): ReactNode {
                 <h3>🚀 Instant Computer Use Agents</h3>
                 <p>
                   <strong>Get Computer use agents with dedicated computers</strong> in seconds. 
-                  No setup required - intelligent Host ready to automate any manual work with full computer access.
+                  No setup required — agent runtime ready to automate any manual work with full computer access.
                 </p>
               </div>
               <div className={styles.developmentCard}>
-                <h3>🔄 Persistent Work Sessions</h3>
+                <h3>🔄 Persistent Agents</h3>
                 <p>
-                  <strong>Never lose progress</strong> - close agent sessions and restore them later with all files, state, and context preserved. 
+                  <strong>Never lose progress</strong> — sleep agents and wake them later with all files, state, and context preserved. 
                   Perfect for long-running automation tasks.
                 </p>
               </div>
               <div className={styles.developmentCard}>
                 <h3>🧪 Isolated Automation Environments</h3>
                 <p>
-                  <strong>Each session provides Computer use agents with dedicated computers</strong> and full OS access. 
+                  <strong>Each agent provides a dedicated computer</strong> with full OS access. 
                   Safe to run any automation without affecting your local machine.
                 </p>
               </div>
@@ -271,7 +271,7 @@ export default function Home(): ReactNode {
                 <h3>🤝 Scalable Automation</h3>
                 <p>
                   <strong>Run multiple Computer use agents</strong> simultaneously with dedicated computers and proper access controls. 
-                  Share automation sessions, fork workflows, and scale manual work elimination.
+                  Share agents, fork workflows, and scale manual work elimination.
                 </p>
               </div>
             </div>

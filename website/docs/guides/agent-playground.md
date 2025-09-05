@@ -9,7 +9,7 @@ Master the full power of Raworc agents with interactive examples and advanced fe
 
 ## Prerequisites
 
-Ensure an Ollama server is available (start the `ollama` component or set `OLLAMA_HOST`).
+Ensure an Ollama server is available (start an Ollama container or set `OLLAMA_HOST`).
 
 ```bash
 # Optional if not using the built-in container
@@ -22,7 +22,7 @@ The simplest way to work with agents is through the interactive CLI:
 
 ```bash
 # Start a new interactive agent (uses OLLAMA_HOST for model inference)
-raworc agent
+raworc agent create
 ```
 
 In the interactive agent interface:
@@ -65,7 +65,7 @@ Sleep/wake allows you to sleep agents to save resources, then wake them later wi
 
 ```bash
 # Create an agent and work with it
-raworc agent
+raworc agent create
 # Work with the agent...
 # Note the agent ID (shown in status)
 
@@ -90,7 +90,7 @@ raworc agent wake {agent-name}
 
 ```bash
 # Start a data analysis agent
-raworc agent
+raworc agent create
 
 ┌─────────────────────────────────────┐
 │ ◊ Agent Start                       │
@@ -147,7 +147,7 @@ raworc agent remix {source-agent-name}
 #### 1. Experiment Branching
 ```bash
 # Original agent: working on main algorithm
-raworc agent
+raworc agent create
 > Implement quicksort algorithm in Python
 # Agent ID: main-456
 

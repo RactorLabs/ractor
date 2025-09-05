@@ -12,7 +12,7 @@ Raworc uses a simple authentication system with two types of users: **Operators*
 ### Operators
 **System administrators with full access to all functionality:**
 
-- **Full system control** - Manage all sessions, users, and system settings
+- **Full system control** - Manage all agents, users, and system settings
 - **User management** - Create and manage user accounts 
 - **Service management** - Control Raworc services and configuration
 - **All API access** - Complete access to all REST API endpoints
@@ -23,12 +23,12 @@ Raworc uses a simple authentication system with two types of users: **Operators*
 - Created automatically when Raworc starts
 
 ### Users
-**Regular users with session-focused access:**
+**Regular users with agent-focused access:**
 
-- **Session management** - Create, manage, and use their own sessions
-- **Limited API access** - Access to session-related endpoints only
+- **Agent management** - Create, manage, and use their own agents
+- **Limited API access** - Access to agent-related endpoints only
 - **No admin functions** - Cannot manage other users or system settings
-- **Personal workspace** - Work within their own session scope
+- **Personal workspace** - Work within their own agent scope
 
 ## Authentication Flow
 
@@ -95,19 +95,19 @@ raworc api auth/token -m POST -b '{
 ## Access Control
 
 ### What Operators Can Do
-- ✅ Create and manage all sessions
-- ✅ View all user sessions
+- ✅ Create and manage all agents
+- ✅ View all user agents
 - ✅ Create user and operator accounts
 - ✅ Access all API endpoints
 - ✅ Manage system configuration
-- ✅ Publish and unpublish any sessions
+- ✅ Publish and unpublish any agents
 
 ### What Users Can Do  
-- ✅ Create and manage their own sessions
-- ✅ Restore their own sessions
-- ✅ Remix published sessions
-- ✅ Access session-related API endpoints
-- ❌ View other users' sessions
+- ✅ Create and manage their own agents
+- ✅ Wake their own agents
+- ✅ Remix published agents
+- ✅ Access agent-related API endpoints
+- ❌ View other users' agents
 - ❌ Create user accounts
 - ❌ Access system management APIs
 
@@ -121,8 +121,8 @@ All API requests require a Bearer token:
 Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...
 
 # CLI automatically handles authentication after raworc auth
-raworc api sessions
-raworc api sessions -m POST -b '{}'
+raworc api agents
+raworc api agents -m POST -b '{}'
 ```
 
 ### Token Validation
@@ -173,7 +173,7 @@ raworc logout
 
 # Test API access
 raworc api version
-raworc api sessions
+raworc api agents
 ```
 
 ## Troubleshooting
@@ -205,7 +205,7 @@ raworc login --user admin --pass admin
 
 ## Next Steps
 
-- **[Getting Started](/docs/getting-started)** - Set up authentication and first session
+- **[Getting Started](/docs/getting-started)** - Set up authentication and your first agent
 - **[CLI Usage Guide](/docs/guides/cli-usage)** - Complete authentication command reference  
-- **[Sessions](/docs/concepts/agents)** - Understand session management and access
+- **[Agents](/docs/concepts/agents)** - Understand agent management and access
 - **[API Reference](/docs/api/rest-api-reference)** - REST API authentication details

@@ -34,20 +34,20 @@ raworc agent wake "customer-analysis-q3"
 
 ```bash
 # Project-based naming
-raworc agent --name "project-website-redesign"
-raworc agent --name "project-mobile-app-v2"
+raworc agent create "project-website-redesign"
+raworc agent create "project-mobile-app-v2"
 
 # Task-based naming
-raworc agent --name "data-analysis-monthly-sales"
-raworc agent --name "automation-invoice-processing"
+raworc agent create "data-analysis-monthly-sales"
+raworc agent create "automation-invoice-processing"
 
 # Team-based naming  
-raworc agent --name "marketing-content-generation"
-raworc agent --name "devops-deployment-scripts"
+raworc agent create "marketing-content-generation"
+raworc agent create "devops-deployment-scripts"
 
 # Date-based naming
-raworc agent --name "report-2024-q3-analysis"
-raworc agent --name "backup-cleanup-jan-2024"
+raworc agent create "report-2024-q3-analysis"
+raworc agent create "backup-cleanup-jan-2024"
 ```
 
 ### Name Requirements
@@ -103,7 +103,7 @@ raworc agent publish "my-agent" \
 
 ```bash
 # 1. Create and work on your agent
-raworc agent --name "web-scraping-tutorial"
+raworc agent create "web-scraping-tutorial"
 # ... do work in the agent ...
 
 # 2. Publish for others to use
@@ -125,7 +125,7 @@ Create reusable agent templates for common workflows:
 
 ```bash
 # Create base agent for data analysis
-raworc agent --name "data-analysis-template" \
+raworc agent create "data-analysis-template" \
   --instructions "You are a data scientist. Use pandas, matplotlib, and seaborn for analysis." \
   --setup "pip install pandas matplotlib seaborn jupyter plotly"
 
@@ -149,7 +149,7 @@ Share educational agents with the community:
 
 ```bash
 # Create tutorial agent
-raworc agent --name "python-web-scraping-tutorial" \
+raworc agent create "python-web-scraping-tutorial" \
   --instructions "Teach web scraping with Python using requests and BeautifulSoup" \
   --setup "pip install requests beautifulsoup4 pandas"
 
@@ -169,7 +169,7 @@ Share work within teams for collaboration:
 
 ```bash
 # Team lead creates base agent
-raworc agent --name "product-launch-analysis" \
+raworc agent create "product-launch-analysis" \
   --instructions "Analyze product launch metrics and create reports"
 
 # Work on initial analysis
@@ -192,7 +192,7 @@ Preserve important project states:
 
 ```bash
 # Create agent for project milestone
-raworc agent --name "website-redesign-milestone-1" \
+raworc agent create "website-redesign-milestone-1" \
   --instructions "Website redesign project - Phase 1 complete"
 
 # Complete milestone work
@@ -245,7 +245,7 @@ raworc agent remix "data-analysis-template" \
 
 ```bash
 # Create named agent
-raworc agent --name "my-agent"
+raworc agent create "my-agent"
 
 # Wake by name
 raworc agent wake "my-agent"
@@ -305,7 +305,7 @@ Create organized agent families:
 
 ```bash
 # Base template
-raworc agent --name "ecommerce-analysis-base"
+raworc agent create "ecommerce-analysis-base"
 raworc agent publish "ecommerce-analysis-base"
 
 # Specialized versions
@@ -320,7 +320,7 @@ Version your agent work:
 
 ```bash
 # Initial version
-raworc agent --name "ml-model-v1"
+raworc agent create "ml-model-v1"
 raworc agent publish "ml-model-v1"
 
 # Improved version

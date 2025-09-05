@@ -132,7 +132,7 @@ Create token for a User:
 }
 ```
 
-Create token for a Operator:
+Create token for an Operator:
 ```json
 {
   "principal": "api-service",
@@ -228,7 +228,7 @@ Get a specific operator by name.
 
 ### PUT /operators/\{name\}
 
-Update a operator.
+Update an operator.
 
 **Authentication**: Required
 
@@ -248,7 +248,7 @@ Update a operator.
 
 ### DELETE /operators/\{name\}
 
-Delete a operator.
+Delete an operator.
 
 **Authentication**: Required
 
@@ -323,7 +323,6 @@ Create a new computer use agent.
   "name": "my-agent",
   "metadata": {},
   "secrets": {
-    "DATABASE_URL": "mysql://user:pass@host/db",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful AI agent specialized in data analysis.",
