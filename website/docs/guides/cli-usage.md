@@ -11,14 +11,14 @@ The Raworc CLI provides complete command-line access to all functionality for ma
 
 - **Node.js 16+**: For the Raworc CLI
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+
-- **Anthropic API Key**: Required - get one at [console.anthropic.com](https://console.anthropic.com)
+- **Ollama**: Local model runtime (built-in `ollama` service) or remote `OLLAMA_HOST`
 
 ### Environment Setup
 
-Set your Anthropic API key as an environment variable:
+Optional: set `OLLAMA_HOST` to point to your Ollama server if you aren't using the built-in container:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+export OLLAMA_HOST=http://raworc_ollama:11434   # default when running the `ollama` component
 ```
 
 ## Installation
@@ -32,8 +32,8 @@ npm install -g @raworc/cli
 Start and manage Raworc services:
 
 ```bash
-# Start all services
-raworc start
+# Start all services (explicit)
+raworc start ollama mysql server operator
 raworc start --pull             # Pull latest images first
 
 # Stop services
@@ -136,7 +136,7 @@ raworc agent sleep <agent-name-or-id>
 ### Starting New Agents
 
 ```bash
-# Basic agent (uses ANTHROPIC_API_KEY from environment)
+# Basic agent (uses OLLAMA_HOST for model inference)
 raworc agent
 
 # Agent with name and timeout
@@ -338,14 +338,13 @@ Reconnect with: raworc agent restore coding-project
 ### API-based Agent Management
 
 ```bash
-# Create new agent (requires ANTHROPIC_API_KEY)
+# Create new agent
 raworc api agents -m post -b '{"secrets":{}}'
 
 # Create agent with full configuration
 raworc api agents -m post -b '{
   "name": "my-agent",
   "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful agent specialized in data analysis.",
@@ -562,11 +561,11 @@ Common error responses and solutions:
   }
 }
 
-// 400 Bad Request - Missing API key
+// 400 Bad Request - Missing required fields
 {
   "error": {
     "code": "BAD_REQUEST",
-    "message": "ANTHROPIC_API_KEY secret is required"
+    "message": "Invalid request"
   }
 }
 
@@ -598,7 +597,7 @@ Common error responses and solutions:
 - Agents persist until explicitly deleted
 - Interactive agents auto-cleanup on exit (`/quit`)
 - Use sleep/wake for long-running computer use agents to save resources
-- **Set `ANTHROPIC_API_KEY` environment variable** - required for all new agents
+- Ensure `OLLAMA_HOST` is reachable or start the `ollama` component
 
 ### Performance Tips
 - Use `raworc start --pull` to ensure latest images

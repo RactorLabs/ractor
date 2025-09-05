@@ -151,7 +151,7 @@ raworc api auth
 - **Limit access** - Only create accounts for users who need access
 
 ### Environment Security
-- **Secure API keys** - Keep ANTHROPIC_API_KEY as environment variable
+- **Secure secrets** - Keep environment secrets out of code and version control
 - **Network security** - Run Raworc on secure networks
 - **Regular updates** - Keep Raworc updated to latest version
 

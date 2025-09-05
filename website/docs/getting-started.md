@@ -11,14 +11,15 @@ Get started with the Remote Agentic Work Orchestrator in just a few commands. Ra
 
 - **Node.js 16+**: For the Raworc CLI
 - **Docker**: Docker Engine 20.10+ and Docker Compose v2+ 
-- **Anthropic API Key**: Required for AI functionality - get one at [console.anthropic.com](https://console.anthropic.com)
+- **Ollama**: Local model runtime (runs as a container via `raworc_ollama`)
 
 ### Environment Setup
 
-Set your Anthropic API key as an environment variable:
+You can run Ollama locally (recommended) or point to a remote Ollama server:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+# Optional: override the default if not using the built-in container
+export OLLAMA_HOST=http://raworc_ollama:11434   # or http://host.docker.internal:11434
 ```
 
 ## Quick Start (30 seconds)
@@ -29,10 +30,10 @@ export ANTHROPIC_API_KEY=sk-ant-your-actual-key
 npm install -g @raworc/cli
 ```
 
-### 2. Start Services
+### 2. Start Services (including Ollama)
 
 ```bash
-raworc start
+raworc start ollama mysql server operator
 ```
 
 ### 3. Authenticate
@@ -51,7 +52,7 @@ raworc auth -t <jwt-token-from-step-1>
 raworc agent
 ```
 
-**Note**: Make sure you have set the `ANTHROPIC_API_KEY` environment variable as shown in the prerequisites.
+Note: If you don't start the `ollama` component, set `OLLAMA_HOST` to a reachable Ollama instance.
 
 That's it! You now have a running agent.
 
@@ -60,11 +61,9 @@ That's it! You now have a running agent.
 ### Basic Agent
 
 ```bash
-# Create new agent (uses ANTHROPIC_API_KEY from environment)
+# Create new agent (uses OLLAMA_HOST for model inference)
 raworc agent
 ```
-
-**Note**: The Anthropic API key environment variable is required for all new agents.
 
 ### Agent with Instructions
 

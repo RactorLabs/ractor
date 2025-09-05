@@ -104,19 +104,13 @@ resources:
 Create agents with optional secrets, instructions, and setup scripts:
 
 ```bash
-# Basic agent (requires ANTHROPIC_API_KEY)
-raworc api agents -m post -b '{
-  "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key"
-  }
-}'
+# Basic agent
+raworc api agents -m post -b '{}'
 
 # Agent with name and timeout
 raworc api agents -m post -b '{
   "name": "my-analysis-agent",
-  "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key"
-  },
+  "secrets": {},
   "timeout_seconds": 300
 }'
 
@@ -124,7 +118,6 @@ raworc api agents -m post -b '{
 raworc api agents -m post -b '{
   "name": "data-project",
   "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful Agent specialized in data analysis.",
@@ -146,16 +139,11 @@ raworc api agents -m post -b '{
 
 ### Create Agent
 ```bash
-# ANTHROPIC_API_KEY is required for all new agents
-raworc api agents -m post -b '{
-  "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key"
-  }
-}'
+raworc api agents -m post -b '{}'
 ```
 
 **Flow:**
-1. Validate ANTHROPIC_API_KEY is provided in secrets
+1. Validate request and create agent record
 2. Generate UUID and create agent record with `init` state
 3. Operator detects new agent and spawns container
 4. Container mounts persistent volume and starts Agent

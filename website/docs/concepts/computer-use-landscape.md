@@ -9,21 +9,20 @@ The computer use market is emerging with several platforms offering different ap
 
 ## True Computer Use Platforms
 
-### **Anthropic Claude (Computer Use)**
-- **Purpose**: Advanced AI model with native computer use capabilities
-- **Strengths**: 
-  - Industry-leading computer use AI model
-  - Can control screens, click buttons, type text, and navigate interfaces
-  - Excellent at understanding visual interfaces and complex workflows
-  - Strong reasoning capabilities for multi-step automation
-- **Limitations**: Requires integration work to provide persistent computer environments
-- **Best For**: Developers building computer use applications who need the AI model
+### **Local Models via Ollama**
+- **Purpose**: Run open models locally for computer use agents
+- **Strengths**:
+  - Runs on your hardware (CPU/GPU) with Docker
+  - Easy to manage models (pull/switch) and cache
+  - No external API keys required
+- **Limitations**: Performance depends on your machine and selected model
+- **Best For**: Teams preferring local inference and data locality
 
 ### **Raworc (Computer Use Agents)**
 - **Purpose**: Complete computer use platform with dedicated computers and built-in Host
 - **Strengths**:
   - **Dedicated computers** - Each session gets a full Ubuntu environment
-  - **Built-in Host** - Pre-configured with Anthropic's Claude computer use model
+  - **Built-in Host** - Pre-configured to use local models via Ollama (default: gpt-oss)
   - **Session persistence** - Close and restore long-running automation workflows
   - **Natural language control** - Describe any task and the Host executes it
   - **No integration required** - Ready to automate any computer-based work immediately

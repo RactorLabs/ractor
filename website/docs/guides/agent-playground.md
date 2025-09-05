@@ -9,10 +9,11 @@ Master the full power of Raworc agents with interactive examples and advanced fe
 
 ## Prerequisites
 
-- **ANTHROPIC_API_KEY**: Required environment variable for all new agents
+Ensure an Ollama server is available (start the `ollama` component or set `OLLAMA_HOST`).
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-your-actual-key
+# Optional if not using the built-in container
+export OLLAMA_HOST=http://raworc_ollama:11434
 ```
 
 ## Interactive Agents
@@ -20,7 +21,7 @@ export ANTHROPIC_API_KEY=sk-ant-your-actual-key
 The simplest way to work with agents is through the interactive CLI:
 
 ```bash
-# Start a new interactive agent (uses ANTHROPIC_API_KEY from environment)
+# Start a new interactive agent (uses OLLAMA_HOST for model inference)
 raworc agent
 ```
 

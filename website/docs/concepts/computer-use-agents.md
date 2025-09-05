@@ -179,7 +179,7 @@ The Agent can automate any manual work that involves using a computer. Here are 
 
 ## Integrated Tools
 
-The Agent comes equipped with powerful Anthropic-compatible tools for comprehensive computer use:
+The Agent comes equipped with powerful built-in tools for comprehensive computer use:
 
 ### 🔧 Bash Tool
 **Execute terminal commands and system operations:**
@@ -248,12 +248,10 @@ Agent: I'll help you organize your files and create a professional summary repor
 ```bash
 # Agent for web automation
 raworc agent \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in web automation and data extraction."
 
 # Agent for content creation
 raworc agent \
-  --secrets '{"ANTHROPIC_API_KEY":"your-key"}' \
   --instructions "You specialize in content creation and social media management."
 ```
 
@@ -263,4 +261,3 @@ raworc agent \
 - **[Dev Mode](/docs/guides/dev-mode)** - Enable Coding Agent for development tasks
 - **[Agents](/docs/concepts/agents)** - Understand agent management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all CLI commands
-

@@ -63,7 +63,7 @@ Each session provides a dedicated computer use agent with full computer access:
 
 #### Host (`raworc_host`)
 - **Computer Use Implementation** - Uses computers like humans do
-- **Anthropic Integration** - Claude-powered intelligent automation
+- **Ollama Integration** - Local model inference via Ollama (gpt-oss by default)
 - **Full OS Access** - Complete access to Linux desktop environment
 - **Persistent State** - All files and state preserved between sessions
 

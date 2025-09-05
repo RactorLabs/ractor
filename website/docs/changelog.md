@@ -281,3 +281,10 @@ Development version - changes will be documented at release.
 
 - Initial public docs and REST API.
 - Sessions, spaces, secrets, agents, operator, MySQL.
+## v0.4.4
+
+- Model Runtime Migration: Replaced Anthropic/Claude integration with local model inference via Ollama (default model: gpt-oss)
+- New `ollama` component: `./scripts/start.sh ollama` runs dedicated `raworc_ollama` container with persistent model cache
+- Resource flags: Added `OLLAMA_CPUS`, `OLLAMA_MEMORY`, `OLLAMA_SHM_SIZE`, and `OLLAMA_ENABLE_GPU` to tune Ollama container resources
+- CLI updates: Removed Anthropic key validation; added `ollama` service mapping; updated examples to use `OLLAMA_HOST`
+- Docs: Updated Getting Started, CLI Usage, Architecture, and Agents guides to reflect Ollama-based runtime

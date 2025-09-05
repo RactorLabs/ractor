@@ -323,7 +323,7 @@ Create a new computer use agent.
   "name": "my-agent",
   "metadata": {},
   "secrets": {
-    "ANTHROPIC_API_KEY": "sk-ant-your-key",
+    "DATABASE_URL": "mysql://user:pass@host/db",
     "DATABASE_URL": "mysql://user:pass@host/db"
   },
   "instructions": "You are a helpful AI agent specialized in data analysis.",
@@ -736,4 +736,3 @@ All errors follow a consistent format:
 | `404` | Not Found - Resource not found |
 | `409` | Conflict - Resource already exists |
 | `500` | Internal Server Error |
-

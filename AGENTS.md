@@ -30,7 +30,7 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test (requires key): `export ANTHROPIC_API_KEY=... && ./scripts/build.sh && ./scripts/start.sh && ./scripts/link.sh && raworc api version`.
+- Integration smoke test: `./scripts/build.sh && ./scripts/start.sh ollama mysql server operator && ./scripts/link.sh && raworc api version`.
 
 ## Commit & Pull Request Guidelines
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
@@ -41,7 +41,7 @@
 
 ## Security & Configuration Tips
 - Copy `.env.example` to `.env`; do not commit secrets.
-- Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`; operator needs `ANTHROPIC_API_KEY`.
+- Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`.
  
 - Example local DB: `mysql://raworc:raworc@localhost:3307/raworc`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
