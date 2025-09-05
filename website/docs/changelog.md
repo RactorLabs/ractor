@@ -154,7 +154,7 @@ Development version - changes will be documented at release.
 
 - **Website Documentation Overhaul**: Comprehensive update of all website documentation to reflect 100+ commits of CLI and feature improvements
 - **CLI Interface Documentation**: Updated all interactive session examples with new geometric icon design system and visual state indicators
-- **Tool Integration Documentation**: Added comprehensive documentation for bash, text_editor, and web_search tools with visual execution examples
+- **Tool Integration Documentation**: Added comprehensive documentation for bash and text_editor tools with visual execution examples
 - **Session Management Updates**: Updated session state machine documentation to include all states (init/idle/busy/closed/deleted)
 - **Interactive Command Reference**: Complete documentation of interactive session commands (/help, /status, /timeout, /name, /detach, /quit)
 - **API Documentation Verification**: Updated version references and verified all endpoints match actual API implementation
@@ -281,4 +281,3 @@ Development version - changes will be documented at release.
 
 - Initial public docs and REST API.
 - Sessions, spaces, secrets, agents, operator, MySQL.
-
