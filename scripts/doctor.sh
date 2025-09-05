@@ -90,8 +90,6 @@ main() {
   fi
 
   echo
-  info "If issues persist, run: sudo ./scripts/setup.sh and reboot if drivers were installed."
 }
 
 main "$@"
-
