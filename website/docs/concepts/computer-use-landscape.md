@@ -85,7 +85,7 @@ The computer use market is emerging with several platforms offering different ap
 | Platform | Computer Control | Dedicated Computers | Session Persistence | Natural Language | Setup Required |
 |----------|------------------|---------------------|---------------------|------------------|----------------|
 | **Raworc** | ✅ Full computer control | ✅ Dedicated per session | ✅ Close/restore workflows | ✅ Conversational interface | ❌ None |
-| **Claude (direct)** | ✅ Computer use model | ❌ User provides computer | ❌ No persistence | ✅ Natural language | ✅ Integration work |
+| **Local AI (direct)** | ✅ Computer use model | ❌ User provides computer | ❌ No persistence | ✅ Natural language | ✅ Integration work |
 | **E2B** | ⚠️ Code execution only | ✅ VM sandboxes | ⚠️ Limited to code | ❌ API integration | ✅ SDK setup |
 | **Enterprise platforms** | ❌ API-based only | ❌ Shared infrastructure | ⚠️ Platform-specific | ⚠️ Platform UIs | ✅ Complex setup |
 
@@ -97,7 +97,7 @@ The computer use market is emerging with several platforms offering different ap
 
 **No Visual Interface Control**: True computer use requires understanding and controlling visual interfaces, not just APIs.
 
-**Integration Complexity**: Even advanced AI models like Claude require significant integration work to provide computer environments.
+**Integration Complexity**: Even advanced AI models require significant integration work to provide computer environments.
 
 ## Raworc's Unique Position
 

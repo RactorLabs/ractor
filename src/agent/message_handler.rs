@@ -357,7 +357,7 @@ impl MessageHandler {
                     }
                     "text_editor" => {
                         let mut normalized = input.clone();
-                        // Map alternate field names from previous Claude tool schema
+                        // Map alternate field names from previous tool schema
                         if normalized.get("action").is_none() && normalized.get("command").is_some() {
                             let cmd_owned = normalized.get("command").and_then(|v| v.as_str()).map(|s| s.to_string());
                             if let Some(cmd) = cmd_owned.as_deref() {

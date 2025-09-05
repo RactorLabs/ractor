@@ -349,7 +349,7 @@ Automatic resource management through configurable timeouts:
 ### Timeout Configuration
 
 ```bash
-# Set timeout during creation (uses ANTHROPIC_API_KEY from environment)
+# Set timeout during creation (uses Ollama for AI inference)
 raworc agent --timeout 300
 # API with timeout
 raworc api agents -m post -b '{
@@ -454,7 +454,7 @@ Agents start quickly because:
 Use the interactive agent interface for real-time Agent interaction:
 
 ```bash
-# All new agents require ANTHROPIC_API_KEY environment variable
+# All new agents use local Ollama for AI inference
 raworc agent                                                    # Start new agent
 raworc agent wake abc123                                        # Continue existing agent
 raworc agent remix def456                                             # Create remix

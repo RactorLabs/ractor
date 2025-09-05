@@ -229,7 +229,7 @@ async function agentCreateCommand(name, options) {
       }
     }
 
-    // Note: ANTHROPIC_API_KEY is now generated automatically by the system
+    // Note: AI inference is handled through local Ollama service
     // Users can still provide their own API key in secrets for custom code if needed
 
     // Add instructions if provided
