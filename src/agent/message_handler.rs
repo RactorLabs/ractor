@@ -236,8 +236,7 @@ impl MessageHandler {
         system_prompt.push_str("- Do NOT wrap JSON in ```json ... ``` or any other formatting.\n");
         system_prompt.push_str("- If no tool is required, produce ONLY a plain text answer (no JSON at all).\n");
 
-        // Loop for tool usage up to max_steps
-        let max_steps = 20; // adopt higher iteration cap similar to Claude integration
+        // Loop for tool usage with no hard cap on steps
         let mut steps = 0;
         // Keep a thread-local conversation for this message
         loop {
@@ -413,11 +412,6 @@ impl MessageHandler {
                 // Cookbook alignment: feed tool result as role "tool" with name
                 conversation.push(ChatMessage { role: "tool".to_string(), content: tool_result, name: Some(tool.clone()) });
 
-                if steps >= max_steps {
-                    warn!("Max tool steps reached; stopping tool loop");
-                    self.finalize_with_note("Stopped after max tool steps").await?;
-                    return Ok(());
-                }
                 continue;
             } else {
                 // Treat as final answer
