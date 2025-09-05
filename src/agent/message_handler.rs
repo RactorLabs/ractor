@@ -267,6 +267,9 @@ impl MessageHandler {
 
             // Try to parse as a tool call JSON
             if let Some((tool, input)) = parse_tool_call(&model_text) {
+                // Clean up tool name (remove any channel artifacts)
+                let clean_tool = tool.split('<').next().unwrap_or(&tool).to_string();
+                
                 // Log parsed tool call (with truncated preview to avoid leaking data)
                 let mut preview = if let Some(s) = input.as_str() {
                     s.to_string()
@@ -274,13 +277,23 @@ impl MessageHandler {
                     serde_json::to_string(&input).unwrap_or_else(|_| "<unprintable>".to_string())
                 };
                 if preview.len() > 300 { preview.truncate(300); preview.push_str("…"); }
-                info!("Tool call: {} input: {}", tool, preview);
+                info!("Tool call: {} input: {}", clean_tool, preview);
 
                 // Send tool execution notification to user
-                let tool_description = match tool.as_str() {
+                let tool_description = match clean_tool.as_str() {
                     "bash" => {
-                        if let Some(s) = input.get("cmd").and_then(|v| v.as_str()) {
-                            s.to_string()
+                        // Handle cmd as array (most common) or string
+                        if let Some(cmd_val) = input.get("cmd") {
+                            if let Some(arr) = cmd_val.as_array() {
+                                // cmd is an array like ["python3", "script.py"] - join with spaces
+                                let parts: Vec<String> = arr.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect();
+                                parts.join(" ")
+                            } else if let Some(s) = cmd_val.as_str() {
+                                // cmd is a string
+                                s.to_string()
+                            } else {
+                                "invalid cmd format".to_string()
+                            }
                         } else if let Some(s) = input.get("command").and_then(|v| v.as_str()) {
                             s.to_string()
                         } else if let Some(s) = input.as_str() {
@@ -295,7 +308,8 @@ impl MessageHandler {
                                 "unknown command".to_string()
                             }
                         } else {
-                            "unknown command".to_string()
+                            // Fallback: show the raw input structure for debugging
+                            format!("bash command: {}", serde_json::to_string(&input).unwrap_or_else(|_| "unknown".to_string()))
                         }
                     },
                     "text_editor" => {
@@ -310,13 +324,13 @@ impl MessageHandler {
                             .unwrap_or("unknown");
                         format!("{} {}", action, path)
                     },
-                    _ => format!("Executing {} tool", tool),
+                    _ => format!("Executing {} tool", clean_tool),
                 };
 
-                self.send_tool_message(&tool_description, &tool).await?;
+                self.send_tool_message(&tool_description, &clean_tool).await?;
 
                 // Execute tool
-                let tool_result = match tool.as_str() {
+                let tool_result = match clean_tool.as_str() {
                     "bash" => {
                         let cmd = if let Some(s) = input.get("cmd").and_then(|v| v.as_str()) {
                             s.to_string()
@@ -408,9 +422,9 @@ impl MessageHandler {
                 };
 
                 // Summarize result length for logging (content logged below is truncated inside tools)
-                info!("Tool result: {} ({} bytes)", tool, tool_result.len());
+                info!("Tool result: {} ({} bytes)", clean_tool, tool_result.len());
                 // Cookbook alignment: feed tool result as role "tool" with name
-                conversation.push(ChatMessage { role: "tool".to_string(), content: tool_result, name: Some(tool.clone()) });
+                conversation.push(ChatMessage { role: "tool".to_string(), content: tool_result, name: Some(clean_tool.clone()) });
 
                 continue;
             } else {
