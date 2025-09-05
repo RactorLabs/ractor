@@ -305,7 +305,7 @@ for component in "${COMPONENTS[@]}"; do
                 print_status "No OLLAMA_MEMORY set; defaulting to ${OLLAMA_MEMORY}"
             fi
             if [ -z "${OLLAMA_SHM_SIZE:-}" ]; then
-                OLLAMA_SHM_SIZE="12g"
+                OLLAMA_SHM_SIZE="24g"
                 SHM_FLAG="--shm-size ${OLLAMA_SHM_SIZE}"
                 print_status "No OLLAMA_SHM_SIZE set; defaulting to ${OLLAMA_SHM_SIZE}"
             fi
