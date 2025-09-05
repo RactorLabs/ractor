@@ -1161,6 +1161,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
+        // Propagate optional Brave Search API key for web_search tool
+        if let Ok(v) = std::env::var("BRAVE_API_KEY") {
+            if !v.is_empty() {
+                env.push(format!("BRAVE_API_KEY={}", v));
+            }
+        }
+
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
             env.push("RAWORC_HAS_SETUP=true".to_string());
@@ -1349,6 +1356,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_PRINCIPAL={}", principal),
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
+
+        // Propagate optional Brave Search API key for web_search tool
+        if let Ok(v) = std::env::var("BRAVE_API_KEY") {
+            if !v.is_empty() {
+                env.push(format!("BRAVE_API_KEY={}", v));
+            }
+        }
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
