@@ -23,8 +23,8 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Initialize service logging
-    let _ = logging::init_service_logging("/app/logs", "raworc_agent");
+    // Initialize service logging (write alongside agent data)
+    let _ = logging::init_service_logging("/agent/logs", "raworc_agent");
 
     // Run the Agent (Computer Use Agent) with comprehensive error handling
     loop {
