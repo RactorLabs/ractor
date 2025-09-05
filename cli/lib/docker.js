@@ -49,8 +49,8 @@ class DockerManager {
 
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
-    // Default to all services if none specified
-    const serviceList = services.length > 0 ? services : ['raworc_mysql', 'raworc_server', 'raworc_operator'];
+    // Default to API server and operator if none specified
+    const serviceList = services.length > 0 ? services : ['raworc_server', 'raworc_operator'];
     
     // Map service names to component names
     const componentMap = {
@@ -192,7 +192,8 @@ class DockerManager {
 
   // Stop services
   async stop(services = [], cleanup = false) {
-    const serviceList = services.length > 0 ? services : ['raworc_operator', 'raworc_server', 'raworc_mysql'];
+    // Default to stopping operator and server only
+    const serviceList = services.length > 0 ? services : ['raworc_operator', 'raworc_server'];
     
     // Map service names to component names
     const componentMap = {

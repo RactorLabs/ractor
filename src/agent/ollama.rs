@@ -56,12 +56,25 @@ struct ChatRequest<'a> {
 }
 
 #[derive(Debug, Deserialize)]
+struct ToolCall {
+    function: ToolCallFunction,
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolCallFunction {
+    name: String,
+    arguments: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
 struct ChatResponseMessage {
     #[serde(default)]
     role: String,
     content: String,
     #[serde(default)]
     thinking: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<ToolCall>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -204,10 +217,14 @@ impl OllamaClient {
             )));
         }
 
-        let parsed: ChatResponse = resp
-            .json()
-            .await
-            .map_err(|e| HostError::Model(format!("Failed to parse Ollama response: {}", e)))?;
+        // Debug: Get raw response text first
+        let response_text = resp.text().await
+            .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
+        
+        tracing::info!("Raw Ollama response: {}", response_text);
+        
+        let parsed: ChatResponse = serde_json::from_str(&response_text)
+            .map_err(|e| HostError::Model(format!("Failed to parse Ollama response: {} | Raw: {}", e, response_text)))?;
 
         tracing::info!("Ollama response parsed successfully, content length: {}", parsed.message.content.len());
         tracing::info!("Content preview: {:?}", if parsed.message.content.len() > 100 { 
@@ -215,7 +232,50 @@ impl OllamaClient {
         } else { 
             parsed.message.content.clone() 
         });
+        tracing::info!("Tool calls present: {:?}", parsed.message.tool_calls.is_some());
+        if let Some(ref tool_calls) = parsed.message.tool_calls {
+            tracing::info!("Number of tool calls: {}", tool_calls.len());
+        }
 
-        Ok(parsed.message.content)
+        // Check for structured tool calls first (gpt-oss format)
+        if let Some(tool_calls) = &parsed.message.tool_calls {
+            if let Some(first_call) = tool_calls.first() {
+                tracing::info!("Found structured tool call: {} with args: {:?}", 
+                    first_call.function.name, first_call.function.arguments);
+                
+                // Convert to our expected JSON format
+                let tool_call_json = serde_json::json!({
+                    "tool": first_call.function.name,
+                    "input": first_call.function.arguments
+                });
+                return Ok(tool_call_json.to_string());
+            }
+        }
+
+        // Fall back to content-based tool calls if no structured calls found
+        let content = &parsed.message.content;
+        
+        // Check if content contains JSON that looks like a tool call
+        if content.trim().starts_with("{") && content.trim().ends_with("}") {
+            tracing::info!("Content looks like JSON, attempting to parse as tool call");
+            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(content) {
+                // Check if it has tool call structure
+                if json_val.get("tool").is_some() || json_val.get("function").is_some() {
+                    tracing::info!("Content appears to be a tool call JSON: {}", content);
+                    return Ok(content.clone());
+                }
+            }
+        }
+        
+        // If content is empty but we expected a tool call, that's likely the issue
+        if content.trim().is_empty() {
+            tracing::warn!("Received empty content from Ollama with no structured tool calls");
+            tracing::warn!("This may indicate a tool call parsing issue or the model needs different prompting");
+            // Return a helpful error message
+            return Ok("I didn't receive a clear response from the model. This might be a tool call parsing issue. Could you try asking me to perform a specific action, like 'create a file' or 'run a command'?".to_string());
+        }
+
+        tracing::info!("Returning content as regular text response");
+        Ok(content.clone())
     }
 }

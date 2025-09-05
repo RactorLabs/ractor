@@ -13,7 +13,7 @@ module.exports = (program) => {
         // Show command box with stop info
         const operation = components.length > 0 ? 
           `Stop components: ${components.join(', ')}` : 
-          'Stop all Raworc services';
+          'Stop API server and operator';
         display.showCommandBox(`${display.icons.stop} Stop Services`, {
           operation: operation
         });

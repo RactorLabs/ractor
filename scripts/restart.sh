@@ -40,7 +40,7 @@ usage() {
     echo "  mysql       Restart only the MySQL database"
     echo "  server      Restart only the API server"
     echo "  operator    Restart only the operator service"
-    echo "  (default)   Restart all services"
+    echo "  (default)   Restart server and operator"
     echo ""
     echo "Options:"
     echo "  -b, --build             Build images before starting"
@@ -113,7 +113,7 @@ print_status "🔄 Restarting Raworc services with direct Docker management"
 if [ ${#COMPONENTS[@]} -gt 0 ]; then
     print_status "Components: ${COMPONENTS[*]}"
 else
-    print_status "Components: all"
+    print_status "Components: server operator"
 fi
 
 print_status "Options: Build=$BUILD, Cleanup=$CLEANUP, Pull=$PULL, Detached=$DETACHED"

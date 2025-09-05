@@ -13,7 +13,7 @@ module.exports = (program) => {
         // Show command box with start info
         const operation = components.length > 0 ? 
           `Start components: ${components.join(', ')}` : 
-          'Start all Raworc services';
+          'Start API server and operator';
         display.showCommandBox(`${display.icons.start} Start Services`, {
           operation: operation
         });

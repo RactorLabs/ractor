@@ -60,9 +60,10 @@ usage() {
     echo ""
     echo "Components:"
     echo "  mysql       Start only the MySQL database"
+    echo "  ollama      Start only the Ollama runtime"
     echo "  server      Start only the API server"
     echo "  operator    Start only the operator service"
-    echo "  (default)   Start all services"
+    echo "  (default)   Start server and operator"
     echo ""
     echo "Options:"
     echo "  -b, --build             Build images before starting"
@@ -72,8 +73,8 @@ usage() {
     echo "  -h, --help              Show this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                      Start all services"
-    echo "  $0 --build              Build images and start all services"
+    echo "  $0                      Start server and operator"
+    echo "  $0 --build              Build images and start server/operator"
     echo "  $0 mysql server         Start only database and server"
     echo "  $0 --pull               Pull base images and start"
 }
@@ -118,9 +119,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Default to all components if none specified
+# Default to server and operator if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-    COMPONENTS=("mysql" "ollama" "server" "operator")
+    COMPONENTS=("server" "operator")
 fi
 
 print_status "Starting Raworc services with direct Docker management"

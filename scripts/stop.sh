@@ -40,7 +40,7 @@ usage() {
     echo "  mysql       Stop only the MySQL database"
     echo "  server      Stop only the API server"
     echo "  operator    Stop only the operator service"
-    echo "  (default)   Stop all services"
+    echo "  (default)   Stop server and operator"
     echo ""
     echo "Options:"
     echo "  -c, --cleanup           Clean up agent containers after stopping"
@@ -98,9 +98,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Default to all components if none specified
+# Default to server and operator if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-    COMPONENTS=("server" "operator" "ollama" "mysql")
+    COMPONENTS=("server" "operator")
 fi
 
 print_status "Stopping Raworc services with direct Docker management"
