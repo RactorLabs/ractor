@@ -16,7 +16,6 @@ const logoutCommand = require('./commands/logout');
 const tokenCommand = require('./commands/token');
 const apiCommand = require('./commands/api');
 const pullCommand = require('./commands/pull');
-const setupCommand = require('./commands/setup');
 const doctorCommand = require('./commands/doctor');
 
 const program = new Command();
@@ -38,7 +37,6 @@ logoutCommand(program);
 tokenCommand(program);
 apiCommand(program);
 pullCommand(program);
-setupCommand(program);
 doctorCommand(program);
 
 // Default help behavior
