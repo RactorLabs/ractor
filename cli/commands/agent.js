@@ -626,6 +626,8 @@ async function startInteractiveAgent(agentName, options) {
           showPrompt(state);
           promptManager.visible = true;
         },
+        pauseRedrawFn: () => promptManager.pauseRedraw(),
+        resumeRedrawFn: () => promptManager.resumeRedraw(),
         currentState: promptManager.currentState
       });
       
@@ -712,9 +714,14 @@ async function waitForAgentResponse(agentName, userMessageTime, timeoutMs = 6000
 
 // Shared function to display agent messages (tool calls + final response)
 function displayAgentMessage(message, options = {}) {
-  const { clearPromptFn, showPromptFn, updateStateFn, setPromptVisibleFn } = options;
+  const { clearPromptFn, showPromptFn, updateStateFn, setPromptVisibleFn, pauseRedrawFn, resumeRedrawFn } = options;
   const metadata = message.metadata;
   
+  // Pause prompt redraw/state monitoring while rendering long outputs
+  if (typeof pauseRedrawFn === 'function') {
+    try { pauseRedrawFn(); } catch (_) {}
+  }
+
   if (metadata && metadata.type === 'tool_execution') {
     // Handle tool execution message
     if (clearPromptFn) {
@@ -743,6 +750,9 @@ function displayAgentMessage(message, options = {}) {
         showPromptFn(options.currentState || 'init');
       }
     }
+    if (typeof resumeRedrawFn === 'function') {
+      try { resumeRedrawFn(); } catch (_) {}
+    }
     return 'tool_execution';
   } else if (metadata && metadata.type === 'assistant_reasoning') {
     // Handle Claude's reasoning/explanation before tool execution
@@ -756,6 +766,9 @@ function displayAgentMessage(message, options = {}) {
     console.log(formattedContent.trim());
     
     // Don't show prompt after reasoning - tool execution will handle it
+    if (typeof resumeRedrawFn === 'function') {
+      try { resumeRedrawFn(); } catch (_) {}
+    }
     return 'assistant_reasoning';
   } else {
     // Handle conversational response
@@ -778,6 +791,9 @@ function displayAgentMessage(message, options = {}) {
         // In prompt context, just re-show the prompt directly
         showPromptFn(options.currentState || 'init');
       }
+    }
+    if (typeof resumeRedrawFn === 'function') {
+      try { resumeRedrawFn(); } catch (_) {}
     }
     return 'final_response';
   }
@@ -927,6 +943,38 @@ function createPromptManager(agentName, userInput = '') {
       dotAnimationInterval = null;
     }
   };
+
+  // Expose lightweight pause/resume to temporarily suspend redraws
+  const pauseRedraw = () => {
+    if (stateMonitorInterval) {
+      clearInterval(stateMonitorInterval);
+      stateMonitorInterval = null;
+    }
+    if (dotAnimationInterval) {
+      clearInterval(dotAnimationInterval);
+      dotAnimationInterval = null;
+    }
+  };
+
+  const resumeRedraw = () => {
+    // Only resume if prompt is visible; otherwise next show() will start
+    if (!stateMonitorInterval && promptVisible) {
+      stateMonitorInterval = setInterval(updateState, 2000);
+    }
+    if (!dotAnimationInterval && promptVisible) {
+      dotAnimationInterval = setInterval(async () => {
+        await updateState();
+        if (promptVisible && (currentState === 'init' || currentState === 'busy')) {
+          clearPrompt();
+          if (currentUserInput) {
+            showPromptWithInput(currentState, currentUserInput);
+          } else {
+            showPrompt(currentState);
+          }
+        }
+      }, 500);
+    }
+  };
   
   const show = async (skipInitial = false) => {
     if (!skipInitial) {
@@ -964,7 +1012,9 @@ function createPromptManager(agentName, userInput = '') {
     getCurrentState,
     get currentState() { return currentState; },
     get visible() { return promptVisible; },
-    set visible(value) { promptVisible = value; }
+    set visible(value) { promptVisible = value; },
+    pauseRedraw,
+    resumeRedraw
   };
 }
 
@@ -1188,7 +1238,9 @@ async function monitorForResponses(agentName, userMessageTime, getCurrentState, 
               showPromptFn: showPrompt,
               updateStateFn: updateState,
               setPromptVisibleFn: setPromptVisible,
-              currentState: getCurrentState()
+              currentState: getCurrentState(),
+              pauseRedrawFn: () => { try { redrawPause(); } catch (_) {} },
+              resumeRedrawFn: () => { try { redrawResume(); } catch (_) {} }
             });
             
             if (result === 'final_response') {
@@ -1214,6 +1266,8 @@ async function chatLoop(agentName, options = {}) {
   let currentUserInput = '';
   let promptVisible = false; // Track if prompt is currently displayed
   let isRestoringFromClosed = options.isRestore && options.agentState === AGENT_STATE_SLEPT;
+  let isRedrawLocked = false;
+  let resizeDebounceTimer = null;
 
   // Function to fetch and update agent state
   async function updateAgentState() {
@@ -1451,19 +1505,19 @@ async function chatLoop(agentName, options = {}) {
   }
 
   return new Promise((resolve) => {
-    // Handle terminal resizes: re-render the prompt to avoid ghost lines
+    // Handle terminal resizes: re-render the prompt with debounce
     if (process.stdout && process.stdout.isTTY && typeof process.stdout.on === 'function') {
       process.stdout.on('resize', () => {
-        // Only act if our prompt is currently on screen
-        if (promptVisible) {
+        if (!promptVisible || isRedrawLocked) return;
+        if (resizeDebounceTimer) clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = setTimeout(() => {
+          if (!promptVisible || isRedrawLocked) return;
           try {
             clearPrompt();
             showPromptWithInput(currentAgentState, currentUserInput);
             promptVisible = true;
-          } catch (_) {
-            // Best-effort; ignore if terminal cannot handle controls
-          }
-        }
+          } catch (_) {}
+        }, 120);
       });
     }
 
@@ -1853,6 +1907,35 @@ function getStateDisplay(state) {
     'slept': '◻',    // empty square - slept/slept
     'deleted': '◼'    // filled square - deleted
   };
+
+  // Pause/resume helpers for redraw/state monitoring in chatLoop
+  function redrawPause() {
+    isRedrawLocked = true;
+    if (stateMonitorInterval) {
+      clearInterval(stateMonitorInterval);
+      stateMonitorInterval = null;
+    }
+    if (dotAnimationInterval) {
+      clearInterval(dotAnimationInterval);
+      dotAnimationInterval = null;
+    }
+  }
+
+  function redrawResume() {
+    isRedrawLocked = false;
+    if (!stateMonitorInterval && promptVisible) {
+      stateMonitorInterval = setInterval(updateAgentState, 2000);
+    }
+    if (!dotAnimationInterval && promptVisible) {
+      dotAnimationInterval = setInterval(async () => {
+        await updateAgentState();
+        if (promptVisible && (currentAgentState === 'init' || currentAgentState === 'busy')) {
+          clearPrompt();
+          showPromptWithInput(currentAgentState, currentUserInput);
+        }
+      }, 500);
+    }
+  }
 
   const stateColors = {
     'init': chalk.blue,
