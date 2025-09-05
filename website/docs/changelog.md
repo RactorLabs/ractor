@@ -5,9 +5,65 @@ title: Changelog
 
 # Changelog
 
-## [0.5.0] - TBD
+## [0.5.0] - 2025-09-05
 
-Development version - changes will be documented at release.
+**Major Ollama Migration & Tool Call Restoration Release**
+
+### 🚀 Major Features
+
+- **🔄 Complete Ollama Migration**: Replaced Anthropic/Claude with local Ollama inference using `gpt-oss:20b` model
+- **🛠️ Tool Call Display Restoration**: Fixed tool execution notifications in CLI after Ollama migration
+- **⚡ GPU Acceleration Support**: Added `--require-gpu` flag and GPU fallback capabilities for Ollama
+- **🔧 Enhanced Tool Protocol**: Improved tool call handling with better JSON parsing and error recovery
+
+### 🛠️ Tool System Improvements
+
+- **Tool Execution Notifications**: Restored user-facing tool call display (e.g., "● Run Bash → python3 script.py")
+- **Array Command Support**: Fixed bash command parsing for Ollama's array format (`["python3", "script.py"]`)
+- **Clean Tool Names**: Removed `<|channel|>` artifacts from tool names in display
+- **Enhanced Logging**: Added comprehensive tool execution logging to Docker logs with `TOOL_EXECUTION:` prefix
+- **Unlimited Tool Steps**: Removed hard cap on tool execution iterations for complex workflows
+
+### 🐳 Infrastructure & Deployment
+
+- **Ollama Service Integration**: Added `raworc_ollama` service with automatic model pulling and GPU detection
+- **Resource Management**: Added CPU/MEM/SHM/GPU configuration flags for optimal performance
+- **Service Defaults**: Changed default start/stop to server+operator only (explicit mysql/ollama required)
+- **Docker Improvements**: Enhanced container management with better readiness checks and volume handling
+
+### 🔧 CLI Enhancements
+
+- **Ollama Integration**: Removed Anthropic API key validation, added Ollama service mappings
+- **GPU Support**: Added GPU detection and fallback mechanisms for Ollama acceleration
+- **Enhanced Error Handling**: Improved tool call detection with better logging and diagnostics
+- **Service Management**: Updated service control to handle new Ollama component
+
+### 📚 Documentation Updates
+
+- **Complete Migration Guide**: Updated all documentation from Anthropic/Claude to Ollama workflows
+- **Getting Started**: Replaced `ANTHROPIC_API_KEY` with `OLLAMA_HOST` in setup instructions
+- **Architecture Updates**: Revised system architecture documentation to reflect Ollama integration
+- **CLI Usage**: Updated command examples to use local model inference instead of Claude API
+
+### 🔒 Security & Guardrails
+
+- **Guardrails Update**: Removed Anthropic-specific key validation from security checks
+- **Local Model Safety**: Maintained security restrictions while enabling local model inference
+- **Input Validation**: Preserved existing input/output validation with Ollama integration
+
+### ⚡ Performance & Reliability
+
+- **Model Pinning**: Default to `gpt-oss:20b` model for consistent performance
+- **Memory Optimization**: Increased default shared memory to 24GB for better model performance  
+- **Retry Logic**: Enhanced error handling with exponential backoff for transient failures
+- **JSON Tool Detection**: Improved tool call parsing with better error diagnostics
+
+### 🐛 Bug Fixes
+
+- **Tool Call Parsing**: Fixed JSON tool call detection that was causing raw JSON to be displayed as text
+- **Command Extraction**: Fixed "unknown command" issue with Ollama's array-based command format
+- **Name Sanitization**: Fixed malformed tool names containing channel artifacts
+- **NVIDIA Setup**: Hardened repository setup with better error checking and validation
 
 ## [0.4.3] - 2025-09-04
 
