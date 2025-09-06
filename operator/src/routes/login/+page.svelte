@@ -81,6 +81,10 @@
               </button>
             </div>
           </form>
+
+          <div class="text-center mt-3 small">
+            <a href="/docs" class="text-decoration-none">View API Documentation</a>
+          </div>
         </div>
       </Card>
       <div class="text-center small text-body text-opacity-75 mt-3">
