@@ -16,7 +16,7 @@
 
 ## Contributor Workflow Rules
 - Use the CLI for service management: `raworc start|stop|doctor`.
-- Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh` (start/stop/restart/doctor scripts are thin wrappers over the CLI).
+- Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh`.
 - Always run `./scripts/link.sh` before invoking the `raworc` CLI during development.
 - Keep changes minimal and consistent with existing patterns; prefer editing within current modules.
 

@@ -748,11 +748,11 @@ Optional longer description explaining the change.
 - **WAIT for user instruction before testing or committing changes**
 - Complete all changes first, then run cargo check to verify compilation
 - Only proceed with testing or committing after receiving explicit user approval
-- Always use the shell scripts (scripts/ folder) for local development:
-  - Use `./scripts/build.sh` instead of `cargo build` or `docker build`
-  - Use `raworc start` instead of manual `docker run` commands
-  - **CRITICAL**: Link CLI with `./scripts/link.sh` then use `raworc` command
-  - **NEVER use `node index.js` or `node cli/index.js`** - always use the linked `raworc` command (Node.js CLI from cli/ folder)
+- Local development workflow:
+  - Use `./scripts/build.sh` to build images (instead of `cargo build` or `docker build`)
+  - Use `raworc start` / `raworc stop` for service management
+  - **CRITICAL**: Link CLI with `./scripts/link.sh` then use the `raworc` command
+  - **NEVER use `node index.js` or `node cli/index.js`** — always use the linked `raworc` command (Node.js CLI from cli/ folder)
 - Published CLI users should use `raworc` commands directly (Node.js package installed via npm)
 
 ### Version Bump Requirements
