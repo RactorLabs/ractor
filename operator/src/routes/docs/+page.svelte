@@ -58,8 +58,48 @@
                   </td>
                   <td>
                     <div>{ep.desc}</div>
-                    {#if ep.body}
-                      <div class="mt-1 small"><span class="text-body text-opacity-75">Body:</span> <code>{ep.body}</code></div>
+                    {#if ep.params && ep.params.length}
+                      <div class="mt-2">
+                        {#if ep.params.filter(p => p.in === 'path').length}
+                          <div class="fw-500 small mb-1">Path parameters</div>
+                          <div class="table-responsive">
+                            <table class="table table-sm table-bordered small">
+                              <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                              <tbody>
+                                {#each ep.params.filter(p => p.in === 'path') as p}
+                                  <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        {/if}
+                        {#if ep.params.filter(p => p.in === 'query').length}
+                          <div class="fw-500 small mb-1">Query parameters</div>
+                          <div class="table-responsive">
+                            <table class="table table-sm table-bordered small">
+                              <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                              <tbody>
+                                {#each ep.params.filter(p => p.in === 'query') as p}
+                                  <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        {/if}
+                        {#if ep.params.filter(p => p.in === 'body').length}
+                          <div class="fw-500 small mb-1">Body fields</div>
+                          <div class="table-responsive">
+                            <table class="table table-sm table-bordered small">
+                              <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                              <tbody>
+                                {#each ep.params.filter(p => p.in === 'body') as p}
+                                  <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                {/each}
+                              </tbody>
+                            </table>
+                          </div>
+                        {/if}
+                      </div>
                     {/if}
                     {#if ep.example}
                       <pre class="small mt-2 bg-dark text-white p-2 rounded"><code>{ep.example}</code></pre>

@@ -12,6 +12,7 @@ export const apiDocs = [
         path: '/api/v0/version',
         auth: 'public',
         desc: 'Get API version and current version string.',
+        params: [],
         example: 'curl -s http://localhost:9000/api/v0/version'
       }
     ]
@@ -26,21 +27,29 @@ export const apiDocs = [
         path: '/api/v0/operators/{name}/login',
         auth: 'public',
         desc: 'Login with operator name and password. Returns JWT token and user info.',
-        body: '{ "pass": "<password>" }',
-        example: 'curl -s -X POST http://localhost:9000/api/v0/operators/admin/login -H "Content-Type: application/json" -d \'{"pass":"admin"}\''
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
+          { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
+        ],
+        example: 'curl -s -X POST http://localhost:9000/api/v0/operators/admin/login -H "Content-Type: application/json" -d '\'{"pass":"admin"}\''
       },
       {
         method: 'GET',
         path: '/api/v0/auth',
         auth: 'bearer',
         desc: 'Get authenticated operator profile (validate token).',
+        params: [],
         example: 'curl -s http://localhost:9000/api/v0/auth -H "Authorization: Bearer <token>"'
       },
       {
         method: 'POST',
         path: '/api/v0/auth/token',
         auth: 'bearer',
-        desc: 'Create a new token for the current operator (if supported).',
+        desc: 'Create a new token for a principal (admin-only).',
+        params: [
+          { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or operator id)' },
+          { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Operator'" }
+        ],
         example: 'curl -s -X POST http://localhost:9000/api/v0/auth/token -H "Authorization: Bearer <token>"'
       }
     ]
@@ -55,13 +64,17 @@ export const apiDocs = [
         path: '/api/v0/published/agents',
         auth: 'public',
         desc: 'List all published agents.',
+        params: [],
         example: 'curl -s http://localhost:9000/api/v0/published/agents'
       },
       {
         method: 'GET',
         path: '/api/v0/published/agents/{id}',
         auth: 'public',
-        desc: 'Get details of a published agent by id.',
+        desc: 'Get details of a published agent by id (id = agent name).',
+        params: [
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+        ],
         example: 'curl -s http://localhost:9000/api/v0/published/agents/<id>'
       }
     ]
@@ -71,12 +84,28 @@ export const apiDocs = [
     title: 'Operators',
     description: 'Operator management endpoints (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/operators', auth: 'bearer', desc: 'List operators.' },
-      { method: 'POST', path: '/api/v0/operators', auth: 'bearer', desc: 'Create operator.' },
-      { method: 'GET', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Get operator.' },
-      { method: 'PUT', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Update operator.' },
-      { method: 'DELETE', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Delete operator.' },
-      { method: 'PUT', path: '/api/v0/operators/{name}/password', auth: 'bearer', desc: 'Update operator password.' }
+      { method: 'GET', path: '/api/v0/operators', auth: 'bearer', desc: 'List operators.', params: [] },
+      { method: 'POST', path: '/api/v0/operators', auth: 'bearer', desc: 'Create operator.', params: [
+        { in: 'body', name: 'user', type: 'string', required: true, desc: 'Operator username' },
+        { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Password' },
+        { in: 'body', name: 'description', type: 'string', required: false, desc: 'Optional description' }
+      ] },
+      { method: 'GET', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Get operator.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' }
+      ] },
+      { method: 'PUT', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Update operator.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
+        { in: 'body', name: 'description', type: 'string', required: false, desc: 'Optional description' },
+        { in: 'body', name: 'active', type: 'boolean|null', required: false, desc: 'Set active status; must be boolean or null' }
+      ] },
+      { method: 'DELETE', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Delete operator.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' }
+      ] },
+      { method: 'PUT', path: '/api/v0/operators/{name}/password', auth: 'bearer', desc: 'Update operator password.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
+        { in: 'body', name: 'current_password', type: 'string', required: true, desc: 'Current password' },
+        { in: 'body', name: 'new_password', type: 'string', required: true, desc: 'New password' }
+      ] }
     ]
   },
   {
@@ -84,19 +113,65 @@ export const apiDocs = [
     title: 'Agents',
     description: 'Agent lifecycle and management endpoints (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List agents.' },
-      { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.' },
-      { method: 'GET', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Get agent by id.' },
-      { method: 'PUT', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Update agent by id.' },
-      { method: 'PUT', path: '/api/v0/agents/{id}/state', auth: 'bearer', desc: 'Update agent state (generic).' },
-      { method: 'POST', path: '/api/v0/agents/{id}/busy', auth: 'bearer', desc: 'Set agent busy.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/idle', auth: 'bearer', desc: 'Set agent idle.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/sleep', auth: 'bearer', desc: 'Put agent to sleep.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/wake', auth: 'bearer', desc: 'Wake agent.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/remix', auth: 'bearer', desc: 'Remix agent.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/publish', auth: 'bearer', desc: 'Publish agent.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/unpublish', auth: 'bearer', desc: 'Unpublish agent.' },
-      { method: 'DELETE', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Delete agent.' }
+      { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List agents.', params: [
+        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept|deleted)' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
+        { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
+        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
+        { in: 'body', name: 'secrets', type: 'object<string,string>', required: false, desc: 'Key/value secrets map (default: empty)' },
+        { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
+        { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
+        { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
+        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Timeout in seconds (default 60)' }
+      ] },
+      { method: 'GET', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Get agent by id (id = agent name).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'PUT', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Update agent by id.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
+        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Update timeout seconds' }
+      ] },
+      { method: 'PUT', path: '/api/v0/agents/{id}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' },
+        { in: 'body', name: 'content_port', type: 'int|null', required: false, desc: 'Optional port used by agent content server' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/busy', auth: 'bearer', desc: 'Set agent busy.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/idle', auth: 'bearer', desc: 'Set agent idle.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/sleep', auth: 'bearer', desc: 'Put agent to sleep.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/wake', auth: 'bearer', desc: 'Wake agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on wake' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Parent agent name' },
+        { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
+        { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
+        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Copy code (default true)' },
+        { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Copy secrets (default true)' },
+        { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
+        { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/publish', auth: 'bearer', desc: 'Publish agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code remix (default true)' },
+        { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Allow secrets remix (default true)' },
+        { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/unpublish', auth: 'bearer', desc: 'Unpublish agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'DELETE', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Delete agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] }
     ]
   },
   {
@@ -104,10 +179,23 @@ export const apiDocs = [
     title: 'Agent Messages',
     description: 'Send and retrieve messages for a given agent (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'List messages for agent.' },
-      { method: 'POST', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Create a message for agent.' },
-      { method: 'GET', path: '/api/v0/agents/{id}/messages/count', auth: 'bearer', desc: 'Get message count for agent.' },
-      { method: 'DELETE', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Clear messages for agent.' }
+      { method: 'GET', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'List messages for agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
+        { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
+      ] },
+      { method: 'POST', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Create a message for agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'role', type: "'user'|'agent'|'system'", required: false, desc: "Message role (default 'user')" },
+        { in: 'body', name: 'content', type: 'string', required: true, desc: 'Message text content' },
+        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' }
+      ] },
+      { method: 'GET', path: '/api/v0/agents/{id}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] },
+      { method: 'DELETE', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      ] }
     ]
   }
 ];
@@ -122,4 +210,3 @@ export function methodClass(method) {
     default: return 'badge bg-secondary';
   }
 }
-
