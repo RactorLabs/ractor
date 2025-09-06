@@ -125,9 +125,43 @@ module.exports = (program) => {
       try {
         const detached = options.foreground ? false : (options.detached !== false);
         const tag = readProjectVersionOrLatest();
-        const SERVER_IMAGE = `raworc_server:${tag}`;
-        const OPERATOR_IMAGE = `raworc_operator:${tag}`;
-        const AGENT_IMAGE = `raworc_agent:${tag}`;
+
+        async function imageExistsLocally(name) {
+          try {
+            const res = await docker(['images','-q', name], { silent: true });
+            return !!res.stdout.trim();
+          } catch (_) { return false; }
+        }
+
+        async function resolveRaworcImage(component, localShortName, remoteRepo, tag) {
+          const localName = `${localShortName}:${tag}`;
+          if (await imageExistsLocally(localName)) {
+            console.log(chalk.blue('[INFO] ') + `${component}: using local image ${localName}`);
+            return localName;
+          }
+          const remoteTagged = `${remoteRepo}:${tag}`;
+          const remoteLatest = `${remoteRepo}:latest`;
+          console.log(chalk.blue('[INFO] ') + `${component}: local image not found (${localName}); pulling ${remoteTagged}...`);
+          try {
+            await docker(['pull', remoteTagged]);
+            console.log(chalk.green('[SUCCESS] ') + `Pulled ${remoteTagged}`);
+            return remoteTagged;
+          } catch (e1) {
+            console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${remoteTagged}: ${e1.message}`);
+            console.log(chalk.blue('[INFO] ') + `Trying ${remoteLatest}...`);
+            try {
+              await docker(['pull', remoteLatest]);
+              console.log(chalk.green('[SUCCESS] ') + `Pulled ${remoteLatest}`);
+              return remoteLatest;
+            } catch (e2) {
+              throw new Error(`Unable to find image for ${component}. Tried local ${localName}, remote ${remoteTagged} and ${remoteLatest}`);
+            }
+          }
+        }
+
+        const SERVER_IMAGE = await resolveRaworcImage('server','raworc_server','raworc/raworc_server', tag);
+        const OPERATOR_IMAGE = await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag);
+        const AGENT_IMAGE = await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
 
         console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
@@ -153,6 +187,7 @@ module.exports = (program) => {
         if (options.pull) {
           console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
           try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
+          // Raworc images are already resolved and pulled above if missing.
           console.log();
         }
 
