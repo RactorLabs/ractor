@@ -3,6 +3,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { setToken, setOperatorName, isAuthenticated } from '$lib/auth.js';
   import { goto } from '$app/navigation';
+  import Card from '/src/components/bootstrap/Card.svelte';
 
   setPageTitle('Login');
 
@@ -47,7 +48,7 @@
 <div class="container">
   <div class="row justify-content-center align-items-center" style="min-height: 70vh;">
     <div class="col-md-6 col-lg-5 col-xl-4">
-      <div class="card shadow-sm">
+      <Card class="shadow-sm">
         <div class="card-body p-4">
           <div class="d-flex align-items-center mb-3">
             <div class="brand-logo me-2">
@@ -81,7 +82,7 @@
             </div>
           </form>
         </div>
-      </div>
+      </Card>
       <div class="text-center small text-body text-opacity-75 mt-3">
         Use default admin/admin in dev, then change password.
       </div>
@@ -90,4 +91,3 @@
   <div class="mb-5"></div>
   <div class="mb-5"></div>
 </div>
-

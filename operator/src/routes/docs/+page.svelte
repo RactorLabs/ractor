@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { apiDocs, methodClass } from '$lib/api/docs.js';
   import { setPageTitle } from '$lib/utils.js';
+  import Card from '/src/components/bootstrap/Card.svelte';
 
   let apiVersion = null;
   let apiError = null;
@@ -22,7 +23,7 @@
 
 <div class="row">
   <div class="col-xl-9">
-    <div class="card mb-3">
+    <Card class="mb-3">
       <div class="card-body">
         <div class="d-flex align-items-center">
           <div class="flex-1">
@@ -55,10 +56,10 @@
         </div>
         {/if}
       </div>
-    </div>
+    </Card>
 
     {#each apiDocs as section}
-    <div id={section.id} class="card mb-3">
+    <Card id={section.id} class="mb-3">
       <div class="card-header d-flex align-items-center">
         <div class="flex-1">
           <div class="fw-bold">{section.title}</div>
@@ -100,12 +101,12 @@
           </table>
         </div>
       </div>
-    </div>
+    </Card>
     {/each}
   </div>
 
   <div class="col-xl-3">
-    <div class="card">
+    <Card>
       <div class="card-header fw-bold">Sections</div>
       <div class="list-group list-group-flush">
         {#each apiDocs as section}
@@ -116,6 +117,6 @@
         <div>Interactive views are available after login.</div>
         <div class="mt-2"><a href="/login" class="text-decoration-none">Go to Login</a></div>
       </div>
-    </div>
+    </Card>
   </div>
 </div>
