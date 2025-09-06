@@ -566,13 +566,13 @@ async function startInteractiveAgent(agentName, options) {
             : msg.content;
 
           if (msg.role === 'user') {
-            // User messages: show with green "> " prefix
+            // User messages: show without any "> " prefix
             const lines = content.split('\n');
             lines.forEach(line => {
               if (line.trim() === '') {
-                console.log(chalk.green('> '));
+                console.log('');
               } else {
-                console.log(chalk.green('> ') + chalk.white(line));
+                console.log(chalk.white(line));
               }
             });
           } else {
@@ -598,7 +598,7 @@ async function startInteractiveAgent(agentName, options) {
 
   // Handle prompt if provided (for any agent type)
   if (options.prompt) {
-    console.log(chalk.green('> ') + chalk.white(options.prompt));
+    console.log(chalk.white(options.prompt));
 
     // Create comprehensive prompt manager
     const promptManager = createPromptManager(agentName);
@@ -1475,7 +1475,7 @@ async function chatLoop(agentName, options = {}) {
   process.on('SIGTERM', () => cleanup());
 
   async function sendMessage(agentName, userInput) {
-    console.log(chalk.green('> ') + chalk.white(userInput));
+    console.log(chalk.white(userInput));
     
     // Show prompt with current actual state
     showPrompt(currentAgentState);
