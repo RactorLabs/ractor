@@ -54,10 +54,10 @@ git log --oneline <last-version>..HEAD
 ## Example workflow
 
 ```
-Current version: 0.5.1
+Current version: 0.5.2
 → Stage changes and commit
-→ Tag 0.5.1 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
-→ Use /bump command to increment to 0.5.2
+→ Tag 0.5.2 and push (triggers GitHub Actions) - NOTE: NO "v" prefix
+→ Use /bump command to increment to 0.5.3
 → Use /commit to push version bump
 ```
 
