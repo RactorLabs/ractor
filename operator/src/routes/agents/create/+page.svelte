@@ -9,12 +9,13 @@
   setPageTitle('Create Agent');
 
   // Simple readable-name generator obeying ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-  const adjectives = ['bright','calm','clever','daring','eager','gentle','nimble','rapid','brave','lucid','solar','lunar','ember','crisp'];
-  const nouns = ['sparrow','otter','lynx','falcon','kiwi','marten','badger','finch','heron','sprout','spruce','cedar','ember','quartz'];
+  // Name format: super_power + creature (animal/bird/mythical)
+  const superPowers = ['blaze','thunder','quantum','shadow','solar','lunar','arcane','cyber','turbo','frost','ember','vortex','echo','phantom','nova','aether','plasma','neon','storm','iron'];
+  const creatures = ['wolf','falcon','dragon','phoenix','griffin','hydra','leviathan','unicorn','pegasus','tiger','hawk','raven','lynx','otter','manticore','basilisk','sphinx','wyvern','kitsune','naga'];
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/^-+|\-+$/g,''); }
   function genName() {
-    const s = `${pick(adjectives)}-${pick(nouns)}`;
+    const s = `${pick(superPowers)}-${pick(creatures)}`;
     let name = slugify(s);
     if (!/^[a-z]/.test(name)) name = 'a' + name;
     if (/[^a-z0-9]$/.test(name)) name += '0';
@@ -25,8 +26,11 @@
   let name = genName();
   let timeoutSeconds = 300; // default 5 minutes
   let metadataText = '{\n  "description": "",\n  "tags": []\n}';
-  let instructions = '# Agent Instructions\n\n- Describe the agent\'s purpose here.\n- List capabilities and constraints.';
-  let setup = '#!/usr/bin/env bash\n# Setup script (optional)\n# e.g., install packages or prepare files\nset -euo pipefail\n';
+  // Leave empty by default; show samples in the sidebar instead
+  let instructions = '';
+  let setup = '';
+  const sampleInstructions = `# Agent Instructions\n\n- Greet the user and explain your purpose.\n- You can run shell commands and edit files via tools when asked.\n- Ask clarifying questions before taking destructive actions.\n- Keep responses concise unless the user requests more detail.`;
+  const sampleSetup = `#!/usr/bin/env bash\n# Optional setup script\n# Install packages or prepare files needed by your agent\nset -euo pipefail\n\n# examples:\n# apt-get update && apt-get install -y jq ripgrep\n# echo \"Hello from setup\" > /agent/content/hello.txt`;
   let prompt = '';
 
   // Secrets as dynamic rows
@@ -159,16 +163,21 @@
     <Card>
       <div class="card-header fw-bold">About</div>
       <div class="card-body small text-body text-opacity-75">
-        <ul class="mb-0 ps-3">
-          <li>Prefilled with sensible defaults; adjust name and settings.</li>
-          <li>Instructions and setup script are optional but recommended.</li>
+        <ul class="ps-3">
+          <li>Adjust name and timeout; other fields are optional.</li>
+          <li>Instructions and setup are not prefilled; see samples below.</li>
           <li>Secrets are saved to the agent volume and injected at runtime.</li>
         </ul>
+        <div class="fw-500 mt-3">Sample Instructions</div>
+        <pre class="small bg-dark text-white p-2 rounded code-wrap"><code>{sampleInstructions}</code></pre>
+        <div class="fw-500 mt-3">Sample Setup Script</div>
+        <pre class="small bg-dark text-white p-2 rounded code-wrap"><code>{sampleSetup}</code></pre>
       </div>
     </Card>
   </div>
 
   <style>
     .font-monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
   </style>
 </div>
