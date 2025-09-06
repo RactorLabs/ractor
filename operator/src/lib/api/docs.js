@@ -31,7 +31,7 @@ export const apiDocs = [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
           { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
         ],
-        example: 'curl -s -X POST http://localhost:9000/api/v0/operators/admin/login -H "Content-Type: application/json" -d '\'{"pass":"admin"}\''
+        example: "curl -s -X POST http://localhost:9000/api/v0/operators/admin/login -H \"Content-Type: application/json\" -d '{\"pass\":\"admin\"}'"
       },
       {
         method: 'GET',

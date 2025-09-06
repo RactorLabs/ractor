@@ -64,12 +64,15 @@
 
           <form on:submit|preventDefault={submit}>
             <div class="mb-3">
-              <label class="form-label">Operator</label>
-              <input class="form-control" bind:value={operator} placeholder="admin" required autocomplete="username" />
+              <label class="form-label" for="operator-input">Operator</label>
+              <input id="operator-input" class="form-control" bind:value={operator} placeholder="admin" required autocomplete="username" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Password</label>
-              <input type="password" class="form-control" bind:value={pass} placeholder="••••••••" required autocomplete="current-password" />
+              <div class="d-flex">
+                <label class="form-label" for="password-input">Password</label>
+                <a href="#/" aria-label="link" class="ms-auto text-inverse text-decoration-none text-opacity-50">Forgot password?</a>
+              </div>
+              <input id="password-input" type="password" class="form-control" bind:value={pass} placeholder="••••••••" required autocomplete="current-password" />
             </div>
             <div class="d-grid">
               <button class="btn btn-theme" disabled={loading}>
