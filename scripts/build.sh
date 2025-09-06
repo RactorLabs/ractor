@@ -94,7 +94,7 @@ fi
 
 # Expand 'all' to actual components
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("server" "controller" "agent")
+  COMPONENTS=("server" "controller" "agent" "operator")
 fi
 
 print_status "Building Raworc Docker images"
@@ -141,6 +141,10 @@ for component in "${COMPONENTS[@]}"; do
   agent)
     image_name="raworc_agent:${TAG}"
     dockerfile="Dockerfile.agent"
+    ;;
+  operator)
+    image_name="raworc_operator:${TAG}"
+    dockerfile="Dockerfile.operator"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."

@@ -8,7 +8,8 @@ class DockerManager {
       mysql: 'mysql:8.0',
       server: 'raworc/raworc_server:latest',
       controller: 'raworc/raworc_controller:latest',
-      agent: 'raworc/raworc_agent:latest'
+      agent: 'raworc/raworc_agent:latest',
+      operator: 'raworc/raworc_operator:latest'
     };
   }
 
@@ -49,14 +50,16 @@ class DockerManager {
 
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
-    // Default to API server and controller if none specified
-    const serviceList = services.length > 0 ? services : ['raworc_server', 'raworc_controller'];
+    // Default to full stack if none specified
+    const serviceList = services.length > 0 ? services : ['raworc_mysql', 'raworc_server', 'raworc_operator', 'raworc_controller', 'raworc_gateway'];
     
     // Map service names to component names
     const componentMap = {
       'raworc_server': 'server',
       'raworc_controller': 'controller',
-      'raworc_mysql': 'mysql'
+      'raworc_mysql': 'mysql',
+      'raworc_operator': 'operator',
+      'raworc_gateway': 'gateway'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -94,7 +97,7 @@ class DockerManager {
       }
     }
 
-    // Start services in order: mysql, server, controller
+    // Start services in order
     for (const component of components) {
       await this.startService(component);
     }
@@ -135,6 +138,32 @@ class DockerManager {
         // Wait for MySQL to be healthy
         await this.waitForMysql();
         break;
+
+      case 'operator':
+        await this.execDocker([
+          'run', '-d',
+          '--name', 'raworc_operator',
+          '--network', 'raworc_network',
+          this.images.operator
+        ]);
+        console.log('🚀 raworc_operator started');
+        break;
+
+      case 'gateway': {
+        // Use nginx:alpine and mount our gateway config
+        const projectRoot = path.resolve(__dirname, '..', '..');
+        const confPath = path.join(projectRoot, 'assets', 'nginx', 'gateway.conf');
+        await this.execDocker([
+          'run', '-d',
+          '--name', 'raworc_gateway',
+          '--network', 'raworc_network',
+          '-p', '80:80',
+          '-v', `${confPath}:/etc/nginx/conf.d/default.conf:ro`,
+          'nginx:alpine'
+        ]);
+        console.log('🚀 raworc_gateway started (port 80)');
+        break;
+      }
 
       case 'server':
         await this.execDocker([
@@ -192,14 +221,16 @@ class DockerManager {
 
   // Stop services
   async stop(services = [], cleanup = false) {
-    // Default to stopping controller and server only
-    const serviceList = services.length > 0 ? services : ['raworc_controller', 'raworc_server'];
+    // Default to stopping gateway, controller, operator and server
+    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_server'];
     
     // Map service names to component names
     const componentMap = {
       'raworc_server': 'server',
       'raworc_controller': 'controller',
-      'raworc_mysql': 'mysql'
+      'raworc_mysql': 'mysql',
+      'raworc_operator': 'operator',
+      'raworc_gateway': 'gateway'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
