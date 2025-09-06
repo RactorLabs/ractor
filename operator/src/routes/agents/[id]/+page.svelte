@@ -110,10 +110,14 @@
     }
   }
 
-  async function clearMessages() {
-    if (!confirm('Clear this conversation?')) return;
-    const res = await apiFetch(`/agents/${encodeURIComponent(id)}/messages`, { method: 'DELETE' });
-    if (res.ok) messages = [];
+  async function sleepAgent() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(id)}/sleep`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.error || `Sleep failed (HTTP ${res.status})`);
+      await fetchAgent();
+    } catch (e) {
+      error = e.message || String(e);
+    }
   }
 
   onMount(async () => {
@@ -141,7 +145,7 @@
         <div>{#if agent}<span class={stateClass(agent.state)}>{agent.state}</span>{/if}</div>
         <div class="ms-auto d-flex gap-2">
           <button class="btn btn-outline-secondary btn-sm" on:click={fetchMessages} aria-label="Refresh">Refresh</button>
-          <button class="btn btn-outline-danger btn-sm" on:click={clearMessages} aria-label="Clear conversation">Clear</button>
+          <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
         </div>
       </div>
       <div class="card-body d-flex flex-column px-3 px-lg-4 py-2" style="min-height: 60vh; background: transparent;">
