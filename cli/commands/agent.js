@@ -1352,6 +1352,13 @@ async function chatLoop(agentName, options = {}) {
     } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
       currentUserInput += str;
     }
+
+    // Live redraw the prompt to reflect the updated input without jumps
+    if (promptVisible) {
+      try { clearPrompt(); } catch (_) {}
+      showPromptWithInput(currentAgentState, currentUserInput);
+      promptVisible = true;
+    }
   });
 
   rl.on('line', async (input) => {
