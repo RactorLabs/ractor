@@ -673,15 +673,12 @@ impl AgentManager {
 
         let agent_container = format!("raworc_agent_{}", agent_name);
 
-        // First, create the public directory in the server container
-        let public_dir = format!("/public/{}", agent_name);
-        info!(
-            "Executing: docker exec raworc_server mkdir -p {}",
-            public_dir
-        );
+        // First, create the content directory in the content container
+        let public_dir = format!("/content/{}", agent_name);
+        info!("Executing: docker exec raworc_content mkdir -p {}", public_dir);
 
         let mkdir_output = tokio::process::Command::new("docker")
-            .args(&["exec", "raworc_server", "mkdir", "-p", &public_dir])
+            .args(&["exec", "raworc_content", "mkdir", "-p", &public_dir])
             .output()
             .await
             .map_err(|e| {
@@ -736,12 +733,12 @@ impl AgentManager {
             ));
         }
 
-        // Copy from filesystem temp to server container
+        // Copy from filesystem temp to content container
         let copy2_output = tokio::process::Command::new("docker")
             .args(&[
                 "cp",
                 &format!("{}//.", temp_dir),
-                &format!("raworc_server:/public/{}/", agent_name),
+                &format!("raworc_content:/content/{}/", agent_name),
             ])
             .output()
             .await
@@ -761,7 +758,7 @@ impl AgentManager {
         }
 
         info!(
-            "Content published for agent {} to /public/{}/",
+            "Content published for agent {} to /content/{}/",
             agent_name, agent_name
         );
         Ok(())
@@ -771,16 +768,13 @@ impl AgentManager {
         let agent_name = &task.agent_name;
         info!("Unpublishing content for agent {}", agent_name);
 
-        // Remove public directory for this agent from the server container
-        let public_path = format!("/public/{}", agent_name);
-        info!(
-            "Executing: docker exec raworc_server rm -rf {}",
-            public_path
-        );
+        // Remove content directory for this agent from the content container
+        let public_path = format!("/content/{}", agent_name);
+        info!("Executing: docker exec raworc_content rm -rf {}", public_path);
 
-        // Remove the published directory from server container
+        // Remove the published directory from content container
         let remove_output = tokio::process::Command::new("docker")
-            .args(&["exec", "raworc_server", "rm", "-rf", &public_path])
+            .args(&["exec", "raworc_content", "rm", "-rf", &public_path])
             .output()
             .await
             .map_err(|e| {

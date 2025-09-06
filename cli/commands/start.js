@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['raworc_mysql_data', 'raworc_public_data', 'raworc_ollama_data']) {
+  for (const v of ['raworc_mysql_data', 'raworc_content_data', 'raworc_ollama_data', 'raworc_logs']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -162,6 +162,8 @@ module.exports = (program) => {
         const SERVER_IMAGE = await resolveRaworcImage('server','raworc_server','raworc/raworc_server', tag);
         const CONTROLLER_IMAGE = await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag);
         const AGENT_IMAGE = await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
+        const OPERATOR_IMAGE = await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag);
+        const GATEWAY_IMAGE = await resolveRaworcImage('gateway','raworc_gateway','raworc/raworc_gateway', tag);
 
         console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
@@ -170,12 +172,12 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'server', 'controller'];
+          components = ['mysql', 'ollama', 'server', 'operator', 'content', 'controller', 'gateway'];
         }
 
         // Enforce startup order: mysql → ollama → server → controller
         // In particular, ensure server starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'server', 'controller'];
+        const desiredOrder = ['mysql', 'ollama', 'server', 'operator', 'content', 'controller', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -367,9 +369,7 @@ module.exports = (program) => {
                 '--name','raworc_server',
                 '--network','raworc_network',
                 '-p', `${String(options.serverApiPort || '9000')}:9000`,
-                '-p', `${String(options.serverPublicPort || '8000')}:8000`,
-                '-v', path.join(process.cwd(),'logs') + ':/app/logs',
-                '-v','raworc_public_data:/public',
+                '-v', 'raworc_logs:/app/logs',
                 '-e',`DATABASE_URL=${options.serverDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc'}`,
                 '-e',`JWT_SECRET=${options.serverJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.serverRustLog || 'info'}`,
@@ -428,6 +428,64 @@ module.exports = (program) => {
               break;
             }
 
+            case 'operator': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
+              if (await containerRunning('raworc_operator')) { console.log(chalk.green('[SUCCESS] ') + 'Operator already running'); console.log(); break; }
+              if (await containerExists('raworc_operator')) {
+                await docker(['start','raworc_operator']);
+                console.log(chalk.green('[SUCCESS] ') + 'Operator started');
+                console.log();
+                break;
+              }
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push('--name','raworc_operator','--network','raworc_network','-v','raworc_content_data:/content', OPERATOR_IMAGE);
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
+              console.log();
+              break;
+            }
+
+            case 'content': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring Content service is running...');
+              if (await containerRunning('raworc_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
+              if (await containerExists('raworc_content')) {
+                await docker(['start','raworc_content']);
+                console.log(chalk.green('[SUCCESS] ') + 'Content started');
+                console.log();
+                break;
+              }
+              const CONTENT_IMAGE = await resolveRaworcImage('content','raworc_content','raworc/raworc_content', tag);
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push('--name','raworc_content','--network','raworc_network','-v','raworc_content_data:/content', CONTENT_IMAGE);
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'Content service container started');
+              console.log();
+              break;
+            }
+
+            case 'gateway': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring gateway (NGINX) is running on port 80...');
+              if (await containerRunning('raworc_gateway')) { console.log(chalk.green('[SUCCESS] ') + 'Gateway already running'); console.log(); break; }
+              if (await containerExists('raworc_gateway')) {
+                await docker(['start','raworc_gateway']);
+                console.log(chalk.green('[SUCCESS] ') + 'Gateway started');
+                console.log();
+                break;
+              }
+              if (await portInUse(80)) {
+                console.log(chalk.yellow('[WARNING] ') + 'Port 80 is already in use on the host. Gateway will fail to bind.');
+              }
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push('--name','raworc_gateway','--network','raworc_network','-p','80:80', GATEWAY_IMAGE);
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'Gateway container started (port 80)');
+              console.log();
+              break;
+            }
+
             default:
               console.log(chalk.yellow('[WARNING] ') + `Unknown component: ${comp}. Skipping...`);
           }
@@ -448,10 +506,17 @@ module.exports = (program) => {
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Service URLs:');
           try {
-            const s = await docker(['ps','--filter','name=raworc_server','--format','{{.Names}}'], { silent: true });
-            if (s.stdout.trim()) {
-              console.log('  • API Server: http://localhost:9000');
-              console.log('  • Public Content: http://localhost:8000');
+            const g = await docker(['ps','--filter','name=raworc_gateway','--format','{{.Names}}'], { silent: true });
+            if (g.stdout.trim()) {
+              console.log('  • Gateway: http://localhost/');
+              console.log('  • Operator UI: http://localhost/operator');
+              console.log('  • API via Gateway: http://localhost/api/v0');
+            } else {
+              const s = await docker(['ps','--filter','name=raworc_server','--format','{{.Names}}'], { silent: true });
+              if (s.stdout.trim()) {
+                console.log('  • API Server: http://localhost:9000');
+                console.log('  • Public Content: http://localhost:8000');
+              }
             }
           } catch(_) {}
           try {

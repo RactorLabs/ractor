@@ -11,7 +11,7 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Create directories
-RUN mkdir -p /app/logs /var/lib/raworc/volumes /public
+RUN mkdir -p /app/logs /var/lib/raworc/volumes
 
 # Copy static files that rarely change
 COPY db ./db
@@ -20,7 +20,7 @@ COPY db ./db
 COPY target/release/raworc-server /usr/local/bin/raworc-server
 
 # Expose ports
-EXPOSE 9000 8000
+EXPOSE 9000
 
 # Start the server
 CMD ["raworc-server"]

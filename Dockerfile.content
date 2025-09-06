@@ -1,0 +1,16 @@
+FROM debian:trixie-slim
+
+RUN apt-get update && \
+    apt-get install -y ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+RUN mkdir -p /app/logs /content
+
+COPY target/release/raworc-content /usr/local/bin/raworc-content
+
+EXPOSE 8000
+
+CMD ["raworc-content"]
+

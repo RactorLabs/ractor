@@ -97,7 +97,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("server" "controller" "agent" "operator")
+  COMPONENTS=("server" "controller" "agent" "operator" "content" "gateway")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -137,6 +137,12 @@ for component in "${COMPONENTS[@]}"; do
     ;;
   operator)
     image_name="${REGISTRY}/raworc_operator:${TAG}"
+    ;;
+  content)
+    image_name="${REGISTRY}/raworc_content:${TAG}"
+    ;;
+  gateway)
+    image_name="${REGISTRY}/raworc_gateway:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -200,7 +206,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | controller | agent | operator)
+  server | controller | agent | operator | content | gateway)
     echo "  ${REGISTRY}/raworc_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_${component}:latest"

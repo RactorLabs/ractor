@@ -9,7 +9,9 @@ class DockerManager {
       server: 'raworc/raworc_server:latest',
       controller: 'raworc/raworc_controller:latest',
       agent: 'raworc/raworc_agent:latest',
-      operator: 'raworc/raworc_operator:latest'
+      operator: 'raworc/raworc_operator:latest',
+      gateway: 'raworc/raworc_gateway:latest',
+      content: 'raworc/raworc_content:latest'
     };
   }
 
@@ -51,7 +53,7 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['raworc_mysql', 'raworc_server', 'raworc_operator', 'raworc_controller', 'raworc_gateway'];
+    const serviceList = services.length > 0 ? services : ['raworc_mysql', 'raworc_server', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
     
     // Map service names to component names
     const componentMap = {
@@ -59,7 +61,8 @@ class DockerManager {
       'raworc_controller': 'controller',
       'raworc_mysql': 'mysql',
       'raworc_operator': 'operator',
-      'raworc_gateway': 'gateway'
+      'raworc_gateway': 'gateway',
+      'raworc_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -89,7 +92,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['raworc_mysql_data', 'raworc_public_data']) {
+    for (const volume of ['raworc_mysql_data', 'raworc_content_data', 'raworc_logs']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -144,26 +147,32 @@ class DockerManager {
           'run', '-d',
           '--name', 'raworc_operator',
           '--network', 'raworc_network',
+          '-v', 'raworc_content_data:/content',
           this.images.operator
         ]);
         console.log('🚀 raworc_operator started');
         break;
+      case 'content':
+        await this.execDocker([
+          'run', '-d',
+          '--name', 'raworc_content',
+          '--network', 'raworc_network',
+          '-v', 'raworc_content_data:/content',
+          this.images.content || 'raworc/raworc_content:latest'
+        ]);
+        console.log('🚀 raworc_content started');
+        break;
 
-      case 'gateway': {
-        // Use nginx:alpine and mount our gateway config
-        const projectRoot = path.resolve(__dirname, '..', '..');
-        const confPath = path.join(projectRoot, 'assets', 'nginx', 'gateway.conf');
+      case 'gateway':
         await this.execDocker([
           'run', '-d',
           '--name', 'raworc_gateway',
           '--network', 'raworc_network',
           '-p', '80:80',
-          '-v', `${confPath}:/etc/nginx/conf.d/default.conf:ro`,
-          'nginx:alpine'
+          this.images.gateway
         ]);
         console.log('🚀 raworc_gateway started (port 80)');
         break;
-      }
 
       case 'server':
         await this.execDocker([
@@ -171,9 +180,8 @@ class DockerManager {
           '--name', 'raworc_server',
           '--network', 'raworc_network',
           '-p', '9000:9000',
-          '-p', '8000:8000',
-          '-v', `${process.cwd()}/logs:/app/logs`,
-          '-v', 'raworc_public_data:/public',
+          '-v', 'raworc_logs:/app/logs',
+          # removed public volume mount; content served by separate container
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
@@ -222,7 +230,7 @@ class DockerManager {
   // Stop services
   async stop(services = [], cleanup = false) {
     // Default to stopping gateway, controller, operator and server
-    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_server'];
+    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_content', 'raworc_server'];
     
     // Map service names to component names
     const componentMap = {
@@ -230,7 +238,8 @@ class DockerManager {
       'raworc_controller': 'controller',
       'raworc_mysql': 'mysql',
       'raworc_operator': 'operator',
-      'raworc_gateway': 'gateway'
+      'raworc_gateway': 'gateway',
+      'raworc_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);

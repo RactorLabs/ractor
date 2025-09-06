@@ -45,3 +45,7 @@ path = "src/controller/main.rs"
 [[bin]]
 name = "raworc-agent"
 path = "src/agent/main.rs"
+
+[[bin]]
+name = "raworc-content"
+path = "src/content/main.rs"

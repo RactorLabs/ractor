@@ -1586,32 +1586,27 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
         let container_name = format!("raworc_agent_{}", agent_name);
-        let public_path = format!("/public/{}", agent_name);
+        let public_path = format!("/content/{}", agent_name);
 
         info!(
             "Publishing content for agent {} to {}",
             agent_name, public_path
         );
 
-        // Create public directory
-        let create_dir_cmd = format!("mkdir -p {}", public_path);
-        if let Err(e) = std::process::Command::new("bash")
-            .arg("-c")
-            .arg(&create_dir_cmd)
-            .output()
-        {
-            error!("Failed to create public directory {}: {}", public_path, e);
-            return Err(anyhow::anyhow!("Failed to create public directory: {}", e));
-        }
+        // Ensure directory exists inside content container
+        let mkdir_output = std::process::Command::new("docker")
+            .args(&["exec", "raworc_content", "mkdir", "-p", &public_path])
+            .output();
+        if let Err(e) = mkdir_output { return Err(anyhow::anyhow!("Failed to create content directory: {}", e)); }
 
-        // Copy content files from container to public directory
-        let copy_cmd = format!(
-            "docker cp {}:/agent/content/. {}/",
-            container_name, public_path
-        );
-        match std::process::Command::new("bash")
-            .arg("-c")
-            .arg(&copy_cmd)
+        // Copy content files directly into content container
+        let copy_cmd = [
+            "docker", "cp",
+            &format!("{}:/agent/content/.", container_name),
+            &format!("raworc_content:{}/", public_path)
+        ];
+        match std::process::Command::new(copy_cmd[0])
+            .args(&copy_cmd[1..])
             .output()
         {
             Ok(output) => {
@@ -1624,7 +1619,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.contains("No such file or directory") {
-                        info!("No content files found for agent {}, creating empty public directory", agent_name);
+                        info!("No content files found for agent {}, creating empty directory", agent_name);
                         Ok(())
                     } else {
                         error!(
@@ -1646,16 +1641,16 @@ echo 'Agent directories created (code, secrets, logs, content)'
     }
 
     pub async fn unpublish_content(&self, agent_name: &str) -> Result<()> {
-        let public_path = format!("/public/{}", agent_name);
+        let public_path = format!("/content/{}", agent_name);
 
         info!(
-            "Unpublishing content for agent {} from server container: {}",
+            "Unpublishing content for agent {} from content container: {}",
             agent_name, public_path
         );
 
         // Remove public directory from server container using docker exec
         let output = std::process::Command::new("docker")
-            .args(&["exec", "raworc_server", "rm", "-rf", &public_path])
+            .args(&["exec", "raworc_content", "rm", "-rf", &public_path])
             .output()
             .map_err(|e| {
                 anyhow::anyhow!("Failed to execute docker exec rm command for agent {}: {}", agent_name, e)

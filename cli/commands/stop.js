@@ -26,15 +26,15 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop Raworc services using direct Docker container management')
-    .argument('[components...]', 'Components to stop (mysql, ollama, server, controller, all). Default: server controller', [])
+    .argument('[components...]', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway, all). Default: server controller gateway operator content', [])
     .option('-c, --cleanup', 'Clean up agent containers after stopping')
     .option('-r, --remove', 'Remove containers after stopping')
     .option('-v, --volumes', 'Remove named volumes after stopping')
     .option('-n, --network', 'Remove Docker network after stopping')
     .action(async (components, options) => {
       try {
-        if (!components || components.length === 0) components = ['server','controller'];
-        if (components.includes('all')) components = ['mysql','ollama','server','controller'];
+        if (!components || components.length === 0) components = ['server','controller','gateway','operator','content'];
+        if (components.includes('all')) components = ['mysql','ollama','server','operator','content','controller','gateway'];
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Cleanup agent containers: ${!!options.cleanup}`);
         console.log(chalk.blue('[INFO] ') + `Remove containers: ${!!options.remove}`);
@@ -44,8 +44,8 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { mysql: 'raworc_mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'raworc_ollama' };
-        const order = ['controller','server','ollama','mysql'];
+        const map = { mysql: 'raworc_mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'raworc_ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const order = ['gateway','controller','operator','content','server','ollama','mysql'];
         const toStop = order.filter((c) => components.includes(c));
 
         for (const comp of toStop) {
@@ -99,7 +99,7 @@ module.exports = (program) => {
 
         if (options.volumes) {
           console.log(chalk.blue('[INFO] ') + 'Removing volumes...');
-          for (const v of ['raworc_mysql_data','raworc_public_data','raworc_ollama_data']) {
+          for (const v of ['raworc_mysql_data','raworc_content_data','raworc_ollama_data','raworc_logs']) {
             try {
               await docker(['volume','inspect', v], { silent: true });
               await docker(['volume','rm', v]);
