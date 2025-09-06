@@ -2,8 +2,9 @@ import { writable } from 'svelte/store';
 
 const menus = [
   { 'url': '/', 'icon': 'bi bi-house-door', 'text': 'Home' },
-  { 'url': '/docs', 'icon': 'bi bi-journal-text', 'text': 'Documentation' },
-  { 'url': '/agents', 'icon': 'bi bi-robot', 'text': 'Agents' }
+  { 'url': '/agents', 'icon': 'bi bi-robot', 'text': 'Agents' },
+  { 'url': '/playground', 'icon': 'bi bi-joystick', 'text': 'API Playground' },
+  { 'url': '/docs', 'icon': 'bi bi-journal-text', 'text': 'Documentation' }
 ];
 
 // Create a writable store with the initial options
