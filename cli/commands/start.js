@@ -509,8 +509,9 @@ module.exports = (program) => {
             const g = await docker(['ps','--filter','name=raworc_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
               console.log('  • Gateway: http://localhost/');
-              console.log('  • Operator UI: http://localhost/operator');
-              console.log('  • API via Gateway: http://localhost/api/v0');
+              console.log('  • Operator UI: http://localhost/');
+              console.log('  • API via Gateway: http://localhost/api');
+              console.log('  • Content: http://localhost/content');
             } else {
               const s = await docker(['ps','--filter','name=raworc_server','--format','{{.Names}}'], { silent: true });
               if (s.stdout.trim()) {

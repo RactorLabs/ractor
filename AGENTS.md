@@ -40,6 +40,10 @@
 - Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
 - Branch naming: `type/short-description` (e.g., `feat/session-timeout`).
 
+Note on commit message formatting:
+- Do not include literal escape sequences like `\n` in commit subjects or bodies.
+- Use actual newlines for paragraphs/bullets. If amending via scripts, verify the resulting message with `git log -1`.
+
 ## Security & Configuration Tips
 - .env files are no longer required for starting services via CLI. Pass configuration via `raworc start` flags. Avoid committing secrets.
 - Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`.

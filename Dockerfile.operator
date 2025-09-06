@@ -9,8 +9,7 @@ RUN npm ci
 
 # Copy source and build with base path
 COPY operator/ .
-# Build with base path so it works under /operator behind gateway
-ENV BASE_PATH=/operator
+# Build with root base path (served at / by gateway)
 RUN npm run build
 
 # Runtime stage: serve static build via nginx
@@ -20,4 +19,3 @@ COPY --from=build /app/operator/build /usr/share/nginx/html
 # Default nginx listens on 80; no extra config needed for static files
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
-
