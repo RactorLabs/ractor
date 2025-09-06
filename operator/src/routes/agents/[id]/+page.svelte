@@ -19,6 +19,10 @@
   let input = '';
   let sending = false;
   let pollHandle = null;
+  let frameUrl = '';
+  let contentLoaded = false;
+  let contentStandby = false;
+  let contentTimer = null;
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -31,6 +35,8 @@
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(id)}`);
     if (res.ok) agent = res.data || res;
+    computeFrameUrl();
+    watchContentLoad();
   }
 
   async function fetchMessages() {
@@ -51,6 +57,29 @@
     }, 2000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
+
+  function computeFrameUrl() {
+    try {
+      if (agent && agent.content_port) {
+        const { protocol, hostname } = window.location;
+        frameUrl = `${protocol}//${hostname}:${agent.content_port}/`;
+      } else if (agent && agent.name) {
+        frameUrl = `/content/${agent.name}/`;
+      } else {
+        frameUrl = '';
+      }
+    } catch (_) {
+      frameUrl = '';
+    }
+  }
+  function watchContentLoad() {
+    contentLoaded = false;
+    contentStandby = false;
+    if (contentTimer) { clearTimeout(contentTimer); contentTimer = null; }
+    if (frameUrl) {
+      contentTimer = setTimeout(() => { if (!contentLoaded) contentStandby = true; }, 4000);
+    }
+  }
 
   function scrollToBottom() {
     const el = document.getElementById('chat-body');
@@ -156,24 +185,19 @@
     </Card>
   </div>
   <div class="col-xl-4">
-    <Card>
-      <div class="card-header fw-bold">Details</div>
-      <div class="card-body small">
-        {#if agent}
-          <div class="mb-2"><span class="text-body text-opacity-75">Name:</span> <span class="font-monospace">{agent.name}</span></div>
-          <div class="mb-2"><span class="text-body text-opacity-75">State:</span> <span class={stateClass(agent.state)}>{agent.state}</span></div>
-          {#if agent.timeout_seconds !== undefined}
-            <div class="mb-2"><span class="text-body text-opacity-75">Timeout:</span> {agent.timeout_seconds}s</div>
+    <Card class="h-100">
+      <div class="card-header fw-bold">Live Content</div>
+      <div class="card-body p-0" style="height: 100%; min-height: 300px;">
+        {#if frameUrl}
+          <iframe src={frameUrl} title="Agent content" style="border:0; width:100%; height:400px;" on:load={() => { contentLoaded = true; contentStandby = false; }}></iframe>
+          {#if !contentLoaded}
+            <div class="p-3 small text-body text-opacity-75">Loading content…</div>
           {/if}
-          {#if agent.content_port}
-            <div class="mb-2"><span class="text-body text-opacity-75">Content:</span> <a href={'/content/'+agent.name} target="_blank" class="text-decoration-none">/content/{agent.name}</a></div>
-          {/if}
-          {#if agent.metadata}
-            <div class="fw-500 mt-3">Metadata</div>
-            <pre class="bg-dark text-white p-2 rounded code-wrap"><code>{JSON.stringify(agent.metadata, null, 2)}</code></pre>
+          {#if contentStandby}
+            <div class="p-3 small text-body text-opacity-75">No content to display.</div>
           {/if}
         {:else}
-          <div class="text-body text-opacity-75">No agent details.</div>
+          <div class="p-3 small text-body text-opacity-75">No content to display.</div>
         {/if}
       </div>
     </Card>
