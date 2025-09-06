@@ -1100,7 +1100,7 @@ function showPrompt(state = 'init') {
   const width = getTerminalWidth();
   const stateText = color(`${icon} ${label}`);
   const dashText = chalk.gray('─'.repeat(width));
-  const promptText = chalk.cyanBright('> ');
+  const promptText = '';
 
   // Render
   console.log();
@@ -1117,7 +1117,7 @@ function showPrompt(state = 'init') {
   __lastPromptLayout = capturePromptLayout({
     stateText: `${icon} ${label}`,
     dashedText: '─'.repeat(width),
-    promptText: '> ',
+    promptText: '',
     width,
   });
 }
@@ -1160,7 +1160,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
   const width = getTerminalWidth();
   const stateText = color(`${icon} ${label}`);
   const dashText = chalk.gray('─'.repeat(width));
-  const promptText = chalk.cyanBright('> ') + userInput;
+  const promptText = userInput;
 
   // Render
   console.log();
@@ -1177,7 +1177,7 @@ function showPromptWithInput(state = 'init', userInput = '') {
   __lastPromptLayout = capturePromptLayout({
     stateText: `${icon} ${label}`,
     dashedText: '─'.repeat(width),
-    promptText: '> ' + userInput,
+    promptText: userInput,
     width,
   });
 }
