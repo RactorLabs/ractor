@@ -11,8 +11,8 @@ This is the next development version.
 
 ### 🐳 Infrastructure & CLI
 
-- Start is now idempotent and starts all components by default (mysql, ollama, server, operator). If a container is already running, it is left as-is; if stopped, it is started.
-- Stop defaults to server + operator. Use `raworc stop all` to stop mysql + ollama as well. Individual components are supported (e.g., `raworc stop mysql`).
+- Start is now idempotent and starts all components by default (mysql, ollama, server, controller). If a container is already running, it is left as-is; if stopped, it is started.
+- Stop defaults to server + controller. Use `raworc stop all` to stop mysql + ollama as well. Individual components are supported (e.g., `raworc stop mysql`).
 - Removed the `restart` command. Use `raworc stop` followed by `raworc start`.
 - Removed legacy service scripts (start/stop/restart/doctor); the CLI is the single source of truth for service management.
 - Removed `.env.example`; all runtime configuration is available as CLI flags per component.
@@ -61,7 +61,7 @@ Primarily a documentation and setup refinement release.
 
 - **Ollama Service Integration**: Added `raworc_ollama` service with automatic model pulling and GPU detection
 - **Resource Management**: Added CPU/MEM/SHM/GPU configuration flags for optimal performance
-- **Service Defaults**: Start is now idempotent and starts all components by default (mysql, ollama, server, operator). Stop defaults to server+operator. Restart removed.
+- **Service Defaults**: Start is now idempotent and starts all components by default (mysql, ollama, server, controller). Stop defaults to server+controller. Restart removed.
 - **Docker Improvements**: Enhanced container management with better readiness checks and volume handling
 
 ### 🔧 CLI Enhancements
@@ -257,8 +257,8 @@ Primarily a documentation and setup refinement release.
 - **Backend State Corrections**: Sessions now set to 'init' state during creation and restoration, transitioning to 'idle' only when host containers are actually ready
 - **Prompt System Reliability**: Implemented comprehensive prompt manager to handle state monitoring, animation, and message processing consistently
 - **Prompt Option Fixes**: Fixed `-p` prompt option to properly send messages to API before waiting for responses, resolving lost message issues
-- **Timestamp-based Message Processing**: Implemented task creation timestamp tracking to prevent processing messages sent before operator task starts
-- **Message Handler Improvements**: Enhanced message processing with proper timestamp filtering and environment variable passing between operator and host containers
+- **Timestamp-based Message Processing**: Implemented task creation timestamp tracking to prevent processing messages sent before controller task starts
+- **Message Handler Improvements**: Enhanced message processing with proper timestamp filtering and environment variable passing between controller and host containers
 - **CLI Animation Fixes**: Resolved duplicate prompt displays and animation conflicts between prompt processing and interactive session systems
 - **Session Timeout Increase**: Increased default session auto-close timeout from 60 seconds to 5 minutes (300 seconds) for better user experience
 - **Interactive Session Enhancements**: Unified message handling between prompt and interactive modes with comprehensive tool execution display
@@ -303,7 +303,7 @@ Primarily a documentation and setup refinement release.
 ## v0.3.1
 
 - **CLI ANTHROPIC_API_KEY Validation**: Added validation for required ANTHROPIC_API_KEY environment variable in `raworc start` command
-- **Operator Container Fix**: Fixed CLI to properly pass ANTHROPIC_API_KEY to operator container, resolving startup failures
+- **Controller Container Fix**: Fixed CLI to properly pass ANTHROPIC_API_KEY to controller container, resolving startup failures
 - **CLI Help Consistency**: Fixed inconsistent help messages across all CLI commands, replacing incorrect `raworc auth login` references with `raworc login`
 - **API Endpoint Fix**: Corrected help text to reference correct `raworc api version` endpoint instead of non-existent `health` endpoint
 - **User Experience**: Enhanced error messages with clear instructions for setting up ANTHROPIC_API_KEY
@@ -369,7 +369,7 @@ Primarily a documentation and setup refinement release.
 ## v0.1.0
 
 - Initial public docs and REST API.
-- Sessions, spaces, secrets, agents, operator, MySQL.
+- Sessions, spaces, secrets, agents, controller, MySQL.
 ## v0.4.4
 
 - Model Runtime Migration: Replaced Anthropic/Claude integration with local model inference via Ollama (default model: gpt-oss)

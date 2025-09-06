@@ -48,7 +48,7 @@ usage() {
   echo ""
   echo "Components:"
   echo "  server      Push the server image"
-  echo "  operator    Push the operator image"
+  echo "  controller  Push the controller image"
   echo "  agent       Push the agent image"
   echo "  all         Push all components (default)"
   echo ""
@@ -59,7 +59,7 @@ usage() {
   echo ""
   echo "Examples:"
   echo "  $0                      Push all components with version tag ($DEFAULT_TAG)"
-  echo "  $0 server operator      Push only server and operator"
+  echo "  $0 server controller    Push only server and controller"
   echo "  $0 --tag latest         Push all components with 'latest' tag"
   echo "  $0 --registry myuser    Push to myuser Docker Hub account"
 }
@@ -97,7 +97,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("server" "operator" "agent")
+  COMPONENTS=("server" "controller" "agent")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -129,8 +129,8 @@ for component in "${COMPONENTS[@]}"; do
   server)
     image_name="${REGISTRY}/raworc_server:${TAG}"
     ;;
-  operator)
-    image_name="${REGISTRY}/raworc_operator:${TAG}"
+  controller)
+    image_name="${REGISTRY}/raworc_controller:${TAG}"
     ;;
   agent)
     image_name="${REGISTRY}/raworc_agent:${TAG}"
@@ -197,7 +197,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | operator | agent)
+  server | controller | agent)
     echo "  ${REGISTRY}/raworc_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_${component}:latest"
@@ -205,4 +205,3 @@ for component in "${COMPONENTS[@]}"; do
     ;;
   esac
 done
-

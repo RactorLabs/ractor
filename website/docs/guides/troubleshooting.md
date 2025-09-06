@@ -14,7 +14,7 @@ sudo lsof -i :3307
 
 # View service logs
 docker logs raworc_server
-docker logs raworc_operator
+docker logs raworc_controller
 docker logs raworc_mysql
 
 # Stop and start services

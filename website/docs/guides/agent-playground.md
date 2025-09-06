@@ -372,8 +372,8 @@ docker exec raworc_agent_{id} cat /agent/logs/agent_*.log
 # Check agent state and configuration
 raworc api agents/{id}
 
-# Check operator logs
-docker logs raworc_operator --tail 50
+# Check controller logs
+docker logs raworc_controller --tail 50
 ```
 
 ### Agent Wake Fails

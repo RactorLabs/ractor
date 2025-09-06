@@ -145,7 +145,7 @@ raworc api agents -m post -b '{}'
 **Flow:**
 1. Validate request and create agent record
 2. Generate UUID and create agent record with `init` state
-3. Operator detects new agent and spawns container
+3. Controller detects new agent and spawns container
 4. Container mounts persistent volume and starts Agent
 5. Setup script executed if provided
 6. Agent transitions to `idle` state when ready

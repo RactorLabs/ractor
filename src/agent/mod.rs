@@ -100,7 +100,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     let has_setup_script = std::env::var("RAWORC_HAS_SETUP").is_ok();
 
     if has_setup_script {
-        // Setup script is expected, wait up to 2 seconds for it to be written by operator
+        // Setup script is expected, wait up to 2 seconds for it to be written by controller
         info!("Setup script expected, waiting for it to be created...");
         let mut attempts = 0;
         let max_attempts = 4; // 2 seconds with 500ms intervals

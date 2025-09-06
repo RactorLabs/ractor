@@ -48,7 +48,7 @@ impl MessageHandler {
     }
 
     /// Initialize message processing based on task creation time.
-    /// Only messages created after the operator task was created should be processed.
+    /// Only messages created after the controller task was created should be processed.
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!("Initializing timestamp-based message tracking...");
         info!("Task creation time: {}", self.task_created_at);

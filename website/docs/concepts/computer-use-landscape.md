@@ -147,7 +147,7 @@ Ready to automate manual computer work with agents?
 npm install -g @raworc/cli
 
 # Start core services  
-raworc start mysql server operator
+raworc start mysql server controller
 
 # Create your first agent
 raworc agent create

@@ -7,7 +7,7 @@ class DockerManager {
     this.images = {
       mysql: 'mysql:8.0',
       server: 'raworc/raworc_server:latest',
-      operator: 'raworc/raworc_operator:latest',
+      controller: 'raworc/raworc_controller:latest',
       agent: 'raworc/raworc_agent:latest'
     };
   }
@@ -49,13 +49,13 @@ class DockerManager {
 
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
-    // Default to API server and operator if none specified
-    const serviceList = services.length > 0 ? services : ['raworc_server', 'raworc_operator'];
+    // Default to API server and controller if none specified
+    const serviceList = services.length > 0 ? services : ['raworc_server', 'raworc_controller'];
     
     // Map service names to component names
     const componentMap = {
       'raworc_server': 'server',
-      'raworc_operator': 'operator',
+      'raworc_controller': 'controller',
       'raworc_mysql': 'mysql'
     };
 
@@ -72,7 +72,7 @@ class DockerManager {
             console.log(`✅ Successfully pulled ${this.images[component]}`);
           } catch (error) {
             console.warn(`⚠️  Warning: Failed to pull ${this.images[component]}: ${error.message}`);
-            console.warn(`   The operator will attempt to pull this image when needed.`);
+            console.warn(`   The controller will attempt to pull this image when needed.`);
           }
         }
       }
@@ -94,7 +94,7 @@ class DockerManager {
       }
     }
 
-    // Start services in order: mysql, server, operator
+    // Start services in order: mysql, server, controller
     for (const component of components) {
       await this.startService(component);
     }
@@ -152,10 +152,10 @@ class DockerManager {
         ]);
         break;
 
-      case 'operator':
+      case 'controller':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_operator',
+          '--name', 'raworc_controller',
           '--network', 'raworc_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
@@ -166,7 +166,7 @@ class DockerManager {
           '-e', 'AGENT_MEMORY_LIMIT=536870912',
           '-e', 'AGENT_DISK_LIMIT=1073741824',
           '-e', 'RUST_LOG=info',
-          this.images.operator
+          this.images.controller
         ]);
         break;
 
@@ -192,13 +192,13 @@ class DockerManager {
 
   // Stop services
   async stop(services = [], cleanup = false) {
-    // Default to stopping operator and server only
-    const serviceList = services.length > 0 ? services : ['raworc_operator', 'raworc_server'];
+    // Default to stopping controller and server only
+    const serviceList = services.length > 0 ? services : ['raworc_controller', 'raworc_server'];
     
     // Map service names to component names
     const componentMap = {
       'raworc_server': 'server',
-      'raworc_operator': 'operator',
+      'raworc_controller': 'controller',
       'raworc_mysql': 'mysql'
     };
 
@@ -255,7 +255,7 @@ class DockerManager {
       } catch (error) {
         console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
         if (component === 'agent') {
-          console.warn(`   The operator will attempt to pull this image when needed.`);
+          console.warn(`   The controller will attempt to pull this image when needed.`);
         }
       }
     }

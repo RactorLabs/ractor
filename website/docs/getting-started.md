@@ -14,8 +14,8 @@ Get started with the Remote Agentic Work Orchestrator in just a few commands. Ra
 - **Ollama + Model**: Local model runtime with the `gpt-oss:20b` model available
 
 Notes about Ollama and models:
-- The Raworc Operator uses an Ollama server for AI inference.
-- If you run Ollama yourself, set `OLLAMA_HOST` for the Operator to reach it.
+- The Raworc Controller uses an Ollama server for AI inference.
+- If you run Ollama yourself, set `OLLAMA_HOST` for the Controller to reach it.
 - Ensure the `gpt-oss:20b` model is pulled on the Ollama server you use.
 
 ### Ollama Setup
@@ -38,7 +38,7 @@ docker run -d \
 # Pull required model inside the container
 docker exec raworc_ollama ollama pull gpt-oss:20b
 
-# Tell Raworc Operator where Ollama is
+# Tell Raworc Controller where Ollama is
 export OLLAMA_HOST=http://raworc_ollama:11434
 ```
 
@@ -60,7 +60,7 @@ ollama pull gpt-oss:20b
 npm install -g @raworc/cli
 ```
 
-### 2. Start Services (API + Operator + DB)
+### 2. Start Services (API + Controller + DB)
 
 ```bash
 raworc start
@@ -82,7 +82,7 @@ raworc auth -t <jwt-token-from-step-1>
 raworc agent create
 ```
 
-Note: The CLI can also manage Ollama locally. By default, `raworc start` brings up MySQL, Ollama, the API server, and the operator. If you prefer a remote Ollama, set `--operator-ollama-host` or export `OLLAMA_HOST` and skip starting the `ollama` component explicitly: `raworc start mysql server operator`.
+Note: The CLI can also manage Ollama locally. By default, `raworc start` brings up MySQL, Ollama, the API server, and the controller. If you prefer a remote Ollama, set `--controller-ollama-host` or export `OLLAMA_HOST` and skip starting the `ollama` component explicitly: `raworc start mysql server controller`.
 
 That's it! You now have a running agent.
 
@@ -235,7 +235,7 @@ raworc api version
 ### View service logs
 ```bash
 docker logs raworc_server
-docker logs raworc_operator
+docker logs raworc_controller
 docker logs raworc_mysql
 ```
 

@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/`: Rust services — `server/` (API), `operator/` (orchestration), `agent/` (runtime), `shared/` (common code). Binaries: `raworc-server`, `raworc-operator`, `raworc-agent`.
+- `src/`: Rust services — `server/` (API), `controller/` (orchestration), `agent/` (runtime), `shared/` (common code). Binaries: `raworc-server`, `raworc-controller`, `raworc-agent`.
 - `cli/`: Node.js CLI (`raworc`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Default admin: `admin/admin`.
@@ -31,7 +31,7 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql server operator && ./scripts/link.sh && raworc api version`.
+- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql server controller && ./scripts/link.sh && raworc api version`.
 
 ## Commit & Pull Request Guidelines
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.

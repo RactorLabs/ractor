@@ -49,6 +49,6 @@ ENV NVM_DIR=/home/agent/.nvm
 ENV CARGO_HOME=/home/agent/.cargo
 
 # Copy the pre-built binary from local build
-COPY target/release/raworc-operator /usr/local/bin/raworc-operator
+COPY target/release/raworc-controller /usr/local/bin/raworc-controller
 
-CMD ["raworc-operator"]
+CMD ["raworc-controller"]

@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
+
 pub struct DockerManager {
     docker: Docker,
     agent_image: String,

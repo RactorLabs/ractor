@@ -46,7 +46,7 @@ usage() {
   echo ""
   echo "Components:"
   echo "  server      Build the server image"
-  echo "  operator    Build the operator image"
+  echo "  controller  Build the controller image"
   echo "  agent       Build the agent image"
   echo "  all         Build all components (default)"
   echo ""
@@ -56,7 +56,7 @@ usage() {
   echo ""
   echo "Examples:"
   echo "  $0                      Build all components"
-  echo "  $0 server operator      Build only server and operator"
+  echo "  $0 server controller    Build only server and controller"
   echo "  $0 --no-cache           Build all components without cache"
   echo "  $0 --no-cache server    Build server without cache"
 }
@@ -94,7 +94,7 @@ fi
 
 # Expand 'all' to actual components
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("server" "operator" "agent")
+  COMPONENTS=("server" "controller" "agent")
 fi
 
 print_status "Building Raworc Docker images"
@@ -134,9 +134,9 @@ for component in "${COMPONENTS[@]}"; do
     image_name="raworc_server:${TAG}"
     dockerfile="Dockerfile.server"
     ;;
-  operator)
-    image_name="raworc_operator:${TAG}"
-    dockerfile="Dockerfile.operator"
+  controller)
+    image_name="raworc_controller:${TAG}"
+    dockerfile="Dockerfile.controller"
     ;;
   agent)
     image_name="raworc_agent:${TAG}"
@@ -180,7 +180,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | operator | agent)
+  server | controller | agent)
     echo "  raworc_${component}:${TAG}"
     ;;
   esac

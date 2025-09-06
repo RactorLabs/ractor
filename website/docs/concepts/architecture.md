@@ -18,7 +18,7 @@ Raworc is built using a **Kubernetes-inspired control plane pattern** for Comput
                     │        │                        │
                     │        ▼                        │
                     │ ┌─────────────┐                 │
-                    │ │  Operator   │                 │
+                    │ │ Controller  │                 │
                     │ └─────────────┘                 │
                     └─────────────────────────────────┘
                                │
@@ -51,7 +51,7 @@ The control plane manages the lifecycle and orchestration of Computer Use Agents
 - **Authentication** - User credentials and JWT tokens
 - **RBAC Data** - Roles, permissions, and access control
 
-#### Operator (`raworc_operator`)
+#### Controller (`raworc_controller`)
 - **Agent Orchestration** - Manage agent container lifecycle
 - **Auto-Sleep** - Monitor idle agents and auto-sleep based on timeout
 - **Container Management** - Create, start, stop, cleanup agent containers
@@ -77,7 +77,7 @@ Each agent provides a dedicated computer use environment with full computer acce
 
 ### Kubernetes-Inspired Control Plane
 - **Declarative State Management** - Agents declared as desired state
-- **Controller Pattern** - Operator reconciles actual vs desired state
+- **Controller Pattern** - Controller reconciles actual vs desired state
 - **Event-Driven Architecture** - React to state changes and lifecycle events
 - **Resource Management** - Efficient container and resource allocation
 
@@ -98,8 +98,8 @@ Each agent provides a dedicated computer use environment with full computer acce
 ### Agent Creation Flow
 1. **CLI Request** - User creates agent via CLI or API
 2. **API Validation** - Server validates request and creates agent record
-3. **Operator Detection** - Operator detects new agent in `init` state
-4. **Container Creation** - Operator spawns Docker container with Agent runtime
+3. **Controller Detection** - Controller detects new agent in `init` state
+4. **Container Creation** - Controller spawns Docker container with Agent runtime
 5. **Agent Initialization** - Agent starts and transitions to `idle` state
 6. **Ready for Messages** - Agent can now receive and process messages
 
@@ -113,14 +113,14 @@ Each agent provides a dedicated computer use environment with full computer acce
 ### Auto-Wake Flow
 1. **Sleeping Agent Message** - Message sent to agent in `slept` state
 2. **Wake Task** - Background task queued for agent wake
-3. **Container Recreation** - Operator creates/starts container with preserved state
+3. **Container Recreation** - Controller creates/starts container with preserved state
 4. **Message Processing** - Message processed after wake completes
 
 ## Deployment Architecture
 
 ### Docker Stack
 - **raworc_server** - API server container
-- **raworc_operator** - Agent operator container
+- **raworc_controller** - Agent controller container
 - **raworc_mysql** - MySQL database container
 - **Agent Containers** - Dynamic containers for agent runtimes
 

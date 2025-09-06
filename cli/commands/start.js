@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start Raworc services (idempotent): starts only missing or stopped components')
-    .argument('[components...]', 'Components to start (mysql, ollama, server, operator). Default: all', [])
+    .argument('[components...]', 'Components to start (mysql, ollama, server, controller). Default: all', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -111,16 +111,16 @@ module.exports = (program) => {
     .option('--server-raworc-port <port>', 'Server RAWORC_PORT')
     .option('--server-api-port <port>', 'Host port for API (maps to 9000)', '9000')
     .option('--server-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
-    // Operator options
-    .option('--operator-database-url <url>', 'Operator DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
-    .option('--operator-jwt-secret <secret>', 'Operator JWT_SECRET')
-    .option('--operator-rust-log <level>', 'Operator RUST_LOG', 'info')
-    .option('--operator-ollama-host <url>', 'Operator OLLAMA_HOST (overrides autodetection)')
-    .option('--operator-ollama-model <model>', 'Operator OLLAMA_MODEL')
-    .option('--operator-agent-image <image>', 'Operator AGENT_IMAGE')
-    .option('--operator-agent-cpu-limit <n>', 'Operator AGENT_CPU_LIMIT', '0.5')
-    .option('--operator-agent-memory-limit <bytes>', 'Operator AGENT_MEMORY_LIMIT', '536870912')
-    .option('--operator-agent-disk-limit <bytes>', 'Operator AGENT_DISK_LIMIT', '1073741824')
+    // Controller options
+    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
+    .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
+    .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
+    .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
+    .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
+    .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
+    .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
+    .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
+    .option('--controller-agent-disk-limit <bytes>', 'Controller AGENT_DISK_LIMIT', '1073741824')
     .action(async (components, options) => {
       try {
         const detached = options.foreground ? false : (options.detached !== false);
@@ -160,7 +160,7 @@ module.exports = (program) => {
         }
 
         const SERVER_IMAGE = await resolveRaworcImage('server','raworc_server','raworc/raworc_server', tag);
-        const OPERATOR_IMAGE = await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag);
+        const CONTROLLER_IMAGE = await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag);
         const AGENT_IMAGE = await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
 
         console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
@@ -170,12 +170,12 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'server', 'operator'];
+          components = ['mysql', 'ollama', 'server', 'controller'];
         }
 
-        // Enforce startup order: mysql → ollama → server → operator
-        // In particular, ensure server starts before operator when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'server', 'operator'];
+        // Enforce startup order: mysql → ollama → server → controller
+        // In particular, ensure server starts before controller when both are requested.
+        const desiredOrder = ['mysql', 'ollama', 'server', 'controller'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -383,17 +383,17 @@ module.exports = (program) => {
               break;
             }
 
-            case 'operator': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring operator service is running...');
-              if (await containerRunning('raworc_operator')) { console.log(chalk.green('[SUCCESS] ') + 'Operator already running'); console.log(); break; }
-              if (await containerExists('raworc_operator')) {
-                await docker(['start','raworc_operator']);
-                console.log(chalk.green('[SUCCESS] ') + 'Operator started');
+            case 'controller': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
+              if (await containerRunning('raworc_controller')) { console.log(chalk.green('[SUCCESS] ') + 'Controller already running'); console.log(); break; }
+              if (await containerExists('raworc_controller')) {
+                await docker(['start','raworc_controller']);
+                console.log(chalk.green('[SUCCESS] ') + 'Controller started');
                 console.log();
                 break;
               }
               // Default OLLAMA_HOST: prefer internal container if running
-              let OLLAMA_HOST = options.operatorOllamaHost || process.env.OLLAMA_HOST;
+              let OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
               try {
                 const res = await docker(['ps','-q','--filter','name=raworc_ollama'], { silent: true });
                 const hasOllama = !!res.stdout.trim();
@@ -402,28 +402,28 @@ module.exports = (program) => {
                 if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
               }
 
-              const agentImage = options.operatorAgentImage || AGENT_IMAGE;
-              const operatorDbUrl = options.operatorDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc';
-              const operatorJwt = options.operatorJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
-              const operatorRustLog = options.operatorRustLog || 'info';
-              const model = options.operatorOllamaModel || options.ollamaModel;
+              const agentImage = options.controllerAgentImage || AGENT_IMAGE;
+              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc';
+              const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
+              const controllerRustLog = options.controllerRustLog || 'info';
+              const model = options.controllerOllamaModel || options.ollamaModel;
               const args = ['run','-d',
-                '--name','raworc_operator',
+                '--name','raworc_controller',
                 '--network','raworc_network',
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
-                '-e',`DATABASE_URL=${operatorDbUrl}`,
-                '-e',`JWT_SECRET=${operatorJwt}`,
+                '-e',`DATABASE_URL=${controllerDbUrl}`,
+                '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`OLLAMA_MODEL=${model}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
-                '-e',`AGENT_CPU_LIMIT=${options.operatorAgentCpuLimit || '0.5'}`,
-                '-e',`AGENT_MEMORY_LIMIT=${options.operatorAgentMemoryLimit || '536870912'}`,
-                '-e',`AGENT_DISK_LIMIT=${options.operatorAgentDiskLimit || '1073741824'}`,
-                '-e',`RUST_LOG=${operatorRustLog}`,
-                OPERATOR_IMAGE
+                '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
+                '-e',`AGENT_MEMORY_LIMIT=${options.controllerAgentMemoryLimit || '536870912'}`,
+                '-e',`AGENT_DISK_LIMIT=${options.controllerAgentDiskLimit || '1073741824'}`,
+                '-e',`RUST_LOG=${controllerRustLog}`,
+                CONTROLLER_IMAGE
               ];
               await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + 'Operator service container started');
+              console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
               break;
             }
