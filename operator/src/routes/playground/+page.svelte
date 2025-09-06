@@ -4,7 +4,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { apiDocs } from '$lib/api/docs.js';
   import { getToken as getCookieTokenFn } from '$lib/auth.js';
-  import { playground } from '/src/stores/playground.js';
+  import { playground, clearPlaygroundToken } from '/src/stores/playground.js';
 
   setPageTitle('API Playground');
 
@@ -153,6 +153,9 @@
             <div class="form-check mt-1">
               <input class="form-check-input" type="checkbox" id="rememberToken" bind:checked={$playground.remember}>
               <label class="form-check-label" for="rememberToken">Remember in this browser</label>
+            </div>
+            <div class="mt-2 d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" on:click={() => { clearPlaygroundToken(); }}>Clear saved token</button>
             </div>
             {#if !token && cookieToken}
               <div class="form-text">Defaulting to cookie token for this session.</div>

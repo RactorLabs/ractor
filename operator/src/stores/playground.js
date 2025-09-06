@@ -30,3 +30,12 @@ function createPlaygroundStore() {
 
 export const playground = createPlaygroundStore();
 
+export function clearPlaygroundToken() {
+  try {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch (_) {}
+  playground.set({ token: '', remember: false });
+}
