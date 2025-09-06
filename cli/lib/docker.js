@@ -181,7 +181,6 @@ class DockerManager {
           '--network', 'raworc_network',
           '-p', '9000:9000',
           '-v', 'raworc_logs:/app/logs',
-          # removed public volume mount; content served by separate container
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',

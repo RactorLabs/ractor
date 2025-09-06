@@ -89,7 +89,7 @@ impl OllamaClient {
         let timeout_secs = std::env::var("OLLAMA_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(120);
+            .unwrap_or(600);
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(timeout_secs))

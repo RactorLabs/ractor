@@ -1,4 +1,4 @@
-// API documentation data source for Raworc Operator
+// API documentation data source for Raworc UI
 // Covers endpoints defined in src/server/rest/routes.rs
 
 export const apiDocs = [

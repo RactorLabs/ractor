@@ -1162,6 +1162,11 @@ echo 'Agent directories created (code, secrets, logs, content)'
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         env.push(format!("OLLAMA_MODEL={}", ollama_model));
+        let ollama_timeout = std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
+        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
+        // Propagate timeout for model calls; default 600s if unspecified
+        let ollama_timeout = std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
+        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 

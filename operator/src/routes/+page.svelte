@@ -1,18 +1,19 @@
 <script>
-  import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import { setPageTitle } from '$lib/utils.js';
-
-  onMount(() => {
-    setPageTitle('Login');
-    goto('/login');
-  });
+  import Card from '/src/components/bootstrap/Card.svelte';
+  setPageTitle('Home');
 </script>
 
-<div class="d-flex align-items-center justify-content-center" style="min-height: 50vh;">
-  <div class="text-center text-body text-opacity-75">
-    <div class="spinner-border text-theme mb-3"></div>
-    <div>Redirecting to login… If not redirected, <a href="/login">click here</a>.</div>
+<div class="row">
+  <div class="col-xl-12">
+    <Card>
+      <div class="card-body p-4">
+        <div class="fs-18px fw-bold mb-1">Welcome to Raworc</div>
+        <div class="text-body text-opacity-75">Use the navigation to explore the UI and API documentation.</div>
+        <div class="mt-3">
+          <a href="/docs" class="btn btn-outline-theme">View API Documentation</a>
+        </div>
+      </div>
+    </Card>
   </div>
-  
 </div>

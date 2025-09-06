@@ -1,26 +1,15 @@
 # Build stage
-FROM node:20-alpine AS build
-WORKDIR /app
-
-# Install dependencies
-COPY operator/package*.json ./operator/
-WORKDIR /app/operator
-RUN npm ci
-
-# Copy source and build with base path
-COPY operator/ .
-# Build static site (adapter-static)
-RUN npm run build
-
-# Runtime stage: serve static build via nginx
 FROM node:20-alpine AS runtime
-WORKDIR /app
-# Install a simple static server
-RUN npm i -g http-server@14
+WORKDIR /app/operator
 
-# Copy built assets
-COPY --from=build /app/operator/build /app
+# Copy prebuilt SSR app and production deps (built outside the container)
+COPY operator/build ./build
+COPY operator/package*.json ./
+COPY operator/node_modules ./node_modules
 
-# Serve on port 7000
+# Configure server port
+ENV PORT=7000
+ENV HOST=0.0.0.0
 EXPOSE 7000
-CMD ["http-server", "/app", "-p", "7000", "-a", "0.0.0.0"]
+
+CMD ["node", "build"]

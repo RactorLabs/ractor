@@ -1,22 +1,11 @@
 import { writable } from 'svelte/store';
 
-const menus = [{
-	'text': 'Navigation',
-	'is_header': true
-},{
-	'url': '/login',
-	'icon': 'bi bi-box-arrow-in-right',
-	'text': 'Login'
-}, {
-	'is_divider': true
-}, {
-	'text': 'Documentation',
-	'is_header': true
-}, {
-	'url': '/docs',
-	'icon': 'bi bi-journal-text',
-	'text': 'API Reference'
-}];
+const menus = [
+  { 'text': 'Navigation', 'is_header': true },
+  { 'url': '/agents', 'icon': 'bi bi-robot', 'text': 'Agents' },
+  { 'is_divider': true },
+  { 'url': '/docs', 'icon': 'bi bi-journal-text', 'text': 'Documentation' }
+];
 
 // Create a writable store with the initial options
 export const appSidebarMenus = writable(menus);

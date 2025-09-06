@@ -145,6 +145,20 @@ for component in "${COMPONENTS[@]}"; do
   operator)
     image_name="raworc_operator:${TAG}"
     dockerfile="Dockerfile.operator"
+    # Build Operator (npm) outside Docker for speed and reproducibility
+    print_status "Cleaning Operator build caches (.svelte-kit, build, Vite cache)"
+    (cd operator && rm -rf .svelte-kit build node_modules/.vite 2>/dev/null || true)
+    print_status "Installing Operator dependencies (npm ci)"
+    (cd operator && npm ci)
+    print_status "Building Operator (npm run build)"
+    (cd operator && npm run build)
+    print_status "Installing production deps for runtime (npm ci --omit=dev)"
+    (cd operator && npm ci --omit=dev)
+    # If an Operator container exists, remove it so the next start uses the fresh image
+    if docker ps -a --format '{{.Names}}' | grep -q '^raworc_operator$'; then
+      print_status "Removing existing raworc_operator container to avoid stale UI"
+      docker rm -f raworc_operator >/dev/null 2>&1 || true
+    fi
     ;;
   content)
     image_name="raworc_content:${TAG}"

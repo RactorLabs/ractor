@@ -218,6 +218,18 @@ module.exports = (program) => {
         async function containerExists(name) {
           try { const res = await docker(['ps','-aq','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
         }
+        async function imageId(imageRef) {
+          try {
+            const res = await docker(['image','inspect', imageRef, '--format','{{.Id}}'], { silent: true });
+            return res.stdout.trim();
+          } catch (_) { return ''; }
+        }
+        async function containerImageId(containerName) {
+          try {
+            const res = await docker(['inspect', containerName, '--format','{{.Image}}'], { silent: true });
+            return res.stdout.trim();
+          } catch (_) { return ''; }
+        }
 
         for (const comp of components) {
           switch (comp) {
@@ -329,7 +341,7 @@ module.exports = (program) => {
               await docker(args);
 
               // Wait until ready (new container only)
-              let timeoutMs = 120000;
+              let timeoutMs = 600000; // 10 minutes to allow large model loads
               const start = Date.now();
               if (hostPublish) {
                 console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
@@ -430,12 +442,26 @@ module.exports = (program) => {
 
             case 'operator': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
-              if (await containerRunning('raworc_operator')) { console.log(chalk.green('[SUCCESS] ') + 'Operator already running'); console.log(); break; }
               if (await containerExists('raworc_operator')) {
-                await docker(['start','raworc_operator']);
-                console.log(chalk.green('[SUCCESS] ') + 'Operator started');
-                console.log();
-                break;
+                // If container exists, ensure it matches the desired image; recreate if not
+                const running = await containerRunning('raworc_operator');
+                const currentId = await containerImageId('raworc_operator');
+                const desiredId = await imageId(OPERATOR_IMAGE);
+                if (currentId && desiredId && currentId !== desiredId) {
+                  console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
+                  try { await docker(['rm','-f','raworc_operator']); } catch (_) {}
+                } else if (running) {
+                  console.log(chalk.green('[SUCCESS] ') + 'Operator already running');
+                  console.log();
+                  break;
+                } else if (!running && currentId && desiredId && currentId === desiredId) {
+                  await docker(['start','raworc_operator']);
+                  console.log(chalk.green('[SUCCESS] ') + 'Operator started');
+                  console.log();
+                  break;
+                } else {
+                  // fallthrough to create
+                }
               }
               const args = ['run'];
               if (detached) args.push('-d');

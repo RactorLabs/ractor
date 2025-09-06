@@ -7,12 +7,14 @@ use axum::{
 };
 use tokio::fs;
 use tower_http::services::ServeDir;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
+#[path = "../shared/mod.rs"]
+mod shared;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging under content service name
-    let _ = raworc::shared::logging::init_service_logging("/app/logs", "raworc_content");
+    let _ = shared::logging::init_service_logging("/app/logs", "raworc_content");
 
     let app = create_app().await;
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await?;
@@ -28,12 +30,15 @@ async fn create_app() -> Router {
         warn!("Failed to create /content directory: {}", e);
     }
 
-    Router::new()
+    // Build a router that is mounted under /content
+    let content_router = Router::new()
         .route("/", get(index_handler))
         .route("/health", get(health_handler))
         .fallback_service(
             ServeDir::new("/content").not_found_service(axum::routing::any(not_found_handler)),
-        )
+        );
+
+    Router::new().nest("/content", content_router)
 }
 
 async fn index_handler() -> impl IntoResponse {
@@ -72,4 +77,3 @@ async fn not_found_handler() -> impl IntoResponse {
         .body(html.to_string())
         .unwrap()
 }
-
