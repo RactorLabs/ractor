@@ -23,6 +23,21 @@ This is the next development version.
 - Updated Getting Started, CLI Usage, and Troubleshooting to reflect idempotent start, new stop behavior, and CLI-only control.
 - Removed script references and `--restart` examples across the site.
 
+## [0.5.1] - 2025-09-06
+
+Primarily a documentation and setup refinement release.
+
+### 📚 Documentation & Terminology
+
+- Updated website docs to align CLI/API terminology and Ollama-based workflows.
+- Added Ollama `gpt-oss:20b` setup notes and prerequisites.
+- Refactored references from Claude/Anthropic to Ollama across docs.
+
+### 🛠️ Setup & Scripts
+
+- Introduced GPU setup checks via a `doctor` flow to validate NVIDIA runtime and container access.
+- Streamlined setup scripts and removed outdated guidance.
+
 ## [0.5.0] - 2025-09-05
 
 **Major Ollama Migration & Tool Call Restoration Release**
@@ -359,21 +374,3 @@ This is the next development version.
 
 - Model Runtime Migration: Replaced Anthropic/Claude integration with local model inference via Ollama (default model: gpt-oss)
 - New `ollama` component: `raworc start ollama` runs dedicated `raworc_ollama` container with persistent model cache
-
-## [0.5.1] - 2025-09-06
-
-Primarily a documentation and setup refinement release.
-
-### 📚 Documentation & Terminology
-
-- Updated website docs to align CLI/API terminology and Ollama-based workflows.
-- Added Ollama `gpt-oss:20b` setup notes and prerequisites.
-- Refactored references from Claude/Anthropic to Ollama across docs.
-
-### 🛠️ Setup & Scripts
-
-- Introduced GPU setup checks via a `doctor` flow to validate NVIDIA runtime and container access.
-- Streamlined setup scripts and removed outdated guidance.
-- Resource flags: Added `OLLAMA_CPUS`, `OLLAMA_MEMORY`, `OLLAMA_SHM_SIZE`, and `OLLAMA_ENABLE_GPU` to tune Ollama container resources
-- CLI updates: Removed Anthropic key validation; added `ollama` service mapping; updated examples to use `OLLAMA_HOST`
-- Docs: Updated Getting Started, CLI Usage, Architecture, and Agents guides to reflect Ollama-based runtime
