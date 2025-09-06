@@ -1026,6 +1026,22 @@ function getTerminalWidth() {
 // Track the last rendered prompt layout to clear accurately
 let __lastPromptLayout = null;
 let __extraBlankLinesAbovePrompt = 0;
+let __promptPaddingInstalled = false;
+
+function updateLayoutPromptText(text) {
+  if (__lastPromptLayout && Array.isArray(__lastPromptLayout.lines)) {
+    const promptLine = __lastPromptLayout.lines.find(l => l.name === 'prompt');
+    if (promptLine) promptLine.text = text;
+  }
+}
+
+function redrawPromptLine(text) {
+  try {
+    process.stdout.write('\r\x1b[2K');
+    process.stdout.write(text || '');
+    updateLayoutPromptText(text || '');
+  } catch (_) {}
+}
 
 function stripAnsi(input) {
   if (!input) return '';
@@ -1106,6 +1122,11 @@ function showPrompt(state = 'init') {
   console.log(stateText);
   console.log(dashText);
   process.stdout.write(promptText);
+  if (!__promptPaddingInstalled) {
+    process.stdout.write('\n');
+    process.stdout.write('\x1b[1A');
+    __promptPaddingInstalled = true;
+  }
 
   // Capture layout for robust clearing
   __lastPromptLayout = capturePromptLayout({
@@ -1161,6 +1182,11 @@ function showPromptWithInput(state = 'init', userInput = '') {
   console.log(stateText);
   console.log(dashText);
   process.stdout.write(promptText);
+  if (!__promptPaddingInstalled) {
+    process.stdout.write('\n');
+    process.stdout.write('\x1b[1A');
+    __promptPaddingInstalled = true;
+  }
 
   // Capture layout for robust clearing
   __lastPromptLayout = capturePromptLayout({
@@ -1330,8 +1356,10 @@ async function chatLoop(agentName, options = {}) {
   // Animation interval for dots (every 500ms)
   const dotAnimationInterval = setInterval(() => {
     if (promptVisible && (currentAgentState === 'init' || currentAgentState === 'busy')) {
+      // Avoid redrawing header while the user is typing to prevent flicker
+      if (currentUserInput && currentUserInput.length > 0) return;
       clearPrompt();
-      showPromptWithInput(currentAgentState, currentUserInput);
+      showPrompt(currentAgentState);
     }
   }, 500);
 
@@ -1352,13 +1380,8 @@ async function chatLoop(agentName, options = {}) {
     } else if (str && str.length === 1 && !key.ctrl && !key.meta) {
       currentUserInput += str;
     }
-
-    // Live redraw the prompt to reflect the updated input without jumps
-    if (promptVisible) {
-      try { clearPrompt(); } catch (_) {}
-      showPromptWithInput(currentAgentState, currentUserInput);
-      promptVisible = true;
-    }
+    // Live update only the prompt line, no header redraw
+    if (promptVisible) redrawPromptLine(currentUserInput);
   });
 
   rl.on('line', async (input) => {
