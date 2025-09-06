@@ -12,6 +12,13 @@
   let error = null;
   let agents = [];
 
+  function stateClass(state) {
+    const s = String(state || '').toLowerCase();
+    if (s === 'idle') return 'badge rounded-pill bg-success';
+    if (s === 'busy') return 'badge rounded-pill bg-warning text-dark';
+    return 'badge rounded-pill bg-secondary';
+  }
+
   onMount(async () => {
     // Guard: if not authed, redirect to login
     if (!isAuthenticated()) {
@@ -62,7 +69,7 @@
                 {#each agents as a}
                   <tr>
                     <td class="font-monospace">{a.name || a.id || '-'}</td>
-                    <td><span class="badge bg-secondary">{a.state || a.status || 'unknown'}</span></td>
+                    <td><span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span></td>
                     <td class="small text-body text-opacity-75">{a.description || a.desc || ''}</td>
                   </tr>
                 {/each}
@@ -74,4 +81,3 @@
     </Card>
   </div>
 </div>
-
