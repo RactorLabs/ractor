@@ -172,6 +172,20 @@ module.exports = (program) => {
         if (!components || components.length === 0) {
           components = ['mysql', 'ollama', 'server', 'operator'];
         }
+
+        // Enforce startup order: mysql → ollama → server → operator
+        // In particular, ensure server starts before operator when both are requested.
+        const desiredOrder = ['mysql', 'ollama', 'server', 'operator'];
+        const unique = Array.from(new Set(components));
+        const ordered = [];
+        for (const name of desiredOrder) {
+          if (unique.includes(name)) ordered.push(name);
+        }
+        // Append any unknown components at the end preserving input order
+        for (const name of unique) {
+          if (!desiredOrder.includes(name)) ordered.push(name);
+        }
+        components = ordered;
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
 
         if (!(await isDockerAvailable())) {
