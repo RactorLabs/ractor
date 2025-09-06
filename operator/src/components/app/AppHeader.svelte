@@ -55,24 +55,34 @@
 	
 	<!-- BEGIN menu -->
 	<div class="menu">
-    	<div class="menu-item dropdown dropdown-mobile-full">
-            <!-- App grid with items from sidebar menus -->
-            <a href="#/" aria-label="Apps" data-bs-toggle="dropdown" data-bs-display="static" class="menu-link">
-              <div class="menu-icon"><i class="bi bi-grid-3x3-gap nav-icon"></i></div>
-            </a>
-            <div class="dropdown-menu fade dropdown-menu-end w-300px text-center p-0 mt-1">
-              <div class="row row-grid gx-0">
-                {#each $appSidebarMenus.filter(m => !m.is_header && !m.is_divider) as m (m.url)}
-                  <div class="col-4">
-                    <a href={m.url} aria-label={m.text} class="dropdown-item text-decoration-none p-3 bg-none">
-                      <div><i class={(m.icon || 'bi bi-circle') + ' h2 opacity-5 d-block my-1'}></i></div>
-                      <div class="fw-500 fs-10px text-inverse">{m.text.toUpperCase()}</div>
-                    </a>
-                  </div>
-                {/each}
+        <div class="menu-item dropdown dropdown-mobile-full">
+          <!-- App grid with fixed items -->
+          <a href="#/" aria-label="Apps" data-bs-toggle="dropdown" data-bs-display="static" class="menu-link">
+            <div class="menu-icon"><i class="bi bi-grid-3x3-gap nav-icon"></i></div>
+          </a>
+          <div class="dropdown-menu fade dropdown-menu-end w-300px text-center p-0 mt-1">
+            <div class="row row-grid gx-0">
+              <div class="col-4">
+                <a href="/agents" aria-label="Agents" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-robot h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">AGENTS</div>
+                </a>
+              </div>
+              <div class="col-4">
+                <a href="/playground" aria-label="Playground" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-joystick h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">PLAYGROUND</div>
+                </a>
+              </div>
+              <div class="col-4">
+                <a href="/docs" aria-label="Docs" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-journal-text h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">DOCS</div>
+                </a>
               </div>
             </div>
           </div>
+        </div>
 
         <div class="menu-item dropdown dropdown-mobile-full">
           {#if $auth && $auth.token}

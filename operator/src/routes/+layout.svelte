@@ -13,13 +13,24 @@
   import { appOptions } from '/src/stores/appOptions.js';
   import { appVariables, generateVariables } from '/src/stores/appVariables.js';
   import { setPageTitle } from '$lib/utils';
+  import { page } from '$app/stores';
 	
-	onMount(async () => {
-		import('bootstrap');
-		document.querySelector('body').classList.add('app-init');
-		
-		$appVariables = generateVariables();
-	});
+  onMount(async () => {
+    import('bootstrap');
+    document.querySelector('body').classList.add('app-init');
+    
+    $appVariables = generateVariables();
+    // Always keep sidebar minimized
+    $appOptions.appSidebarCollapsed = true;
+    $appOptions.appSidebarToggled = false;
+  });
+
+  // Keep sidebar minimized on navigation
+  $: (async () => {
+    const _ = $page.url.pathname; // react to route changes
+    $appOptions.appSidebarCollapsed = true;
+    $appOptions.appSidebarToggled = false;
+  })();
 </script>
 
 <div id="app" class="app" 

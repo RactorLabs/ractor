@@ -153,8 +153,8 @@
 </script>
 
 <div class="row g-3">
-  <div class="col-xl-8">
-    <Card class="h-100" style="z-index: 1020;">
+  <div class="col-xl-8 d-flex">
+    <Card class="h-100 flex-fill" style="z-index: 1020;">
       <div class="card-header d-flex align-items-center gap-2">
         <div class="fw-bold">{id}</div>
         <div>{#if agent}<span class={stateClass(agent.state)}>{agent.state}</span>{/if}</div>
@@ -167,7 +167,7 @@
           {/if}
         </div>
       </div>
-      <div class="card-body d-flex flex-column px-3 px-lg-4 py-2" style="min-height: 60vh; background: transparent;">
+      <div class="card-body d-flex flex-column px-3 px-lg-4 py-2" style="height: 100%; background: transparent;">
         {#if loading}
           <div class="flex-fill d-flex align-items-center justify-content-center">
             <div class="text-body text-opacity-75 text-center">
@@ -197,7 +197,7 @@
               <div class="text-body text-opacity-75">No messages yet. Say hello!</div>
             {/if}
           </div>
-          <form class="border-top pt-2" on:submit|preventDefault={sendMessage}>
+          <form class="border-top pt-2" on:submit|preventDefault={sendMessage} style="position: sticky; bottom: 0; background: var(--bs-body-bg); z-index: 2;">
             <div class="input-group">
               <input aria-label="Message input" class="form-control" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
               <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>Send</button>
