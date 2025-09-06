@@ -229,7 +229,7 @@ raworc start
 
 ### Check system status
 ```bash
-raworc api version
+curl -s http://localhost:9000/api/v0/version
 ```
 
 ### View service logs

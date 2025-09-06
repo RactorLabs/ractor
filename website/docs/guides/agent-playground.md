@@ -7,6 +7,9 @@ title: Agent Playground
 
 Master the full power of Raworc agents with interactive examples and advanced features. This guide demonstrates agent management capabilities with Computer Use Agent through practical, hands-on examples.
 
+Note
+- As of 0.6.0, CLI agent commands were removed. Use the REST API for agent creation, messages, sleep/wake, publish/unpublish.
+
 ## Prerequisites
 
 Ensure an Ollama server is available (start an Ollama container or set `OLLAMA_HOST`).

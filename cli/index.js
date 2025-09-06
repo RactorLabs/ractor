@@ -9,12 +9,6 @@ const startCommand = require('./commands/start');
 const stopCommand = require('./commands/stop');
 const resetCommand = require('./commands/reset');
 const cleanCommand = require('./commands/clean');
-const agentCommand = require('./commands/agent');
-const authCommand = require('./commands/auth');
-const loginCommand = require('./commands/login');
-const logoutCommand = require('./commands/logout');
-const tokenCommand = require('./commands/token');
-const apiCommand = require('./commands/api');
 const pullCommand = require('./commands/pull');
 const doctorCommand = require('./commands/doctor');
 
@@ -30,12 +24,6 @@ startCommand(program);
 stopCommand(program);
 resetCommand(program);
 cleanCommand(program);
-agentCommand(program);
-authCommand(program);
-loginCommand(program);
-logoutCommand(program);
-tokenCommand(program);
-apiCommand(program);
 pullCommand(program);
 doctorCommand(program);
 

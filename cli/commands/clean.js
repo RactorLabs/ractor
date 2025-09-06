@@ -1,6 +1,4 @@
 const chalk = require('chalk');
-const api = require('../lib/api');
-const config = require('../config/config');
 const docker = require('../lib/docker');
 const display = require('../lib/display');
 

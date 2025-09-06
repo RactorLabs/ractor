@@ -5,6 +5,16 @@ title: Changelog
 
 # Changelog
 
+## [0.6.0] - TBD
+
+### 🔁 Component Rename
+- Renamed the Orchestrator component from Operator to Controller. Database entities and API semantics retaining the term “Operator” remain unchanged.
+
+### 🧹 CLI De-scope
+- Removed API and agent commands from CLI: `login`, `auth`, `logout`, `token`, `api`, `agent`.
+- CLI now focuses solely on Docker lifecycle: `start`, `stop`, `pull`, `doctor`.
+- Documentation updated to reference direct REST API usage (curl/Postman) for authentication and agent lifecycle.
+
 ## [0.5.2] - TBD
 
 This is the next development version.

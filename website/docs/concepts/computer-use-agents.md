@@ -261,3 +261,5 @@ raworc agent create \
 - **[Dev Mode](/docs/guides/dev-mode)** - Enable Coding Agent for development tasks
 - **[Agents](/docs/concepts/agents)** - Understand agent management
 - **[CLI Usage](/docs/guides/cli-usage)** - Master all CLI commands
+Note
+- As of 0.6.0, CLI agent commands were removed. Use the REST API to create and interact with agents.

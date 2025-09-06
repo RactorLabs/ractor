@@ -7,6 +7,9 @@ title: Agents
 
 Raworc organizes Agent work through **Agents** - isolated containerized environments where the Agent executes tasks. Each agent provides secure execution, persistent storage, and comprehensive lifecycle management.
 
+Note
+- As of 0.6.0, the CLI no longer includes API or agent commands. Use REST API examples (curl/Postman) instead of `raworc api`/`raworc agent` where shown.
+
 ## Agent Data Model
 
 ```typescript

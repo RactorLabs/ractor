@@ -12,7 +12,7 @@
 - Run CI-like checks: `cargo test --verbose`.
 - Start full stack (Docker): `raworc start` (MySQL on `3307`, API `9000`, public `8000`). Use `./scripts/build.sh` in dev if you need to build images.
 - Stop: `raworc stop`.
-- Dev CLI link: `./scripts/link.sh` then use `raworc api version`.
+- Dev CLI link: `./scripts/link.sh` then use `raworc --help` or `raworc start`.
 
 ## Contributor Workflow Rules
 - Use the CLI for service management: `raworc start|stop|doctor`.
@@ -31,7 +31,7 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql server controller && ./scripts/link.sh && raworc api version`.
+- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql server controller && ./scripts/link.sh && raworc --version`.
 
 ## Commit & Pull Request Guidelines
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
@@ -50,7 +50,7 @@
 
 ## Agent-Specific Instructions
 - Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.
-- Link the CLI before usage: `./scripts/link.sh`, then prefer `raworc ...` commands for checks (e.g., `raworc api version`).
+- Link the CLI before usage: `./scripts/link.sh`, then prefer `raworc ...` commands for checks (e.g., `raworc --version`).
 - Coordinate actions: wait for explicit maintainer instruction before running long/destructive ops, publishing, or committing.
 - Commit policy: never reference AI/assistants; no emojis; write professional, imperative, conventional commits.
 - Pre‑commit checklist: `cargo fmt --check`, `cargo clippy`, `cargo build --release`, `cargo test`, and verify services start.

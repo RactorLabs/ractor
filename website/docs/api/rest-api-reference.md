@@ -13,45 +13,19 @@ Complete reference for all Raworc REST API endpoints.
 - **Authentication**: Bearer token (JWT) required for most endpoints
 - **Content-Type**: application/json
 
-## CLI API Access
+## API Access
 
-The Raworc CLI provides convenient access to all API endpoints:
+As of 0.6.0, the CLI no longer includes an `api` helper. Use curl/Postman for direct HTTP calls.
 
+Examples (no auth):
 ```bash
-# Direct API calls
-raworc api <endpoint>
-
-# Examples
-raworc api version                   # GET /version
-raworc api agents                    # GET /agents
-raworc api agents -m POST            # POST /agents
-raworc api agents/abc123            # GET /agents/abc123
-raworc api agents/abc123 -m DELETE  # DELETE /agents/abc123
-
-# With request body
-raworc api agents -m POST -b '{"instructions":"Hello"}'
-
-# With query parameters  
-raworc api "agents/abc123/messages?limit=10"
-
-# Response formatting
-raworc api agents --pretty           # Pretty print JSON
-raworc api agents --headers          # Show response headers
-raworc api agents --status           # Show HTTP status
-```
-
-**CLI Options:**
-- `-m, --method <method>` - HTTP method (GET, POST, PUT, DELETE, PATCH)
-- `-b, --body <body>` - JSON request body
-- `-H, --headers` - Show response headers
-- `-p, --pretty` - Pretty print JSON (default: true)
-- `-s, --status` - Show HTTP status code
-
-**Authentication:**
-The CLI automatically includes your stored authentication token. Authenticate first:
-```bash
-raworc login -u admin -p admin    # Generate token
-raworc auth -t <jwt-token>        # Authenticate CLI
+curl -s http://localhost:9000/api/v0/version
+curl -s http://localhost:9000/api/v0/agents
+curl -s -X POST http://localhost:9000/api/v0/agents \
+  -H 'Content-Type: application/json' \
+  -d '{"instructions":"Hello"}'
+curl -s http://localhost:9000/api/v0/agents/abc123
+curl -s -X DELETE http://localhost:9000/api/v0/agents/abc123
 ```
 
 ## Version & Health
