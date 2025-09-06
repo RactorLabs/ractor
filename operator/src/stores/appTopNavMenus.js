@@ -1,9 +1,9 @@
 import { writable } from 'svelte/store';
 
 const menus = [{
-  'url': '/',
-  'icon': 'bi bi-house-door',
-  'text': 'Home'
+  'url': '/login',
+  'icon': 'bi bi-box-arrow-in-right',
+  'text': 'Login'
 }, {
   'url': '/docs',
   'icon': 'bi bi-journal-text',

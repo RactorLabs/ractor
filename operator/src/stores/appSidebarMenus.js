@@ -4,9 +4,9 @@ const menus = [{
 	'text': 'Navigation',
 	'is_header': true
 },{
-	'url': '/',
-	'icon': 'bi bi-house-door',
-	'text': 'Home'
+	'url': '/login',
+	'icon': 'bi bi-box-arrow-in-right',
+	'text': 'Login'
 }, {
 	'is_divider': true
 }, {
