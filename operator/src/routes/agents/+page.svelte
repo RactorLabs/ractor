@@ -36,7 +36,10 @@
     <Card>
       <div class="card-header d-flex align-items-center">
         <div class="fw-bold">Agents</div>
-        <div class="ms-auto small text-body text-opacity-75">{agents?.length || 0} total</div>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
+          <div class="small text-body text-opacity-75">{agents?.length || 0} total</div>
+        </div>
       </div>
       <div class="card-body">
         {#if loading}
@@ -50,6 +53,9 @@
           <div class="alert alert-danger small">{error}</div>
         {:else if !agents || agents.length === 0}
           <div class="text-body text-opacity-75">No agents found.</div>
+          <div class="mt-3">
+            <a href="/agents/create" class="btn btn-theme"><i class="bi bi-plus me-1"></i>Create your first agent</a>
+          </div>
         {:else}
           <div class="table-responsive">
             <table class="table table-sm align-middle">
@@ -76,4 +82,3 @@
     </Card>
   </div>
 </div>
-
