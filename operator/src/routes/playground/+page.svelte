@@ -3,6 +3,7 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
   import { apiDocs } from '$lib/api/docs.js';
+  import { getToken as getCookieTokenFn } from '$lib/auth.js';
   import { playground } from '/src/stores/playground.js';
 
   setPageTitle('API Playground');
@@ -25,6 +26,11 @@
 
   $: token = $playground.token || '';
   $: remember = $playground.remember;
+  let cookieToken = '';
+  onMount(() => {
+    try { cookieToken = getCookieTokenFn() || ''; } catch (_) { cookieToken = ''; }
+  });
+  $: effectiveToken = (token && token.trim().length > 0) ? token : cookieToken;
 
   function onSelect(idx) {
     selected = endpoints[idx];
@@ -79,7 +85,7 @@
     parts.push('-s');
     parts.push('-X ' + selected.method);
     parts.push(url);
-    if (token) parts.push('-H "Authorization: Bearer ' + token + '"');
+    if (effectiveToken) parts.push('-H "Authorization: Bearer ' + effectiveToken + '"');
     if (bodyText && selected.method !== 'GET' && selected.method !== 'DELETE') {
       parts.push('-H "Content-Type: application/json"');
       parts.push("-d '" + bodyText.replace(/'/g, "'\\''") + "'");
@@ -97,7 +103,7 @@
     loading = true; result = null;
     const url = buildUrl();
     const headers = new Headers();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    if (effectiveToken) headers.set('Authorization', `Bearer ${effectiveToken}`);
     let body;
     if (bodyText && selected.method !== 'GET' && selected.method !== 'DELETE') {
       headers.set('Content-Type', 'application/json');
@@ -142,12 +148,15 @@
             </select>
           </div>
           <div class="col-12 col-md-4">
-            <label class="form-label">Auth Token</label>
-            <input class="form-control" placeholder="Bearer token" bind:value={$playground.token} />
+            <label class="form-label" for="pg-token">Auth Token</label>
+            <input id="pg-token" class="form-control" placeholder={cookieToken ? 'Using cookie token if empty' : 'Bearer token'} bind:value={$playground.token} />
             <div class="form-check mt-1">
               <input class="form-check-input" type="checkbox" id="rememberToken" bind:checked={$playground.remember}>
               <label class="form-check-label" for="rememberToken">Remember in this browser</label>
             </div>
+            {#if !token && cookieToken}
+              <div class="form-text">Defaulting to cookie token for this session.</div>
+            {/if}
           </div>
           <div class="col-12 col-md-4 text-md-end">
             <button class="btn btn-theme" on:click|preventDefault={execute} disabled={loading}>
