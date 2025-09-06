@@ -1,0 +1,75 @@
+body {
+	& .ql-toolbar,
+	& .ql-container {
+		border-color: var(--#{$prefix}border-color) !important;
+		
+		& .ql-picker {
+			color: var(--#{$prefix}inverse);
+			
+			&:not(.ql-color-picker):not(.ql-icon-picker) svg {
+				right: initial;
+				inset-inline-end: 0;
+			}
+		}
+		& button,
+		& .ql-picker-label,
+		& .ql-picker-item {
+			color: var(--#{$prefix}body-color) !important;
+			border-color: transparent !important;
+			
+			&:hover,
+			&:focus {
+				background: rgba(var(--#{$prefix}inverse-rgb), .25) !important;
+				border-radius: $border-radius;
+			}
+			&.ql-active {
+				background: rgba(var(--#{$prefix}theme-rgb), .25) !important;
+				border-radius: $border-radius;
+				color: var(--#{$prefix}theme) !important;
+				border: none !important;
+				
+				& .ql-stroke {
+					stroke: var(--#{$prefix}theme) !important;
+				}
+				& .ql-fill {
+					fill: var(--#{$prefix}theme) !important;
+				}
+			}
+		}
+		& .ql-picker-options {
+			background: $dropdown-bg;
+			border-color: $dropdown-border-color !important;
+			border-radius: 0;
+			padding: $dropdown-padding-y $dropdown-padding-x;
+			
+			& .ql-picker-item {
+				border-radius: 0 !important;
+				padding: $dropdown-item-padding-y $dropdown-item-padding-x;
+			
+				&:hover,
+				&:focus {
+					background: rgba(var(--#{$prefix}inverse-rgb), .25) !important;
+					color: var(--#{$prefix}inverse) !important;
+				}
+				&.ql-selected {
+					background: rgba(var(--#{$prefix}theme-rgb), .25) !important;
+					color: var(--#{$prefix}theme) !important;
+				}
+			}
+		}
+		& .ql-fill {
+			fill: var(--#{$prefix}inverse) !important;
+		}
+		& .ql-stroke {
+			fill: transparent;
+			stroke: var(--#{$prefix}inverse) !important;
+		}
+	}
+}
+.border-0 .ql-toolbar {
+	border-left: none !important;
+	border-right: none !important;
+}
+.border-0 .ql-container {
+	border: none !important;
+}

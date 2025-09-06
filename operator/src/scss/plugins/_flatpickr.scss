@@ -1,0 +1,189 @@
+body .flatpickr-calendar {
+	--#{$prefix}dropdown-zindex: #{$zindex-dropdown};
+  --#{$prefix}dropdown-min-width: #{$dropdown-min-width};
+  --#{$prefix}dropdown-padding-x: #{$dropdown-padding-x};
+  --#{$prefix}dropdown-padding-y: #{$dropdown-padding-y};
+  --#{$prefix}dropdown-spacer: #{$dropdown-spacer};
+  @include rfs($dropdown-font-size, --#{$prefix}dropdown-font-size);
+  --#{$prefix}dropdown-color: #{$dropdown-color};
+  --#{$prefix}dropdown-bg: #{$dropdown-bg};
+  --#{$prefix}dropdown-border-color: #{$dropdown-border-color};
+  --#{$prefix}dropdown-border-radius: #{$dropdown-border-radius};
+  --#{$prefix}dropdown-border-width: #{$dropdown-border-width};
+  --#{$prefix}dropdown-inner-border-radius: #{$dropdown-inner-border-radius};
+  --#{$prefix}dropdown-divider-bg: #{$dropdown-divider-bg};
+  --#{$prefix}dropdown-divider-margin-y: #{$dropdown-divider-margin-y};
+  --#{$prefix}dropdown-box-shadow: #{$dropdown-box-shadow};
+  --#{$prefix}dropdown-link-color: #{$dropdown-link-color};
+  --#{$prefix}dropdown-link-hover-color: #{$dropdown-link-hover-color};
+  --#{$prefix}dropdown-link-hover-bg: #{$dropdown-link-hover-bg};
+  --#{$prefix}dropdown-link-active-color: #{$dropdown-link-active-color};
+  --#{$prefix}dropdown-link-active-bg: #{$dropdown-link-active-bg};
+  --#{$prefix}dropdown-link-disabled-color: #{$dropdown-link-disabled-color};
+  --#{$prefix}dropdown-item-padding-x: #{$dropdown-item-padding-x};
+  --#{$prefix}dropdown-item-padding-y: #{$dropdown-item-padding-y};
+  --#{$prefix}dropdown-header-color: #{$dropdown-header-color};
+  --#{$prefix}dropdown-header-padding-x: #{$dropdown-header-padding-x};
+  --#{$prefix}dropdown-header-padding-y: #{$dropdown-header-padding-y};
+  
+	position: absolute;
+  z-index: var(--#{$prefix}dropdown-zindex);
+  min-width: var(--#{$prefix}dropdown-min-width);
+  width: auto;
+  padding: var(--#{$prefix}dropdown-padding-y);
+  margin: 0;
+  color: var(--#{$prefix}dropdown-color);
+  text-align: left;
+  list-style: none;
+  background-color: var(--#{$prefix}dropdown-bg);
+  border: var(--#{$prefix}dropdown-border-width) solid var(--#{$prefix}dropdown-border-color);
+  box-shadow: $dropdown-box-shadow;
+  @include font-size(var(--#{$prefix}dropdown-font-size));
+  @include border-radius(var(--#{$prefix}dropdown-border-radius));
+  
+  &:before,
+  &:after {
+  	display: none;
+  }
+  
+  & .flatpickr-months {
+  	& .flatpickr-prev-month,
+  	& .flatpickr-next-month,
+		& .flatpickr-current-month {
+			position: relative;
+			height: auto;
+			color: var(--#{$prefix}body-color);
+			fill: var(--#{$prefix}body-color);
+		}
+  	& .flatpickr-prev-month,
+  	& .flatpickr-next-month {
+  		padding: $spacer * .5;
+  		
+  		&:hover {
+  			& svg {
+  				fill: var(--#{$prefix}theme);
+  			}
+  		}
+  	}
+		& .flatpickr-current-month {
+			left: 0;
+		}
+  }
+  & .flatpickr-weekday {
+  	font-weight: $font-weight-bold;
+  	color: var(--#{$prefix}body-color);
+  }
+  & .flatpickr-day {
+  	width: 14.28%;
+    max-width: inherit;
+    border: none;
+  	border-left: 1px solid var(--#{$prefix}border-color) !important;
+    border-bottom: 1px solid var(--#{$prefix}border-color) !important;
+    border-radius: 0 !important;
+    color: var(--#{$prefix}body-color);
+    margin: 0 !important;
+    background-clip: content-box !important;
+    box-shadow: none !important;
+    position: relative;
+    
+    &:hover,
+    &:focus,
+    &.selected,
+    &.inRange {
+    	background: var(--#{$prefix}border-color);
+    }
+    &:nth-child(7n) {
+    	border-right: 1px solid var(--#{$prefix}border-color) !important;
+		}
+		&:nth-child(-n + 7) {
+    	border-top: 1px solid var(--#{$prefix}border-color) !important;
+		}
+		&.today {
+			color: var(--#{$prefix}theme);
+			background: none;
+		}
+		&.prevMonthDay,
+		&.nextMonthDay {
+			color: rgba(var(--#{$prefix}body-color-rgb), .15) !important;
+			background: none;
+		}
+		&.startRange,
+		&.endRange {
+			color: var(--#{$prefix}theme-color);
+			background: var(--#{$prefix}theme);
+			border-color: var(--#{$prefix}theme) !important;
+			
+			&:before {
+				content: '';
+				position: absolute;
+				top: -1px;
+				background: var(--#{$prefix}theme);
+				height: 1px;
+				left: -1px;
+				right: 0;
+			}
+			&:after {
+				content: '';
+				position: absolute;
+				bottom: -1px;
+				background: var(--#{$prefix}theme);
+				height: 1px;
+				left: -1px;
+				right: 0;
+			}
+		}
+  }
+  & .flatpickr-time {
+  	border: 1px solid var(--#{$prefix}border-color) !important;
+  	margin-top: $spacer * .5;
+  	
+  	& input {
+  		color: var(--#{$prefix}body-color);
+  		background: none !important;
+  	}
+  	& .flatpickr-time-separator, 
+  	& .flatpickr-am-pm {
+  		color: var(--#{$prefix}body-color);
+  	}
+  	& .flatpickr-am-pm {
+  		&:hover,
+  		&:focus {
+  			background: rgba(var(--#{$prefix}body-color-rgb), .15);
+  		}
+  	}	
+  	& .numInputWrapper {
+  		&:hover,
+  		&:focus {
+  			background: rgba(var(--#{$prefix}body-color-rgb), .15);
+  		}
+  		& span {
+  			border: none;
+  			padding: 0;
+  			display: flex;
+  			align-items: center;
+  			justify-content: center;
+  			
+  			&:after {
+  				top: 0;
+  				position: relative;
+  			}
+  			&.arrowUp:after {
+  				border-bottom-color: var(--#{$prefix}border-color);
+  			}
+  			&.arrowDown:after {
+  				border-top-color: var(--#{$prefix}border-color);
+  			}
+  			&:hover,
+  			&:focus {
+  				background: rgba(var(--#{$prefix}body-color-rgb), .15);
+  			}
+  		}
+  	}
+  }
+  &.noCalendar {
+  	& .flatpickr-time {
+  		margin-top: 0;
+  		border: none !important;
+  	}
+  }
+}

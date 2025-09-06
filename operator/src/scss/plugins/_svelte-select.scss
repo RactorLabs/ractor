@@ -1,0 +1,180 @@
+body .app {
+	& .svelte-select {
+ 		--#{$prefix}form-select-bg-img: #{escape-svg($form-select-indicator)};
+ 		
+		display: flex;
+		width: 100%;
+		padding: $input-padding-y $input-padding-x * .5 0 !important;
+		font-family: $input-font-family;
+		@include font-size($input-font-size);
+		font-weight: $input-font-weight;
+		line-height: $input-line-height;
+		color: $input-color;
+		appearance: none;
+		background-color: $input-bg !important;
+		background-clip: padding-box !important;
+		background-image: var(--#{$prefix}form-select-bg-img), var(--#{$prefix}form-select-bg-icon, none) !important;
+		background-repeat: no-repeat !important;
+		background-position: $form-select-bg-position !important;
+		background-size: $form-select-bg-size !important;
+		border: $input-border-width solid $input-border-color !important;
+		border-radius: $input-border-radius !important;
+		min-height: ($input-padding-y * 2) + ($input-line-height * $input-font-size) + rem-default(2px) !important;
+	
+		@include box-shadow($input-box-shadow);
+		@include transition($input-transition);
+		
+		:dir(rtl) & {
+			background-position: left 0.75rem center !important;
+		}
+
+		&.focused {
+			color: $input-focus-color;
+			background-color: $input-focus-bg;
+			border-color: $input-focus-border-color !important;
+			outline: 0 !important;
+			@if $enable-shadows {
+				@include box-shadow($input-box-shadow, $input-focus-box-shadow);
+			} @else {
+				box-shadow: $input-focus-box-shadow !important;
+			}
+		}
+		& .value-container {
+			margin: 0 !important;
+			padding: 0 !important;
+			gap: 0 !important;
+			
+			& input {
+				margin: 0 0 $input-padding-y !important;
+				padding: 0 $input-padding-x * .5 !important;
+				font-family: inherit !important;
+				font-size: $input-font-size !important;
+				font-weight: $input-font-weight;
+				line-height: $input-line-height;
+				height: inherit !important;
+			}
+			& .selected-item {
+				font-family: inherit !important;
+				font-size: $input-font-size !important;
+				font-weight: $input-font-weight;
+				line-height: $input-line-height;
+				height: inherit !important;
+				padding-bottom: $input-padding-y;
+				padding-left: $input-padding-x * .5;
+			}
+			& .multi-item {
+				font-size: $input-font-size - rem(1px) !important;
+				font-weight: $input-font-weight;
+				padding: 0 $input-padding-x * .5 !important;
+				margin: 0 $input-padding-y * .5 $input-padding-y !important;
+				border: none !important;
+				background: rgba(var(--#{$prefix}inverse-rgb), .15) !important;
+				border-radius: $input-border-radius !important;
+				color: $input-color;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				border-radius: 20px;
+				outline: none !important;
+				height: auto !important;
+				line-height: rem(21px) !important;
+				
+				& .multi-item-clear {
+					width: rem(16px);
+					height: rem(16px);
+				}
+			}
+		}
+		& .indicators {
+			padding-bottom: $input-padding-y;
+			margin-inline-end: rem(30px);
+			
+			& .icon {
+				width: rem(16px);
+				height: rem(16px);
+			}
+		}
+	}
+	& .svelte-select-list {
+		--#{$prefix}dropdown-zindex: #{$zindex-dropdown};
+		--#{$prefix}dropdown-min-width: #{$dropdown-min-width};
+		--#{$prefix}dropdown-padding-x: #{$dropdown-padding-x};
+		--#{$prefix}dropdown-padding-y: #{$dropdown-padding-y};
+		--#{$prefix}dropdown-spacer: #{$dropdown-spacer};
+		@include rfs($dropdown-font-size, --#{$prefix}dropdown-font-size);
+		--#{$prefix}dropdown-color: #{$dropdown-color};
+		--#{$prefix}dropdown-bg: #{$dropdown-bg};
+		--#{$prefix}dropdown-border-color: #{$dropdown-border-color};
+		--#{$prefix}dropdown-border-radius: #{$dropdown-border-radius};
+		--#{$prefix}dropdown-border-width: #{$dropdown-border-width};
+		--#{$prefix}dropdown-inner-border-radius: #{$dropdown-inner-border-radius};
+		--#{$prefix}dropdown-divider-bg: #{$dropdown-divider-bg};
+		--#{$prefix}dropdown-divider-margin-y: #{$dropdown-divider-margin-y};
+		--#{$prefix}dropdown-box-shadow: #{$dropdown-box-shadow};
+		--#{$prefix}dropdown-link-color: #{$dropdown-link-color};
+		--#{$prefix}dropdown-link-hover-color: #{$dropdown-link-hover-color};
+		--#{$prefix}dropdown-link-hover-bg: #{$dropdown-link-hover-bg};
+		--#{$prefix}dropdown-link-active-color: #{$dropdown-link-active-color};
+		--#{$prefix}dropdown-link-active-bg: #{$dropdown-link-active-bg};
+		--#{$prefix}dropdown-link-disabled-color: #{$dropdown-link-disabled-color};
+		--#{$prefix}dropdown-item-padding-x: #{$dropdown-item-padding-x};
+		--#{$prefix}dropdown-item-padding-y: #{$dropdown-item-padding-y};
+		--#{$prefix}dropdown-header-color: #{$dropdown-header-color};
+		--#{$prefix}dropdown-header-padding-x: #{$dropdown-header-padding-x};
+		--#{$prefix}dropdown-header-padding-y: #{$dropdown-header-padding-y};
+
+		z-index: var(--#{$prefix}dropdown-zindex) !important;
+		min-width: var(--#{$prefix}dropdown-min-width) !important;
+		width: auto !important;
+		padding: var(--#{$prefix}dropdown-padding-y) var(--#{$prefix}dropdown-padding-x) !important;
+		margin: 0 !important;
+		color: var(--#{$prefix}dropdown-color) !important;
+		text-align: left !important;
+		list-style: none !important;
+		background-color: var(--#{$prefix}dropdown-bg) !important;
+		border: var(--#{$prefix}dropdown-border-width) solid var(--#{$prefix}dropdown-border-color) !important;
+		box-shadow: $dropdown-box-shadow !important;
+		@include font-size(var(--#{$prefix}dropdown-font-size));
+		@include border-radius(var(--#{$prefix}dropdown-border-radius) !important);
+	
+		& .list-item {
+			padding: 0 !important;
+			
+			& .item {
+				display: block;
+				width: 100%;
+				padding: var(--#{$prefix}dropdown-item-padding-y) var(--#{$prefix}dropdown-item-padding-x) !important;
+				clear: both;
+				font-weight: $font-weight-normal;
+				color: var(--#{$prefix}dropdown-link-color);
+				text-align: inherit;
+				text-decoration: if($link-decoration == none, null, none);
+				white-space: nowrap; 
+				background-color: transparent !important;
+				border: 0;
+				border-radius: 0 !important;
+				height: auto !important;
+				line-height: inherit !important;
+
+				&:hover,
+				&:focus {
+					color: var(--#{$prefix}dropdown-link-hover-color) !important;
+					text-decoration: if($link-hover-decoration == underline, none, null) !important;
+					border-radius: 0 !important;
+					@include gradient-bg(var(--#{$prefix}dropdown-link-hover-bg) !important);
+				}
+			}
+		}
+  }
+}
+
+
+@if $enable-dark-mode {
+  @include color-mode(dark) {
+  	body .app {
+			& .svelte-select {
+      	--#{$prefix}form-select-bg-img: #{escape-svg($form-select-indicator-dark)};
+      }
+    }
+  }
+}
