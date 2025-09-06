@@ -63,7 +63,7 @@ npm install -g @raworc/cli
 ### 2. Start Services (API + Operator + DB)
 
 ```bash
-raworc start mysql server operator
+raworc start
 ```
 
 ### 3. Authenticate
@@ -82,7 +82,7 @@ raworc auth -t <jwt-token-from-step-1>
 raworc agent create
 ```
 
-Note: The CLI does not manage Ollama itself. Make sure `OLLAMA_HOST` is set to a reachable Ollama instance and that `gpt-oss:20b` is available there.
+Note: The CLI can also manage Ollama locally. By default, `raworc start` brings up MySQL, Ollama, the API server, and the operator. If you prefer a remote Ollama, set `--operator-ollama-host` or export `OLLAMA_HOST` and skip starting the `ollama` component explicitly: `raworc start mysql server operator`.
 
 That's it! You now have a running agent.
 
@@ -224,7 +224,7 @@ raworc api agents/{agent-name} -m DELETE
 ### Services won't start
 ```bash
 raworc stop
-raworc start --restart
+raworc start
 ```
 
 ### Check system status

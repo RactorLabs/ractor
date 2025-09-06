@@ -32,8 +32,8 @@ npm install -g @raworc/cli
 Start and manage Raworc services:
 
 ```bash
-# Start core services (explicit)
-raworc start mysql server operator
+# Start all core services (idempotent)
+raworc start
 raworc start --pull             # Pull latest images first
 
 # Stop services
@@ -502,7 +502,7 @@ raworc stop --cleanup
 
 | Command | Options | Description |
 |---------|---------|-------------|
-| `raworc start` | `[-r/--restart] [components...]` | Start services, optionally restart existing |
+| `raworc start` | `[components...]` | Start services (idempotent: starts missing or stopped components). Default: all |
 | `raworc stop` | `[-c/--cleanup] [components...]` | Stop services, optionally clean agent containers |
 | `raworc clean` | | Clean agent containers (preserves core services) |
 | `raworc reset` | `[-y/--yes] [-s/--services-only]` | Complete cleanup with optional confirmation |
@@ -538,8 +538,8 @@ docker logs raworc_server
 docker logs raworc_operator
 docker logs raworc_mysql
 
-# Restart services
-raworc start --restart
+# Stop and start services
+raworc stop && raworc start
 ```
 
 ## Error Handling

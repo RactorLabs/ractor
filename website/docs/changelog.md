@@ -32,7 +32,7 @@ Development version - changes will be documented at release.
 
 - **Ollama Service Integration**: Added `raworc_ollama` service with automatic model pulling and GPU detection
 - **Resource Management**: Added CPU/MEM/SHM/GPU configuration flags for optimal performance
-- **Service Defaults**: Changed default start/stop to server+operator only (explicit mysql/ollama required)
+- **Service Defaults**: Start is now idempotent and starts all components by default (mysql, ollama, server, operator). Stop defaults to server+operator. Restart removed.
 - **Docker Improvements**: Enhanced container management with better readiness checks and volume handling
 
 ### 🔧 CLI Enhancements
@@ -75,7 +75,7 @@ Development version - changes will be documented at release.
 
 ### 🐛 Bug Fixes
 - **Docker Public Volume**: Fixed missing `raworc_public_data` volume creation and mounting in CLI Docker manager
-- **CLI/Scripts Consistency**: CLI Docker configuration now mirrors scripts/start.sh behavior for volume management
+- **CLI Control**: CLI is now the single source of truth for service management; legacy start/stop/restart scripts removed
 - **Published Content Storage**: Public content server now has proper persistent volume mounting
 
 ### 🔧 Infrastructure Improvements
@@ -344,7 +344,7 @@ Development version - changes will be documented at release.
 ## v0.4.4
 
 - Model Runtime Migration: Replaced Anthropic/Claude integration with local model inference via Ollama (default model: gpt-oss)
-- New `ollama` component: `./scripts/start.sh ollama` runs dedicated `raworc_ollama` container with persistent model cache
+- New `ollama` component: `raworc start ollama` runs dedicated `raworc_ollama` container with persistent model cache
 - Resource flags: Added `OLLAMA_CPUS`, `OLLAMA_MEMORY`, `OLLAMA_SHM_SIZE`, and `OLLAMA_ENABLE_GPU` to tune Ollama container resources
 - CLI updates: Removed Anthropic key validation; added `ollama` service mapping; updated examples to use `OLLAMA_HOST`
 - Docs: Updated Getting Started, CLI Usage, Architecture, and Agents guides to reflect Ollama-based runtime

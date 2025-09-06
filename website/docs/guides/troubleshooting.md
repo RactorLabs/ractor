@@ -17,8 +17,9 @@ docker logs raworc_server
 docker logs raworc_operator
 docker logs raworc_mysql
 
-# Restart services
-raworc start --restart
+# Stop and start services
+raworc stop all
+raworc start
 
 # Complete reset
 raworc reset --yes
@@ -43,8 +44,9 @@ docker logs raworc_server | grep migration
 # List running agent containers
 docker ps --filter "name=raworc_agent_"
 
-# Clean restart
-raworc start --restart
+# Clean stop/start
+raworc stop all
+raworc start
 
 # Clean up all agents
 raworc clean

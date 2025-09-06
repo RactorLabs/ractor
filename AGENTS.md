@@ -3,19 +3,20 @@
 ## Project Structure & Module Organization
 - `src/`: Rust services — `server/` (API), `operator/` (orchestration), `agent/` (runtime), `shared/` (common code). Binaries: `raworc-server`, `raworc-operator`, `raworc-agent`.
 - `cli/`: Node.js CLI (`raworc`).
-- `scripts/`: Dev automation (`build.sh`, `start.sh`, `stop.sh`, `restart.sh`, `link.sh`).
+- `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Default admin: `admin/admin`.
 - `assets/`, `website/`: Static assets and docs site.
 
 ## Build, Test, and Development Commands
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
-- Start full stack (Docker): `./scripts/start.sh --build` (MySQL on `3307`, API `9000`, public `8000`).
-- Stop/Restart: `./scripts/stop.sh` / `./scripts/restart.sh --build`.
+- Start full stack (Docker): `raworc start` (MySQL on `3307`, API `9000`, public `8000`). Use `./scripts/build.sh` in dev if you need to build images.
+- Stop: `raworc stop`.
 - Dev CLI link: `./scripts/link.sh` then use `raworc api version`.
 
 ## Contributor Workflow Rules
-- Use repo scripts instead of ad‑hoc Docker/Cargo commands: `build.sh`, `start.sh`, `restart.sh`, `stop.sh`.
+- Use the CLI for service management: `raworc start|stop|doctor`.
+- Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh` (start/stop/restart/doctor scripts are thin wrappers over the CLI).
 - Always run `./scripts/link.sh` before invoking the `raworc` CLI during development.
 - Keep changes minimal and consistent with existing patterns; prefer editing within current modules.
 
@@ -30,17 +31,17 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && ./scripts/start.sh ollama mysql server operator && ./scripts/link.sh && raworc api version`.
+- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql server operator && ./scripts/link.sh && raworc api version`.
 
 ## Commit & Pull Request Guidelines
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
 - PRs must include: summary, test plan, breaking changes (if any), and linked issues.
-- Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure scripts still start: `./scripts/start.sh server`.
+- Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `raworc start server`.
 - Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
 - Branch naming: `type/short-description` (e.g., `feat/session-timeout`).
 
 ## Security & Configuration Tips
-- Copy `.env.example` to `.env`; do not commit secrets.
+- .env files are no longer required for starting services via CLI. Pass configuration via `raworc start` flags. Avoid committing secrets.
 - Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`.
  
 - Example local DB: `mysql://raworc:raworc@localhost:3307/raworc`.
@@ -48,7 +49,7 @@
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
 
 ## Agent-Specific Instructions
-- Follow repo scripts strictly: `./scripts/build.sh`, `start.sh`, `restart.sh`, `stop.sh`; avoid ad‑hoc `docker build/run` sequences.
+- Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.
 - Link the CLI before usage: `./scripts/link.sh`, then prefer `raworc ...` commands for checks (e.g., `raworc api version`).
 - Coordinate actions: wait for explicit maintainer instruction before running long/destructive ops, publishing, or committing.
 - Commit policy: never reference AI/assistants; no emojis; write professional, imperative, conventional commits.

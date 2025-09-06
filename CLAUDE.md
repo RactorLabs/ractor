@@ -65,11 +65,11 @@ raworc api version
 git clone <this-repo>
 cd raworc
 
-# Build images locally (using shell scripts from scripts/ folder)
+# Build images locally
 ./scripts/build.sh
 
-# Start services with local images (using shell scripts from scripts/ folder)
-./scripts/start.sh
+# Start services with local images via CLI
+raworc start
 
 # Link CLI for development (shell script links the Node.js CLI from cli/ folder)
 ./scripts/link.sh
@@ -80,8 +80,8 @@ raworc agent create  # Now uses your local build
 
 - Builds Docker images locally from source
 - Full access to build, modify, and test changes
-- Uses shell scripts (scripts/ folder) for container management
-- CLI is Node.js implementation (cli/ folder) linked via shell scripts
+- Uses the CLI for container management
+- CLI is Node.js implementation (cli/ folder)
 - Can modify source code and rebuild
 - Publishing capabilities to Docker Hub
 
@@ -116,9 +116,8 @@ raworc/
 |---------|---------|
 | `./scripts/link.sh` | Link CLI for development |
 | `./scripts/build.sh` | Build Rust binaries and Docker images |
-| `./scripts/start.sh` | Start development services |
-| `./scripts/stop.sh` | Stop services |
-| `./scripts/restart.sh` | Restart all services |
+| `raworc start` | Start services (idempotent) |
+| `raworc stop` | Stop services |
 | `./scripts/reset.sh` | Complete cleanup |
 | `./scripts/push.sh` | Push images to registry |
 | `./scripts/publish.sh` | Publish CLI to npm |
@@ -129,7 +128,7 @@ raworc/
 # Full integration test (requires ANTHROPIC_API_KEY)
 export ANTHROPIC_API_KEY=sk-ant-api03-your-key
 ./scripts/build.sh
-./scripts/start.sh
+raworc start
 ./scripts/link.sh
 raworc login -u admin -p admin
 raworc auth -t <jwt-token-from-login>
@@ -262,7 +261,7 @@ git clone <this-repo>
 
 **Service Management:**
 
-- `raworc start [-r/--restart] [components...]` - Start services
+- `raworc start [components...]` - Start services
 - `raworc stop [-c/--cleanup] [components...]` - Stop services
 - `raworc clean` - Clean agent containers (preserves core services)
 - `raworc reset [-y/--yes] [-s/--services-only]` - Complete cleanup
@@ -751,8 +750,7 @@ Optional longer description explaining the change.
 - Only proceed with testing or committing after receiving explicit user approval
 - Always use the shell scripts (scripts/ folder) for local development:
   - Use `./scripts/build.sh` instead of `cargo build` or `docker build`
-  - Use `./scripts/start.sh` instead of manual `docker run` commands
-  - Use `./scripts/restart.sh` instead of manual restart sequences
+  - Use `raworc start` instead of manual `docker run` commands
   - **CRITICAL**: Link CLI with `./scripts/link.sh` then use `raworc` command
   - **NEVER use `node index.js` or `node cli/index.js`** - always use the linked `raworc` command (Node.js CLI from cli/ folder)
 - Published CLI users should use `raworc` commands directly (Node.js package installed via npm)

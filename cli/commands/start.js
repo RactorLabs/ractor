@@ -1,107 +1,433 @@
 const chalk = require('chalk');
-const docker = require('../lib/docker');
-const display = require('../lib/display');
+const { spawn } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+function execCmd(cmd, args = [], opts = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: opts.silent ? 'pipe' : 'inherit', shell: false });
+    let stdout = '';
+    let stderr = '';
+    if (opts.silent) {
+      child.stdout.on('data', (d) => (stdout += d.toString()))
+      child.stderr.on('data', (d) => (stderr += d.toString()))
+    }
+    child.on('exit', (code) => {
+      if (code === 0) return resolve({ code, stdout, stderr });
+      reject(new Error(stderr || `Command failed: ${cmd} ${args.join(' ')}`));
+    });
+    child.on('error', (err) => reject(err));
+  });
+}
+
+async function docker(args, opts = {}) {
+  return execCmd('docker', args, opts);
+}
+
+async function portInUse(port) {
+  try {
+    const res = await execCmd('bash', ['-lc', `ss -ltn 2>/dev/null | awk '{print $4}' | grep -q ':${port}$'`], { silent: true });
+    return res.code === 0; // grep matched
+  } catch (_) {
+    return false;
+  }
+}
+
+function readProjectVersionOrLatest() {
+  try {
+    const cargoPath = path.join(process.cwd(), 'Cargo.toml');
+    if (fs.existsSync(cargoPath)) {
+      const content = fs.readFileSync(cargoPath, 'utf8');
+      const m = content.match(/^version\s*=\s*"([^"]+)"/m);
+      if (m) return m[1];
+    }
+  } catch (_) {}
+  return 'latest';
+}
+
+async function ensureNetwork() {
+  try {
+    await docker(['network', 'inspect', 'raworc_network'], { silent: true });
+  } catch (_) {
+    await docker(['network', 'create', 'raworc_network']);
+  }
+}
+
+async function ensureVolumes() {
+  for (const v of ['raworc_mysql_data', 'raworc_public_data', 'raworc_ollama_data']) {
+    try {
+      await docker(['volume', 'inspect', v], { silent: true });
+    } catch (_) {
+      await docker(['volume', 'create', v]);
+    }
+  }
+}
+
+async function isDockerAvailable() {
+  try { await docker(['--version'], { silent: true }); return true; } catch (_) { return false; }
+}
+
+async function waitForMysql() {
+  process.stdout.write(chalk.blue('[INFO] ') + 'Waiting for MySQL to be ready...\n');
+  for (let i = 0; i < 30; i++) {
+    try {
+      await docker(['exec', 'raworc_mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
+      console.log(chalk.green('[SUCCESS] ') + 'MySQL is ready');
+      return;
+    } catch (_) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  throw new Error('MySQL failed to become healthy');
+}
 
 module.exports = (program) => {
   program
     .command('start')
-    .description('Start Raworc services using direct Docker container management')
-    .argument('[components...]', 'Components to start (server, operator, mysql)', [])
-    .option('-r, --restart', 'Stop existing containers before starting (restart)')
+    .description('Start Raworc services (idempotent): starts only missing or stopped components')
+    .argument('[components...]', 'Components to start (mysql, ollama, server, operator). Default: all', [])
+    .option('-p, --pull', 'Pull base images (mysql) before starting')
+    .option('-d, --detached', 'Run in detached mode', true)
+    .option('-f, --foreground', 'Run MySQL in foreground mode')
+    .option('--require-gpu', 'Require GPU for Ollama (fail if missing)')
+    .option('--ollama-cpus <cpus>', 'CPUs for Ollama (e.g., 4)')
+    .option('--ollama-memory <mem>', 'Memory for Ollama (e.g., 16g)')
+    .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 16g)')
+    .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
+    .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
+    .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:20b')
+    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '1h')
+    // MySQL options
+    .option('--mysql-port <port>', 'Host port for MySQL', '3307')
+    .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
+    .option('--mysql-database <db>', 'MySQL database name', 'raworc')
+    .option('--mysql-user <user>', 'MySQL user', 'raworc')
+    .option('--mysql-password <pw>', 'MySQL user password', 'raworc')
+    // Server options
+    .option('--server-database-url <url>', 'Server DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
+    .option('--server-jwt-secret <secret>', 'Server JWT_SECRET')
+    .option('--server-rust-log <level>', 'Server RUST_LOG', 'info')
+    .option('--server-raworc-host <host>', 'Server RAWORC_HOST')
+    .option('--server-raworc-port <port>', 'Server RAWORC_PORT')
+    .option('--server-api-port <port>', 'Host port for API (maps to 9000)', '9000')
+    .option('--server-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
+    // Operator options
+    .option('--operator-database-url <url>', 'Operator DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
+    .option('--operator-jwt-secret <secret>', 'Operator JWT_SECRET')
+    .option('--operator-rust-log <level>', 'Operator RUST_LOG', 'info')
+    .option('--operator-ollama-host <url>', 'Operator OLLAMA_HOST (overrides autodetection)')
+    .option('--operator-ollama-model <model>', 'Operator OLLAMA_MODEL')
+    .option('--operator-agent-image <image>', 'Operator AGENT_IMAGE')
+    .option('--operator-agent-cpu-limit <n>', 'Operator AGENT_CPU_LIMIT', '0.5')
+    .option('--operator-agent-memory-limit <bytes>', 'Operator AGENT_MEMORY_LIMIT', '536870912')
+    .option('--operator-agent-disk-limit <bytes>', 'Operator AGENT_DISK_LIMIT', '1073741824')
     .action(async (components, options) => {
       try {
-        // Show command box with start info
-        const operation = components.length > 0 ? 
-          `Start components: ${components.join(', ')}` : 
-          'Start API server and operator';
-        display.showCommandBox(`${display.icons.start} Start Services`, {
-          operation: operation
-        });
-        
-        // Check Docker availability
-        const dockerAvailable = await docker.checkDocker();
-        if (!dockerAvailable) {
-          display.error('Docker is not available. Please install Docker first.');
+        const detached = options.foreground ? false : (options.detached !== false);
+        const tag = readProjectVersionOrLatest();
+        const SERVER_IMAGE = `raworc_server:${tag}`;
+        const OPERATOR_IMAGE = `raworc_operator:${tag}`;
+        const AGENT_IMAGE = `raworc_agent:${tag}`;
+
+        console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
+        console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
+        console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
+        console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
+
+        if (!components || components.length === 0) {
+          components = ['mysql', 'ollama', 'server', 'operator'];
+        }
+        console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
+
+        if (!(await isDockerAvailable())) {
+          console.error(chalk.red('[ERROR] ') + 'Docker is not available. Please install Docker first.');
           process.exit(1);
         }
 
-        // Check if images are available
+        console.log();
+
+        // No build step in start; use ./scripts/build.sh in dev
+
+        // Pull base images
+        if (options.pull) {
+          console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
+          try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
+          console.log();
+        }
+
+        await ensureNetwork();
+        await ensureVolumes();
+        console.log();
+
+        // Helpers for container state
+        async function containerRunning(name) {
+          try { const res = await docker(['ps','-q','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
+        }
+        async function containerExists(name) {
+          try { const res = await docker(['ps','-aq','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
+        }
+
+        for (const comp of components) {
+          switch (comp) {
+            case 'mysql': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring MySQL database is running...');
+              if (await containerRunning('raworc_mysql')) { console.log(chalk.green('[SUCCESS] ') + 'MySQL already running'); console.log(); break; }
+              if (await containerExists('raworc_mysql')) {
+                await docker(['start','raworc_mysql']);
+                console.log(chalk.green('[SUCCESS] ') + 'MySQL started');
+                console.log();
+                break;
+              }
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push(
+                '--name','raworc_mysql',
+                '--network','raworc_network',
+                '-p', `${String(options.mysqlPort || '3307')}:3306`,
+                '-v','raworc_mysql_data:/var/lib/mysql',
+                '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
+                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'raworc'}`,
+                '-e',`MYSQL_USER=${options.mysqlUser || 'raworc'}`,
+                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'raworc'}`,
+                '--health-cmd','mysqladmin ping -h localhost -u root -proot',
+                '--health-interval','10s',
+                '--health-timeout','5s',
+                '--health-retries','5',
+                'mysql:8.0',
+                '--default-authentication-plugin=mysql_native_password',
+                '--collation-server=utf8mb4_unicode_ci',
+                '--character-set-server=utf8mb4'
+              );
+              await docker(args);
+              await waitForMysql();
+              console.log();
+              break;
+            }
+
+            case 'ollama': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring Ollama runtime is running...');
+              if (await containerRunning('raworc_ollama')) { console.log(chalk.green('[SUCCESS] ') + 'Ollama already running'); console.log(); break; }
+              if (await containerExists('raworc_ollama')) {
+                await docker(['start','raworc_ollama']);
+                console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
+                console.log();
+                break;
+              }
+
+              // Determine GPU availability and flags
+              let OLLAMA_ENABLE_GPU = (options.ollamaEnableGpu !== undefined) ? !!options.ollamaEnableGpu : true;
+              const REQUIRE_GPU = !!options.requireGpu;
+              let gpuAvailable = false;
+              try {
+                const r1 = await execCmd('docker', ['info','--format','{{json .Runtimes}}'], { silent: true });
+                const r2 = await execCmd('docker', ['info','--format','{{json .DefaultRuntime}}'], { silent: true });
+                if (/nvidia/i.test(r1.stdout) || /nvidia/i.test(r2.stdout)) gpuAvailable = true;
+              } catch (_) {}
+              let gpuFlags = [];
+              let cpuEnv = [];
+              if (OLLAMA_ENABLE_GPU) {
+                if (gpuAvailable) {
+                  gpuFlags = ['--gpus','all'];
+                  console.log(chalk.blue('[INFO] ') + 'GPU enabled for Ollama');
+                } else {
+                  if (REQUIRE_GPU) {
+                    console.error(chalk.red('[ERROR] ') + 'GPU required for Ollama, but Docker GPU runtime is not available.');
+                    console.error(chalk.red('[ERROR] ') + 'Install NVIDIA drivers + NVIDIA Container Toolkit, or omit --require-gpu.');
+                    process.exit(1);
+                  } else {
+                    console.log(chalk.yellow('[WARNING] ') + 'GPU requested but not available; falling back to CPU.');
+                    OLLAMA_ENABLE_GPU = false;
+                  }
+                }
+              }
+              if (!OLLAMA_ENABLE_GPU) {
+                cpuEnv = ['-e','OLLAMA_NO_GPU=1'];
+                console.log(chalk.blue('[INFO] ') + 'Running Ollama in CPU-only mode');
+              }
+
+              // Resource flags
+              const cpuFlag = options.ollamaCpus ? ['--cpus', options.ollamaCpus] : [];
+              let mem = options.ollamaMemory || '16g';
+              let shm = options.ollamaShmSize || '16g';
+              if (!options.ollamaMemory) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
+              if (!options.ollamaShmSize) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
+              const memFlag = ['--memory', mem, '--memory-swap', mem];
+              const shmFlag = ['--shm-size', shm];
+
+              // Host port mapping if free
+              const hostPublish = !(await portInUse(11434));
+              if (!hostPublish) console.log(chalk.yellow('[WARNING] ') + 'Host port 11434 in use; starting without host port mapping');
+
+              const args = ['run','-d',
+                '--name','raworc_ollama',
+                '--network','raworc_network',
+              ];
+              if (hostPublish) args.push('-p','11434:11434');
+              args.push(
+                '-v','raworc_ollama_data:/root/.ollama',
+                '-e',`OLLAMA_KEEP_ALIVE=${options.ollamaKeepAlive || '1h'}`,
+                ...cpuEnv,
+                ...gpuFlags,
+                ...cpuFlag,
+                ...memFlag,
+                ...shmFlag,
+                'ollama/ollama:latest'
+              );
+
+              await docker(args);
+
+              // Wait until ready (new container only)
+              let timeoutMs = 120000;
+              const start = Date.now();
+              if (hostPublish) {
+                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
+                while (Date.now() - start < timeoutMs) {
+                  try { await execCmd('bash',['-lc','curl -fsS http://localhost:11434/api/tags >/dev/null']); break; } catch(_) {}
+                  await new Promise(r=>setTimeout(r,2000));
+                }
+              } else {
+                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama container to be ready...');
+                while (Date.now() - start < timeoutMs) {
+                  try { await docker(['exec','raworc_ollama','ollama','list'], { silent: true }); break; } catch(_) {}
+                  await new Promise(r=>setTimeout(r,2000));
+                }
+              }
+              if (Date.now() - start >= timeoutMs) {
+                throw new Error('Ollama did not become ready in time');
+              }
+              console.log(chalk.green('[SUCCESS] ') + 'Ollama is ready');
+
+              // Ensure model available (best-effort)
+              console.log(chalk.blue('[INFO] ') + `Pulling ${options.ollamaModel} model (if needed)...`);
+              try { await docker(['exec','raworc_ollama','ollama','pull', options.ollamaModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${options.ollamaModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${options.ollamaModel}. You may need to pull manually.`); }
+              console.log();
+              break;
+            }
+
+            case 'server': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring API server is running...');
+              if (await containerRunning('raworc_server')) { console.log(chalk.green('[SUCCESS] ') + 'Server already running'); console.log(); break; }
+              if (await containerExists('raworc_server')) {
+                await docker(['start','raworc_server']);
+                console.log(chalk.green('[SUCCESS] ') + 'Server started');
+                console.log();
+                break;
+              }
+              const args = ['run','-d',
+                '--name','raworc_server',
+                '--network','raworc_network',
+                '-p', `${String(options.serverApiPort || '9000')}:9000`,
+                '-p', `${String(options.serverPublicPort || '8000')}:8000`,
+                '-v', path.join(process.cwd(),'logs') + ':/app/logs',
+                '-v','raworc_public_data:/public',
+                '-e',`DATABASE_URL=${options.serverDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc'}`,
+                '-e',`JWT_SECRET=${options.serverJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
+                '-e',`RUST_LOG=${options.serverRustLog || 'info'}`,
+                ...(options.serverRaworcHost ? ['-e', `RAWORC_HOST=${options.serverRaworcHost}`] : []),
+                ...(options.serverRaworcPort ? ['-e', `RAWORC_PORT=${options.serverRaworcPort}`] : []),
+                SERVER_IMAGE
+              ];
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'API server container started');
+              console.log();
+              break;
+            }
+
+            case 'operator': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring operator service is running...');
+              if (await containerRunning('raworc_operator')) { console.log(chalk.green('[SUCCESS] ') + 'Operator already running'); console.log(); break; }
+              if (await containerExists('raworc_operator')) {
+                await docker(['start','raworc_operator']);
+                console.log(chalk.green('[SUCCESS] ') + 'Operator started');
+                console.log();
+                break;
+              }
+              // Default OLLAMA_HOST: prefer internal container if running
+              let OLLAMA_HOST = options.operatorOllamaHost || process.env.OLLAMA_HOST;
+              try {
+                const res = await docker(['ps','-q','--filter','name=raworc_ollama'], { silent: true });
+                const hasOllama = !!res.stdout.trim();
+                if (!OLLAMA_HOST) OLLAMA_HOST = hasOllama ? 'http://raworc_ollama:11434' : 'http://host.docker.internal:11434';
+              } catch (_) {
+                if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
+              }
+
+              const agentImage = options.operatorAgentImage || AGENT_IMAGE;
+              const operatorDbUrl = options.operatorDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc';
+              const operatorJwt = options.operatorJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
+              const operatorRustLog = options.operatorRustLog || 'info';
+              const model = options.operatorOllamaModel || options.ollamaModel;
+              const args = ['run','-d',
+                '--name','raworc_operator',
+                '--network','raworc_network',
+                '-v','/var/run/docker.sock:/var/run/docker.sock',
+                '-e',`DATABASE_URL=${operatorDbUrl}`,
+                '-e',`JWT_SECRET=${operatorJwt}`,
+                '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
+                '-e',`OLLAMA_MODEL=${model}`,
+                '-e',`AGENT_IMAGE=${agentImage}`,
+                '-e',`AGENT_CPU_LIMIT=${options.operatorAgentCpuLimit || '0.5'}`,
+                '-e',`AGENT_MEMORY_LIMIT=${options.operatorAgentMemoryLimit || '536870912'}`,
+                '-e',`AGENT_DISK_LIMIT=${options.operatorAgentDiskLimit || '1073741824'}`,
+                '-e',`RUST_LOG=${operatorRustLog}`,
+                OPERATOR_IMAGE
+              ];
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'Operator service container started');
+              console.log();
+              break;
+            }
+
+            default:
+              console.log(chalk.yellow('[WARNING] ') + `Unknown component: ${comp}. Skipping...`);
+          }
+        }
+
+        // Show status summary
+        console.log(chalk.blue('[INFO] ') + 'Checking running services...');
+        console.log();
+        let status = '';
         try {
-          await docker.checkImages();
-        } catch (error) {
-          display.error('Docker images not available: ' + error.message);
-          display.info('Try running: raworc pull');
-          process.exit(1);
-        }
-
-        // Note: Operator now uses Ollama. Optionally set OLLAMA_HOST or start the ollama component.
-
-        // Map component names to service names
-        const serviceMap = {
-          'server': 'raworc_server',
-          'operator': 'raworc_operator',
-          'mysql': 'raworc_mysql',
-          'ollama': 'raworc_ollama'
-        };
-
-        // Convert component names to service names
-        const services = components.length > 0 
-          ? components.map(comp => serviceMap[comp] || comp)
-          : [];
-
-        // Stop existing containers if restart requested
-        if (options.restart) {
-          display.info('Stopping existing containers...');
+          const res = await docker(['ps','--filter','name=raworc_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true });
+          status = res.stdout;
+        } catch(_) {}
+        if (status && status.trim()) {
+          console.log(status);
+          console.log();
+          console.log(chalk.green('[SUCCESS] ') + '🎉 Raworc services are now running!');
+          console.log();
+          console.log(chalk.blue('[INFO] ') + 'Service URLs:');
           try {
-            await docker.stop(services);
-            display.success('Existing containers stopped');
-          } catch (error) {
-            display.warning('Some containers may not have been running');
-          }
-        }
-
-        // Start services
-        display.info('Starting services...');
-        try {
-          await docker.start(services, false);
-          display.success('Services started successfully');
-          
-          // Show running services
+            const s = await docker(['ps','--filter','name=raworc_server','--format','{{.Names}}'], { silent: true });
+            if (s.stdout.trim()) {
+              console.log('  • API Server: http://localhost:9000');
+              console.log('  • Public Content: http://localhost:8000');
+            }
+          } catch(_) {}
+          try {
+            const m = await docker(['ps','--filter','name=raworc_mysql','--format','{{.Names}}'], { silent: true });
+            if (m.stdout.trim()) {
+              console.log('  • MySQL Port: 3307');
+            }
+          } catch(_) {}
           console.log();
-          display.success('Raworc is now running!');
-          
-          const status = await docker.status();
-          if (status) {
-            console.log();
-            console.log(chalk.blue('Running services:'));
-            console.log(status);
-          }
-          
+          console.log(chalk.blue('[INFO] ') + 'Next steps:');
+          console.log('  • Check logs: docker logs raworc_server -f');
+          console.log('  • Authenticate: raworc login -u admin -p admin');
+          console.log('  • Check version: raworc api version');
+          console.log('  • Start agent: raworc agent create');
           console.log();
-          console.log(chalk.cyan('Next steps:'));
-          console.log('  • Authenticate: ' + chalk.white('raworc login --user admin --pass admin'));
-          console.log('  • Check health: ' + chalk.white('raworc api version'));
-          console.log('  • Start agent: ' + chalk.white('raworc agent create'));
-          console.log();
-          console.log(chalk.gray('API Server: http://localhost:9000'));
-          console.log(chalk.gray('MySQL Port: 3307'));
-
-        } catch (error) {
-          display.error(`Failed to start services: ${error.message}`);
-          
-          // Show troubleshooting tips
-          console.log();
-          display.info('Troubleshooting tips:');
-          console.log('  • Check if ports 9000 and 3307 are available');
-          console.log('  • Ensure Docker daemon is running');
-          console.log('  • Try pulling latest images: ' + chalk.white('raworc pull'));
-          console.log('  • Make sure Docker Hub is accessible');
-          
+          console.log(chalk.blue('[INFO] ') + 'Container management:');
+          console.log("  • Stop services: raworc stop");
+          console.log("  • View logs: docker logs <container_name>");
+          console.log("  • Check status: docker ps --filter 'name=raworc_'");
+        } else {
+          console.error(chalk.red('[ERROR] ') + 'No Raworc containers are running');
           process.exit(1);
         }
-
       } catch (error) {
-        display.error('Error: ' + error.message);
+        console.error(chalk.red('[ERROR] ') + (error && error.message ? error.message : String(error)));
         process.exit(1);
       }
     });

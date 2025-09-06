@@ -190,5 +190,4 @@ echo ""
 print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
-echo "  ./scripts/start.sh"
-
+echo "  raworc start"
