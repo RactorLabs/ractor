@@ -1026,7 +1026,6 @@ function getTerminalWidth() {
 // Track the last rendered prompt layout to clear accurately
 let __lastPromptLayout = null;
 let __extraBlankLinesAbovePrompt = 0;
-let __extraBlankLinesBelowPrompt = 0;
 
 function stripAnsi(input) {
   if (!input) return '';
@@ -1107,11 +1106,6 @@ function showPrompt(state = 'init') {
   console.log(stateText);
   console.log(dashText);
   process.stdout.write(promptText);
-  // Add an extra blank line visually under the prompt while keeping
-  // the cursor on the prompt line for input.
-  process.stdout.write('\n');
-  process.stdout.write('\x1b[1A');
-  __extraBlankLinesBelowPrompt = 1;
 
   // Capture layout for robust clearing
   __lastPromptLayout = capturePromptLayout({
@@ -1167,11 +1161,6 @@ function showPromptWithInput(state = 'init', userInput = '') {
   console.log(stateText);
   console.log(dashText);
   process.stdout.write(promptText);
-  // Add an extra blank line visually under the prompt while keeping
-  // the cursor on the prompt line for input.
-  process.stdout.write('\n');
-  process.stdout.write('\x1b[1A');
-  __extraBlankLinesBelowPrompt = 1;
 
   // Capture layout for robust clearing
   __lastPromptLayout = capturePromptLayout({
@@ -1205,18 +1194,6 @@ function clearPrompt() {
     const then = calcRowsForText(line.text, prevWidth);
     return Math.max(now, then);
   };
-
-  // If we inserted extra blank lines below the prompt, clear them first
-  if (__extraBlankLinesBelowPrompt > 0) {
-    for (let i = 0; i < __extraBlankLinesBelowPrompt; i++) {
-      // Save cursor, move down one, clear that line, restore
-      process.stdout.write('\x1b[s');
-      process.stdout.write('\x1b[1B');
-      process.stdout.write('\r\x1b[2K');
-      process.stdout.write('\x1b[u');
-    }
-    __extraBlankLinesBelowPrompt = 0;
-  }
 
   // Start at the prompt (bottom-most), which is where the cursor is
   const promptRows = rowsFor('prompt');
