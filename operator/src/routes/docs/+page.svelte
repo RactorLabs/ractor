@@ -39,6 +39,21 @@
             {/if}
           </div>
         </div>
+        {#if apiError}
+        <div class="alert alert-warning mt-3 small">
+          <div class="fw-bold mb-1">Why am I seeing “Version unavailable: {apiError}”?</div>
+          <div>
+            The docs page calls <code>/api/v0/version</code> on the current origin. A 404 usually means the UI is running via the Vite dev server without a proxy to the API, or the API isn’t running at this origin.
+          </div>
+          <div class="mt-2">
+            Fix options:
+            <ul class="mb-0">
+              <li>Start services with the CLI so the Operator is served alongside the API: <code>raworc start server controller</code> (or <code>raworc start</code>).</li>
+              <li>If developing Operator standalone, add a Vite proxy for <code>/api/v0</code> to your API (e.g. <code>http://localhost:9000</code>).</li>
+            </ul>
+          </div>
+        </div>
+        {/if}
       </div>
     </div>
 
@@ -104,4 +119,3 @@
     </div>
   </div>
 </div>
-
