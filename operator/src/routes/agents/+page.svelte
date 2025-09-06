@@ -14,6 +14,7 @@
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
+    if (s === 'init') return 'badge rounded-pill bg-light text-dark';
     if (s === 'idle') return 'badge rounded-pill bg-success';
     if (s === 'busy') return 'badge rounded-pill bg-warning text-dark';
     return 'badge rounded-pill bg-secondary';

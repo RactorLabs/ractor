@@ -10,8 +10,15 @@
 
   // Simple readable-name generator obeying ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
   // Name format: super_power + creature (animal/bird/mythical)
-  const superPowers = ['blaze','thunder','quantum','shadow','solar','lunar','arcane','cyber','turbo','frost','ember','vortex','echo','phantom','nova','aether','plasma','neon','storm','iron'];
-  const creatures = ['wolf','falcon','dragon','phoenix','griffin','hydra','leviathan','unicorn','pegasus','tiger','hawk','raven','lynx','otter','manticore','basilisk','sphinx','wyvern','kitsune','naga'];
+  const superPowers = [
+    'blaze','thunder','quantum','shadow','solar','lunar','arcane','cyber','turbo','frost','ember','vortex','echo','phantom','nova','aether','plasma','neon','storm','iron',
+    'cosmic','stellar','galactic','astral','radiant','prismatic','crystal','obsidian','onyx','azure','crimson','verdant','golden','silver','bronze','alpha','omega','gamma','delta','ultra','hyper','nano','micro','macro','zenith','apex'
+  ];
+  const creatures = [
+    'wolf','falcon','dragon','phoenix','griffin','hydra','leviathan','unicorn','pegasus','tiger','hawk','raven','lynx','otter','manticore','basilisk','sphinx','wyvern','kitsune','naga',
+    'eagle','sparrow','owl','condor','heron','ibis','crane','stork','albatross','swallow','panther','lion','leopard','cheetah','jaguar','fox','bear','stag','boar','ram',
+    'viper','cobra','python','anaconda','orca','dolphin','kraken','yeti','sasquatch','cerberus','minotaur','chimera','fenrir','banshee','kelpie','selkie'
+  ];
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
   function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/^-+|\-+$/g,''); }
   function genName() {
