@@ -87,9 +87,6 @@
           </div>
         </div>
       </Card>
-      <div class="text-center small text-body text-opacity-75 mt-3">
-        Use default admin/admin in dev, then change password.
-      </div>
     </div>
   </div>
   <div class="mb-5"></div>
