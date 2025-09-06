@@ -69,7 +69,7 @@
               <tbody>
                 {#each agents as a}
                   <tr>
-                    <td class="font-monospace">{a.name || a.id || '-'}</td>
+                    <td class="font-monospace"><a class="text-decoration-none" href={'/agents/' + encodeURIComponent(a.name || a.id)}>{a.name || a.id || '-'}</a></td>
                     <td><span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span></td>
                     <td class="small text-body text-opacity-75">{a.description || a.desc || ''}</td>
                   </tr>
