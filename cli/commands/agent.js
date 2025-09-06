@@ -736,7 +736,7 @@ function displayAgentMessage(message, options = {}) {
     };
     toolType = toolNameMap[toolType] || toolType;
     console.log();
-    console.log(chalk.green('● ') + chalk.white(toolType));
+    console.log(chalk.green('• ') + chalk.white(toolType));
     console.log(chalk.dim('└─ ') + chalk.gray(message.content));
     
     if (showPromptFn) {
