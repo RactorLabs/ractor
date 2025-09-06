@@ -7,7 +7,21 @@ title: Changelog
 
 ## [0.5.2] - TBD
 
-Development version - changes will be documented at release.
+This is the next development version.
+
+### 🐳 Infrastructure & CLI
+
+- Start is now idempotent and starts all components by default (mysql, ollama, server, operator). If a container is already running, it is left as-is; if stopped, it is started.
+- Stop defaults to server + operator. Use `raworc stop all` to stop mysql + ollama as well. Individual components are supported (e.g., `raworc stop mysql`).
+- Removed the `restart` command. Use `raworc stop` followed by `raworc start`.
+- Removed legacy service scripts (start/stop/restart/doctor); the CLI is the single source of truth for service management.
+- Removed `.env.example`; all runtime configuration is available as CLI flags per component.
+- Doctor is now fully CLI-native and performs OS/GPU/Docker diagnostics.
+
+### 📚 Documentation
+
+- Updated Getting Started, CLI Usage, and Troubleshooting to reflect idempotent start, new stop behavior, and CLI-only control.
+- Removed script references and `--restart` examples across the site.
 
 ## [0.5.0] - 2025-09-05
 
@@ -345,6 +359,21 @@ Development version - changes will be documented at release.
 
 - Model Runtime Migration: Replaced Anthropic/Claude integration with local model inference via Ollama (default model: gpt-oss)
 - New `ollama` component: `raworc start ollama` runs dedicated `raworc_ollama` container with persistent model cache
+
+## [0.5.1] - 2025-09-06
+
+Primarily a documentation and setup refinement release.
+
+### 📚 Documentation & Terminology
+
+- Updated website docs to align CLI/API terminology and Ollama-based workflows.
+- Added Ollama `gpt-oss:20b` setup notes and prerequisites.
+- Refactored references from Claude/Anthropic to Ollama across docs.
+
+### 🛠️ Setup & Scripts
+
+- Introduced GPU setup checks via a `doctor` flow to validate NVIDIA runtime and container access.
+- Streamlined setup scripts and removed outdated guidance.
 - Resource flags: Added `OLLAMA_CPUS`, `OLLAMA_MEMORY`, `OLLAMA_SHM_SIZE`, and `OLLAMA_ENABLE_GPU` to tune Ollama container resources
 - CLI updates: Removed Anthropic key validation; added `ollama` service mapping; updated examples to use `OLLAMA_HOST`
 - Docs: Updated Getting Started, CLI Usage, Architecture, and Agents guides to reflect Ollama-based runtime
