@@ -32,6 +32,11 @@
     return 'badge rounded-pill bg-secondary';
   }
 
+  function isSlept() {
+    const s = String(agent?.state || '').toLowerCase();
+    return s === 'slept' || s === 'sleep' || s === 'asleep';
+  }
+
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(id)}`);
     if (res.ok) agent = res.data || res;
@@ -120,6 +125,16 @@
     }
   }
 
+  async function wakeAgent() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(id)}/wake`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.error || `Wake failed (HTTP ${res.status})`);
+      await fetchAgent();
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
   onMount(async () => {
     if (!isAuthenticated()) { goto('/login'); return; }
     $appOptions.appContentClass = 'p-3';
@@ -145,7 +160,11 @@
         <div>{#if agent}<span class={stateClass(agent.state)}>{agent.state}</span>{/if}</div>
         <div class="ms-auto d-flex gap-2">
           <button class="btn btn-outline-secondary btn-sm" on:click={fetchMessages} aria-label="Refresh">Refresh</button>
-          <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+          {#if isSlept()}
+            <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+          {:else}
+            <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+          {/if}
         </div>
       </div>
       <div class="card-body d-flex flex-column px-3 px-lg-4 py-2" style="min-height: 60vh; background: transparent;">
