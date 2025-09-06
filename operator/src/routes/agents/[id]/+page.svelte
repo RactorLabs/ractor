@@ -6,6 +6,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
+  import { appOptions } from '/src/stores/appOptions.js';
 
   let id = '';
   $: id = $page.params.id;
@@ -88,6 +89,8 @@
 
   onMount(async () => {
     if (!isAuthenticated()) { goto('/login'); return; }
+    $appOptions.appContentClass = 'p-3';
+    $appOptions.appContentFullHeight = true;
     try {
       await fetchAgent();
       await fetchMessages();
@@ -98,21 +101,21 @@
       loading = false;
     }
   });
-  onDestroy(stopPolling);
+  onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
 </script>
 
 <div class="row g-3">
   <div class="col-xl-8">
-    <Card class="mb-3 h-100">
+    <Card class="h-100" style="z-index: 1020;">
       <div class="card-header d-flex align-items-center gap-2">
         <div class="fw-bold">{id}</div>
         <div>{#if agent}<span class={stateClass(agent.state)}>{agent.state}</span>{/if}</div>
         <div class="ms-auto d-flex gap-2">
-          <button class="btn btn-outline-secondary btn-sm" on:click={fetchMessages} title="Refresh"><i class="bi bi-arrow-repeat"></i></button>
-          <button class="btn btn-outline-danger btn-sm" on:click={clearMessages} title="Clear"><i class="bi bi-trash"></i></button>
+          <button class="btn btn-outline-secondary btn-sm" on:click={fetchMessages} aria-label="Refresh">Refresh</button>
+          <button class="btn btn-outline-danger btn-sm" on:click={clearMessages} aria-label="Clear conversation">Clear</button>
         </div>
       </div>
-      <div class="card-body p-0 d-flex flex-column" style="min-height: 60vh;">
+      <div class="card-body d-flex flex-column px-3 px-lg-4 py-2" style="min-height: 60vh; background: transparent;">
         {#if loading}
           <div class="flex-fill d-flex align-items-center justify-content-center">
             <div class="text-body text-opacity-75 text-center">
@@ -121,24 +124,31 @@
             </div>
           </div>
         {:else}
-          <div id="chat-body" class="flex-fill overflow-auto p-3" style="background: var(--bs-body-bg);">
+          <div id="chat-body" class="flex-fill overflow-auto px-1 px-sm-2 py-2" style="background: transparent;">
             {#if messages && messages.length}
               {#each messages as m, i}
-                <div class={"d-flex mb-3 " + (m.role === 'user' ? 'justify-content-end' : 'justify-content-start')}>
-                  <div class={"p-2 rounded-3 " + (m.role === 'user' ? 'bg-theme text-white' : 'bg-light')}
-                       style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
-                    {m.content}
+                {#if m.role === 'user'}
+                  <div class="d-flex mb-3 justify-content-end">
+                    <div class="p-2 rounded-3 bg-theme text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
+                      {m.content}
+                    </div>
                   </div>
-                </div>
+                {:else}
+                  <div class="d-flex mb-3 justify-content-start">
+                    <div class="text-body" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
+                      {m.content}
+                    </div>
+                  </div>
+                {/if}
               {/each}
             {:else}
               <div class="text-body text-opacity-75">No messages yet. Say hello!</div>
             {/if}
           </div>
-          <form class="border-top p-2" on:submit|preventDefault={sendMessage}>
+          <form class="border-top pt-2" on:submit|preventDefault={sendMessage}>
             <div class="input-group">
-              <input class="form-control" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
-              <button class="btn btn-theme" disabled={sending || !input.trim()}><i class="bi bi-send me-1"></i>Send</button>
+              <input aria-label="Message input" class="form-control" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
+              <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>Send</button>
             </div>
           </form>
         {/if}
