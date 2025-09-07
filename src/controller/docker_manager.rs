@@ -93,7 +93,7 @@ impl DockerManager {
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /agent/{code,secrets,logs,content}
+        let init_script = "sudo mkdir -p /agent/code /agent/secrets /agent/logs /agent/content
 sudo chown -R agent:agent /agent
 sudo chmod -R 755 /agent
 echo 'Agent directories created (code, secrets, logs, content)'

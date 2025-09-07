@@ -61,7 +61,7 @@ COPY target/release/raworc-agent /usr/local/bin/raworc-agent
 
 # Create agent directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /agent/{code,secrets,logs,content} && \
+RUN mkdir -p /agent/code /agent/secrets /agent/logs /agent/content && \
     chown -R agent:agent /agent && \
     chmod -R 755 /agent
 
