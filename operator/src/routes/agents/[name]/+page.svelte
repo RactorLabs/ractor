@@ -341,19 +341,31 @@
             {:else}
               <!-- Agent side -->
               {#if isToolExec(m)}
-                <!-- Tool request card -->
-                <div class="d-flex mb-3 justify-content-start">
-                  <div class="p-2 rounded-3 border bg-body" style="max-width: 80%;">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                      <span class="badge bg-secondary">{toolLabel(m.metadata.tool_type)}</span>
-                      <span class="small text-body text-opacity-75">Request</span>
-                    </div>
-                    <details class="mt-1">
-                      <summary class="small fw-500">View Full JSON</summary>
+                {#if (m?.metadata?.tool_type || '').toLowerCase() === 'text_editor'}
+                  <!-- Compact single-line summary that toggles details for Text Editor requests -->
+                  <div class="d-flex mb-2 justify-content-start">
+                    <details class="mt-0">
+                      <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                        {toolLabel(m.metadata.tool_type)} Request
+                      </summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
                     </details>
                   </div>
-                </div>
+                {:else}
+                  <!-- Tool request card -->
+                  <div class="d-flex mb-3 justify-content-start">
+                    <div class="p-2 rounded-3 border bg-body" style="max-width: 80%;">
+                      <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-secondary">{toolLabel(m.metadata.tool_type)}</span>
+                        <span class="small text-body text-opacity-75">Request</span>
+                      </div>
+                      <details class="mt-1">
+                        <summary class="small fw-500">View Full JSON</summary>
+                        <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
+                      </details>
+                    </div>
+                  </div>
+                {/if}
               {:else}
                 <!-- Tool response card or regular agent message -->
                 {#if isToolResult(m)}
