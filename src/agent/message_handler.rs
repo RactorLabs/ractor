@@ -87,6 +87,11 @@ impl MessageHandler {
                     registry
                         .register_alias("functions", "bash", None)
                         .await;
+                    
+                    // Also map text_editor harmony calls
+                    registry
+                        .register_alias("text_editor", "text_editor", None)
+                        .await;
 
                     info!("Registered built-in tools and aliases");
                 }
