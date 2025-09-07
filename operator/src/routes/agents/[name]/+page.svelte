@@ -8,8 +8,27 @@
   import { appOptions } from '/src/stores/appOptions.js';
   import MarkdownIt from 'markdown-it';
   import taskLists from 'markdown-it-task-lists';
+  import { browser } from '$app/environment';
 
-  const md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
+  let md;
+  try {
+    md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
+  } catch (e) {
+    console.error('Markdown init failed', e);
+    md = null;
+  }
+
+  function renderMarkdown(s) {
+    try {
+      if (!s || !s.trim()) return '';
+      if (md) return md.render(s);
+    } catch (e) {
+      console.error('Markdown render failed', e);
+    }
+    // Fallback: minimal formatting
+    const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<pre class="mb-0">${esc(s)}</pre>`;
+  }
 
   let name = '';
   $: name = $page.params.name;
@@ -358,7 +377,7 @@
                           <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                         {/if}
                         {#if m.content && m.content.trim()}
-                          <div class="markdown-body" {@html md.render(m.content)}></div>
+                          <div class="markdown-body" {@html renderMarkdown(m.content)}></div>
                         {/if}
                       </div>
                     </div>
