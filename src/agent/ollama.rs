@@ -160,10 +160,26 @@ impl ToolResult {
 
 impl OllamaClient {
     pub fn new(base_url: &str) -> Result<Self> {
-        let timeout_secs = std::env::var("OLLAMA_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(600);
+        let timeout_secs = match std::env::var("OLLAMA_TIMEOUT_SECS").ok() {
+            Some(timeout_str) => match timeout_str.parse::<u64>() {
+                Ok(timeout) => {
+                    if timeout < 10 || timeout > 3600 {
+                        return Err(HostError::Model(format!(
+                            "Invalid OLLAMA_TIMEOUT_SECS '{}'. Must be between 10 and 3600 seconds",
+                            timeout
+                        )));
+                    }
+                    timeout
+                }
+                Err(_) => {
+                    return Err(HostError::Model(format!(
+                        "Invalid OLLAMA_TIMEOUT_SECS '{}'. Must be a valid positive integer",
+                        timeout_str
+                    )));
+                }
+            },
+            None => 600,
+        };
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(timeout_secs))
@@ -172,15 +188,39 @@ impl OllamaClient {
 
         // Reasoning controls via env with sensible defaults
         // Default to high reasoning effort and a thinking budget if not provided
-        let reasoning_effort = Some(
-            std::env::var("OLLAMA_REASONING_EFFORT")
-                .ok()
-                .unwrap_or_else(|| "high".to_string()),
-        );
-        let thinking_budget = std::env::var("OLLAMA_THINKING_TOKENS")
-            .ok()
-            .and_then(|s| s.parse::<u32>().ok())
-            .or(Some(4096));
+        let reasoning_effort = match std::env::var("OLLAMA_REASONING_EFFORT").ok() {
+            Some(effort) => {
+                let effort_lower = effort.to_lowercase();
+                if !["low", "medium", "high"].contains(&effort_lower.as_str()) {
+                    return Err(HostError::Model(format!(
+                        "Invalid OLLAMA_REASONING_EFFORT '{}'. Must be one of: low, medium, high",
+                        effort
+                    )));
+                }
+                Some(effort_lower)
+            }
+            None => Some("high".to_string()),
+        };
+        let thinking_budget = match std::env::var("OLLAMA_THINKING_TOKENS").ok() {
+            Some(budget_str) => match budget_str.parse::<u32>() {
+                Ok(budget) => {
+                    if budget < 100 || budget > 100000 {
+                        return Err(HostError::Model(format!(
+                            "Invalid OLLAMA_THINKING_TOKENS '{}'. Must be between 100 and 100000",
+                            budget
+                        )));
+                    }
+                    Some(budget)
+                }
+                Err(_) => {
+                    return Err(HostError::Model(format!(
+                        "Invalid OLLAMA_THINKING_TOKENS '{}'. Must be a valid positive integer",
+                        budget_str
+                    )));
+                }
+            },
+            None => Some(4096),
+        };
 
         Ok(Self {
             client,
