@@ -291,21 +291,40 @@
                     <div class="d-flex align-items-center gap-2 mb-1">
                       <span class="badge bg-secondary">{toolLabel(m.metadata.tool_type)}</span>
                     </div>
-                    {#if String(m.metadata.tool_type).toLowerCase() === 'bash'}
-                      <div class="small text-body text-opacity-75">Command</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
-                    {:else if String(m.metadata.tool_type).toLowerCase() === 'text_editor'}
-                      {#key m.content}
-                        {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed}
-                          <div class="small"><span class="text-body text-opacity-75">Action:</span> <span class="fw-500">{parsed.action || '-'}</span></div>
-                          <div class="small mb-1"><span class="text-body text-opacity-75">Path:</span> <span class="font-monospace">{parsed.path || '-'}</span></div>
+                    <details class="mt-1">
+                      <summary class="small fw-500">Input</summary>
+                      {#if String(m.metadata.tool_type).toLowerCase() === 'bash'}
+                        <div class="small text-body text-opacity-75">Command</div>
+                        <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
+                        {#if m.metadata && m.metadata.args}
+                          <div class="small text-body text-opacity-75">Args</div>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                        {/if}
+                      {:else if String(m.metadata.tool_type).toLowerCase() === 'text_editor'}
+                        {#key m.content}
+                          {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed}
+                            <div class="small"><span class="text-body text-opacity-75">Action:</span> <span class="fw-500">{parsed.action || '-'}</span></div>
+                            <div class="small mb-1"><span class="text-body text-opacity-75">Path:</span> <span class="font-monospace">{parsed.path || '-'}</span></div>
                           {/await}
-                      {/key}
-                      <div class="small text-body text-opacity-75">Text</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
-                    {:else}
-                      <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
-                    {/if}
+                        {/key}
+                        <div class="small text-body text-opacity-75">Text</div>
+                        <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
+                        {#if m.metadata && m.metadata.args}
+                          <div class="small text-body text-opacity-75">Args</div>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                        {/if}
+                      {:else}
+                        <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
+                        {#if m.metadata && m.metadata.args}
+                          <div class="small text-body text-opacity-75 mt-1">Args</div>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                        {/if}
+                      {/if}
+                    </details>
+                    <details class="mt-1">
+                      <summary class="small fw-500">Output</summary>
+                      <div class="small text-body text-opacity-75">No output yet</div>
+                    </details>
                   </div>
                 </div>
               {:else}
@@ -316,13 +335,20 @@
                       <div class="d-flex align-items-center gap-2 mb-1">
                         <span class="badge bg-light text-dark">{toolLabel(m.metadata.tool_type)} Result</span>
                       </div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
-                      {#if m.metadata && m.metadata.args}
+                      <div class="p-2 rounded-3 border bg-body">
                         <details class="mt-1">
-                          <summary class="small text-body text-opacity-75">View JSON</summary>
-                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                          <summary class="small fw-500">Input</summary>
+                          {#if m.metadata && m.metadata.args}
+                            <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                          {:else}
+                            <div class="small text-body text-opacity-75">No input captured</div>
+                          {/if}
                         </details>
-                      {/if}
+                        <details class="mt-1" open>
+                          <summary class="small fw-500">Output</summary>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
+                        </details>
+                      </div>
                     {:else}
                       {m.content}
                     {/if}
