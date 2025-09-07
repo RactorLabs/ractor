@@ -405,7 +405,7 @@
       </div>
     {:else}
       <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
-        <div class="d-flex flex-column justify-content-end">
+        <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
         {#if messages && messages.length}
           {#each messages as m, i}
             {#if m.role === 'user'}
