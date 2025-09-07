@@ -2,7 +2,6 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
@@ -372,8 +371,7 @@
     {/if}
   </div>
   <div class="col-12 col-xl-4 d-flex flex-column h-100" style="min-height: 0;">
-    <Card class="w-100 h-100">
-      <div class="card-body p-0 h-100" style="min-height: 300px;">
+      <div class="p-0 h-100 d-flex flex-column" style="min-height: 300px;">
         <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
           <span>Content</span>
           {#if agent && (agent.content_port || agent.contentPort)}
@@ -433,7 +431,6 @@
           {/if}
         </div>
       </div>
-    </Card>
   </div>
 
   <style>
