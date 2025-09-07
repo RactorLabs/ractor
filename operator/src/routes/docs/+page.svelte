@@ -4,7 +4,7 @@
   import Card from '/src/components/bootstrap/Card.svelte';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.6.7 (v0)';
+  const API_VERSION = '0.6.8 (v0)';
   
 
   setPageTitle('API Documentation');
