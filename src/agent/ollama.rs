@@ -382,6 +382,27 @@ impl OllamaClient {
             thinking: Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget }),
         };
 
+        // Debug: Log the full request being sent to Ollama
+        tracing::info!("=== OLLAMA REQUEST DEBUG ===");
+        tracing::info!("Model: {}", req.model);
+        tracing::info!("Message count: {}", req.messages.len());
+        tracing::info!("Tools count: {}", req.tools.as_ref().map_or(0, |t| t.len()));
+        for (i, msg) in req.messages.iter().enumerate() {
+            tracing::info!(
+                "Message[{}]: role='{}', content_len={}, tool_call_id={:?}",
+                i, msg.role, msg.content.len(), msg.tool_call_id
+            );
+            if msg.content.len() <= 200 {
+                tracing::info!("Message[{}] content: {:?}", i, msg.content);
+            } else {
+                tracing::info!("Message[{}] content preview: {:?}...", i, &msg.content[..200]);
+            }
+        }
+        
+        let req_json = serde_json::to_string_pretty(&req).unwrap_or_else(|_| "Failed to serialize".to_string());
+        tracing::info!("Full JSON request to Ollama: {}", req_json);
+        tracing::info!("=== END OLLAMA REQUEST DEBUG ===");
+
         let url = format!("{}/api/chat", self.base_url);
         let resp = self
             .client
