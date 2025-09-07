@@ -335,8 +335,8 @@ impl OllamaClient {
         );
         tracing::info!(
             "Content preview: {:?}",
-            if parsed.message.content.len() > 100 {
-                format!("{}...", &parsed.message.content[..100])
+            if parsed.message.content.chars().count() > 100 {
+                format!("{}...", parsed.message.content.chars().take(100).collect::<String>())
             } else {
                 parsed.message.content.clone()
             }
