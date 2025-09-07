@@ -380,8 +380,22 @@
           <div class="ms-auto d-flex gap-2">
             {#if agent}
               {#if agent.is_published || agent.isPublished}
-                <button class="btn btn-outline-danger btn-sm" on:click={unpublishAgent} aria-label="Unpublish content">Unpublish</button>
-                <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content in new tab">Open ↗</a>
+                <div class="dropdown">
+                  <button class="btn btn-success btn-sm fw-bold dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                    Published ⋯
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    <li>
+                      <a class="dropdown-item" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                    </li>
+                    <li>
+                      <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
+                    </li>
+                  </ul>
+                </div>
               {:else}
                 <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
               {/if}
