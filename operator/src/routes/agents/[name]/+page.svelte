@@ -374,10 +374,10 @@
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       <div class="markdown-wrap">
                         {#if m.metadata && m.metadata.thinking}
-                          <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
+                          <div class="small fst-italic text-body text-opacity-50 mt-1 mb-2">{m.metadata.thinking}</div>
                         {/if}
                         {#if m.content && m.content.trim()}
-                          <div class="markdown-body" {@html renderMarkdown(m.content)}></div>
+                          <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                         {/if}
                       </div>
                     </div>
