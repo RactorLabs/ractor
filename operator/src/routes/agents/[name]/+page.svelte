@@ -174,14 +174,26 @@
     return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
   }
 
+  // Normalize metadata to an object (handles string-serialized JSON)
+  function metaOf(m) {
+    try {
+      const v = m?.metadata;
+      if (!v) return null;
+      if (typeof v === 'string') {
+        try { return JSON.parse(v); } catch (_) { return null; }
+      }
+      return v;
+    } catch (_) { return null; }
+  }
+
   // Helper: detect a tool execution message
   function isToolExec(m) {
-    try { return m && m.metadata && m.metadata.type === 'tool_execution' && m.metadata.tool_type; } catch (_) { return false; }
+    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_execution' && meta.tool_type); } catch (_) { return false; }
   }
 
   // Helper: detect a tool result message
   function isToolResult(m) {
-    try { return m && m.metadata && m.metadata.type === 'tool_result' && m.metadata.tool_type; } catch (_) { return false; }
+    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_result' && meta.tool_type); } catch (_) { return false; }
   }
 
   // Helper: for Text Editor description like "write /path/file" => { action, path }
@@ -421,7 +433,7 @@
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                      {toolLabel(m.metadata.tool_type)} Request {argsPreview(m)}
+                      {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
                     </summary>
                     <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
                   </details>
@@ -433,7 +445,7 @@
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        {toolLabel(m.metadata.tool_type)} Response {argsPreview(m)}
+                        {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
                       </summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
                     </details>
