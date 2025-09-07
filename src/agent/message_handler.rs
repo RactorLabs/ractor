@@ -400,8 +400,20 @@ impl MessageHandler {
                     // Log tool result
                     info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
 
-                    // Note: Tool results are already visible via tool execution messages
-                    // Sending them as separate messages causes context desynchronization
+                    // Send tool result message to database for UI display
+                    let mut result_metadata = serde_json::json!({
+                        "type": "tool_result",
+                        "tool_type": tool_name
+                    });
+                    if let Some(obj) = result_metadata.as_object_mut() {
+                        obj.insert("args".to_string(), args.clone());
+                    }
+                    if let Err(e) = self.api_client
+                        .send_message(tool_result.clone(), Some(result_metadata))
+                        .await
+                    {
+                        warn!("Failed to send tool result message: {}", e);
+                    }
 
                     // Add tool result to conversation following Ollama cookbook
                     conversation.push(ChatMessage {
@@ -456,8 +468,20 @@ impl MessageHandler {
                     Err(e) => format!("[error] {}", e),
                 };
 
-                // Note: Tool results are already visible via tool execution messages
-                // Sending them as separate messages causes context desynchronization
+                // Send tool result message to database for UI display
+                let mut result_metadata = serde_json::json!({
+                    "type": "tool_result",
+                    "tool_type": &tool_name
+                });
+                if let Some(obj) = result_metadata.as_object_mut() {
+                    obj.insert("args".to_string(), args.clone());
+                }
+                if let Err(e) = self.api_client
+                    .send_message(tool_result.clone(), Some(result_metadata))
+                    .await
+                {
+                    warn!("Failed to send tool result message: {}", e);
+                }
 
                 // Add tool result to conversation and continue
                 conversation.push(ChatMessage {
