@@ -292,7 +292,7 @@
                       <span class="badge bg-secondary">{toolLabel(m.metadata.tool_type)}</span>
                       <span class="small text-body text-opacity-75">Request</span>
                     </div>
-                    <details class="mt-1" open>
+                    <details class="mt-1">
                       <summary class="small fw-500">View Full JSON</summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
                     </details>
@@ -304,13 +304,13 @@
                   <div class="text-body" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
                     {#if isToolResult(m)}
                       <div class="p-2 rounded-3 border bg-body">
-                        <div class="d-flex align-items-center gap-2 mb-0">
+                        <div class="d-flex align-items-center gap-2 mb-1">
                           <span class="badge bg-light text-dark">{toolLabel(m.metadata.tool_type)}</span>
                           <span class="small text-body text-opacity-75">Response</span>
                         </div>
-                        <details open>
+                        <details class="mt-1">
                           <summary class="small fw-500">View Full JSON</summary>
-                          <pre class="small bg-dark text-white p-2 rounded mb-0 mt-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
                         </details>
                       </div>
                     {:else}
