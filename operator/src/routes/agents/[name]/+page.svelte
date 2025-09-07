@@ -293,11 +293,7 @@
                     </div>
                     {#if String(m.metadata.tool_type).toLowerCase() === 'bash'}
                       <div class="small text-body text-opacity-75">Command</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
-                      <details class="mt-1">
-                        <summary class="small text-body text-opacity-75">View JSON</summary>
-                        <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: 'bash', input: { command: m.content } }, null, 2)}</code></pre>
-                      </details>
+                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
                     {:else if String(m.metadata.tool_type).toLowerCase() === 'text_editor'}
                       {#key m.content}
                         {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed}
@@ -306,21 +302,9 @@
                           {/await}
                       {/key}
                       <div class="small text-body text-opacity-75">Text</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
-                      <details class="mt-1">
-                        <summary class="small text-body text-opacity-75">View JSON</summary>
-                        {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed2}
-                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: 'text_editor', input: { action: parsed2.action, path: parsed2.path, raw: m.content } }, null, 2)}</code></pre>
-                        {/await}
-                      </details>
+                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
                     {:else}
                       <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
-                      {#if m.metadata && m.metadata.args}
-                        <details class="mt-1">
-                          <summary class="small text-body text-opacity-75">View JSON</summary>
-                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
-                        </details>
-                      {/if}
                     {/if}
                   </div>
                 </div>
