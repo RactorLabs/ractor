@@ -39,6 +39,9 @@
   });
 </script>
 
+<div class="container-xxl">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xxl-10">
 <div class="d-flex align-items-center mb-3">
   <div class="fw-bold">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
@@ -82,4 +85,6 @@
             {/each}
           </div>
         {/if}
+    </div>
+  </div>
 </div>
