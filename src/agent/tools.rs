@@ -9,7 +9,7 @@ use tracing::info;
 const AGENT_ROOT: &str = "/agent";
 const MAX_OUTPUT_BYTES: usize = 200_000; // cap tool outputs
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum TextEditAction {
     View {

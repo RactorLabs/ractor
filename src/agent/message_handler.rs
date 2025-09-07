@@ -21,6 +21,14 @@ pub struct MessageHandler {
 }
 
 impl MessageHandler {
+    /// Map platform roles to LLM roles.
+    fn role_to_model(role: &MessageRole) -> &'static str {
+        match role {
+            MessageRole::User => MESSAGE_ROLE_USER,
+            MessageRole::Agent => "assistant",
+            MessageRole::System => "system",
+        }
+    }
     pub fn new(
         api_client: Arc<RaworcClient>,
         ollama_client: Arc<OllamaClient>,
@@ -313,6 +321,8 @@ impl MessageHandler {
 
         // Loop for tool usage with no hard cap on steps
         loop {
+            // Track model "thinking" duration for UI (best-effort)
+            let mut thinking_secs: Option<f32> = None;
             // Simple retry/backoff for transient failures
             let mut resp: Result<ModelResponse> =
                 Err(super::error::HostError::Model("uninitialized".to_string()));
@@ -327,12 +337,10 @@ impl MessageHandler {
                     )
                     .await;
                 match try_resp {
-                    Ok(mut t) => {
-                        // Attach an approximate thinking duration for UI
-                        let secs = started.elapsed().as_secs_f32();
-                        // We cannot mutate t metadata directly, will attach when sending
+                    Ok(t) => {
+                        // Record approximate thinking time for this successful attempt
+                        thinking_secs = Some(started.elapsed().as_secs_f32());
                         resp = Ok(t);
-                        // Store in a local var via conversation? We'll recompute when sending below if needed.
                         break;
                     }
                     Err(e) => {
@@ -509,6 +517,9 @@ impl MessageHandler {
                             serde_json::Value::String(thinking.clone()),
                         );
                     }
+                    if let Some(secs) = thinking_secs {
+                        obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
+                    }
                 }
                 self.api_client.send_message(sanitized, Some(meta)).await?;
                 return Ok(());
@@ -571,53 +582,22 @@ impl MessageHandler {
         let history: Vec<_> = messages
             .iter()
             .filter(|m| m.id != current.id)
-            .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
+            .filter(|m| matches!(m.role, MessageRole::User | MessageRole::Agent | MessageRole::System))
             .map(|m| {
-                let (role, name) = match m.role {
-                    MessageRole::User => (MESSAGE_ROLE_USER.to_string(), None),
-                    MessageRole::Agent => {
-                        // Check if this is a tool result message based on metadata
-                        if let Some(metadata) = &m.metadata {
-                            if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
-                                if msg_type == "tool_result" {
-                                    let tool_name = metadata
-                                        .get("tool_type")
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string());
-
-                                    // Special handling for tool errors that break conversation flow
-                                    if m.content.starts_with("[error]")
-                                        || m.content.contains("not found")
-                                    {
-                                        // Tool errors should be handled as assistant messages with clear error context
-                                        // to avoid confusing the model about tool calling flow
-                                        let error_content =
-                                            format!("I encountered an error: {}", m.content);
-                                        return ChatMessage {
-                                            role: "assistant".to_string(),
-                                            content: error_content,
-                                            name: None,
-                                        };
-                                    }
-
-                                    // Normal successful tool results
-                                    return ChatMessage {
-                                        role: "tool".to_string(),
-                                        content: m.content.clone(),
-                                        name: tool_name,
-                                    };
-                                }
-                            }
+                // Pass explicit tool results as tool role with name for the model
+                if let Some(metadata) = &m.metadata {
+                    if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
+                        if msg_type == "tool_result" {
+                            let tool_name = metadata
+                                .get("tool_type")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string());
+                            return ChatMessage { role: "tool".to_string(), content: m.content.clone(), name: tool_name };
                         }
-                        ("assistant".to_string(), None) // Model expects "assistant" not "agent"
                     }
-                    _ => (MESSAGE_ROLE_USER.to_string(), None),
-                };
-                ChatMessage {
-                    role,
-                    content: m.content.clone(),
-                    name,
                 }
+                let role = Self::role_to_model(&m.role).to_string();
+                ChatMessage { role, content: m.content.clone(), name: None }
             })
             .collect();
 
