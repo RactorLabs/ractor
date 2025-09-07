@@ -63,6 +63,8 @@ struct ChatRequest<'a> {
     reasoning: Option<Reasoning>,
     #[serde(skip_serializing_if = "Option::is_none")]
     thinking: Option<Thinking>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<RequestOptions>,
 }
 
 #[derive(Debug, Serialize)]
@@ -76,6 +78,11 @@ struct Thinking {
     typ: String, // e.g., "enabled"
     #[serde(skip_serializing_if = "Option::is_none")]
     budget_tokens: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+struct RequestOptions {
+    num_ctx: u32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -387,6 +394,7 @@ impl OllamaClient {
             } else { 
                 None 
             },
+            options: Some(RequestOptions { num_ctx: 131072 }), // 128k context
         };
 
         // Debug: Log the full request being sent to Ollama
