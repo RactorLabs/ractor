@@ -225,6 +225,38 @@
     }
   }
 
+  async function publishAgent() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, {
+        method: 'POST',
+        body: JSON.stringify({ content: true })
+      });
+      if (!res.ok) throw new Error(res?.data?.error || `Publish failed (HTTP ${res.status})`);
+      if (agent) {
+        agent = { ...(agent || {}), is_published: true, isPublished: true };
+      }
+      // Recompute frame URL to use published path if no direct port
+      computeFrameUrl();
+      error = null;
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
+  async function unpublishAgent() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.error || `Unpublish failed (HTTP ${res.status})`);
+      if (agent) {
+        agent = { ...(agent || {}), is_published: false, isPublished: false };
+      }
+      computeFrameUrl();
+      error = null;
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
   
 
   
@@ -339,16 +371,28 @@
   </div>
   <div class="col-12 col-xl-4 d-flex flex-column h-100" style="min-height: 0;">
     <Card class="w-100 h-100">
-      <div class="card-header fw-bold d-flex align-items-center gap-2">
-        <span>Content</span>
-        {#if agent && (agent.content_port || agent.contentPort)}
-          <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
-        {/if}
-        {#if stateStr === 'idle' || stateStr === 'busy'}
-          <button class="btn btn-outline-secondary btn-sm ms-auto" on:click={refreshFrameUrl} aria-label="Refresh content">Refresh</button>
-        {/if}
-      </div>
       <div class="card-body p-0 h-100" style="min-height: 300px;">
+        <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
+          <span>Content</span>
+          {#if agent && (agent.is_published || agent.isPublished)}
+            <span class="badge bg-success">Public</span>
+          {/if}
+          {#if agent && (agent.content_port || agent.contentPort)}
+            <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
+          {/if}
+          <div class="ms-auto d-flex gap-2">
+            {#if agent}
+              {#if agent.is_published || agent.isPublished}
+                <button class="btn btn-outline-danger btn-sm" on:click={unpublishAgent} aria-label="Unpublish content">Unpublish</button>
+              {:else}
+                <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
+              {/if}
+            {/if}
+            {#if stateStr === 'idle' || stateStr === 'busy'}
+              <button class="btn btn-outline-secondary btn-sm" on:click={refreshFrameUrl} aria-label="Refresh content">Refresh</button>
+            {/if}
+          </div>
+        </div>
         <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
           {#if stateStr === 'idle' || stateStr === 'busy'}
             {#if frameUrl && contentAvailable}
