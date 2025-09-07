@@ -272,7 +272,8 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill d-flex flex-column justify-content-end px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
+      <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
+        <div class="d-flex flex-column justify-content-end">
         {#if messages && messages.length}
           {#each messages as m, i}
             {#if m.role === 'user'}
@@ -347,6 +348,7 @@
             {/if}
           {/each}
         {/if}
+        </div>
       </div>
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
