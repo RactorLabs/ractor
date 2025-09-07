@@ -193,6 +193,30 @@
     return { action: s.slice(0, firstSpace), path: s.slice(firstSpace + 1).trim() };
   }
 
+  // Helper: compact args preview for tool summaries
+  function argsPreview(m) {
+    try {
+      const t = String(m?.metadata?.tool_type || '').toLowerCase();
+      const a = m?.metadata?.args;
+      if (!a || typeof a !== 'object') return '';
+      if (t === 'bash') {
+        const cmd = a.command || a.cmd || '';
+        if (!cmd) return '';
+        return `(${String(cmd).trim().slice(0, 80)})`;
+      }
+      if (t === 'text_editor') {
+        const action = a.action || 'edit';
+        const path = a.path || '';
+        const extra = path ? ` ${path}` : '';
+        return `(${action}${extra})`;
+      }
+      const json = JSON.stringify(a);
+      if (!json) return '';
+      const short = json.length > 80 ? json.slice(0, 77) + '…' : json;
+      return `(${short})`;
+    } catch (_) { return ''; }
+  }
+
   async function sendMessage(e) {
     e?.preventDefault?.();
     const content = (input || '').trim();
@@ -345,7 +369,7 @@
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                      {toolLabel(m.metadata.tool_type)} Request
+                      {toolLabel(m.metadata.tool_type)} Request {argsPreview(m)}
                     </summary>
                     <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
                   </details>
@@ -357,7 +381,7 @@
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        {toolLabel(m.metadata.tool_type)} Response
+                        {toolLabel(m.metadata.tool_type)} Response {argsPreview(m)}
                       </summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
                     </details>
