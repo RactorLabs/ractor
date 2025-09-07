@@ -342,6 +342,7 @@
   onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
 </script>
 
+<div class="container">
 <div class="row g-3 h-100">
   <div class="col-12 col-xl-8 d-flex flex-column h-100" style="min-height: 0;">
     <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body">
@@ -535,4 +536,5 @@
       margin-left: 0.4rem;
     }
   </style>
+</div>
 </div>
