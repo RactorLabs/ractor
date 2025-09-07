@@ -464,7 +464,8 @@
             {/if}
           </div>
         </div>
-        <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
+        <div class="flex-fill border rounded-2" style="min-height: 0;">
+          <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
           {#if stateStr === 'idle' || stateStr === 'busy'}
             {#if frameUrl && contentAvailable}
               <iframe src={frameUrl} title="Agent content" style="border:0; width:100%; height:100%; opacity: {frameOpacity}; transition: opacity 200ms ease;" on:load={() => { frameOpacity = 1; }}></iframe>
@@ -502,6 +503,7 @@
               </div>
             </div>
           {/if}
+          </div>
         </div>
       </div>
   </div>
