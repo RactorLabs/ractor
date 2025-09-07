@@ -140,8 +140,8 @@
       <div class="card-body">
         <div class="row g-3 align-items-end">
           <div class="col-12 col-md-4">
-            <label class="form-label">Endpoint</label>
-            <select class="form-select" on:change={(e)=>onSelect(e.target.selectedIndex)}>
+            <label class="form-label" for="ep-select">Endpoint</label>
+            <select id="ep-select" class="form-select" on:change={(e)=>onSelect(e.target.selectedIndex)}>
               {#each endpoints as ep, i}
                 <option value={i} selected={selected===ep}>{ep.method} {ep.path} — {ep.section}</option>
               {/each}
@@ -178,8 +178,8 @@
             <div class="row g-2">
               {#each selected.params.filter(p=>p.in==='path') as p}
                 <div class="col-12 col-md-4">
-                  <label class="form-label">{p.name}</label>
-                  <input class="form-control" bind:value={pathParams[p.name]} placeholder={p.desc || ''} />
+                  <label class="form-label" for={'path-'+p.name}>{p.name}</label>
+                  <input id={'path-'+p.name} class="form-control" bind:value={pathParams[p.name]} placeholder={p.desc || ''} />
                 </div>
               {/each}
             </div>
@@ -192,8 +192,8 @@
             <div class="row g-2">
               {#each selected.params.filter(p=>p.in==='query') as p}
                 <div class="col-12 col-md-4">
-                  <label class="form-label">{p.name}</label>
-                  <input class="form-control" bind:value={queryParams[p.name]} placeholder={p.desc || ''} />
+                  <label class="form-label" for={'query-'+p.name}>{p.name}</label>
+                  <input id={'query-'+p.name} class="form-control" bind:value={queryParams[p.name]} placeholder={p.desc || ''} />
                 </div>
               {/each}
               {#each extraQuery as row, idx}
