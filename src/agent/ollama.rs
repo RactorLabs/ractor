@@ -10,6 +10,8 @@ pub struct OllamaClient {
     client: Client,
     base_url: String,
     api_client: Option<Arc<RaworcClient>>, // kept for parity; unused currently
+    reasoning_effort: Option<String>,
+    thinking_budget: Option<u32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +56,23 @@ struct ChatRequest<'a> {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<ToolDef>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<Reasoning>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<Thinking>,
+}
+
+#[derive(Debug, Serialize)]
+struct Reasoning {
+    effort: String, // e.g., "low" | "medium" | "high"
+}
+
+#[derive(Debug, Serialize)]
+struct Thinking {
+    #[serde(rename = "type")]
+    typ: String, // e.g., "enabled"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    budget_tokens: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -104,10 +123,24 @@ impl OllamaClient {
             .build()
             .map_err(|e| HostError::Model(format!("Failed to create client: {}", e)))?;
 
+        // Reasoning controls via env with sensible defaults
+        // Default to high reasoning effort and a thinking budget if not provided
+        let reasoning_effort = Some(
+            std::env::var("OLLAMA_REASONING_EFFORT")
+                .ok()
+                .unwrap_or_else(|| "high".to_string()),
+        );
+        let thinking_budget = std::env::var("OLLAMA_THINKING_TOKENS")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .or(Some(4096));
+
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             api_client: None,
+            reasoning_effort,
+            thinking_budget,
         })
     }
 
@@ -256,6 +289,8 @@ impl OllamaClient {
             messages: chat_messages,
             stream: false,
             tools: Some(tools),
+            reasoning: self.reasoning_effort.as_ref().map(|effort| Reasoning { effort: effort.clone() }),
+            thinking: Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget }),
         };
 
         let url = format!("{}/api/chat", self.base_url);
