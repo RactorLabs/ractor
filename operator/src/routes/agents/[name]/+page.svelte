@@ -391,7 +391,7 @@
       </div>
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
-          <input aria-label="Message input" class="form-control chat-no-focus border-0 bg-transparent shadow-none" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
+          <input aria-label="Message input" class="form-control chat-no-focus" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
           <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>Send</button>
         </div>
       </form>
@@ -473,10 +473,7 @@
 
   <style>
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-    :global(.chat-no-focus) {
-      border-color: transparent !important;
-      background-color: transparent !important;
-    }
+    /* Restore default border/background for chat input */
     /* Remove focus border and shadow on the chat input to match template behavior */
     :global(.chat-no-focus:focus) {
       outline: 0 !important;
