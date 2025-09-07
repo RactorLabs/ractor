@@ -193,6 +193,22 @@
     return { action: s.slice(0, firstSpace), path: s.slice(firstSpace + 1).trim() };
   }
 
+  // Expand/Collapse all tool details helpers
+  function expandAllTools() {
+    try {
+      if (typeof document === 'undefined') return;
+      const list = document.querySelectorAll('#chat-body details');
+      list.forEach((el) => { try { el.open = true; } catch (_) {} });
+    } catch (_) {}
+  }
+  function collapseAllTools() {
+    try {
+      if (typeof document === 'undefined') return;
+      const list = document.querySelectorAll('#chat-body details');
+      list.forEach((el) => { try { el.open = false; } catch (_) {} });
+    } catch (_) {}
+  }
+
   // Helper: compact args preview for tool summaries
   function argsPreview(m) {
     try {
@@ -339,6 +355,8 @@
         {:else}
           <button class="btn btn-outline-warning btn-sm" disabled aria-label="Put agent to sleep" title="Agent not ready">Sleep</button>
         {/if}
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details">Expand All</button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details">Collapse All</button>
       </div>
     </div>
     {#if error}
