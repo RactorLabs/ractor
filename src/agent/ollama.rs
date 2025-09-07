@@ -296,18 +296,13 @@ impl OllamaClient {
                 _ => "user",
             };
 
-            // Skip empty messages, but preserve tool messages even if empty
-            // to maintain conversation flow after tool calls
-            if msg.content.trim().is_empty() && role != "tool" {
+            // Skip empty messages completely - tool results should always have content
+            if msg.content.trim().is_empty() {
+                tracing::warn!("Skipping empty message with role: {}", role);
                 continue;
             }
 
-            // For tool messages, use a placeholder if content is empty to maintain flow
-            let content = if role == "tool" && msg.content.trim().is_empty() {
-                "[tool output]"
-            } else {
-                msg.content.trim()
-            };
+            let content = msg.content.trim();
 
             chat_messages.push(ChatRequestMessage {
                 role,
