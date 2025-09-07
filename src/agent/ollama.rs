@@ -115,6 +115,49 @@ pub struct ModelResponse {
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ToolResult {
+    pub tool_call_id: String,
+    pub content: String,
+    pub error: Option<String>,
+}
+
+impl ToolResult {
+    pub fn from_tool_results(tool_results: Vec<ToolResult>) -> Vec<ChatMessage> {
+        tool_results.into_iter().map(|tr| tr.to_chat_message()).collect()
+    }
+    pub fn new(tool_call_id: String, content: String) -> Self {
+        Self {
+            tool_call_id,
+            content,
+            error: None,
+        }
+    }
+
+    pub fn with_error(tool_call_id: String, error: String) -> Self {
+        Self {
+            tool_call_id,
+            content: String::new(),
+            error: Some(error),
+        }
+    }
+
+    pub fn to_chat_message(&self) -> ChatMessage {
+        let content = if let Some(ref error) = self.error {
+            format!("Error: {}", error)
+        } else {
+            self.content.clone()
+        };
+
+        ChatMessage {
+            role: "tool".to_string(),
+            content,
+            name: None,
+            tool_call_id: Some(self.tool_call_id.clone()),
+        }
+    }
+}
+
 impl OllamaClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let timeout_secs = std::env::var("OLLAMA_TIMEOUT_SECS")
