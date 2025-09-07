@@ -60,7 +60,7 @@
 		"svelte-highlight": "^7.8.3",
     "svelte-select": "^5.8.3",
     "svelte-tags-input": "^6.0.2",
-    "svelte-markdown": "^0.4.1",
-    "remark-gfm": "^4.0.0"
+    "markdown-it": "^14.1.0",
+    "markdown-it-task-lists": "^2.1.1"
   }
 }

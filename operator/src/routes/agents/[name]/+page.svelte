@@ -6,8 +6,10 @@
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import { appOptions } from '/src/stores/appOptions.js';
-  import Markdown from 'svelte-markdown';
-  import gfm from 'remark-gfm';
+  import MarkdownIt from 'markdown-it';
+  import taskLists from 'markdown-it-task-lists';
+
+  const md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
 
   let name = '';
   $: name = $page.params.name;
@@ -356,7 +358,7 @@
                           <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                         {/if}
                         {#if m.content && m.content.trim()}
-                          <Markdown class="markdown-body" source={m.content} remarkPlugins={[gfm]} />
+                          <div class="markdown-body" {@html md.render(m.content)}></div>
                         {/if}
                       </div>
                     </div>
