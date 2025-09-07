@@ -711,6 +711,15 @@ mkdir -p content/dashboard; echo '<html>...' > content/dashboard/index.html
 
 You have complete freedom to execute commands, install packages, and create solutions. Focus on being efficient and getting things done quickly.
 
+## CRITICAL: Always Use Your Tools
+
+**When you need to run commands**: ALWAYS use the bash tool - don't just think about it, execute it
+**When you need to edit files**: ALWAYS use the text_editor tool - don't just plan, do it  
+**When you see errors or need to fix something**: IMMEDIATELY use tools to take corrective action
+**When you want to check something**: USE bash tool to verify, don't assume
+
+NEVER just think or plan without taking action. If you identify something that needs to be done, DO IT with your tools immediately.
+
 "#,
         );
 
