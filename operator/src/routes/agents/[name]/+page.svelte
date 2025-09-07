@@ -351,12 +351,14 @@
                 {:else}
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                      {#if m.metadata && m.metadata.thinking}
-                        <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
-                      {/if}
-                      {#if m.content && m.content.trim()}
-                        <Markdown class="markdown-body" source={m.content} remarkPlugins={[gfm]} />
-                      {/if}
+                      <div class="markdown-wrap">
+                        {#if m.metadata && m.metadata.thinking}
+                          <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
+                        {/if}
+                        {#if m.content && m.content.trim()}
+                          <Markdown class="markdown-body" source={m.content} remarkPlugins={[gfm]} />
+                        {/if}
+                      </div>
                     </div>
                   </div>
                 {/if}
@@ -469,5 +471,6 @@
     :global(.markdown-body thead th) { background: var(--bs-light); }
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
+    :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
   </style>
 </div>
