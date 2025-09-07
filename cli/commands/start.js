@@ -97,6 +97,7 @@ module.exports = (program) => {
     .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
     .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:20b')
     .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '1h')
+    .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -315,6 +316,8 @@ module.exports = (program) => {
               let shm = options.ollamaShmSize || '16g';
               if (!options.ollamaMemory) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
               if (!options.ollamaShmSize) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
+              const contextLength = options.ollamaContextLength || '131072';
+              console.log(chalk.blue('[INFO] ') + `Ollama context length: ${contextLength} tokens (128k)`);
               const memFlag = ['--memory', mem, '--memory-swap', mem];
               const shmFlag = ['--shm-size', shm];
 
@@ -330,6 +333,8 @@ module.exports = (program) => {
               args.push(
                 '-v','raworc_ollama_data:/root/.ollama',
                 '-e',`OLLAMA_KEEP_ALIVE=${options.ollamaKeepAlive || '1h'}`,
+                '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
+                '-e',`OLLAMA_NUM_CTX=${contextLength}`,
                 ...cpuEnv,
                 ...gpuFlags,
                 ...cpuFlag,

@@ -394,7 +394,7 @@ impl OllamaClient {
             } else { 
                 None 
             },
-            options: Some(RequestOptions { num_ctx: 131072 }), // 128k context
+            options: None, // Context length now set via CLI environment variables
         };
 
         // Debug: Log the full request being sent to Ollama
