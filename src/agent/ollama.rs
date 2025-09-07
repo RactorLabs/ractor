@@ -146,12 +146,23 @@ impl OllamaClient {
                 "tool" => "tool",
                 _ => "user",
             };
-            if msg.content.trim().is_empty() {
+            
+            // Skip empty messages, but preserve tool messages even if empty 
+            // to maintain conversation flow after tool calls
+            if msg.content.trim().is_empty() && role != "tool" {
                 continue;
             }
+            
+            // For tool messages, use a placeholder if content is empty to maintain flow
+            let content = if role == "tool" && msg.content.trim().is_empty() {
+                "[tool output]"
+            } else {
+                msg.content.trim()
+            };
+            
             chat_messages.push(ChatRequestMessage {
                 role,
-                content: msg.content.trim(),
+                content,
                 name: msg.name.as_deref(),
             });
         }

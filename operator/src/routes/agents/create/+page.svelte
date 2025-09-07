@@ -86,8 +86,8 @@
 
       const res = await apiFetch('/agents', { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.error || `Create failed (HTTP ${res.status})`);
-      // Navigate back to agents list
-      goto('/agents');
+      // Navigate to the created agent page
+      goto(`/agents/${encodeURIComponent(name)}`);
     } catch (e) {
       error = e.message || String(e);
     } finally {

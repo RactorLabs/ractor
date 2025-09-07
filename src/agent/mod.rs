@@ -305,7 +305,7 @@ async fn start_content_server() -> Result<()> {
       html, body { height: 100%; margin: 0; }
       body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background: #fff; color: #111; }
       .wrap { text-align: center; padding: 24px; }
-      h1 { font-size: 48px; margin: 0 0 8px; font-weight: 600; }
+      h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
       p { margin: 0; color: rgba(0,0,0,0.6); }
     </style>
   </head>
