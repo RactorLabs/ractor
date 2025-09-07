@@ -105,15 +105,18 @@ When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told no
 - Verify: `git status`. Do not push without approval.
 
 ### Bump (version management)
-- Choose target: patch/minor/major or specific (e.g., `0.5.2`).
-- Update version refs (Cargo.toml, cli/ and website/ package.json, API/version docs, Operator docs badge in `operator/src/routes/docs/+page.svelte`, etc.).
-- Rebuild to update locks: `cargo build --release`; `cd cli && npm install`; `cd website && npm install`.
+- Choose target: patch/minor/major or specific (e.g., `0.6.3`).
+- Update version refs (review and edit only these):
+  - `Cargo.toml` (top-level `version = "x.y.z"`)
+  - `cli/package.json` (`version` field)
+  - Operator docs badge constant in `operator/src/routes/docs/+page.svelte` (`const API_VERSION = 'x.y.z (v0)';`)
+- Rebuild to update locks: `cargo build --release`; then `cd cli && npm install`.
 - Verify modified files via `git status`. Then commit using the Commit playbook (don’t push yet).
-- Tip: search and replace prior version across tracked files (review before edit):
+- Tip: find current version and audit occurrences (avoid lockfiles and node_modules when counting):
   - `prev=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)`
-  - `new=0.X.Y`
-  - Audit: `rg -n --hidden -S "$prev" -g '!target/**' -g '!node_modules/**' -g '!website/build/**'` 
-  - Replace in known refs only (avoid lock files): `sed -i "s/$prev/$new/g" Cargo.toml cli/package.json website/package.json operator/src/routes/docs/+page.svelte`
+  - `rg -n --hidden -S "$prev" -g '!target/**' -g '!**/node_modules/**'`
+- Safely update the Operator docs badge (avoid corrupting the line):
+  - Use a targeted replace: `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
 
 ### Release
 - Update docs: README, website docs/changelog, API docs, CLAUDE.md.
