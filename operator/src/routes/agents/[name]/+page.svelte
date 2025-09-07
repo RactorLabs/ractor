@@ -319,6 +319,32 @@
     }
   }
 
+  // Remix current agent into a new one and navigate to it
+  async function remixAgent() {
+    try {
+      const cur = String(name || '').trim();
+      const suggestion = (cur && /^[a-z0-9-]+$/.test(cur)) ? `${cur}-remix` : 'new-agent';
+      const next = typeof window !== 'undefined' ? window.prompt('Enter new agent name', suggestion) : null;
+      if (!next) return;
+      const newName = String(next).trim();
+      const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+      if (!pattern.test(newName)) {
+        error = 'Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$';
+        return;
+      }
+
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, {
+        method: 'POST',
+        body: JSON.stringify({ name: newName, code: true, secrets: true, content: true })
+      });
+      if (!res.ok) throw new Error(res?.data?.error || `Remix failed (HTTP ${res.status})`);
+      // Navigate to the remixed agent
+      goto(`/agents/${encodeURIComponent(newName)}`);
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
   
 
   
@@ -348,6 +374,14 @@
       <div class="fw-bold">{name}</div>
       <div>{#if agent}<span class={stateClass(stateStr)}>{stateStr}</span>{/if}</div>
       <div class="ms-auto d-flex gap-2">
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Agent menu">
+            Menu
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
+          </ul>
+        </div>
         <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
         <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
         {#if stateStr === 'slept'}
