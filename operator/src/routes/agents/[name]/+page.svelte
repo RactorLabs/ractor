@@ -347,11 +347,9 @@
     <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body">
       <div class="fw-bold">{name}</div>
       <div>{#if agent}<span class={stateClass(stateStr)}>{stateStr}</span>{/if}</div>
-      <div class="d-flex gap-2 ms-2">
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details">Expand All</button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details">Collapse All</button>
-      </div>
       <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
         {#if stateStr === 'slept'}
           <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
         {:else if stateStr === 'idle' || stateStr === 'busy'}
