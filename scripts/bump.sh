@@ -62,8 +62,8 @@ echo "Building Rust (cargo build --release)"
 cargo build --release
 
 if [[ -f cli/package.json ]]; then
-  echo "Installing CLI deps (cli/)"
-  (cd cli && (npm ci || npm install) >/dev/null)
+  echo "Installing CLI deps and updating lockfile (cli/)"
+  (cd cli && npm install)
 fi
 
 if [[ -f operator/package.json ]]; then
