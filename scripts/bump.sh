@@ -38,9 +38,26 @@ fi
 
 # Update Operator docs badge (safe regex)
 if [[ -f operator/src/routes/docs/+page.svelte ]]; then
-  perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte
+  perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte || true
+  # Fallback: if corrupted, replace the line following the version comment
+  if ! rg -n "const\\s+API_VERSION" operator/src/routes/docs/+page.svelte >/dev/null; then
+    python3 - "$new" <<'PY'
+import sys
+from pathlib import Path
+new=sys.argv[1]
+p=Path('operator/src/routes/docs/+page.svelte')
+s=p.read_text()
+needle='// Hard-coded docs version; update during version bumps'
+if needle in s:
+    parts=s.split(needle)
+    head=parts[0]+needle+"\n  const API_VERSION = '%s (v0)';\n"%new
+    # drop the next line (possibly corrupted) and keep rest after first newline
+    rest=parts[1].split('\n',1)[1] if '\n' in parts[1] else ''
+    s=head+rest
+    p.write_text(s)
+PY
+  fi
 fi
 
 echo "Updated refs to $new. Review with: git status && git diff --compact-summary"
 echo "To commit: git add -A && git commit -m \"chore: bump version to $new\""
-
