@@ -36,12 +36,12 @@ async fn main() -> Result<()> {
             Err(e) => {
                 tracing::error!("Agent crashed with error: {}", e);
                 tracing::error!("Attempting to restart agent in 5 seconds...");
-                
+
                 // Wait before restart to prevent tight crash loops
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         }
-        
+
         tracing::info!("Restarting agent...");
     }
 }

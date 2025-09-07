@@ -87,8 +87,7 @@ pub mod permissions {
     pub const AGENT_LIST: PermissionRequirement =
         PermissionRequirement::new("api", "agents", "list");
     #[allow(dead_code)]
-    pub const AGENT_GET: PermissionRequirement =
-        PermissionRequirement::new("api", "agents", "get");
+    pub const AGENT_GET: PermissionRequirement = PermissionRequirement::new("api", "agents", "get");
     #[allow(dead_code)]
     pub const AGENT_CREATE: PermissionRequirement =
         PermissionRequirement::new("api", "agents", "create");

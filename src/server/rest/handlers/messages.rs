@@ -8,10 +8,10 @@ use std::sync::Arc;
 use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::shared::models::constants::{
-    AGENT_STATE_BUSY, AGENT_STATE_SLEPT, AGENT_STATE_IDLE, AGENT_STATE_INIT,
+    AGENT_STATE_BUSY, AGENT_STATE_IDLE, AGENT_STATE_INIT, AGENT_STATE_SLEPT,
 };
 use crate::shared::models::{
-    AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse, AgentMessage,
+    AgentMessage, AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse,
 };
 
 pub async fn create_message(
@@ -137,10 +137,9 @@ pub async fn list_messages(
         .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
     // Get messages - simplified for now
-    let messages =
-        AgentMessage::find_by_agent(&state.db, &agent_name, query.limit, query.offset)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch messages: {}", e)))?;
+    let messages = AgentMessage::find_by_agent(&state.db, &agent_name, query.limit, query.offset)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch messages: {}", e)))?;
 
     // Convert to MessageResponse
     let response_messages: Vec<MessageResponse> = messages

@@ -1,16 +1,16 @@
 use sqlx::{MySql, Pool};
 use thiserror::Error;
 
+pub mod agent;
 pub mod constants;
 pub mod message;
-pub mod agent;
 pub mod state_helpers;
 
-pub use message::{CreateMessageRequest, ListMessagesQuery, MessageResponse, AgentMessage};
 pub use agent::{
-    CreateAgentRequest, PublishAgentRequest, RemixAgentRequest, RestoreAgentRequest,
-    Agent, UpdateAgentRequest, UpdateAgentStateRequest,
+    Agent, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest, RestoreAgentRequest,
+    UpdateAgentRequest, UpdateAgentStateRequest,
 };
+pub use message::{AgentMessage, CreateMessageRequest, ListMessagesQuery, MessageResponse};
 
 // Database errors
 #[derive(Error, Debug)]

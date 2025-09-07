@@ -1,9 +1,9 @@
 use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
-use super::ollama::{ChatMessage, OllamaClient, ModelResponse, ToolCall};
-use super::tool_registry::{ToolRegistry, ContainerExecMapper};
 use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
 use super::guardrails::Guardrails;
+use super::ollama::{ChatMessage, ModelResponse, OllamaClient};
+use super::tool_registry::{ContainerExecMapper, ToolRegistry};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -55,28 +55,30 @@ impl MessageHandler {
             registry
         } else {
             let registry = Arc::new(ToolRegistry::new());
-            
+
             // Register built-in tools
             let bash_tool = Box::new(BashTool);
             let text_editor_tool = Box::new(TextEditorTool);
-            
+
             tokio::spawn({
                 let registry = registry.clone();
                 async move {
                     registry.register_tool(bash_tool).await;
                     registry.register_tool(text_editor_tool).await;
-                    
+
                     // Register container.exec alias for bash
-                    registry.register_alias(
-                        "container.exec",
-                        "bash",
-                        Some(Box::new(ContainerExecMapper))
-                    ).await;
-                    
+                    registry
+                        .register_alias(
+                            "container.exec",
+                            "bash",
+                            Some(Box::new(ContainerExecMapper)),
+                        )
+                        .await;
+
                     info!("Registered built-in tools and aliases");
                 }
             });
-            
+
             registry
         };
 
@@ -260,21 +262,27 @@ impl MessageHandler {
         if let Some((tool, input)) = parse_user_tool_call(&message.content) {
             // Notify
             let tool_description = match tool.as_str() {
-                "bash" => {
-                    input
-                        .get("command").and_then(|v| v.as_str())
-                        .or_else(|| input.get("cmd").and_then(|v| v.as_str()))
-                        .unwrap_or("bash command")
-                        .to_string()
-                }
+                "bash" => input
+                    .get("command")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| input.get("cmd").and_then(|v| v.as_str()))
+                    .unwrap_or("bash command")
+                    .to_string(),
                 "text_editor" => {
-                    let action = input.get("action").and_then(|v| v.as_str()).unwrap_or("edit");
-                    let path = input.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    let action = input
+                        .get("action")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("edit");
+                    let path = input
+                        .get("path")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown");
                     format!("{} {}", action, path)
                 }
                 _ => format!("Executing {} tool", tool),
             };
-            self.send_tool_message(&tool_description, &tool, Some(&input)).await?;
+            self.send_tool_message(&tool_description, &tool, Some(&input))
+                .await?;
 
             // Execute tool through registry
             let tool_result = match self.tool_registry.execute_tool(&tool, &input).await {
@@ -284,8 +292,12 @@ impl MessageHandler {
 
             // Send result back
             let mut metadata = serde_json::json!({ "type": "tool_result", "tool_type": tool });
-            if let Some(obj) = metadata.as_object_mut() { obj.insert("args".to_string(), input.clone()); }
-            self.api_client.send_message(tool_result, Some(metadata)).await?;
+            if let Some(obj) = metadata.as_object_mut() {
+                obj.insert("args".to_string(), input.clone());
+            }
+            self.api_client
+                .send_message(tool_result, Some(metadata))
+                .await?;
             return Ok(());
         }
 
@@ -302,16 +314,31 @@ impl MessageHandler {
         // Loop for tool usage with no hard cap on steps
         loop {
             // Simple retry/backoff for transient failures
-            let mut resp: Result<ModelResponse> = Err(super::error::HostError::Model("uninitialized".to_string()));
+            let mut resp: Result<ModelResponse> =
+                Err(super::error::HostError::Model("uninitialized".to_string()));
             for attempt in 0..=2 {
                 let try_resp = self
                     .ollama_client
-                    .complete_with_registry(conversation.clone(), Some(system_prompt.clone()), Some(&*self.tool_registry))
+                    .complete_with_registry(
+                        conversation.clone(),
+                        Some(system_prompt.clone()),
+                        Some(&*self.tool_registry),
+                    )
                     .await;
                 match try_resp {
-                    Ok(t) => { resp = Ok(t); break; }
+                    Ok(t) => {
+                        resp = Ok(t);
+                        break;
+                    }
                     Err(e) => {
-                        if attempt < 2 { let delay = 300u64 * 3u64.pow(attempt); tokio::time::sleep(std::time::Duration::from_millis(delay)).await; resp = Err(e); continue; } else { resp = Err(e); }
+                        if attempt < 2 {
+                            let delay = 300u64 * 3u64.pow(attempt);
+                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                            resp = Err(e);
+                            continue;
+                        } else {
+                            resp = Err(e);
+                        }
                     }
                 }
             }
@@ -330,7 +357,7 @@ impl MessageHandler {
                 if let Some(tool_call) = tool_calls.first() {
                     let tool_name = &tool_call.function.name;
                     let args = &tool_call.function.arguments;
-                    
+
                     // Log parsed tool call
                     info!("Structured tool call: {} with args: {:?}", tool_name, args);
 
@@ -338,23 +365,31 @@ impl MessageHandler {
                     let tool_description = match tool_name.as_str() {
                         "bash" => {
                             if let Some(cmd) = args
-                                .get("command").and_then(|v| v.as_str())
+                                .get("command")
+                                .and_then(|v| v.as_str())
                                 .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
                             {
                                 cmd.to_string()
                             } else {
                                 "bash command".to_string()
                             }
-                        },
+                        }
                         "text_editor" => {
-                            let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("edit");
-                            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                            let action = args
+                                .get("action")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("edit");
+                            let path = args
+                                .get("path")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown");
                             format!("{} {}", action, path)
-                        },
+                        }
                         _ => format!("Executing {} tool", tool_name),
                     };
 
-                    self.send_tool_message(&tool_description, tool_name, Some(args)).await?;
+                    self.send_tool_message(&tool_description, tool_name, Some(args))
+                        .await?;
 
                     // Execute tool through registry
                     let tool_result = match self.tool_registry.execute_tool(tool_name, args).await {
@@ -364,43 +399,56 @@ impl MessageHandler {
 
                     // Log tool result
                     info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
-                    
-                    // Also send tool result as a message so Operator can render it
-                    let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
-                    if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args.clone()); }
-                    let _ = self.api_client.send_message(tool_result.clone(), Some(meta)).await;
+
+                    // Note: Tool results are already visible via tool execution messages
+                    // Sending them as separate messages causes context desynchronization
 
                     // Add tool result to conversation following Ollama cookbook
-                    conversation.push(ChatMessage { 
-                        role: "tool".to_string(), 
-                        content: tool_result, 
-                        name: Some(tool_name.clone()) 
+                    conversation.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: tool_result,
+                        name: Some(tool_name.clone()),
                     });
 
                     continue;
                 }
-            } else if let Some((tool_name, args)) = parse_assistant_functions_text(&model_resp.content) {
+            } else if let Some((tool_name, args)) =
+                parse_assistant_functions_text(&model_resp.content)
+            {
                 // Fallback: parse assistant<|channel|>functions.* style
-                info!("Assistant functions text tool call: {} with args: {:?}", tool_name, args);
+                info!(
+                    "Assistant functions text tool call: {} with args: {:?}",
+                    tool_name, args
+                );
 
                 // Notify user
                 let tool_description = match tool_name.as_str() {
                     "bash" => {
                         if let Some(cmd) = args
-                            .get("command").and_then(|v| v.as_str())
+                            .get("command")
+                            .and_then(|v| v.as_str())
                             .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
                         {
                             cmd.to_string()
-                        } else { "bash command".to_string() }
+                        } else {
+                            "bash command".to_string()
+                        }
                     }
                     "text_editor" => {
-                        let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("edit");
-                        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let action = args
+                            .get("action")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("edit");
+                        let path = args
+                            .get("path")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         format!("{} {}", action, path)
                     }
                     _ => format!("Executing {} tool", tool_name),
                 };
-                self.send_tool_message(&tool_description, &tool_name, Some(&args)).await?;
+                self.send_tool_message(&tool_description, &tool_name, Some(&args))
+                    .await?;
 
                 // Execute tool through registry
                 let tool_result = match self.tool_registry.execute_tool(&tool_name, &args).await {
@@ -408,16 +456,14 @@ impl MessageHandler {
                     Err(e) => format!("[error] {}", e),
                 };
 
-                // Send result to Operator and add to conversation
-                let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
-                if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args.clone()); }
-                let _ = self.api_client.send_message(tool_result.clone(), Some(meta)).await;
+                // Note: Tool results are already visible via tool execution messages
+                // Sending them as separate messages causes context desynchronization
 
                 // Add tool result to conversation and continue
-                conversation.push(ChatMessage { 
-                    role: "tool".to_string(), 
-                    content: tool_result, 
-                    name: Some(tool_name.clone()) 
+                conversation.push(ChatMessage {
+                    role: "tool".to_string(),
+                    content: tool_result,
+                    name: Some(tool_name.clone()),
                 });
                 continue;
             } else {
@@ -428,14 +474,14 @@ impl MessageHandler {
                     "model": "gpt-oss"
                 });
                 if let Some(obj) = meta.as_object_mut() {
-                    if let Some(thinking) = &model_resp.thinking { obj.insert("thinking".to_string(), serde_json::Value::String(thinking.clone())); }
+                    if let Some(thinking) = &model_resp.thinking {
+                        obj.insert(
+                            "thinking".to_string(),
+                            serde_json::Value::String(thinking.clone()),
+                        );
+                    }
                 }
-                self.api_client
-                    .send_message(
-                        sanitized,
-                        Some(meta),
-                    )
-                    .await?;
+                self.api_client.send_message(sanitized, Some(meta)).await?;
                 return Ok(());
             }
         }
@@ -505,41 +551,55 @@ impl MessageHandler {
                         if let Some(metadata) = &m.metadata {
                             if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
                                 if msg_type == "tool_result" {
-                                    let tool_name = metadata.get("tool_type").and_then(|v| v.as_str()).map(|s| s.to_string());
-                                    
+                                    let tool_name = metadata
+                                        .get("tool_type")
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string());
+
                                     // Special handling for tool errors that break conversation flow
-                                    if m.content.starts_with("[error]") || m.content.contains("not found") {
+                                    if m.content.starts_with("[error]")
+                                        || m.content.contains("not found")
+                                    {
                                         // Tool errors should be handled as assistant messages with clear error context
                                         // to avoid confusing the model about tool calling flow
-                                        let error_content = format!("I encountered an error: {}", m.content);
-                                        return ChatMessage { 
-                                            role: "assistant".to_string(), 
-                                            content: error_content, 
-                                            name: None 
+                                        let error_content =
+                                            format!("I encountered an error: {}", m.content);
+                                        return ChatMessage {
+                                            role: "assistant".to_string(),
+                                            content: error_content,
+                                            name: None,
                                         };
                                     }
-                                    
+
                                     // Normal successful tool results
-                                    return ChatMessage { 
-                                        role: "tool".to_string(), 
-                                        content: m.content.clone(), 
-                                        name: tool_name 
+                                    return ChatMessage {
+                                        role: "tool".to_string(),
+                                        content: m.content.clone(),
+                                        name: tool_name,
                                     };
                                 }
                             }
                         }
                         ("assistant".to_string(), None) // Model expects "assistant" not "agent"
-                    },
+                    }
                     _ => (MESSAGE_ROLE_USER.to_string(), None),
                 };
-                ChatMessage { role, content: m.content.clone(), name }
+                ChatMessage {
+                    role,
+                    content: m.content.clone(),
+                    name,
+                }
             })
             .collect();
 
         conversation.extend(history);
 
         // Always add the current message (avoids race if not yet visible in fetched list)
-        conversation.push(ChatMessage { role: MESSAGE_ROLE_USER.to_string(), content: current.content.clone(), name: None });
+        conversation.push(ChatMessage {
+            role: MESSAGE_ROLE_USER.to_string(),
+            content: current.content.clone(),
+            name: None,
+        });
 
         info!(
             "Prepared conversation with {} messages of history",
@@ -741,7 +801,12 @@ Current agent context:
         prompt
     }
 
-    async fn send_tool_message(&self, description: &str, tool_name: &str, args: Option<&serde_json::Value>) -> Result<()> {
+    async fn send_tool_message(
+        &self,
+        description: &str,
+        tool_name: &str,
+        args: Option<&serde_json::Value>,
+    ) -> Result<()> {
         // Log tool execution notification to Docker logs
         println!("TOOL_EXECUTION: {}: {}", tool_name, description);
 
@@ -750,7 +815,11 @@ Current agent context:
             "type": "tool_execution",
             "tool_type": tool_name
         });
-        if let Some(a) = args { if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), a.clone()); } }
+        if let Some(a) = args {
+            if let Some(obj) = meta.as_object_mut() {
+                obj.insert("args".to_string(), a.clone());
+            }
+        }
         self.api_client
             .send_message(description.to_string(), Some(meta))
             .await?;
@@ -776,7 +845,9 @@ struct ToolCallsResponse {
     tool_calls: Vec<StructuredToolCall>,
 }
 
-fn parse_structured_tool_calls(_s: &str) -> Option<Vec<StructuredToolCall>> { None }
+fn parse_structured_tool_calls(_s: &str) -> Option<Vec<StructuredToolCall>> {
+    None
+}
 
 // Parse text that looks like: "assistant<|channel|>functions.bash" followed by a JSON args block
 fn parse_assistant_functions_text(s: &str) -> Option<(String, serde_json::Value)> {
@@ -790,7 +861,9 @@ fn parse_assistant_functions_text(s: &str) -> Option<(String, serde_json::Value)
     };
     let start = s.rfind('{')?;
     let end = s.rfind('}')?;
-    if end <= start { return None; }
+    if end <= start {
+        return None;
+    }
     let json_str = &s[start..=end];
     let args: serde_json::Value = serde_json::from_str(json_str).ok()?;
     Some((tool.to_string(), args))
@@ -804,7 +877,9 @@ fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
     }
     let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
     let tool = v.get("tool")?.as_str()?.to_string();
-    if tool != "bash" && tool != "text_editor" { return None; }
+    if tool != "bash" && tool != "text_editor" {
+        return None;
+    }
     let input = v.get("input")?.clone();
     Some((tool, input))
 }

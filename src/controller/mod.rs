@@ -1,5 +1,5 @@
-pub mod docker_manager;
 mod agent_manager;
+pub mod docker_manager;
 
 pub use agent_manager::AgentManager;
 
@@ -11,8 +11,8 @@ pub async fn run() -> Result<()> {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     // Resolve OLLAMA_HOST or use default inside Docker network
-    let ollama_host = std::env::var("OLLAMA_HOST")
-        .unwrap_or_else(|_| "http://raworc_ollama:11434".to_string());
+    let ollama_host =
+        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://raworc_ollama:11434".to_string());
     tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
     // Initialize agent manager

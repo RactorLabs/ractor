@@ -14,13 +14,13 @@ use super::ollama::{ToolDef, ToolFunction, ToolType};
 pub trait Tool: Send + Sync {
     /// Get the tool name
     fn name(&self) -> &str;
-    
+
     /// Get the tool description
     fn description(&self) -> &str;
-    
+
     /// Get the tool parameters as JSON schema
     fn parameters(&self) -> serde_json::Value;
-    
+
     /// Execute the tool with given arguments
     async fn execute(&self, args: &serde_json::Value) -> Result<String>;
 }
@@ -69,12 +69,17 @@ impl ToolRegistry {
     }
 
     /// Register an alias for an existing tool
-    pub async fn register_alias(&self, alias: &str, target: &str, mapper: Option<Box<dyn ParameterMapper>>) {
+    pub async fn register_alias(
+        &self,
+        alias: &str,
+        target: &str,
+        mapper: Option<Box<dyn ParameterMapper>>,
+    ) {
         info!("Registering alias '{}' -> '{}'", alias, target);
-        
+
         let mut aliases = self.aliases.write().await;
         aliases.insert(alias.to_string(), target.to_string());
-        
+
         if let Some(mapper) = mapper {
             let mut mappers = self.mappers.write().await;
             mappers.insert(alias.to_string(), mapper);
@@ -88,13 +93,13 @@ impl ToolRegistry {
         if let Some(canonical_name) = aliases.get(name) {
             return Some(canonical_name.clone());
         }
-        
+
         // Check if it's a direct tool name
         let tools = self.tools.read().await;
         if tools.contains_key(name) {
             return Some(name.to_string());
         }
-        
+
         None
     }
 
@@ -128,7 +133,7 @@ impl ToolRegistry {
     /// Generate Ollama-compatible tool definitions
     pub async fn generate_ollama_tools(&self) -> Vec<ToolDef> {
         let mut tool_defs = Vec::new();
-        
+
         // Add all registered tools
         let tools = self.tools.read().await;
         for (name, tool) in tools.iter() {
@@ -150,7 +155,11 @@ impl ToolRegistry {
                     typ: ToolType::Function,
                     function: ToolFunction {
                         name: alias_name.clone(),
-                        description: format!("{} (alias for {})", tool.description(), canonical_name),
+                        description: format!(
+                            "{} (alias for {})",
+                            tool.description(),
+                            canonical_name
+                        ),
                         parameters: tool.parameters(),
                     },
                 });
@@ -164,7 +173,10 @@ impl ToolRegistry {
     /// Load tool configuration from file
     pub async fn load_config(&self, config_path: &Path) -> Result<()> {
         if !config_path.exists() {
-            info!("No tool config found at {}, skipping", config_path.display());
+            info!(
+                "No tool config found at {}, skipping",
+                config_path.display()
+            );
             return Ok(());
         }
 
@@ -174,13 +186,15 @@ impl ToolRegistry {
         let tools_len = config.tools.len();
         for alias_config in config.tools {
             // Create parameter mapper from config
-            let mapper: Option<Box<dyn ParameterMapper>> = if let Some(mapping) = alias_config.parameter_mapping {
-                Some(Box::new(ConfigParameterMapper { mapping }))
-            } else {
-                None
-            };
+            let mapper: Option<Box<dyn ParameterMapper>> =
+                if let Some(mapping) = alias_config.parameter_mapping {
+                    Some(Box::new(ConfigParameterMapper { mapping }))
+                } else {
+                    None
+                };
 
-            self.register_alias(&alias_config.name, &alias_config.alias_for, mapper).await;
+            self.register_alias(&alias_config.name, &alias_config.alias_for, mapper)
+                .await;
         }
 
         info!("Loaded {} tool aliases from config", tools_len);
@@ -190,13 +204,13 @@ impl ToolRegistry {
     /// Get list of all available tools (including aliases)
     pub async fn list_tools(&self) -> Vec<String> {
         let mut tool_names = Vec::new();
-        
+
         let tools = self.tools.read().await;
         tool_names.extend(tools.keys().cloned());
-        
+
         let aliases = self.aliases.read().await;
         tool_names.extend(aliases.keys().cloned());
-        
+
         tool_names.sort();
         tool_names
     }
@@ -210,14 +224,14 @@ pub struct ConfigParameterMapper {
 impl ParameterMapper for ConfigParameterMapper {
     fn map(&self, args: &serde_json::Value) -> serde_json::Value {
         let mut result = serde_json::Map::new();
-        
+
         if let Some(obj) = args.as_object() {
             for (key, value) in obj {
                 let target_key = self.mapping.get(key).unwrap_or(key);
                 result.insert(target_key.clone(), value.clone());
             }
         }
-        
+
         serde_json::Value::Object(result)
     }
 }
@@ -230,7 +244,8 @@ impl ParameterMapper for ContainerExecMapper {
         // Extract command from cmd array or command field
         let command = if let Some(cmd_array) = args.get("cmd").and_then(|v| v.as_array()) {
             // Join array elements into a single command
-            cmd_array.iter()
+            cmd_array
+                .iter()
                 .filter_map(|v| v.as_str())
                 .collect::<Vec<&str>>()
                 .join(" ")
@@ -288,7 +303,7 @@ mod tests {
         });
 
         registry.register_tool(tool).await;
-        
+
         let found = registry.get_tool("test_tool").await;
         assert_eq!(found, Some("test_tool".to_string()));
     }
@@ -302,7 +317,7 @@ mod tests {
 
         registry.register_tool(tool).await;
         registry.register_alias("alias", "original", None).await;
-        
+
         let found = registry.get_tool("alias").await;
         assert_eq!(found, Some("original".to_string()));
     }
@@ -310,11 +325,11 @@ mod tests {
     #[tokio::test]
     async fn test_container_exec_mapper() {
         let mapper = ContainerExecMapper;
-        
+
         let args = serde_json::json!({
             "cmd": ["bash", "-lc", "echo hello"]
         });
-        
+
         let mapped = mapper.map(&args);
         assert_eq!(mapped["command"].as_str(), Some("bash -lc echo hello"));
     }

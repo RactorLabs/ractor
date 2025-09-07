@@ -8,7 +8,6 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
-
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
@@ -64,7 +63,9 @@ impl AgentManager {
     }
 
     pub async fn run(&self) -> Result<()> {
-        info!("Agent Manager started, polling for tasks, auto-sleep monitoring, and health checks...");
+        info!(
+            "Agent Manager started, polling for tasks, auto-sleep monitoring, and health checks..."
+        );
 
         loop {
             // Process pending tasks
@@ -458,10 +459,12 @@ impl AgentManager {
 
             // Create message record in database
             let message_id = uuid::Uuid::new_v4().to_string();
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
                 VALUES (?, ?, ?, ?, 'user', NOW())
-                "#)
+                "#,
+            )
             .bind(&message_id)
             .bind(&agent_name)
             .bind(&principal)
@@ -586,10 +589,7 @@ impl AgentManager {
         info!("Waking container for agent {}", agent_name);
 
         // Generate fresh tokens for woken agent
-        info!(
-            "Generating fresh tokens for woken agent {}",
-            agent_name
-        );
+        info!("Generating fresh tokens for woken agent {}", agent_name);
         let wake_token = self
             .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
             .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
@@ -621,20 +621,19 @@ impl AgentManager {
 
         // Send prompt if provided
         if let Some(prompt) = task.payload.get("prompt").and_then(|v| v.as_str()) {
-            info!(
-                "Sending prompt to woken agent {}: {}",
-                agent_name, prompt
-            );
+            info!("Sending prompt to woken agent {}: {}", agent_name, prompt);
 
             // Get the principal name from the task
             let principal = task.created_by;
 
             // Create message record in database
             let message_id = uuid::Uuid::new_v4().to_string();
-            sqlx::query(r#"
+            sqlx::query(
+                r#"
                 INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
                 VALUES (?, ?, ?, ?, 'user', NOW())
-                "#)
+                "#,
+            )
             .bind(&message_id)
             .bind(&agent_name)
             .bind(&principal)
@@ -675,7 +674,10 @@ impl AgentManager {
 
         // First, create the content directory in the content container
         let public_dir = format!("/content/{}", agent_name);
-        info!("Executing: docker exec raworc_content mkdir -p {}", public_dir);
+        info!(
+            "Executing: docker exec raworc_content mkdir -p {}",
+            public_dir
+        );
 
         let mkdir_output = tokio::process::Command::new("docker")
             .args(&["exec", "raworc_content", "mkdir", "-p", &public_dir])
@@ -718,10 +720,7 @@ impl AgentManager {
             .output()
             .await
             .map_err(|e| {
-                anyhow::anyhow!(
-                    "Failed to execute copy command from agent container: {}",
-                    e
-                )
+                anyhow::anyhow!("Failed to execute copy command from agent container: {}", e)
             })?;
 
         if !copy1_output.status.success() {
@@ -770,7 +769,10 @@ impl AgentManager {
 
         // Remove content directory for this agent from the content container
         let public_path = format!("/content/{}", agent_name);
-        info!("Executing: docker exec raworc_content rm -rf {}", public_path);
+        info!(
+            "Executing: docker exec raworc_content rm -rf {}",
+            public_path
+        );
 
         // Remove the published directory from content container
         let remove_output = tokio::process::Command::new("docker")
@@ -832,20 +834,19 @@ impl AgentManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Agent {} container is unhealthy or missing, marking as slept for recovery", 
+                        "Agent {} container is unhealthy or missing, marking as slept for recovery",
                         agent_name
                     );
-                    
+
                     // Mark agent as slept so it can be woken up later
-                    if let Err(e) = sqlx::query(
-                        r#"UPDATE agents SET state = 'slept' WHERE name = ?"#,
-                    )
-                    .bind(&agent_name)
-                    .execute(&self.pool)
-                    .await
+                    if let Err(e) =
+                        sqlx::query(r#"UPDATE agents SET state = 'slept' WHERE name = ?"#)
+                            .bind(&agent_name)
+                            .execute(&self.pool)
+                            .await
                     {
                         error!(
-                            "Failed to mark unhealthy agent {} as slept: {}", 
+                            "Failed to mark unhealthy agent {} as slept: {}",
                             agent_name, e
                         );
                     } else {
@@ -859,7 +860,7 @@ impl AgentManager {
                 Err(e) => {
                     // Health check failed, likely Docker connection issues
                     error!(
-                        "Health check failed for agent {}: {}, will retry next cycle", 
+                        "Health check failed for agent {}: {}, will retry next cycle",
                         agent_name, e
                     );
                 }
@@ -868,7 +869,7 @@ impl AgentManager {
 
         if recovered_count > 0 {
             info!(
-                "Marked {} agents as slept due to container failures", 
+                "Marked {} agents as slept due to container failures",
                 recovered_count
             );
         }

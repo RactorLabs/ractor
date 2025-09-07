@@ -1,9 +1,9 @@
 use anyhow::Result;
 
-#[path = "../shared/logging.rs"]
-mod logging;
 #[path = "../controller/mod.rs"]
 mod controller;
+#[path = "../shared/logging.rs"]
+mod logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {

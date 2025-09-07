@@ -120,7 +120,8 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
     ) -> Result<ModelResponse> {
-        self.complete_with_registry(messages, system_prompt, None).await
+        self.complete_with_registry(messages, system_prompt, None)
+            .await
     }
 
     pub async fn complete_with_registry(
@@ -146,20 +147,20 @@ impl OllamaClient {
                 "tool" => "tool",
                 _ => "user",
             };
-            
-            // Skip empty messages, but preserve tool messages even if empty 
+
+            // Skip empty messages, but preserve tool messages even if empty
             // to maintain conversation flow after tool calls
             if msg.content.trim().is_empty() && role != "tool" {
                 continue;
             }
-            
+
             // For tool messages, use a placeholder if content is empty to maintain flow
             let content = if role == "tool" && msg.content.trim().is_empty() {
                 "[tool output]"
             } else {
                 msg.content.trim()
             };
-            
+
             chat_messages.push(ChatRequestMessage {
                 role,
                 content,
@@ -181,12 +182,13 @@ impl OllamaClient {
                     typ: ToolType::Function,
                     function: ToolFunction {
                         name: "bash".to_string(),
-                        description: "Execute a bash shell command in the /agent directory".to_string(),
+                        description: "Execute a bash shell command in the /agent directory"
+                            .to_string(),
                         parameters: serde_json::json!({
                             "type": "object",
                             "properties": {
                                 "command": {
-                                    "type": "string", 
+                                    "type": "string",
                                     "description": "The bash command to execute"
                                 }
                             },
@@ -198,12 +200,14 @@ impl OllamaClient {
                     typ: ToolType::Function,
                     function: ToolFunction {
                         name: "text_editor".to_string(),
-                        description: "Perform text editing operations on files in the /agent directory".to_string(),
+                        description:
+                            "Perform text editing operations on files in the /agent directory"
+                                .to_string(),
                         parameters: serde_json::json!({
                             "type": "object",
                             "properties": {
                                 "action": {
-                                    "type": "string", 
+                                    "type": "string",
                                     "enum": ["view", "create", "str_replace", "insert"],
                                     "description": "The editing action to perform"
                                 },
@@ -276,21 +280,36 @@ impl OllamaClient {
         }
 
         // Debug: Get raw response text first
-        let response_text = resp.text().await
+        let response_text = resp
+            .text()
+            .await
             .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
-        
-        tracing::info!("Raw Ollama response: {}", response_text);
-        
-        let parsed: ChatResponse = serde_json::from_str(&response_text)
-            .map_err(|e| HostError::Model(format!("Failed to parse Ollama response: {} | Raw: {}", e, response_text)))?;
 
-        tracing::info!("Ollama response parsed successfully, content length: {}", parsed.message.content.len());
-        tracing::info!("Content preview: {:?}", if parsed.message.content.len() > 100 { 
-            format!("{}...", &parsed.message.content[..100]) 
-        } else { 
-            parsed.message.content.clone() 
-        });
-        tracing::info!("Tool calls present: {:?}", parsed.message.tool_calls.is_some());
+        tracing::info!("Raw Ollama response: {}", response_text);
+
+        let parsed: ChatResponse = serde_json::from_str(&response_text).map_err(|e| {
+            HostError::Model(format!(
+                "Failed to parse Ollama response: {} | Raw: {}",
+                e, response_text
+            ))
+        })?;
+
+        tracing::info!(
+            "Ollama response parsed successfully, content length: {}",
+            parsed.message.content.len()
+        );
+        tracing::info!(
+            "Content preview: {:?}",
+            if parsed.message.content.len() > 100 {
+                format!("{}...", &parsed.message.content[..100])
+            } else {
+                parsed.message.content.clone()
+            }
+        );
+        tracing::info!(
+            "Tool calls present: {:?}",
+            parsed.message.tool_calls.is_some()
+        );
         if let Some(ref tool_calls) = parsed.message.tool_calls {
             tracing::info!("Number of tool calls: {}", tool_calls.len());
         }

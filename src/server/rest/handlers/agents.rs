@@ -10,8 +10,8 @@ use crate::server::rest::error::{ApiError, ApiResult};
 use crate::server::rest::middleware::AuthContext;
 use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
-    RestoreAgentRequest, Agent, UpdateAgentRequest, UpdateAgentStateRequest,
+    Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
+    RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
 };
 
 // Helper function to check if authenticated user is admin
@@ -100,9 +100,7 @@ pub async fn list_agents(
     // Check agent:list permission
     check_api_permission(&auth, &state, &permissions::AGENT_LIST)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to list agents".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to list agents".to_string()))?;
 
     let mut agents = Agent::find_all(&state.db)
         .await
@@ -156,9 +154,7 @@ pub async fn get_agent(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    Ok(Json(
-        AgentResponse::from_agent(agent, &state.db).await?,
-    ))
+    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
 pub async fn create_agent(
@@ -177,9 +173,7 @@ pub async fn create_agent(
     // Check agent:create permission
     check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to create agent".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to create agent".to_string()))?;
 
     // Get the principal name
     let created_by = match &auth.principal {
@@ -194,15 +188,27 @@ pub async fn create_agent(
 
             // Check for unique constraint violation on agent name
             if let sqlx::Error::Database(db_err) = &e {
-                tracing::error!("Database error - code: {:?}, message: '{}'", db_err.code(), db_err.message());
+                tracing::error!(
+                    "Database error - code: {:?}, message: '{}'",
+                    db_err.code(),
+                    db_err.message()
+                );
                 if let Some(code) = db_err.code() {
                     // Simplify the condition to catch the specific error
                     if code == "23000" || code == "1062" {
                         let name_display = &req.name;
-                        tracing::info!("Detected database constraint violation for agent {}", name_display);
-                        if db_err.message().contains("agents.PRIMARY") || db_err.message().contains("Duplicate entry") {
+                        tracing::info!(
+                            "Detected database constraint violation for agent {}",
+                            name_display
+                        );
+                        if db_err.message().contains("agents.PRIMARY")
+                            || db_err.message().contains("Duplicate entry")
+                        {
                             tracing::info!("Confirmed duplicate agent name constraint violation");
-                            return ApiError::BadRequest(format!("Agent name '{}' is already taken. Please choose a different name.", name_display));
+                            return ApiError::BadRequest(format!(
+                                "Agent name '{}' is already taken. Please choose a different name.",
+                                name_display
+                            ));
                         }
                     }
                 }
@@ -240,9 +246,7 @@ pub async fn create_agent(
 
     tracing::info!("Created agent task for agent {}", agent.name);
 
-    Ok(Json(
-        AgentResponse::from_agent(agent, &state.db).await?,
-    ))
+    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
 pub async fn remix_agent(
@@ -254,9 +258,7 @@ pub async fn remix_agent(
     // Check agent:create permission (remixing creates a new agent)
     check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to remix agent".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix agent".to_string()))?;
 
     // Get username for ownership check
     let username = match &auth.principal {
@@ -353,9 +355,7 @@ pub async fn remix_agent(
 
     tracing::info!("Created agent task for remixed agent {}", agent.name);
 
-    Ok(Json(
-        AgentResponse::from_agent(agent, &state.db).await?,
-    ))
+    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
 pub async fn sleep_agent(
@@ -469,9 +469,7 @@ pub async fn wake_agent(
     // Check permission for updating agents
     check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to wake agent".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to wake agent".to_string()))?;
 
     // Get username for ownership check
     let username = match &auth.principal {
@@ -573,9 +571,7 @@ pub async fn update_agent(
     // Check permission for updating agents
     check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to update agent".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
 
     // Get username for ownership check
     let username = match &auth.principal {
@@ -656,9 +652,7 @@ pub async fn delete_agent(
     // Check permission for deleting agents
     check_api_permission(&auth, &state, &permissions::AGENT_DELETE)
         .await
-        .map_err(|_| {
-            ApiError::Forbidden("Insufficient permissions to delete agent".to_string())
-        })?;
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete agent".to_string()))?;
 
     // Get username for ownership check
     let username = match &auth.principal {
@@ -854,9 +848,7 @@ pub async fn get_published_agent(
         ));
     }
 
-    Ok(Json(
-        AgentResponse::from_agent(agent, &state.db).await?,
-    ))
+    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
 pub async fn update_agent_to_busy(

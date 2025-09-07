@@ -28,13 +28,7 @@ impl Guardrails {
         let mut sanitized = content.to_string();
 
         // Only redact critical sensitive information
-        let sensitive_keywords = vec![
-            "api_key",
-            "raworc_token",
-            "jwt",
-            "bearer",
-            "mysql://",
-        ];
+        let sensitive_keywords = vec!["api_key", "raworc_token", "jwt", "bearer", "mysql://"];
 
         for keyword in sensitive_keywords {
             if sanitized.to_lowercase().contains(keyword) {

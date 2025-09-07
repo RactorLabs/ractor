@@ -11,7 +11,6 @@ use std::collections::HashMap;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-
 pub struct DockerManager {
     docker: Docker,
     agent_image: String,
@@ -90,10 +89,7 @@ impl DockerManager {
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
-        info!(
-            "Initializing agent structure for agent {}",
-            agent_name
-        );
+        info!("Initializing agent structure for agent {}", agent_name);
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
@@ -134,10 +130,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 .await?;
         }
 
-        info!(
-            "Agent structure initialized with {} secrets",
-            secrets.len()
-        );
+        info!("Agent structure initialized with {} secrets", secrets.len());
 
         Ok(())
     }
@@ -1082,14 +1075,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let container_name = format!("raworc_agent_{agent_name}");
 
         // Get content port from agent (already allocated during agent creation)
-        let content_port: i32 = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT content_port FROM agents WHERE name = ?",
-        )
-        .bind(agent_name)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
+        let content_port: i32 =
+            sqlx::query_scalar::<_, Option<i32>>("SELECT content_port FROM agents WHERE name = ?")
+                .bind(agent_name)
+                .fetch_one(&self.db_pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
+                .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
 
         info!(
             "Using Content port {} from agent {}",
@@ -1160,12 +1152,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let ollama_host = std::env::var("OLLAMA_HOST")
             .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        let ollama_model =
+            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         env.push(format!("OLLAMA_MODEL={}", ollama_model));
-        let ollama_timeout = std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
+        let ollama_timeout =
+            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
         env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
         // Propagate timeout for model calls; default 600s if unspecified
-        let ollama_timeout = std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
+        let ollama_timeout =
+            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
         env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
@@ -1219,10 +1214,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!(
-                "agent-{}",
-                &agent_name[..agent_name.len().min(8)]
-            )),
+            hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
@@ -1287,14 +1279,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let container_name = format!("raworc_agent_{agent_name}");
 
         // Get content port from agent (already allocated during agent creation)
-        let content_port: i32 = sqlx::query_scalar::<_, Option<i32>>(
-            "SELECT content_port FROM agents WHERE name = ?",
-        )
-        .bind(agent_name)
-        .fetch_one(&self.db_pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
-        .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
+        let content_port: i32 =
+            sqlx::query_scalar::<_, Option<i32>>("SELECT content_port FROM agents WHERE name = ?")
+                .bind(agent_name)
+                .fetch_one(&self.db_pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
+                .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
 
         info!(
             "Using Content port {} from agent {}",
@@ -1362,7 +1353,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let ollama_host = std::env::var("OLLAMA_HOST")
             .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        let ollama_model =
+            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         env.push(format!("OLLAMA_MODEL={}", ollama_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
@@ -1409,10 +1401,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!(
-                "agent-{}",
-                &agent_name[..agent_name.len().min(8)]
-            )),
+            hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
             labels: Some(labels),
             env: Some(env),
             cmd: Some(cmd),
@@ -1520,10 +1509,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
                 // Cleanup the agent volume
                 if let Err(e) = self.cleanup_agent_volume(agent_name).await {
-                    warn!(
-                        "Failed to cleanup agent volume for {}: {}",
-                        agent_name, e
-                    );
+                    warn!("Failed to cleanup agent volume for {}: {}", agent_name, e);
                 }
 
                 Ok(())
@@ -1534,10 +1520,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
                     // Still try to cleanup the agent volume
                     if let Err(e) = self.cleanup_agent_volume(agent_name).await {
-                        warn!(
-                            "Failed to cleanup agent volume for {}: {}",
-                            agent_name, e
-                        );
+                        warn!("Failed to cleanup agent volume for {}: {}", agent_name, e);
                     }
 
                     Ok(())
@@ -1602,13 +1585,16 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let mkdir_output = std::process::Command::new("docker")
             .args(&["exec", "raworc_content", "mkdir", "-p", &public_path])
             .output();
-        if let Err(e) = mkdir_output { return Err(anyhow::anyhow!("Failed to create content directory: {}", e)); }
+        if let Err(e) = mkdir_output {
+            return Err(anyhow::anyhow!("Failed to create content directory: {}", e));
+        }
 
         // Copy content files directly into content container
         let copy_cmd = [
-            "docker", "cp",
+            "docker",
+            "cp",
             &format!("{}:/agent/content/.", container_name),
-            &format!("raworc_content:{}/", public_path)
+            &format!("raworc_content:{}/", public_path),
         ];
         match std::process::Command::new(copy_cmd[0])
             .args(&copy_cmd[1..])
@@ -1616,15 +1602,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
         {
             Ok(output) => {
                 if output.status.success() {
-                    info!(
-                        "Content published successfully for agent {}",
-                        agent_name
-                    );
+                    info!("Content published successfully for agent {}", agent_name);
                     Ok(())
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.contains("No such file or directory") {
-                        info!("No content files found for agent {}, creating empty directory", agent_name);
+                        info!(
+                            "No content files found for agent {}, creating empty directory",
+                            agent_name
+                        );
                         Ok(())
                     } else {
                         error!(
@@ -1658,14 +1644,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
             .args(&["exec", "raworc_content", "rm", "-rf", &public_path])
             .output()
             .map_err(|e| {
-                anyhow::anyhow!("Failed to execute docker exec rm command for agent {}: {}", agent_name, e)
+                anyhow::anyhow!(
+                    "Failed to execute docker exec rm command for agent {}: {}",
+                    agent_name,
+                    e
+                )
             })?;
 
         if output.status.success() {
-            info!(
-                "Content unpublished successfully for agent {}",
-                agent_name
-            );
+            info!("Content unpublished successfully for agent {}", agent_name);
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1676,7 +1663,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
             );
             Err(anyhow::anyhow!(
                 "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
-                agent_name, stdout, stderr
+                agent_name,
+                stdout,
+                stderr
             ))
         }
     }
@@ -1705,7 +1694,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 warn!("Agent {} container state is unclear", agent_name);
                 Ok(false)
             }
-            Err(bollard::errors::Error::DockerResponseServerError { status_code: 404, .. }) => {
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => {
                 // Container doesn't exist
                 info!("Agent {} container does not exist", agent_name);
                 Ok(false)
@@ -1713,7 +1704,11 @@ echo 'Agent directories created (code, secrets, logs, content)'
             Err(e) => {
                 // Other Docker API error
                 error!("Failed to inspect agent {} container: {}", agent_name, e);
-                Err(anyhow::anyhow!("Docker API error for agent {}: {}", agent_name, e))
+                Err(anyhow::anyhow!(
+                    "Docker API error for agent {}: {}",
+                    agent_name,
+                    e
+                ))
             }
         }
     }
@@ -1745,7 +1740,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 }
             }
             Err(e) => {
-                warn!("Failed to create exec for container {}: {}", container_name, e);
+                warn!(
+                    "Failed to create exec for container {}: {}",
+                    container_name, e
+                );
                 Ok(false)
             }
         }

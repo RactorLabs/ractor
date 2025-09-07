@@ -526,41 +526,47 @@ impl Agent {
 
         // Common adjectives that work well for agent names
         let adjectives = [
-            "swift", "bold", "keen", "wise", "calm", "brave", "quick", "smart",
-            "bright", "sharp", "clear", "cool", "warm", "soft", "hard", "fast",
-            "slow", "deep", "light", "dark", "rich", "pure", "fresh", "clean"
+            "swift", "bold", "keen", "wise", "calm", "brave", "quick", "smart", "bright", "sharp",
+            "clear", "cool", "warm", "soft", "hard", "fast", "slow", "deep", "light", "dark",
+            "rich", "pure", "fresh", "clean",
         ];
 
-        // Common nouns that work well for agent names  
+        // Common nouns that work well for agent names
         let nouns = [
-            "falcon", "tiger", "wolf", "bear", "eagle", "lion", "fox", "hawk",
-            "shark", "whale", "raven", "robin", "swift", "storm", "river", "ocean",
-            "mountain", "forest", "desert", "valley", "cloud", "star", "moon", "sun"
+            "falcon", "tiger", "wolf", "bear", "eagle", "lion", "fox", "hawk", "shark", "whale",
+            "raven", "robin", "swift", "storm", "river", "ocean", "mountain", "forest", "desert",
+            "valley", "cloud", "star", "moon", "sun",
         ];
 
         let mut rng = rand::thread_rng();
-        
+
         // Try to generate a unique name (up to 10 attempts)
         for _attempt in 0..10 {
             let adjective = adjectives.choose(&mut rng).unwrap();
             let noun = nouns.choose(&mut rng).unwrap();
             let number: u16 = rng.gen_range(10..999);
-            
+
             let candidate_name = format!("{}-{}-{}", adjective, noun, number);
-            
+
             // Validate the name follows our pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-            if candidate_name.len() <= 64 
+            if candidate_name.len() <= 64
                 && candidate_name.chars().next().unwrap().is_ascii_lowercase()
-                && candidate_name.chars().last().unwrap().is_ascii_alphanumeric()
-                && candidate_name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
-                
+                && candidate_name
+                    .chars()
+                    .last()
+                    .unwrap()
+                    .is_ascii_alphanumeric()
+                && candidate_name
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
                 // Check if name is available
                 if Self::find_by_name(pool, &candidate_name).await?.is_none() {
                     return Ok(candidate_name);
                 }
             }
         }
-        
+
         // Fallback to UUID-based name if we can't generate a unique readable name
         let uuid = uuid::Uuid::new_v4().to_string();
         let fallback_name = format!("agent-{}", &uuid[0..8]);

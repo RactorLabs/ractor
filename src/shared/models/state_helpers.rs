@@ -7,7 +7,7 @@ pub fn can_transition_to(from: &str, to: &str) -> bool {
 
         // From IDLE (ready and waiting)
         (AGENT_STATE_IDLE, AGENT_STATE_SLEPT) => true, // User sleeps or controller detects failure
-        (AGENT_STATE_IDLE, AGENT_STATE_BUSY) => true,   // Processing request
+        (AGENT_STATE_IDLE, AGENT_STATE_BUSY) => true,  // Processing request
 
         // From SLEPT (container destroyed, volume preserved)
         (AGENT_STATE_SLEPT, AGENT_STATE_IDLE) => true, // User wakes, recreate container

@@ -1,13 +1,13 @@
 // Agent (Computer Use Agent) modules
 mod api;
-mod ollama;
+mod builtin_tools;
 mod config;
 mod error;
 mod guardrails;
 mod message_handler;
-mod tools;
+mod ollama;
 mod tool_registry;
-mod builtin_tools;
+mod tools;
 
 use anyhow::Result;
 use std::sync::Arc;
@@ -74,12 +74,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
     // Initialize agent directories
-    let agent_dirs = [
-        "/agent",
-        "/agent/code",
-        "/agent/secrets",
-        "/agent/content",
-    ];
+    let agent_dirs = ["/agent", "/agent/code", "/agent/secrets", "/agent/content"];
 
     for dir in agent_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {
@@ -155,8 +150,11 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 
     // Initialize message handler
-    let message_handler =
-        message_handler::MessageHandler::new(api_client.clone(), ollama_client.clone(), guardrails.clone());
+    let message_handler = message_handler::MessageHandler::new(
+        api_client.clone(),
+        ollama_client.clone(),
+        guardrails.clone(),
+    );
 
     // Initialize processed message tracking to prevent reprocessing on restore
     if let Err(e) = message_handler.initialize_processed_tracking().await {
@@ -182,7 +180,9 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
                     "Content HTTP server available at: http://{}:{}/",
                     server_hostname, content_port
                 );
-                info!("Content folder: /agent/content/ - Create HTML files here for visual displays");
+                info!(
+                    "Content folder: /agent/content/ - Create HTML files here for visual displays"
+                );
             } else {
                 warn!("Content port not available for this agent");
             }
@@ -213,7 +213,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
             }
             Err(e) => {
                 error!("Error processing messages: {}", e);
-                
+
                 // Send error as message to user instead of crashing
                 let error_message = format!("Agent encountered an error: {}", e);
                 if let Err(send_err) = api_client.send_message(error_message, None).await {
@@ -221,7 +221,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
                 } else {
                     info!("Sent error message to user, continuing operation");
                 }
-                
+
                 // Continue polling - agent should never die silently
             }
         }

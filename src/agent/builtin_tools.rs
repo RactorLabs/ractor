@@ -22,7 +22,7 @@ impl Tool for BashTool {
             "type": "object",
             "properties": {
                 "command": {
-                    "type": "string", 
+                    "type": "string",
                     "description": "The bash command to execute"
                 }
             },
@@ -32,10 +32,11 @@ impl Tool for BashTool {
 
     async fn execute(&self, args: &serde_json::Value) -> Result<String> {
         let cmd = args
-            .get("command").and_then(|v| v.as_str())
+            .get("command")
+            .and_then(|v| v.as_str())
             .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
             .unwrap_or("");
-        
+
         match run_bash(cmd).await {
             Ok(output) => {
                 // Check if the command actually succeeded by looking for exit_code in output
@@ -44,7 +45,7 @@ impl Tool for BashTool {
                 } else {
                     Ok(format!("[bash ok]\n{}", output))
                 }
-            },
+            }
             Err(e) => Ok(format!("[bash error] {}", e)),
         }
     }
@@ -68,7 +69,7 @@ impl Tool for TextEditorTool {
             "type": "object",
             "properties": {
                 "action": {
-                    "type": "string", 
+                    "type": "string",
                     "enum": ["view", "create", "str_replace", "insert"],
                     "description": "The editing action to perform"
                 },
@@ -110,7 +111,7 @@ impl Tool for TextEditorTool {
 
     async fn execute(&self, args: &serde_json::Value) -> Result<String> {
         let action = parse_text_edit(args)?;
-        
+
         match text_edit(action).await {
             Ok(output) => Ok(format!("[text_editor ok]\n{}", output)),
             Err(e) => Ok(format!("[text_editor error] {}", e)),
@@ -125,7 +126,11 @@ fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> 
     if let Some(obj) = v.as_object_mut() {
         // Accept "file" or "file_path" as alias for "path"
         if !obj.contains_key("path") {
-            if let Some(p) = obj.get("file").cloned().or_else(|| obj.get("file_path").cloned()) {
+            if let Some(p) = obj
+                .get("file")
+                .cloned()
+                .or_else(|| obj.get("file_path").cloned())
+            {
                 obj.insert("path".to_string(), p);
             }
         }
@@ -142,21 +147,30 @@ mod tests {
     async fn test_bash_tool_parameters() {
         let tool = BashTool;
         let params = tool.parameters();
-        
+
         assert_eq!(tool.name(), "bash");
         assert!(params["properties"]["command"]["type"].as_str() == Some("string"));
-        assert!(params["required"].as_array().unwrap().contains(&serde_json::Value::String("command".to_string())));
+        assert!(params["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::Value::String("command".to_string())));
     }
 
     #[tokio::test]
     async fn test_text_editor_tool_parameters() {
         let tool = TextEditorTool;
         let params = tool.parameters();
-        
+
         assert_eq!(tool.name(), "text_editor");
         assert!(params["properties"]["action"]["enum"].as_array().is_some());
-        assert!(params["required"].as_array().unwrap().contains(&serde_json::Value::String("action".to_string())));
-        assert!(params["required"].as_array().unwrap().contains(&serde_json::Value::String("path".to_string())));
+        assert!(params["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::Value::String("action".to_string())));
+        assert!(params["required"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::Value::String("path".to_string())));
     }
 
     #[test]
@@ -165,10 +179,10 @@ mod tests {
             "action": "view",
             "file": "test.txt"  // Using "file" alias instead of "path"
         });
-        
+
         let result = parse_text_edit(&input);
         assert!(result.is_ok());
-        
+
         match result.unwrap() {
             TextEditAction::View { path, .. } => {
                 assert_eq!(path, "test.txt");
