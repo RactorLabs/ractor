@@ -67,6 +67,7 @@
   // No live fetch — version shown here is managed with releases
 </script>
 
+<div class="container">
 <div class="row">
   <div class="col-xl-9">
     <Card class="mb-3">
@@ -197,4 +198,5 @@
       </div>
     </Card>
   </div>
+</div>
 </div>
