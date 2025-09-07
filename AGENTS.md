@@ -105,7 +105,7 @@ When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told no
 - Verify: `git status`. Do not push without approval.
 
 ### Bump (version management)
-- Preferred: run the helper (repairs docs badge safely):
+- Preferred: run the helper (repairs docs badge safely and builds Operator):
   - `bash scripts/bump.sh 0.X.Y` or just `bash scripts/bump.sh` to bump patch
 - What it updates:
   - `Cargo.toml` (top-level `version = "x.y.z"`)
@@ -118,8 +118,8 @@ When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told no
   - Update the docs badge with a targeted replace to avoid syntax errors:
     - `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
   
-- After bump: rebuild to update locks: `cargo build --release`; then `cd cli && npm install`.
-- Verify via `git status`, then commit using the Commit playbook.
+- After bump: the script runs `cargo build --release` and builds the Operator (`npm ci|install && npm run build`).
+- It stages, commits, and pushes changes automatically.
 
 ### Release
 - Update docs: top-level README, Operator docs page (version badge), CLI README, CLAUDE.md.

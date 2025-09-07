@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# bump.sh — safely bump repo version across known refs
+# bump.sh — safely bump repo version across known refs and build artifacts
 # Usage:
 #   scripts/bump.sh [new_version]
 # If new_version is omitted, bumps patch version from Cargo.toml.
@@ -9,13 +9,14 @@ set -euo pipefail
 root_dir=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root_dir"
 
-if ! command -v rg >/dev/null 2>&1; then echo "ripgrep (rg) required" >&2; exit 1; fi
+need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1" >&2; exit 1; }; }
+need rg
 
 cur=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
-if [[ -z "${cur}" ]]; then echo "Could not read current version from Cargo.toml" >&2; exit 1; fi
+[[ -n "$cur" ]] || { echo "Could not read current version from Cargo.toml" >&2; exit 1; }
 
 new="${1:-}"
-if [[ -z "${new}" ]]; then
+if [[ -z "$new" ]]; then
   IFS=. read -r major minor patch <<<"$cur"
   new="$major.$minor.$((patch+1))"
 fi
@@ -31,7 +32,6 @@ if [[ -f cli/package.json ]]; then
     tmp=$(mktemp)
     jq -r --arg v "$new" '.version=$v' cli/package.json > "$tmp" && mv "$tmp" cli/package.json
   else
-    # fallback: simple replace (assumes valid JSON formatting)
     sed -i "0,/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/s//\"version\": \"$new\"/" cli/package.json || true
   fi
 fi
@@ -51,7 +51,6 @@ needle='// Hard-coded docs version; update during version bumps'
 if needle in s:
     parts=s.split(needle)
     head=parts[0]+needle+"\n  const API_VERSION = '%s (v0)';\n"%new
-    # drop the next line (possibly corrupted) and keep rest after first newline
     rest=parts[1].split('\n',1)[1] if '\n' in parts[1] else ''
     s=head+rest
     p.write_text(s)
@@ -59,5 +58,24 @@ PY
   fi
 fi
 
-echo "Updated refs to $new. Review with: git status && git diff --compact-summary"
-echo "To commit: git add -A && git commit -m \"chore: bump version to $new\""
+echo "Building Rust (cargo build --release)"
+cargo build --release
+
+if [[ -f cli/package.json ]]; then
+  echo "Installing CLI deps (cli/)"
+  (cd cli && (npm ci || npm install) >/dev/null)
+fi
+
+if [[ -f operator/package.json ]]; then
+  echo "Installing Operator deps and building (operator/)"
+  (cd operator && (npm ci || npm install) >/dev/null && npm run -s build)
+fi
+
+echo "Staging and committing bump"
+git add -A
+if ! git diff --cached --quiet; then
+  git commit -m "chore: bump version to $new"
+  git push origin main
+else
+  echo "No changes to commit"
+fi
