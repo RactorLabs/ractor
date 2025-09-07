@@ -5,7 +5,7 @@
 - `cli/`: Node.js CLI (`raworc`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Default admin: `admin/admin`.
-- `assets/`, `website/`: Static assets and docs site.
+- `assets/`: Static assets.
 
 ## Build, Test, and Development Commands
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
@@ -119,7 +119,7 @@ When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told no
   - Use a targeted replace: `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
 
 ### Release
-- Update docs: README, website docs/changelog, API docs, CLAUDE.md.
+- Update docs: top-level README, Operator docs page (version badge), CLI README, CLAUDE.md.
 - Stage/commit docs: `git add .` then a clear docs commit.
 - Stage/commit remaining changes as needed.
 - Get version from `Cargo.toml`; tag without prefix: `git tag 0.X.Y`.
