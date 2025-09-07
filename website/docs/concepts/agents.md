@@ -10,6 +10,9 @@ Raworc organizes Agent work through **Agents** - isolated containerized environm
 Note
 - As of 0.6.0, the CLI no longer includes API or agent commands. Use REST API examples (curl/Postman) instead of `raworc api`/`raworc agent` where shown.
 
+Developer note
+- When this doc says to refer to the "template routes", check the HUD template files under `/home/dev/repos/hud/template/src/routes`.
+
 ## Agent Data Model
 
 ```typescript

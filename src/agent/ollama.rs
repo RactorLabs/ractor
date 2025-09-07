@@ -143,20 +143,22 @@ impl OllamaClient {
             return Err(HostError::Model("No messages provided".to_string()));
         }
 
-        // Advertise tools per cookbook so the model emits structured tool calls
+        // Clean tool definitions following Ollama cookbook standards
         let tools = vec![
             ToolDef {
                 typ: ToolType::Function,
                 function: ToolFunction {
                     name: "bash".to_string(),
-                    description: "Execute a bash shell command in /agent".to_string(),
+                    description: "Execute a bash shell command in the /agent directory".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
-                            "cmd": {"type": "string", "description": "Command to run"},
-                            "args": {"oneOf": [{"type":"array","items":{"type":"string"}}, {"type":"string"}]},
-                            "command": {"type": "string"}
-                        }
+                            "command": {
+                                "type": "string", 
+                                "description": "The bash command to execute"
+                            }
+                        },
+                        "required": ["command"]
                     }),
                 },
             },
@@ -164,26 +166,48 @@ impl OllamaClient {
                 typ: ToolType::Function,
                 function: ToolFunction {
                     name: "text_editor".to_string(),
-                    description: "View/create/replace/insert in files under /agent".to_string(),
+                    description: "Perform text editing operations on files in the /agent directory".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
-                            "action": {"type": "string", "enum": ["view","create","str_replace","insert"]},
-                            "operation": {"type":"string"},
-                            "path": {"type": "string"},
-                            "file_path": {"type":"string"},
-                            "content": {"type": "string"},
-                            "file_text": {"type":"string"},
-                            "target": {"type": "string"},
-                            "old_str": {"type":"string"},
-                            "replacement": {"type": "string"},
-                            "new_str": {"type":"string"},
-                            "line": {"type": "integer", "minimum": 1},
-                            "insert_line": {"type":"integer","minimum":1},
-                            "start_line": {"type": "integer", "minimum": 1},
-                            "end_line": {"type": "integer", "minimum": 1},
-                            "view_range": {"type":"array","items":{"type":"integer"},"minItems":2,"maxItems":2}
-                        }
+                            "action": {
+                                "type": "string", 
+                                "enum": ["view", "create", "str_replace", "insert"],
+                                "description": "The editing action to perform"
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "The file path relative to /agent"
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "Content for create/insert operations"
+                            },
+                            "target": {
+                                "type": "string",
+                                "description": "Text to find for str_replace operation"
+                            },
+                            "replacement": {
+                                "type": "string",
+                                "description": "Replacement text for str_replace operation"
+                            },
+                            "line": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Line number for insert operation"
+                            },
+                            "start_line": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Start line for view operation"
+                            },
+                            "end_line": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "End line for view operation"
+                            }
+                        },
+                        "required": ["action", "path"]
                     }),
                 },
             },
@@ -238,52 +262,27 @@ impl OllamaClient {
             tracing::info!("Number of tool calls: {}", tool_calls.len());
         }
 
-        // Check for structured tool calls first (gpt-oss format)
+        // Handle structured tool calls first (GPT-OSS native format)
         if let Some(tool_calls) = &parsed.message.tool_calls {
             if let Some(first_call) = tool_calls.first() {
                 tracing::info!("Found structured tool call: {} with args: {:?}", 
                     first_call.function.name, first_call.function.arguments);
                 
-                // Convert to our expected JSON format
+                // Return the structured tool call directly
                 let tool_call_json = serde_json::json!({
-                    "tool": first_call.function.name,
-                    "input": first_call.function.arguments
+                    "tool_calls": [{
+                        "function": {
+                            "name": first_call.function.name,
+                            "arguments": first_call.function.arguments
+                        }
+                    }]
                 });
                 return Ok(tool_call_json.to_string());
             }
         }
 
-        // Fall back to content-based tool calls if no structured calls found
-        let content = &parsed.message.content;
-        
-        // Check if content contains JSON that looks like a tool call
-        if content.trim().starts_with("{") && content.trim().ends_with("}") {
-            tracing::info!("Content looks like JSON, attempting to parse as tool call");
-            match serde_json::from_str::<serde_json::Value>(content) {
-                Ok(json_val) => {
-                    // Check if it has tool call structure
-                    if json_val.get("tool").is_some() || json_val.get("function").is_some() {
-                        tracing::info!("Content appears to be a tool call JSON - returning as tool call");
-                        return Ok(content.clone());
-                    } else {
-                        tracing::info!("JSON parsed but no tool/function field found: {:?}", json_val.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-                    }
-                },
-                Err(e) => {
-                    tracing::warn!("Failed to parse content as JSON: {} | Content: {}", e, content);
-                }
-            }
-        }
-        
-        // If content is empty but we expected a tool call, that's likely the issue
-        if content.trim().is_empty() {
-            tracing::warn!("Received empty content from Ollama with no structured tool calls");
-            tracing::warn!("This may indicate a tool call parsing issue or the model needs different prompting");
-            // Return a helpful error message
-            return Ok("I didn't receive a clear response from the model. This might be a tool call parsing issue. Could you try asking me to perform a specific action, like 'create a file' or 'run a command'?".to_string());
-        }
-
-        tracing::info!("Returning content as regular text response");
-        Ok(content.clone())
+        // Return content as regular text response
+        tracing::info!("No structured tool calls found, returning content as text response");
+        Ok(parsed.message.content.clone())
     }
 }

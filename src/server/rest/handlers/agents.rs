@@ -504,16 +504,18 @@ pub async fn wake_agent(
         )));
     }
 
-    // Update agent state to init (will be set to idle by agent when ready)
+    // Update agent state to INIT and bump activity timestamp.
+    // Guard on current state to avoid races between check and update.
     let result = query(
         r#"
         UPDATE agents 
-        SET state = ?
-        WHERE name = ?
+        SET state = ?, last_activity_at = CURRENT_TIMESTAMP
+        WHERE name = ? AND state = ?
         "#,
     )
     .bind(crate::shared::models::constants::AGENT_STATE_INIT)
     .bind(&agent.name)
+    .bind(crate::shared::models::constants::AGENT_STATE_SLEPT)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake agent: {}", e)))?;

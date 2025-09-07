@@ -92,18 +92,33 @@
 						<div class="menu-divider"></div>
 					{:else}
 						<div class="menu-item" class:has-sub={menu.children} class:active={$page.url.pathname === menu.url || checkChildMenu(menu.children)}>
-							<a href={menu.url} class="menu-link">
-								{#if menu.icon}
-									<span class="menu-icon">
-										<i class={menu.icon}></i>
-										{#if menu.highlight}<span class="w-5px h-5px rounded-3 bg-theme position-absolute top-0 end-0 mt-3px me-3px"></span>{/if}
-									</span>
-								{/if}
-								<span class="menu-text">{menu.text}</span>
-								{#if menu.children}
-									<span class="menu-caret"><b class="caret"></b></span>
-								{/if}
-							</a>
+                {#if menu.url === '/logout'}
+                  <a href="/logout" data-sveltekit-reload class="menu-link" onclick={() => { import('$lib/auth.js').then(m => m.logoutClientSide()).catch(()=>{}); }}>
+									{#if menu.icon}
+										<span class="menu-icon">
+											<i class={menu.icon}></i>
+											{#if menu.highlight}<span class="w-5px h-5px rounded-3 bg-theme position-absolute top-0 end-0 mt-3px me-3px"></span>{/if}
+										</span>
+									{/if}
+									<span class="menu-text">{menu.text}</span>
+									{#if menu.children}
+										<span class="menu-caret"><b class="caret"></b></span>
+									{/if}
+								</a>
+							{:else}
+								<a href={menu.url} class="menu-link">
+									{#if menu.icon}
+										<span class="menu-icon">
+											<i class={menu.icon}></i>
+											{#if menu.highlight}<span class="w-5px h-5px rounded-3 bg-theme position-absolute top-0 end-0 mt-3px me-3px"></span>{/if}
+										</span>
+									{/if}
+									<span class="menu-text">{menu.text}</span>
+									{#if menu.children}
+										<span class="menu-caret"><b class="caret"></b></span>
+									{/if}
+								</a>
+							{/if}
 						
 							{#if menu.children}
 								<div class="menu-submenu">

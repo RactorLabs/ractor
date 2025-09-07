@@ -9,11 +9,9 @@
     ps = new PerfectScrollbar(container);
   });
   onDestroy(() => {
-  	if (ps) {
-  		ps.destroy();
-  	}
+    if (ps) ps.destroy();
   });
 </script>
-<div bind:this={container} class={$$props.class}>
-	<slot />
+<div bind:this={container} {...$$restProps}>
+  <slot />
 </div>

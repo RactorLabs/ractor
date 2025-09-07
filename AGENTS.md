@@ -60,6 +60,43 @@ Note on commit message formatting:
 - Pre‑commit checklist: `cargo fmt --check`, `cargo clippy`, `cargo build --release`, `cargo test`, and verify services start.
 - Licensing: repository is intentionally unlicensed; do not add or suggest license files.
 
+### HTML Page Creation Guidelines
+When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told not to. Follow this standard structure:
+
+#### Standard Bootstrap HTML Template
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Page Title</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Page content here -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>
+```
+
+#### Required Elements
+- HTML5 doctype (`<!doctype html>`)
+- Viewport meta tag for responsive design
+- Bootstrap CSS CDN link in `<head>`
+- Bootstrap JS bundle before closing `</body>`
+
+#### Grid System Usage
+- Use `.container` or `.container-fluid` for page layout
+- Structure content with `.row` and `.col-*` classes
+- Leverage responsive breakpoints (sm, md, lg, xl, xxl)
+- Example: `<div class="container"><div class="row"><div class="col-md-8">Main</div><div class="col-md-4">Sidebar</div></div></div>`
+
+#### When NOT to use Bootstrap
+- Only skip Bootstrap when explicitly requested
+- When building custom CSS frameworks  
+- When working with existing non-Bootstrap projects
+
 ## Command Playbooks (.claude/commands)
 ### Commit
 - Review: `git status`, `git diff`, `git log --oneline -5`.

@@ -56,21 +56,27 @@ async fn health_handler() -> impl IntoResponse {
 }
 
 async fn not_found_handler() -> impl IntoResponse {
-    let html = r#"
-<!DOCTYPE html>
+    let html = r#"<!DOCTYPE html>
 <html>
-<head>
-    <title>404</title>
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>No Content</title>
     <style>
-        html, body { height: 100%; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; background: white; color: black; }
-        h1 { font-size: 72px; font-weight: normal; margin: 0; }
+      html, body { height: 100%; margin: 0; }
+      body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background: #fff; color: #111; }
+      .wrap { text-align: center; padding: 24px; }
+      h1 { font-size: 48px; margin: 0 0 8px; font-weight: 600; }
+      p { margin: 0; color: rgba(0,0,0,0.6); }
     </style>
-    </head>
-<body>
-    <h1>404</h1>
-    </body>
-</html>
-"#;
+  </head>
+  <body>
+    <div class=\"wrap\">
+      <h1>No Content</h1>
+      <p>This agent has no published content.</p>
+    </div>
+  </body>
+</html>"#;
     Response::builder()
         .status(StatusCode::NOT_FOUND)
         .header("content-type", "text/html; charset=utf-8")

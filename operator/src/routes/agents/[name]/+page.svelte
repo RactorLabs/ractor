@@ -296,9 +296,11 @@
                       {#key m.content}
                         {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed}
                           <div class="small"><span class="text-body text-opacity-75">Action:</span> <span class="fw-500">{parsed.action || '-'}</span></div>
-                          <div class="small"><span class="text-body text-opacity-75">Path:</span> <span class="font-monospace">{parsed.path || '-'}</span></div>
+                          <div class="small mb-1"><span class="text-body text-opacity-75">Path:</span> <span class="font-monospace">{parsed.path || '-'}</span></div>
                         {/await}
                       {/key}
+                      <div class="small text-body text-opacity-75">Text</div>
+                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
                     {:else}
                       <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
                     {/if}

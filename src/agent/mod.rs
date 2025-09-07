@@ -292,10 +292,32 @@ async fn start_content_server() -> Result<()> {
                     .unwrap()),
             }
         } else {
-            // Return 404 for missing files
+            // Return a full-page 404-style response with a helpful message
+            let html = r#"<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>No Content</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background: #fff; color: #111; }
+      .wrap { text-align: center; padding: 24px; }
+      h1 { font-size: 48px; margin: 0 0 8px; font-weight: 600; }
+      p { margin: 0; color: rgba(0,0,0,0.6); }
+    </style>
+  </head>
+  <body>
+    <div class=\"wrap\">
+      <h1>No Content</h1>
+    </div>
+  </body>
+</html>"#;
+
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
-                .body(Body::from("File not found"))
+                .header(CONTENT_TYPE, "text/html; charset=utf-8")
+                .body(Body::from(html))
                 .unwrap())
         }
     }
