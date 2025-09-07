@@ -465,7 +465,7 @@ module.exports = (program) => {
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','raworc_operator','--network','raworc_network','-v','raworc_content_data:/content', OPERATOR_IMAGE);
+              args.push('--name','raworc_operator','--network','raworc_network','-p','7000:7000','-v','raworc_content_data:/content', OPERATOR_IMAGE);
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();

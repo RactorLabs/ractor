@@ -349,9 +349,7 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
                       {#if m.metadata && m.metadata.thinking}
-                        <div class="small fst-italic text-body text-opacity-50 mb-2 p-2 border rounded bg-light">
-                          <strong>Thinking:</strong> {m.metadata.thinking}
-                        </div>
+                        <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div>{m.content}</div>
