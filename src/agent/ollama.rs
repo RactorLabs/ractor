@@ -80,8 +80,15 @@ struct Thinking {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToolCall {
+    #[serde(default = "generate_tool_call_id")]
     pub id: String,
     pub function: ToolCallFunction,
+}
+
+fn generate_tool_call_id() -> String {
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+    format!("call_{}", COUNTER.fetch_add(1, Ordering::SeqCst))
 }
 
 #[derive(Debug, Deserialize, Clone)]
