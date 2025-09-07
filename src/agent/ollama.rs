@@ -56,15 +56,15 @@ struct ChatRequest<'a> {
     tools: Option<Vec<ToolDef>>,
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolCall {
-    function: ToolCallFunction,
+#[derive(Debug, Deserialize, Clone)]
+pub struct ToolCall {
+    pub function: ToolCallFunction,
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolCallFunction {
-    name: String,
-    arguments: serde_json::Value,
+#[derive(Debug, Deserialize, Clone)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +83,13 @@ struct ChatResponse {
     message: ChatResponseMessage,
     #[serde(flatten)]
     extra: serde_json::Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModelResponse {
+    pub content: String,
+    pub thinking: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 impl OllamaClient {
@@ -112,7 +119,7 @@ impl OllamaClient {
         &self,
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
-    ) -> Result<String> {
+    ) -> Result<ModelResponse> {
         self.complete_with_registry(messages, system_prompt, None).await
     }
 
@@ -121,7 +128,7 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
-    ) -> Result<String> {
+    ) -> Result<ModelResponse> {
         // Build chat messages for Ollama
         let mut chat_messages: Vec<ChatRequestMessage> = Vec::new();
         if let Some(sp) = system_prompt.as_ref() {
@@ -278,26 +285,19 @@ impl OllamaClient {
         }
 
         // Handle structured tool calls first (GPT-OSS native format)
-        if let Some(tool_calls) = &parsed.message.tool_calls {
-            if let Some(first_call) = tool_calls.first() {
-                tracing::info!("Found structured tool call: {} with args: {:?}", 
-                    first_call.function.name, first_call.function.arguments);
-                
-                // Return the structured tool call directly
-                let tool_call_json = serde_json::json!({
-                    "tool_calls": [{
-                        "function": {
-                            "name": first_call.function.name,
-                            "arguments": first_call.function.arguments
-                        }
-                    }]
-                });
-                return Ok(tool_call_json.to_string());
-            }
+        // Build structured response for caller
+        let model_resp = ModelResponse {
+            content: parsed.message.content.clone(),
+            thinking: parsed.message.thinking.clone(),
+            tool_calls: parsed.message.tool_calls.clone(),
+        };
+
+        if let Some(ref calls) = model_resp.tool_calls {
+            tracing::info!("Structured tool calls present: {}", calls.len());
+        } else {
+            tracing::info!("No structured tool calls found, content-only response");
         }
 
-        // Return content as regular text response
-        tracing::info!("No structured tool calls found, returning content as text response");
-        Ok(parsed.message.content.clone())
+        Ok(model_resp)
     }
 }

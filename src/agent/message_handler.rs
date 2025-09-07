@@ -1,5 +1,5 @@
 use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
-use super::ollama::{ChatMessage, OllamaClient};
+use super::ollama::{ChatMessage, OllamaClient, ModelResponse, ToolCall};
 use super::tool_registry::{ToolRegistry, ContainerExecMapper};
 use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
@@ -294,7 +294,7 @@ impl MessageHandler {
 
         // Fetch full conversation
         let all_messages = self.fetch_all_agent_messages().await?;
-        let mut conversation = self.prepare_conversation_history(&all_messages, &message.id);
+        let mut conversation = self.prepare_conversation_history(&all_messages, message);
 
         // Build system prompt
         let system_prompt = self.build_system_prompt().await;
@@ -302,7 +302,7 @@ impl MessageHandler {
         // Loop for tool usage with no hard cap on steps
         loop {
             // Simple retry/backoff for transient failures
-            let mut resp = Err(super::error::HostError::Model("uninitialized".to_string()));
+            let mut resp: Result<ModelResponse> = Err(super::error::HostError::Model("uninitialized".to_string()));
             for attempt in 0..=2 {
                 let try_resp = self
                     .ollama_client
@@ -316,7 +316,7 @@ impl MessageHandler {
                 }
             }
 
-            let model_text = match resp {
+            let model_resp = match resp {
                 Ok(t) => t,
                 Err(e) => {
                     warn!("Ollama API failed: {}", e);
@@ -326,7 +326,7 @@ impl MessageHandler {
             };
 
             // Check if response contains structured tool calls (GPT-OSS format)
-            if let Some(tool_calls) = parse_structured_tool_calls(&model_text) {
+            if let Some(tool_calls) = &model_resp.tool_calls {
                 if let Some(tool_call) = tool_calls.first() {
                     let tool_name = &tool_call.function.name;
                     let args = &tool_call.function.arguments;
@@ -379,7 +379,7 @@ impl MessageHandler {
 
                     continue;
                 }
-            } else if let Some((tool_name, args)) = parse_assistant_functions_text(&model_text) {
+            } else if let Some((tool_name, args)) = parse_assistant_functions_text(&model_resp.content) {
                 // Fallback: parse assistant<|channel|>functions.* style
                 info!("Assistant functions text tool call: {} with args: {:?}", tool_name, args);
 
@@ -422,14 +422,18 @@ impl MessageHandler {
                 continue;
             } else {
                 // Treat as final answer
-                let sanitized = self.guardrails.validate_output(&model_text)?;
+                let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+                let mut meta = serde_json::json!({
+                    "type": "model_response",
+                    "model": "gpt-oss"
+                });
+                if let Some(obj) = meta.as_object_mut() {
+                    if let Some(thinking) = &model_resp.thinking { obj.insert("thinking".to_string(), serde_json::Value::String(thinking.clone())); }
+                }
                 self.api_client
                     .send_message(
                         sanitized,
-                        Some(serde_json::json!({
-                            "type": "model_response",
-                            "model": "gpt-oss"
-                        })),
+                        Some(meta),
                     )
                     .await?;
                 return Ok(());
@@ -484,14 +488,14 @@ impl MessageHandler {
     fn prepare_conversation_history(
         &self,
         messages: &[Message],
-        current_id: &str,
+        current: &Message,
     ) -> Vec<ChatMessage> {
         let mut conversation: Vec<ChatMessage> = Vec::new();
 
         // Include ALL message history (excluding the current message being processed)
         let history: Vec<_> = messages
             .iter()
-            .filter(|m| m.id != current_id)
+            .filter(|m| m.id != current.id)
             .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
             .map(|m| {
                 let role = match m.role {
@@ -505,10 +509,8 @@ impl MessageHandler {
 
         conversation.extend(history);
 
-        // Add current message
-        if let Some(current) = messages.iter().find(|m| m.id == current_id) {
-            conversation.push(ChatMessage { role: MESSAGE_ROLE_USER.to_string(), content: current.content.clone(), name: None });
-        }
+        // Always add the current message (avoids race if not yet visible in fetched list)
+        conversation.push(ChatMessage { role: MESSAGE_ROLE_USER.to_string(), content: current.content.clone(), name: None });
 
         info!(
             "Prepared conversation with {} messages of history",
@@ -730,14 +732,7 @@ struct ToolCallsResponse {
     tool_calls: Vec<StructuredToolCall>,
 }
 
-fn parse_structured_tool_calls(s: &str) -> Option<Vec<StructuredToolCall>> {
-    // Try to parse the response as JSON containing tool_calls
-    if let Ok(response) = serde_json::from_str::<ToolCallsResponse>(s) {
-        Some(response.tool_calls)
-    } else {
-        None
-    }
-}
+fn parse_structured_tool_calls(_s: &str) -> Option<Vec<StructuredToolCall>> { None }
 
 // Parse text that looks like: "assistant<|channel|>functions.bash" followed by a JSON args block
 fn parse_assistant_functions_text(s: &str) -> Option<(String, serde_json::Value)> {
@@ -769,4 +764,3 @@ fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
     let input = v.get("input")?.clone();
     Some((tool, input))
 }
-
