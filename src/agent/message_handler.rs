@@ -604,11 +604,14 @@ Working Directory and File Operations:
     - Not copied during agent remix - logs are unique per agent instance
     - Example: /agent/logs/bash_1641234567.log
 
-  /agent/content/ - HTML display and visualization content:
+  /agent/content/ - HTML display and visualization content (hosted at /content/):
     - Store HTML files and supporting assets for displaying information to users
     - ALWAYS create or update /agent/content/index.html as the main entry point
     - Use index.html for summary, overview, intro, instructions, or navigation
-    - Link to other files using relative URLs (e.g., <a href="report.html">Report</a>)
+    - IMPORTANT: Content is hosted at /content/ URL path, so reference files properly:
+      * Use relative URLs within content: <a href="report.html">Report</a>
+      * When referring to content from outside: /content/report.html
+      * Assets and images: <img src="images/chart.png"> or <img src="/content/images/chart.png">
     - Create interactive visualizations, reports, charts, and data displays
     - Build images, maps, tables, games, apps, and rich interactive content
     - Support all types of visual and interactive content: charts, graphs, dashboards, games, applications, maps, image galleries, data tables, reports, presentations
@@ -618,6 +621,7 @@ Working Directory and File Operations:
     - IMPORTANT: Use /agent/content/ for displaying ANY information to users - results, reports, dashboards, visualizations, documentation, summaries, interactive apps, games, or any content users need to view
     - Create well-formatted HTML files with proper styling and navigation for professional presentation
     - Example structure: index.html (main), report.html, chart.html, dashboard/, games/, maps/
+    - Web accessible at: /content/ (e.g., /content/index.html, /content/report.html)
 
   /agent/secrets/ - Environment variables and configuration:
     - Contains environment variables automatically sourced by the agent
@@ -664,13 +668,15 @@ Guidelines:
   - Create interactive content like games, apps, maps, charts, tables, images, and presentations in /agent/content/
   - Create /agent/code/instructions.md for persistent agent context (auto-loaded)
   - Create /agent/code/setup.sh for environment initialization (auto-executed)
-- Content folder workflow (IMPORTANT for visual content):
+- Content folder workflow (IMPORTANT for visual content - hosted at /content/):
   - ALWAYS create /agent/content/index.html as the main entry point
   - Use index.html for overview, summary, navigation, or standalone content
   - Link additional files using relative paths: href="report.html", src="data/chart.png"
   - Create supporting files: report.html, dashboard.html, styles.css, etc.
   - Organize subdirectories as needed: images/, data/, scripts/
   - Example: index.html -> links to -> report.html, chart.html, dashboard/
+  - Content is web-accessible at /content/ URL path (e.g., /content/index.html)
+  - When referencing content from outside the content folder, use /content/ prefix
 - Assume the current working directory is /agent/
 - Show command outputs to users when relevant
 - Organize files logically: all working files in /agent/code/, visuals in /agent/content/
