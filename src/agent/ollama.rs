@@ -210,6 +210,73 @@ impl OllamaClient {
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
     ) -> Result<ModelResponse> {
+        self.complete_with_tool_execution(messages, system_prompt, tool_registry, false).await
+    }
+
+    pub async fn complete_with_tool_execution(
+        &self,
+        mut messages: Vec<ChatMessage>,
+        system_prompt: Option<String>,
+        tool_registry: Option<&ToolRegistry>,
+        enable_tool_execution: bool,
+    ) -> Result<ModelResponse> {
+        const MAX_ITERATIONS: usize = 10; // Prevent infinite loops
+        let mut iteration = 0;
+
+        loop {
+            iteration += 1;
+            if iteration > MAX_ITERATIONS {
+                return Err(HostError::Model(
+                    "Tool execution exceeded maximum iterations".to_string(),
+                ));
+            }
+
+            let response = self.complete_single_turn(messages.clone(), system_prompt.clone(), tool_registry).await?;
+            
+            // If no tool calls or tool execution disabled, return response
+            if !enable_tool_execution || response.tool_calls.is_none() {
+                return Ok(response);
+            }
+
+            let tool_calls = response.tool_calls.as_ref().unwrap();
+            tracing::info!("Processing {} tool calls in iteration {}", tool_calls.len(), iteration);
+
+            // Add the assistant's message with tool calls to conversation
+            messages.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: response.content.clone(),
+                name: None,
+                tool_call_id: None,
+            });
+
+            // Execute tool calls if registry is available
+            if let Some(registry) = tool_registry {
+                let mut tool_results = Vec::new();
+                
+                for tool_call in tool_calls {
+                    let result = self.execute_tool_call(tool_call, registry).await;
+                    tool_results.push(result);
+                }
+
+                // Add tool result messages to conversation
+                let tool_messages = ToolResult::from_tool_results(tool_results);
+                messages.extend(tool_messages);
+            } else {
+                // No registry available - return response with tool calls
+                tracing::warn!("Tool calls present but no registry available for execution");
+                return Ok(response);
+            }
+
+            // Continue loop to get model's final response
+        }
+    }
+
+    async fn complete_single_turn(
+        &self,
+        messages: Vec<ChatMessage>,
+        system_prompt: Option<String>,
+        tool_registry: Option<&ToolRegistry>,
+    ) -> Result<ModelResponse> {
         // Build chat messages for Ollama
         let mut chat_messages: Vec<ChatRequestMessage> = Vec::new();
         if let Some(sp) = system_prompt.as_ref() {
@@ -413,5 +480,26 @@ impl OllamaClient {
         }
 
         Ok(model_resp)
+    }
+
+    async fn execute_tool_call(&self, tool_call: &ToolCall, registry: &ToolRegistry) -> ToolResult {
+        tracing::info!("Executing tool call: {} with id: {}", tool_call.function.name, tool_call.id);
+        
+        // Try to execute the tool via registry
+        let result = registry.execute_tool(
+            &tool_call.function.name,
+            &tool_call.function.arguments,
+        ).await;
+
+        match result {
+            Ok(output) => {
+                tracing::info!("Tool call {} completed successfully", tool_call.id);
+                ToolResult::new(tool_call.id.clone(), output)
+            }
+            Err(e) => {
+                tracing::error!("Tool call {} failed: {}", tool_call.id, e);
+                ToolResult::with_error(tool_call.id.clone(), e.to_string())
+            }
+        }
     }
 }
