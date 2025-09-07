@@ -6,6 +6,9 @@
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import { appOptions } from '/src/stores/appOptions.js';
+  import MarkdownIt from 'markdown-it';
+
+  const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
 
   let name = '';
   $: name = $page.params.name;
@@ -348,12 +351,12 @@
                   </div>
                 {:else}
                   <div class="d-flex mb-3 justify-content-start">
-                    <div class="text-body" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
+                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if m.metadata && m.metadata.thinking}
                         <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
-                        <div>{m.content}</div>
+                        <div class="markdown-body" {@html md.render(m.content)}></div>
                       {/if}
                     </div>
                   </div>
@@ -454,5 +457,9 @@
       box-shadow: none !important;
       border-color: var(--bs-border-color) !important; /* keep neutral border on focus */
     }
+    :global(.markdown-body) { white-space: normal; }
+    :global(.markdown-body p) { margin-bottom: 0.5rem; }
+    :global(.markdown-body pre) { background: #111; color: #fff; padding: 0.5rem; border-radius: 0.25rem; overflow: auto; }
+    :global(.markdown-body code) { background: rgba(0,0,0,0.06); padding: 0.1rem 0.25rem; border-radius: 0.2rem; }
   </style>
 </div>
