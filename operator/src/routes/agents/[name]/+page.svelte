@@ -3,7 +3,6 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
   import Card from '/src/components/bootstrap/Card.svelte';
-  import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
   import { setPageTitle } from '$lib/utils.js';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
@@ -271,7 +270,7 @@
         </div>
       </div>
     {:else}
-      <PerfectScrollbar id="chat-body" class="flex-fill d-flex flex-column justify-content-end px-2 py-2 border rounded-2" style="background: transparent;">
+      <div id="chat-body" class="flex-fill d-flex flex-column justify-content-end px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto;">
         {#if messages && messages.length}
           {#each messages as m, i}
             {#if m.role === 'user'}
@@ -291,16 +290,26 @@
                     </div>
                     {#if String(m.metadata.tool_type).toLowerCase() === 'bash'}
                       <div class="small text-body text-opacity-75">Command</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
+                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
+                      <details class="mt-1">
+                        <summary class="small text-body text-opacity-75">View JSON</summary>
+                        <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: 'bash', input: { command: m.content } }, null, 2)}</code></pre>
+                      </details>
                     {:else if String(m.metadata.tool_type).toLowerCase() === 'text_editor'}
                       {#key m.content}
                         {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed}
                           <div class="small"><span class="text-body text-opacity-75">Action:</span> <span class="fw-500">{parsed.action || '-'}</span></div>
                           <div class="small mb-1"><span class="text-body text-opacity-75">Path:</span> <span class="font-monospace">{parsed.path || '-'}</span></div>
-                        {/await}
+                          {/await}
                       {/key}
                       <div class="small text-body text-opacity-75">Text</div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
+                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
+                      <details class="mt-1">
+                        <summary class="small text-body text-opacity-75">View JSON</summary>
+                        {#await Promise.resolve(parseTextEditorDesc(m.content)) then parsed2}
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: 'text_editor', input: { action: parsed2.action, path: parsed2.path, raw: m.content } }, null, 2)}</code></pre>
+                        {/await}
+                      </details>
                     {:else}
                       <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
                     {/if}
@@ -324,7 +333,7 @@
             {/if}
           {/each}
         {/if}
-      </PerfectScrollbar>
+      </div>
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
           <input aria-label="Message input" class="form-control chat-no-focus" placeholder="Type a message…" bind:value={input} on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); }}} />
@@ -345,7 +354,7 @@
         {/if}
       </div>
       <div class="card-body p-0 h-100" style="min-height: 300px;">
-        <PerfectScrollbar class="h-100">
+        <div class="h-100" style="overflow: auto;">
           {#if stateStr === 'idle' || stateStr === 'busy'}
             {#if frameUrl && contentAvailable}
               <iframe src={frameUrl} title="Agent content" style="border:0; width:100%; height:100%; opacity: {frameOpacity}; transition: opacity 200ms ease;" on:load={() => { frameOpacity = 1; }}></iframe>
@@ -383,7 +392,7 @@
               </div>
             </div>
           {/if}
-        </PerfectScrollbar>
+        </div>
       </div>
     </Card>
   </div>
