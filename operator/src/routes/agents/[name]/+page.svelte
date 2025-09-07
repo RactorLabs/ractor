@@ -405,8 +405,8 @@
             {#if agent}
               {#if agent.is_published || agent.isPublished}
                 <div class="dropdown">
-                  <button class="btn btn-success btn-sm fw-bold dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                    Published ⋯
+                  <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                    Published
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
                     <li>
@@ -493,5 +493,12 @@
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
     :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
+    /* Make the Published dropdown caret arrow a bit bigger */
+    :global(.published-toggle.dropdown-toggle::after) {
+      border-top-width: 0.5em;
+      border-right-width: 0.5em;
+      border-left-width: 0.5em;
+      margin-left: 0.4rem;
+    }
   </style>
 </div>
