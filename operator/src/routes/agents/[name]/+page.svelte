@@ -7,6 +7,7 @@
   import { apiFetch } from '$lib/api/client.js';
   import { appOptions } from '/src/stores/appOptions.js';
   import Markdown from 'svelte-markdown';
+  import gfm from 'remark-gfm';
 
   let name = '';
   $: name = $page.params.name;
@@ -354,7 +355,7 @@
                         <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
-                        <Markdown class="markdown-body" source={m.content} />
+                        <Markdown class="markdown-body" source={m.content} remarkPlugins={[gfm]} />
                       {/if}
                     </div>
                   </div>
@@ -463,5 +464,10 @@
     :global(.markdown-body p) { margin-bottom: 0.5rem; }
     :global(.markdown-body pre) { background: #111; color: #fff; padding: 0.5rem; border-radius: 0.25rem; overflow: auto; }
     :global(.markdown-body code) { background: rgba(0,0,0,0.06); padding: 0.1rem 0.25rem; border-radius: 0.2rem; }
+    :global(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+    :global(.markdown-body th), :global(.markdown-body td) { border: 1px solid var(--bs-border-color); padding: 0.375rem 0.5rem; }
+    :global(.markdown-body thead th) { background: var(--bs-light); }
+    :global(.markdown-body ul) { padding-left: 1.25rem; }
+    :global(.markdown-body li) { margin: 0.125rem 0; }
   </style>
 </div>
