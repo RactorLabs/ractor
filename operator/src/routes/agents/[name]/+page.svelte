@@ -204,6 +204,13 @@
     if (firstSpace === -1) return { action: s, path: '' };
     return { action: s.slice(0, firstSpace), path: s.slice(firstSpace + 1).trim() };
   }
+  function fmtSeconds(v) {
+    const n = Number(v || 0);
+    if (!isFinite(n) || n <= 0) return '';
+    if (n < 1) return `${n.toFixed(2)}s`;
+    if (n < 10) return `${n.toFixed(1)}s`;
+    return `${Math.round(n)}s`;
+  }
 
   // Expand/Collapse all tool details helpers
   function expandAllTools() {
@@ -453,8 +460,13 @@
                 {:else}
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                      {#if m.metadata && m.metadata.thinking}
-                        <div class="small fst-italic text-body text-opacity-50 mt-1 mb-2" style="white-space: pre-wrap;">{m.metadata.thinking}</div>
+                      {#if metaOf(m)?.thinking}
+                        <details class="mt-1 mb-2">
+                          <summary class="small text-body text-opacity-75" style="cursor: pointer;">
+                            Thought{#if metaOf(m)?.thinking_seconds} for {fmtSeconds(metaOf(m)?.thinking_seconds)}{/if}
+                          </summary>
+                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                        </details>
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div class="markdown-wrap">

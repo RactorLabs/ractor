@@ -41,12 +41,14 @@ impl Tool for BashTool {
             Ok(output) => {
                 // Check if the command actually succeeded by looking for exit_code in output
                 if output.contains("[exit_code:") && !output.contains("[exit_code:0]") {
-                    Ok(format!("[bash failed]\n{}", output))
+                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
+                    Ok(format!("{}\n{}", summary, output))
                 } else {
-                    Ok(format!("[bash ok]\n{}", output))
+                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
+                    Ok(format!("{}\n{}", summary, output))
                 }
             }
-            Err(e) => Ok(format!("[bash error] {}", e)),
+            Err(e) => Ok(format!("Result for tool 'bash' — error: {}", e)),
         }
     }
 }
@@ -112,9 +114,17 @@ impl Tool for TextEditorTool {
     async fn execute(&self, args: &serde_json::Value) -> Result<String> {
         let action = parse_text_edit(args)?;
 
-        match text_edit(action).await {
-            Ok(output) => Ok(format!("[text_editor ok]\n{}", output)),
-            Err(e) => Ok(format!("[text_editor error] {}", e)),
+        match text_edit(action.clone()).await {
+            Ok(output) => {
+                let summary = match &action {
+                    TextEditAction::View { path, .. } => format!("Result for tool 'text_editor' (view {} )", path),
+                    TextEditAction::Create { path, .. } => format!("Result for tool 'text_editor' (create {} )", path),
+                    TextEditAction::StrReplace { path, .. } => format!("Result for tool 'text_editor' (str_replace {} )", path),
+                    TextEditAction::Insert { path, line, .. } => format!("Result for tool 'text_editor' (insert {} at line {} )", path, line),
+                };
+                Ok(format!("{}\n{}", summary, output))
+            }
+            Err(e) => Ok(format!("Result for tool 'text_editor' — error: {}", e)),
         }
     }
 }
@@ -137,6 +147,10 @@ fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> 
     }
     let action: TextEditAction = serde_json::from_value(v)?;
     Ok(action)
+}
+
+fn truncate(s: &str, max: usize) -> String {
+    if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
 }
 
 #[cfg(test)]

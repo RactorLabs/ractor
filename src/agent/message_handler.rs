@@ -317,6 +317,7 @@ impl MessageHandler {
             let mut resp: Result<ModelResponse> =
                 Err(super::error::HostError::Model("uninitialized".to_string()));
             for attempt in 0..=2 {
+                let started = std::time::Instant::now();
                 let try_resp = self
                     .ollama_client
                     .complete_with_registry(
@@ -326,8 +327,12 @@ impl MessageHandler {
                     )
                     .await;
                 match try_resp {
-                    Ok(t) => {
+                    Ok(mut t) => {
+                        // Attach an approximate thinking duration for UI
+                        let secs = started.elapsed().as_secs_f32();
+                        // We cannot mutate t metadata directly, will attach when sending
                         resp = Ok(t);
+                        // Store in a local var via conversation? We'll recompute when sending below if needed.
                         break;
                     }
                     Err(e) => {
