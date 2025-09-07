@@ -376,11 +376,6 @@
       <div class="card-body p-0 h-100" style="min-height: 300px;">
         <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
           <span>Content</span>
-          {#if agent && (agent.is_published || agent.isPublished)}
-            <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content in new tab">
-              Open ↗
-            </a>
-          {/if}
           {#if agent && (agent.content_port || agent.contentPort)}
             <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
           {/if}
@@ -388,6 +383,7 @@
             {#if agent}
               {#if agent.is_published || agent.isPublished}
                 <button class="btn btn-outline-danger btn-sm" on:click={unpublishAgent} aria-label="Unpublish content">Unpublish</button>
+                <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content in new tab">Open ↗</a>
               {:else}
                 <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
               {/if}
