@@ -443,9 +443,19 @@ impl OllamaClient {
         if response_text.contains("error parsing tool call") {
             tracing::error!("=== OLLAMA TOOL CALL PARSING ERROR ===");
             tracing::error!("Full error response: {}", response_text);
-            tracing::error!("This suggests GPT-OSS is outputting raw function calls instead of JSON");
-            tracing::error!("Consider configuring Ollama for harmony format or updating tool definitions");
+            tracing::error!("This suggests malformed JSON in tool call arguments");
+            tracing::error!("Will attempt to extract and sanitize tool calls manually");
             tracing::error!("=== END ERROR DEBUG ===");
+            
+            // Try to extract tool calls manually from the error
+            if let Some(tool_calls) = self.extract_failed_tool_calls(&response_text) {
+                tracing::info!("Successfully extracted {} tool calls from error response", tool_calls.len());
+                return Ok(ModelResponse {
+                    content: "".to_string(),
+                    thinking: None,
+                    tool_calls: Some(tool_calls),
+                });
+            }
         }
 
         let parsed: ChatResponse = serde_json::from_str(&response_text).map_err(|e| {
@@ -476,11 +486,33 @@ impl OllamaClient {
         }
 
         // Handle structured tool calls first (GPT-OSS native format)
+        // Check for harmony format channels in content
+        let (final_content, analysis_thinking, commentary_tools) = self.parse_harmony_channels(&parsed.message.content);
+        
+        // Use harmony-parsed content if available, otherwise use original
+        let response_content = if !final_content.is_empty() {
+            final_content
+        } else {
+            parsed.message.content.clone()
+        };
+        
+        let response_thinking = if let Some(harmony_thinking) = analysis_thinking {
+            Some(harmony_thinking)
+        } else {
+            parsed.message.thinking.clone()
+        };
+        
+        let response_tool_calls = if let Some(harmony_tools) = commentary_tools {
+            Some(harmony_tools)
+        } else {
+            parsed.message.tool_calls.clone()
+        };
+        
         // Build structured response for caller
         let model_resp = ModelResponse {
-            content: parsed.message.content.clone(),
-            thinking: parsed.message.thinking.clone(),
-            tool_calls: parsed.message.tool_calls.clone(),
+            content: response_content,
+            thinking: response_thinking,
+            tool_calls: response_tool_calls,
         };
 
         if let Some(ref calls) = model_resp.tool_calls {
@@ -511,5 +543,121 @@ impl OllamaClient {
                 ToolResult::with_error(tool_call.id.clone(), e.to_string())
             }
         }
+    }
+
+    fn extract_failed_tool_calls(&self, error_response: &str) -> Option<Vec<ToolCall>> {
+        // Try to extract tool calls from Ollama error responses
+        // Look for patterns like: "error parsing tool call: raw='{"command":"..."}'
+        
+        if let Some(start) = error_response.find("raw='") {
+            let start_idx = start + 5; // Length of "raw='"
+            if let Some(end_idx) = error_response[start_idx..].find("', err=") {
+                let raw_content = &error_response[start_idx..start_idx + end_idx];
+                tracing::info!("Extracted raw tool call content: {}", raw_content);
+                
+                // Try to parse as JSON and fix common issues
+                let sanitized = self.sanitize_tool_call_json(raw_content);
+                
+                if let Ok(args) = serde_json::from_str::<serde_json::Value>(&sanitized) {
+                    // Create a tool call - we need to infer the tool name from context
+                    let tool_name = self.infer_tool_name_from_args(&args);
+                    
+                    let tool_call = ToolCall {
+                        id: generate_tool_call_id(),
+                        function: ToolCallFunction {
+                            name: tool_name,
+                            arguments: args,
+                        },
+                    };
+                    
+                    return Some(vec![tool_call]);
+                }
+            }
+        }
+        
+        None
+    }
+    
+    fn sanitize_tool_call_json(&self, raw_json: &str) -> String {
+        // Fix common JSON issues in GPT-OSS tool calls
+        let mut sanitized = raw_json.to_string();
+        
+        // Fix escaped quotes and newlines
+        sanitized = sanitized.replace("\\\"", "\"");
+        sanitized = sanitized.replace("\\n", "\n");
+        sanitized = sanitized.replace("\\t", "\t");
+        
+        // Fix unescaped quotes in string values
+        // This is more complex - for now, just log and return as-is
+        tracing::info!("Sanitized JSON: {}", sanitized);
+        
+        sanitized
+    }
+    
+    fn infer_tool_name_from_args(&self, args: &serde_json::Value) -> String {
+        // Infer tool name from arguments structure
+        if args.get("command").is_some() {
+            "bash".to_string()
+        } else if args.get("action").is_some() || args.get("path").is_some() {
+            "text_editor".to_string()
+        } else {
+            "bash".to_string() // Default fallback
+        }
+    }
+    
+    fn parse_harmony_channels(&self, content: &str) -> (String, Option<String>, Option<Vec<ToolCall>>) {
+        // Parse harmony format channels from content
+        // Format: <|start|>assistant<|channel|>{channel}<|message|>{content}<|end|>
+        
+        let mut final_content = String::new();
+        let mut analysis_content = None;
+        let mut commentary_tools = None;
+        
+        // Look for channel patterns
+        for line in content.lines() {
+            if line.contains("<|channel|>final<|message|>") {
+                if let Some(msg_start) = line.find("<|message|>") {
+                    let start_idx = msg_start + 11; // Length of "<|message|>"
+                    if let Some(end_idx) = line.find("<|end|>") {
+                        final_content = line[start_idx..end_idx].to_string();
+                    } else {
+                        final_content = line[start_idx..].to_string();
+                    }
+                }
+            } else if line.contains("<|channel|>analysis<|message|>") {
+                if let Some(msg_start) = line.find("<|message|>") {
+                    let start_idx = msg_start + 11;
+                    if let Some(end_idx) = line.find("<|end|>") {
+                        analysis_content = Some(line[start_idx..end_idx].to_string());
+                    } else {
+                        analysis_content = Some(line[start_idx..].to_string());
+                    }
+                }
+            } else if line.contains("<|channel|>commentary<|message|>") {
+                if let Some(msg_start) = line.find("<|message|>") {
+                    let start_idx = msg_start + 11;
+                    let commentary_text = if let Some(end_idx) = line.find("<|end|>") {
+                        &line[start_idx..end_idx]
+                    } else {
+                        &line[start_idx..]
+                    };
+                    
+                    // Try to parse tool calls from commentary
+                    commentary_tools = self.parse_commentary_tool_calls(commentary_text);
+                }
+            }
+        }
+        
+        (final_content, analysis_content, commentary_tools)
+    }
+    
+    fn parse_commentary_tool_calls(&self, commentary: &str) -> Option<Vec<ToolCall>> {
+        // Try to parse tool calls from commentary channel
+        // Commentary might contain function call descriptions
+        
+        // For now, return None - this would need more sophisticated parsing
+        // based on the actual harmony format structure
+        tracing::info!("Commentary channel content: {}", commentary);
+        None
     }
 }
