@@ -397,28 +397,8 @@ impl OllamaClient {
             options: None, // Context length now set via CLI environment variables
         };
 
-        // Debug: Log the full request being sent to Ollama
-        tracing::info!("=== OLLAMA REQUEST DEBUG ===");
-        tracing::info!("Model: {}", req.model);
-        tracing::info!("Message count: {}", req.messages.len());
-        tracing::info!("Tools count: {}", req.tools.as_ref().map_or(0, |t| t.len()));
-        for (i, msg) in req.messages.iter().enumerate() {
-            tracing::info!(
-                "Message[{}]: role='{}', content_len={}, tool_call_id={:?}",
-                i, msg.role, msg.content.len(), msg.tool_call_id
-            );
-            if msg.content.len() <= 200 {
-                tracing::info!("Message[{}] content: {:?}", i, msg.content);
-            } else {
-                // Use char boundary safe truncation
-                let preview = msg.content.chars().take(200).collect::<String>();
-                tracing::info!("Message[{}] content preview: {:?}...", i, preview);
-            }
-        }
-        
-        let req_json = serde_json::to_string_pretty(&req).unwrap_or_else(|_| "Failed to serialize".to_string());
-        tracing::info!("Full JSON request to Ollama: {}", req_json);
-        tracing::info!("=== END OLLAMA REQUEST DEBUG ===");
+        // Log request to file
+        self.log_ollama_request(&req).await;
 
         let url = format!("{}/api/chat", self.base_url);
         let resp = self
@@ -447,7 +427,8 @@ impl OllamaClient {
             .await
             .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
 
-        tracing::info!("Raw Ollama response: {}", response_text);
+        // Log response to file
+        self.log_ollama_response(&response_text).await;
         
         // Additional debug: Check if this is a tool calling error
         if response_text.contains("error parsing tool call") {
@@ -475,25 +456,12 @@ impl OllamaClient {
             ))
         })?;
 
+        // Minimal logging for Docker logs
         tracing::info!(
-            "Ollama response parsed successfully, content length: {}",
-            parsed.message.content.len()
+            "Ollama response: content_len={}, tool_calls={}", 
+            parsed.message.content.len(),
+            parsed.message.tool_calls.as_ref().map_or(0, |tc| tc.len())
         );
-        tracing::info!(
-            "Content preview: {:?}",
-            if parsed.message.content.chars().count() > 100 {
-                format!("{}...", parsed.message.content.chars().take(100).collect::<String>())
-            } else {
-                parsed.message.content.clone()
-            }
-        );
-        tracing::info!(
-            "Tool calls present: {:?}",
-            parsed.message.tool_calls.is_some()
-        );
-        if let Some(ref tool_calls) = parsed.message.tool_calls {
-            tracing::info!("Number of tool calls: {}", tool_calls.len());
-        }
 
         // Handle structured tool calls first (GPT-OSS native format)
         // Check for harmony format channels in content
@@ -525,11 +493,7 @@ impl OllamaClient {
             tool_calls: response_tool_calls,
         };
 
-        if let Some(ref calls) = model_resp.tool_calls {
-            tracing::info!("Structured tool calls present: {}", calls.len());
-        } else {
-            tracing::info!("No structured tool calls found, content-only response");
-        }
+        // Tool calls logged in minimal response info above
 
         Ok(model_resp)
     }
@@ -669,5 +633,47 @@ impl OllamaClient {
         // based on the actual harmony format structure
         tracing::info!("Commentary channel content: {}", commentary);
         None
+    }
+    
+    async fn log_ollama_request(&self, req: &ChatRequest<'_>) {
+        if let Ok(req_json) = serde_json::to_string_pretty(req) {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let filename = format!("/agent/logs/ollama_request_{}.json", timestamp);
+            
+            let log_content = format!(
+                "=== OLLAMA REQUEST {} ===\nModel: {}\nMessage Count: {}\nTools Count: {}\n\n{}",
+                timestamp,
+                req.model,
+                req.messages.len(),
+                req.tools.as_ref().map_or(0, |t| t.len()),
+                req_json
+            );
+            
+            if let Err(e) = tokio::fs::write(&filename, log_content).await {
+                tracing::warn!("Failed to write Ollama request log to {}: {}", filename, e);
+            }
+        }
+    }
+    
+    async fn log_ollama_response(&self, response_text: &str) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let filename = format!("/agent/logs/ollama_response_{}.json", timestamp);
+        
+        let log_content = format!(
+            "=== OLLAMA RESPONSE {} ===\nResponse Length: {} characters\n\n{}",
+            timestamp,
+            response_text.len(),
+            response_text
+        );
+        
+        if let Err(e) = tokio::fs::write(&filename, log_content).await {
+            tracing::warn!("Failed to write Ollama response log to {}: {}", filename, e);
+        }
     }
 }
