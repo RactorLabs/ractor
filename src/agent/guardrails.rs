@@ -79,29 +79,8 @@ impl Guardrails {
     }
 
     /// Check if the input is asking for system prompt or internal information
-    pub fn check_system_prompt_exposure(&self, content: &str) -> Result<()> {
-        let lower_content = content.to_lowercase();
-
-        let prompt_exposure_patterns = [
-            "system prompt",
-            "system message",
-            "your instructions",
-            "your prompt",
-            "repeat your instructions",
-            "show me your prompt",
-            "api_key",
-            "raworc_token",
-        ];
-
-        for pattern in prompt_exposure_patterns {
-            if lower_content.contains(pattern) {
-                warn!("System prompt exposure attempt detected: {}", pattern);
-                return Err(HostError::Guardrail(
-                    "Cannot provide system configuration or internal details".to_string(),
-                ));
-            }
-        }
-
+    pub fn check_system_prompt_exposure(&self, _content: &str) -> Result<()> {
+        // System prompt exposure checks disabled for more open agent behavior
         Ok(())
     }
 
