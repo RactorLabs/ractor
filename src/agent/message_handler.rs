@@ -498,12 +498,27 @@ impl MessageHandler {
             .filter(|m| m.id != current.id)
             .filter(|m| m.role == MessageRole::User || m.role == MessageRole::Agent)
             .map(|m| {
-                let role = match m.role {
-                    MessageRole::User => MESSAGE_ROLE_USER,
-                    MessageRole::Agent => "assistant", // Model expects "assistant" not "agent"
-                    _ => MESSAGE_ROLE_USER,
+                let (role, name) = match m.role {
+                    MessageRole::User => (MESSAGE_ROLE_USER.to_string(), None),
+                    MessageRole::Agent => {
+                        // Check if this is a tool result message based on metadata
+                        if let Some(metadata) = &m.metadata {
+                            if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
+                                if msg_type == "tool_result" {
+                                    let tool_name = metadata.get("tool_type").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                    return ChatMessage { 
+                                        role: "tool".to_string(), 
+                                        content: m.content.clone(), 
+                                        name: tool_name 
+                                    };
+                                }
+                            }
+                        }
+                        ("assistant".to_string(), None) // Model expects "assistant" not "agent"
+                    },
+                    _ => (MESSAGE_ROLE_USER.to_string(), None),
                 };
-                ChatMessage { role: role.to_string(), content: m.content.clone(), name: None }
+                ChatMessage { role, content: m.content.clone(), name }
             })
             .collect();
 

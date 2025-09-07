@@ -377,7 +377,9 @@
         <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
           <span>Content</span>
           {#if agent && (agent.is_published || agent.isPublished)}
-            <span class="badge bg-success">Public</span>
+            <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content">
+              Open →
+            </a>
           {/if}
           {#if agent && (agent.content_port || agent.contentPort)}
             <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
