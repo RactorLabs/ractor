@@ -96,6 +96,9 @@
   }
 </script>
 
+<div class="container-xxl">
+  <div class="row justify-content-center">
+    <div class="col-12 col-xxl-10">
 <div class="row g-3">
   <div class="col-xl-8">
     <Card class="mb-3">
@@ -187,4 +190,7 @@
     .font-monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
   </style>
+</div>
+    </div>
+  </div>
 </div>
