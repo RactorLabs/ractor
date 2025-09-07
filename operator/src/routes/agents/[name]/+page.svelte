@@ -59,18 +59,20 @@
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/messages?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.messages || []);
+      // Only auto-stick if near bottom before refresh
+      let shouldStick = true;
+      try {
+        const el = typeof document !== 'undefined' ? document.getElementById('chat-body') : null;
+        if (el) {
+          const delta = el.scrollHeight - el.scrollTop - el.clientHeight;
+          shouldStick = delta < 80;
+        }
+      } catch (_) {}
       messages = list;
       await tick();
-      scrollToBottom();
+      if (shouldStick) scrollToBottom();
     }
   }
-
-  // Always keep view scrolled to the latest message (guard SSR)
-  $: (async () => {
-    if (typeof document === 'undefined') return;
-    await tick();
-    scrollToBottom();
-  })();
 
   function startPolling() {
     stopPolling();
@@ -270,7 +272,7 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill d-flex flex-column justify-content-end px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto;">
+      <div id="chat-body" class="flex-fill d-flex flex-column justify-content-end px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
         {#if messages && messages.length}
           {#each messages as m, i}
             {#if m.role === 'user'}
@@ -366,7 +368,7 @@
         {/if}
       </div>
       <div class="card-body p-0 h-100" style="min-height: 300px;">
-        <div class="h-100" style="overflow: auto;">
+        <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
           {#if stateStr === 'idle' || stateStr === 'busy'}
             {#if frameUrl && contentAvailable}
               <iframe src={frameUrl} title="Agent content" style="border:0; width:100%; height:100%; opacity: {frameOpacity}; transition: opacity 200ms ease;" on:load={() => { frameOpacity = 1; }}></iframe>
