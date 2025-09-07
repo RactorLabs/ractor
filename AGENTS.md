@@ -105,18 +105,21 @@ When creating HTML pages, use Bootstrap 5.3 by default unless explicitly told no
 - Verify: `git status`. Do not push without approval.
 
 ### Bump (version management)
-- Choose target: patch/minor/major or specific (e.g., `0.6.3`).
-- Update version refs (review and edit only these):
+- Preferred: run the helper (repairs docs badge safely):
+  - `bash scripts/bump.sh 0.X.Y` or just `bash scripts/bump.sh` to bump patch
+- What it updates:
   - `Cargo.toml` (top-level `version = "x.y.z"`)
   - `cli/package.json` (`version` field)
-  - Operator docs badge constant in `operator/src/routes/docs/+page.svelte` (`const API_VERSION = 'x.y.z (v0)';`)
-- Rebuild to update locks: `cargo build --release`; then `cd cli && npm install`.
-- Verify modified files via `git status`. Then commit using the Commit playbook (don’t push yet).
-- Tip: find current version and audit occurrences (avoid lockfiles and node_modules when counting):
+  - Operator docs badge in `operator/src/routes/docs/+page.svelte` (`const API_VERSION = 'x.y.z (v0)';`)
+- The script avoids node_modules/lockfiles and repairs the docs badge line if it was ever corrupted by prior bumps.
+- If doing manually, audit occurrences (avoid lockfiles and node_modules):
   - `prev=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)`
   - `rg -n --hidden -S "$prev" -g '!target/**' -g '!**/node_modules/**'`
-- Safely update the Operator docs badge (avoid corrupting the line):
-  - Use a targeted replace: `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
+  - Update the docs badge with a targeted replace to avoid syntax errors:
+    - `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
+  
+- After bump: rebuild to update locks: `cargo build --release`; then `cd cli && npm install`.
+- Verify via `git status`, then commit using the Commit playbook.
 
 ### Release
 - Update docs: top-level README, Operator docs page (version badge), CLI README, CLAUDE.md.
