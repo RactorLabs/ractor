@@ -289,6 +289,8 @@
           <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
         {:else if stateStr === 'idle' || stateStr === 'busy'}
           <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+        {:else}
+          <button class="btn btn-outline-warning btn-sm" disabled aria-label="Put agent to sleep" title="Agent not ready">Sleep</button>
         {/if}
       </div>
     </div>
