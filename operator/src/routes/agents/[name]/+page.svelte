@@ -233,20 +233,6 @@
     } catch (_) { return ''; }
   }
 
-  // Helper: compact output preview for tool response summaries
-  function resultPreview(m) {
-    try {
-      const s = String(m?.content || '').trim();
-      if (!s) return '';
-      // Take first non-empty line, collapse whitespace, limit length
-      const first = s.split('\n').find((ln) => ln.trim().length > 0) || '';
-      if (!first) return '';
-      const compact = first.replace(/\s+/g, ' ').trim();
-      const short = compact.length > 80 ? compact.slice(0, 77) + '…' : compact;
-      return ` — ${short}`;
-    } catch (_) { return ''; }
-  }
-
   async function sendMessage(e) {
     e?.preventDefault?.();
     const content = (input || '').trim();
@@ -447,7 +433,7 @@
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        {toolLabel(m.metadata.tool_type)} Response {argsPreview(m)}{resultPreview(m)}
+                        {toolLabel(m.metadata.tool_type)} Response {argsPreview(m)}
                       </summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
                     </details>
