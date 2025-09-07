@@ -374,9 +374,6 @@
       <div class="p-0 h-100 d-flex flex-column" style="min-height: 300px;">
         <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
           <span>Content</span>
-          {#if agent && (agent.content_port || agent.contentPort)}
-            <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
-          {/if}
           <div class="ms-auto d-flex gap-2">
             {#if agent}
               {#if agent.is_published || agent.isPublished}
