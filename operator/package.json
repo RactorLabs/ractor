@@ -15,7 +15,7 @@
     "vite": "^7.0.4"
   },
 	"type": "module",
-	"dependencies": {
+  "dependencies": {
 		"@fortawesome/fontawesome-free": "^6.7.2",
 		"@fullcalendar/bootstrap": "^6.1.18",
 		"@fullcalendar/common": "^5.11.5",
@@ -58,7 +58,8 @@
 		"svelte-autocomplete": "^0.0.4",
 		"svelte-color-picker": "^1.0.7",
 		"svelte-highlight": "^7.8.3",
-		"svelte-select": "^5.8.3",
-		"svelte-tags-input": "^6.0.2"
-	}
+    "svelte-select": "^5.8.3",
+    "svelte-tags-input": "^6.0.2",
+    "svelte-markdown": "^0.4.1"
+  }
 }

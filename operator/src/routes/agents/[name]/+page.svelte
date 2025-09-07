@@ -6,9 +6,7 @@
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import { appOptions } from '/src/stores/appOptions.js';
-  import MarkdownIt from 'markdown-it';
-
-  const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
+  import Markdown from 'svelte-markdown';
 
   let name = '';
   $: name = $page.params.name;
@@ -356,7 +354,7 @@
                         <div class="small fst-italic text-body text-opacity-50 mt-1">{m.metadata.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
-                        <div class="markdown-body" {@html md.render(m.content)}></div>
+                        <Markdown class="markdown-body" source={m.content} />
                       {/if}
                     </div>
                   </div>
