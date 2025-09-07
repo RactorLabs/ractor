@@ -4,11 +4,8 @@ Remote Agentic Work Orchestrator - CLI for Computer use agents
 
 ## Getting Started
 
-Visit **[raworc.com](https://raworc.com)** for installation instructions, setup guides, and complete documentation.
+See this repository's README for installation instructions, setup guides, and documentation.
 
 ## Support
 
-- **📚 Documentation**: [raworc.com/docs](https://raworc.com/docs)
-- **🌐 Website**: [raworc.com](https://raworc.com)
 - **🐦 Community**: [x.com/raworc](https://x.com/raworc)
-
