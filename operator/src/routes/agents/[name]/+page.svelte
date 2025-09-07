@@ -377,8 +377,8 @@
         <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
           <span>Content</span>
           {#if agent && (agent.is_published || agent.isPublished)}
-            <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content">
-              Open →
+            <a class="btn btn-success btn-sm fw-bold" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer" aria-label="Open published content in new tab">
+              Open ↗
             </a>
           {/if}
           {#if agent && (agent.content_port || agent.contentPort)}
