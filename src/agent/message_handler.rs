@@ -433,6 +433,7 @@ impl MessageHandler {
                         role: "tool".to_string(),
                         content: tool_result,
                         name: Some(tool_name.clone()),
+                        tool_call_id: None,
                     });
 
                     continue;
@@ -501,6 +502,7 @@ impl MessageHandler {
                     role: "tool".to_string(),
                     content: tool_result,
                     name: Some(tool_name.clone()),
+                    tool_call_id: None,
                 });
                 continue;
             } else {
@@ -592,12 +594,12 @@ impl MessageHandler {
                                 .get("tool_type")
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string());
-                            return ChatMessage { role: "tool".to_string(), content: m.content.clone(), name: tool_name };
+                            return ChatMessage { role: "tool".to_string(), content: m.content.clone(), name: tool_name, tool_call_id: None };
                         }
                     }
                 }
                 let role = Self::role_to_model(&m.role).to_string();
-                ChatMessage { role, content: m.content.clone(), name: None }
+                ChatMessage { role, content: m.content.clone(), name: None, tool_call_id: None }
             })
             .collect();
 
@@ -608,6 +610,7 @@ impl MessageHandler {
             role: MESSAGE_ROLE_USER.to_string(),
             content: current.content.clone(),
             name: None,
+            tool_call_id: None,
         });
 
         info!(

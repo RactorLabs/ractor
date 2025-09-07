@@ -20,6 +20,8 @@ struct ChatRequestMessage<'a> {
     content: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +29,7 @@ pub struct ChatMessage {
     pub role: String,
     pub content: String,
     pub name: Option<String>,
+    pub tool_call_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -77,6 +80,7 @@ struct Thinking {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct ToolCall {
+    pub id: String,
     pub function: ToolCallFunction,
 }
 
@@ -170,6 +174,7 @@ impl OllamaClient {
                 role: "system",
                 content: sp,
                 name: None,
+                tool_call_id: None,
             });
         }
 
@@ -198,6 +203,7 @@ impl OllamaClient {
                 role,
                 content,
                 name: msg.name.as_deref(),
+                tool_call_id: msg.tool_call_id.as_deref(),
             });
         }
 
