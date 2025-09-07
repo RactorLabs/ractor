@@ -232,7 +232,7 @@ impl MessageHandler {
                 }
                 _ => format!("Executing {} tool", tool),
             };
-            self.send_tool_message(&tool_description, &tool).await?;
+            self.send_tool_message(&tool_description, &tool, Some(&input)).await?;
 
             // Execute
             let tool_result = match tool.as_str() {
@@ -253,7 +253,8 @@ impl MessageHandler {
             };
 
             // Send result back
-            let metadata = serde_json::json!({ "type": "tool_result", "tool_type": tool });
+            let mut metadata = serde_json::json!({ "type": "tool_result", "tool_type": tool });
+            if let Some(obj) = metadata.as_object_mut() { obj.insert("args".to_string(), input.clone()); }
             self.api_client.send_message(tool_result, Some(metadata)).await?;
             return Ok(());
         }
@@ -325,7 +326,7 @@ impl MessageHandler {
                         _ => format!("Executing {} tool", tool_name),
                     };
 
-                    self.send_tool_message(&tool_description, tool_name).await?;
+                    self.send_tool_message(&tool_description, tool_name, Some(args)).await?;
 
                     // Execute tool
                     let tool_result = match tool_name.as_str() {
@@ -356,6 +357,11 @@ impl MessageHandler {
                     // Log tool result
                     info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
                     
+                    // Also send tool result as a message so Operator can render it
+                    let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
+                    if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args.clone()); }
+                    let _ = self.api_client.send_message(tool_result.clone(), Some(meta)).await;
+
                     // Add tool result to conversation following Ollama cookbook
                     conversation.push(ChatMessage { 
                         role: "tool".to_string(), 
@@ -386,7 +392,7 @@ impl MessageHandler {
                     }
                     _ => format!("Executing {} tool", tool_name),
                 };
-                self.send_tool_message(&tool_description, &tool_name).await?;
+                self.send_tool_message(&tool_description, &tool_name, Some(&args)).await?;
 
                 // Execute
                 let tool_result = match tool_name.as_str() {
@@ -411,6 +417,11 @@ impl MessageHandler {
                     }
                     other => format!("[error] unknown tool: {}", other),
                 };
+
+                // Send result to Operator and add to conversation
+                let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
+                if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args.clone()); }
+                let _ = self.api_client.send_message(tool_result.clone(), Some(meta)).await;
 
                 // Add tool result to conversation and continue
                 conversation.push(ChatMessage { 
@@ -680,18 +691,18 @@ Current agent context:
         prompt
     }
 
-    async fn send_tool_message(&self, description: &str, tool_name: &str) -> Result<()> {
+    async fn send_tool_message(&self, description: &str, tool_name: &str, args: Option<&serde_json::Value>) -> Result<()> {
         // Log tool execution notification to Docker logs
         println!("TOOL_EXECUTION: {}: {}", tool_name, description);
 
         // Send tool execution message to user
-        let metadata = serde_json::json!({
+        let mut meta = serde_json::json!({
             "type": "tool_execution",
             "tool_type": tool_name
         });
-
+        if let Some(a) = args { if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), a.clone()); } }
         self.api_client
-            .send_message(description.to_string(), Some(metadata))
+            .send_message(description.to_string(), Some(meta))
             .await?;
 
         Ok(())

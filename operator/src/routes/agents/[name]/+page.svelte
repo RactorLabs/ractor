@@ -312,6 +312,12 @@
                       </details>
                     {:else}
                       <div class="small" style="white-space: pre-wrap; word-break: break-word;">{m.content}</div>
+                      {#if m.metadata && m.metadata.args}
+                        <details class="mt-1">
+                          <summary class="small text-body text-opacity-75">View JSON</summary>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                        </details>
+                      {/if}
                     {/if}
                   </div>
                 </div>
@@ -323,7 +329,13 @@
                       <div class="d-flex align-items-center gap-2 mb-1">
                         <span class="badge bg-light text-dark">{toolLabel(m.metadata.tool_type)} Result</span>
                       </div>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{m.content}</code></pre>
+                      <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{m.content}</code></pre>
+                      {#if m.metadata && m.metadata.args}
+                        <details class="mt-1">
+                          <summary class="small text-body text-opacity-75">View JSON</summary>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify(m.metadata.args, null, 2)}</code></pre>
+                        </details>
+                      {/if}
                     {:else}
                       {m.content}
                     {/if}
