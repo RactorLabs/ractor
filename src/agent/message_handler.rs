@@ -1,6 +1,7 @@
 use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
 use super::ollama::{ChatMessage, OllamaClient};
-use super::tools::{run_bash, text_edit, TextEditAction};
+use super::tool_registry::{ToolRegistry, ContainerExecMapper};
+use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
 use super::guardrails::Guardrails;
 use chrono::{DateTime, Utc};
@@ -16,6 +17,7 @@ pub struct MessageHandler {
     guardrails: Arc<Guardrails>,
     processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
     task_created_at: DateTime<Utc>,
+    tool_registry: Arc<ToolRegistry>,
 }
 
 impl MessageHandler {
@@ -23,6 +25,15 @@ impl MessageHandler {
         api_client: Arc<RaworcClient>,
         ollama_client: Arc<OllamaClient>,
         guardrails: Arc<Guardrails>,
+    ) -> Self {
+        Self::new_with_registry(api_client, ollama_client, guardrails, None)
+    }
+
+    pub fn new_with_registry(
+        api_client: Arc<RaworcClient>,
+        ollama_client: Arc<OllamaClient>,
+        guardrails: Arc<Guardrails>,
+        tool_registry: Option<Arc<ToolRegistry>>,
     ) -> Self {
         // Try to read task creation timestamp from environment, fallback to current time
         let task_created_at = std::env::var("RAWORC_TASK_CREATED_AT")
@@ -39,12 +50,43 @@ impl MessageHandler {
             task_created_at
         );
 
+        // Initialize tool registry with built-in tools if not provided
+        let tool_registry = if let Some(registry) = tool_registry {
+            registry
+        } else {
+            let registry = Arc::new(ToolRegistry::new());
+            
+            // Register built-in tools
+            let bash_tool = Box::new(BashTool);
+            let text_editor_tool = Box::new(TextEditorTool);
+            
+            tokio::spawn({
+                let registry = registry.clone();
+                async move {
+                    registry.register_tool(bash_tool).await;
+                    registry.register_tool(text_editor_tool).await;
+                    
+                    // Register container.exec alias for bash
+                    registry.register_alias(
+                        "container.exec",
+                        "bash",
+                        Some(Box::new(ContainerExecMapper))
+                    ).await;
+                    
+                    info!("Registered built-in tools and aliases");
+                }
+            });
+            
+            registry
+        };
+
         Self {
             api_client,
             ollama_client,
             guardrails,
             processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
             task_created_at,
+            tool_registry,
         }
     }
 
@@ -234,22 +276,10 @@ impl MessageHandler {
             };
             self.send_tool_message(&tool_description, &tool, Some(&input)).await?;
 
-            // Execute
-            let tool_result = match tool.as_str() {
-                "bash" => {
-                    let cmd = input
-                        .get("command").and_then(|v| v.as_str())
-                        .or_else(|| input.get("cmd").and_then(|v| v.as_str()))
-                        .unwrap_or("");
-                    match run_bash(cmd).await { Ok(o) => format!("[bash ok]\n{}", o), Err(e) => format!("[bash error] {}", e) }
-                }
-                "text_editor" => {
-                    match parse_text_edit(&input) {
-                        Ok(op) => match text_edit(op).await { Ok(o) => format!("[text_editor ok]\n{}", o), Err(e) => format!("[text_editor error] {}", e) },
-                        Err(e) => format!("[text_editor error] {}", e),
-                    }
-                }
-                other => format!("[error] unknown tool: {}", other),
+            // Execute tool through registry
+            let tool_result = match self.tool_registry.execute_tool(&tool, &input).await {
+                Ok(result) => result,
+                Err(e) => format!("[error] {}", e),
             };
 
             // Send result back
@@ -270,15 +300,13 @@ impl MessageHandler {
         let system_prompt = self.build_system_prompt().await;
 
         // Loop for tool usage with no hard cap on steps
-        let mut steps = 0;
         loop {
-            steps += 1;
             // Simple retry/backoff for transient failures
             let mut resp = Err(super::error::HostError::Model("uninitialized".to_string()));
             for attempt in 0..=2 {
                 let try_resp = self
                     .ollama_client
-                    .complete(conversation.clone(), Some(system_prompt.clone()))
+                    .complete_with_registry(conversation.clone(), Some(system_prompt.clone()), Some(&*self.tool_registry))
                     .await;
                 match try_resp {
                     Ok(t) => { resp = Ok(t); break; }
@@ -328,30 +356,10 @@ impl MessageHandler {
 
                     self.send_tool_message(&tool_description, tool_name, Some(args)).await?;
 
-                    // Execute tool
-                    let tool_result = match tool_name.as_str() {
-                        "bash" => {
-                            let cmd = args
-                                .get("command").and_then(|v| v.as_str())
-                                .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                                .unwrap_or("");
-                            match run_bash(cmd).await {
-                                Ok(o) => format!("[bash ok]\n{}", o),
-                                Err(e) => format!("[bash error] {}", e),
-                            }
-                        }
-                        "text_editor" => {
-                            match parse_text_edit(args) {
-                                Ok(action) => match text_edit(action).await {
-                                    Ok(o) => format!("[text_editor ok]\n{}", o),
-                                    Err(e) => format!("[text_editor error] {}", e),
-                                },
-                                Err(e) => format!("[text_editor error] {}", e),
-                            }
-                        }
-                        other => {
-                            format!("[error] unknown tool: {}", other)
-                        }
+                    // Execute tool through registry
+                    let tool_result = match self.tool_registry.execute_tool(tool_name, args).await {
+                        Ok(result) => result,
+                        Err(e) => format!("[error] {}", e),
                     };
 
                     // Log tool result
@@ -394,28 +402,10 @@ impl MessageHandler {
                 };
                 self.send_tool_message(&tool_description, &tool_name, Some(&args)).await?;
 
-                // Execute
-                let tool_result = match tool_name.as_str() {
-                    "bash" => {
-                        let cmd = args
-                            .get("command").and_then(|v| v.as_str())
-                            .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                            .unwrap_or("");
-                        match run_bash(cmd).await {
-                            Ok(o) => format!("[bash ok]\n{}", o),
-                            Err(e) => format!("[bash error] {}", e),
-                        }
-                    }
-                    "text_editor" => {
-                        match parse_text_edit(&args) {
-                            Ok(action) => match text_edit(action).await {
-                                Ok(o) => format!("[text_editor ok]\n{}", o),
-                                Err(e) => format!("[text_editor error] {}", e),
-                            },
-                            Err(e) => format!("[text_editor error] {}", e),
-                        }
-                    }
-                    other => format!("[error] unknown tool: {}", other),
+                // Execute tool through registry
+                let tool_result = match self.tool_registry.execute_tool(&tool_name, &args).await {
+                    Ok(result) => result,
+                    Err(e) => format!("[error] {}", e),
                 };
 
                 // Send result to Operator and add to conversation
@@ -547,6 +537,20 @@ Bash Tool Usage:
 - The bash environment persists between commands within the conversation
 - For system package management (apt-get, yum, etc.), use sudo when needed but confirm with user first
 - Example: "I need to install a package with sudo apt-get. Is that okay?" before running privileged commands
+- Python Package Management: Follow proper Python environment practices:
+  * ALWAYS use virtual environments for Python projects to avoid system conflicts
+  * Before installing packages, check if in a virtual environment: `which python`
+  * If not in venv, create one: `python3 -m venv venv` then `source venv/bin/activate`
+  * NEVER use --break-system-packages flag - use virtual environments instead
+  * For new Python projects, follow this sequence:
+    - `python3 -m venv venv`
+    - `source venv/bin/activate` 
+    - `pip install --upgrade pip`
+    - `pip install [required_packages]`
+  * For ModuleNotFoundError: create/activate venv, install missing packages, verify with `pip list`
+  * Document venv activation in any scripts you create for reproducibility
+- Command Failure Handling: If a bash command fails (shows [bash failed] or [exit_code:N] where N≠0), analyze the error and take corrective action
+- For "externally-managed-environment" errors, always create and use a virtual environment instead of forcing system-wide installs
 - All bash executions are automatically logged to /agent/logs/ and Docker logs for debugging
 
 Text Editor Tool Usage:
@@ -766,17 +770,3 @@ fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
     Some((tool, input))
 }
 
-fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> {
-    // Normalize common alias keys before deserializing to the enum
-    let mut v = input.clone();
-    if let Some(obj) = v.as_object_mut() {
-        // Accept "file" or "file_path" as alias for "path"
-        if !obj.contains_key("path") {
-            if let Some(p) = obj.get("file").cloned().or_else(|| obj.get("file_path").cloned()) {
-                obj.insert("path".to_string(), p);
-            }
-        }
-    }
-    let action: TextEditAction = serde_json::from_value(v)?;
-    Ok(action)
-}

@@ -360,7 +360,7 @@
             {:else}
               <div class="d-flex align-items-center justify-content-center h-100 p-4">
                 <div class="text-center">
-                  <div class="display-6 fw-bold mb-2">No Content</div>
+                  <div class="h4 fw-bold mb-2">No Content</div>
                   <div class="text-body text-opacity-75 mb-3">This agent has no live page to display.</div>
                   {#if frameUrl}
                     <a class="btn btn-outline-theme btn-sm" href={frameUrl} target="_blank" rel="noopener">Open in new tab</a>
@@ -371,7 +371,7 @@
           {:else if stateStr === 'slept'}
             <div class="d-flex align-items-center justify-content-center h-100 p-4">
               <div class="text-center">
-                <div class="display-6 fw-bold mb-2">Agent is Sleeping</div>
+                <div class="h4 fw-bold mb-2">Agent is Sleeping</div>
                 <div class="text-body text-opacity-75 mb-3">Wake the agent to view live content.</div>
                 <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
               </div>
@@ -379,7 +379,7 @@
           {:else}
             <div class="d-flex align-items-center justify-content-center h-100 p-4">
               <div class="text-center">
-                <div class="display-6 fw-bold mb-2">Agent Not Ready</div>
+                <div class="h4 fw-bold mb-2">Agent Not Ready</div>
                 <div class="text-body text-opacity-75">This agent is initializing or has been deleted.</div>
               </div>
             </div>

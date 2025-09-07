@@ -1,5 +1,6 @@
 use super::api::RaworcClient;
 use super::error::{HostError, Result};
+use super::tool_registry::ToolRegistry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -28,22 +29,22 @@ pub struct ChatMessage {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum ToolType {
+pub enum ToolType {
     Function,
 }
 
 #[derive(Debug, Serialize)]
-struct ToolFunction {
-    name: String,
-    description: String,
-    parameters: serde_json::Value,
+pub struct ToolFunction {
+    pub name: String,
+    pub description: String,
+    pub parameters: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
-struct ToolDef {
+pub struct ToolDef {
     #[serde(rename = "type")]
-    typ: ToolType,
-    function: ToolFunction,
+    pub typ: ToolType,
+    pub function: ToolFunction,
 }
 
 #[derive(Debug, Serialize)]
@@ -112,6 +113,15 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
     ) -> Result<String> {
+        self.complete_with_registry(messages, system_prompt, None).await
+    }
+
+    pub async fn complete_with_registry(
+        &self,
+        messages: Vec<ChatMessage>,
+        system_prompt: Option<String>,
+        tool_registry: Option<&ToolRegistry>,
+    ) -> Result<String> {
         // Build chat messages for Ollama
         let mut chat_messages: Vec<ChatRequestMessage> = Vec::new();
         if let Some(sp) = system_prompt.as_ref() {
@@ -143,75 +153,80 @@ impl OllamaClient {
             return Err(HostError::Model("No messages provided".to_string()));
         }
 
-        // Clean tool definitions following Ollama cookbook standards
-        let tools = vec![
-            ToolDef {
-                typ: ToolType::Function,
-                function: ToolFunction {
-                    name: "bash".to_string(),
-                    description: "Execute a bash shell command in the /agent directory".to_string(),
-                    parameters: serde_json::json!({
-                        "type": "object",
-                        "properties": {
-                            "command": {
-                                "type": "string", 
-                                "description": "The bash command to execute"
-                            }
-                        },
-                        "required": ["command"]
-                    }),
+        // Use dynamic tool definitions from registry if available, otherwise fallback to static tools
+        let tools = if let Some(registry) = tool_registry {
+            registry.generate_ollama_tools().await
+        } else {
+            // Fallback to static tool definitions for backward compatibility
+            vec![
+                ToolDef {
+                    typ: ToolType::Function,
+                    function: ToolFunction {
+                        name: "bash".to_string(),
+                        description: "Execute a bash shell command in the /agent directory".to_string(),
+                        parameters: serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string", 
+                                    "description": "The bash command to execute"
+                                }
+                            },
+                            "required": ["command"]
+                        }),
+                    },
                 },
-            },
-            ToolDef {
-                typ: ToolType::Function,
-                function: ToolFunction {
-                    name: "text_editor".to_string(),
-                    description: "Perform text editing operations on files in the /agent directory".to_string(),
-                    parameters: serde_json::json!({
-                        "type": "object",
-                        "properties": {
-                            "action": {
-                                "type": "string", 
-                                "enum": ["view", "create", "str_replace", "insert"],
-                                "description": "The editing action to perform"
+                ToolDef {
+                    typ: ToolType::Function,
+                    function: ToolFunction {
+                        name: "text_editor".to_string(),
+                        description: "Perform text editing operations on files in the /agent directory".to_string(),
+                        parameters: serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "action": {
+                                    "type": "string", 
+                                    "enum": ["view", "create", "str_replace", "insert"],
+                                    "description": "The editing action to perform"
+                                },
+                                "path": {
+                                    "type": "string",
+                                    "description": "The file path relative to /agent"
+                                },
+                                "content": {
+                                    "type": "string",
+                                    "description": "Content for create/insert operations"
+                                },
+                                "target": {
+                                    "type": "string",
+                                    "description": "Text to find for str_replace operation"
+                                },
+                                "replacement": {
+                                    "type": "string",
+                                    "description": "Replacement text for str_replace operation"
+                                },
+                                "line": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Line number for insert operation"
+                                },
+                                "start_line": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Start line for view operation"
+                                },
+                                "end_line": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "End line for view operation"
+                                }
                             },
-                            "path": {
-                                "type": "string",
-                                "description": "The file path relative to /agent"
-                            },
-                            "content": {
-                                "type": "string",
-                                "description": "Content for create/insert operations"
-                            },
-                            "target": {
-                                "type": "string",
-                                "description": "Text to find for str_replace operation"
-                            },
-                            "replacement": {
-                                "type": "string",
-                                "description": "Replacement text for str_replace operation"
-                            },
-                            "line": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "description": "Line number for insert operation"
-                            },
-                            "start_line": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "description": "Start line for view operation"
-                            },
-                            "end_line": {
-                                "type": "integer",
-                                "minimum": 1,
-                                "description": "End line for view operation"
-                            }
-                        },
-                        "required": ["action", "path"]
-                    }),
+                            "required": ["action", "path"]
+                        }),
+                    },
                 },
-            },
-        ];
+            ]
+        };
 
         let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         let req = ChatRequest {
