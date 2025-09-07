@@ -340,9 +340,9 @@
   <div class="col-12 col-xl-4 d-flex flex-column h-100" style="min-height: 0;">
     <Card class="w-100 h-100">
       <div class="card-header fw-bold d-flex align-items-center gap-2">
-        <span>Live Content</span>
+        <span>Content</span>
         {#if agent && (agent.content_port || agent.contentPort)}
-          <span class="badge bg-light text-dark">port {(agent.content_port || agent.contentPort)}</span>
+          <span class="badge bg-light text-dark">{(agent.content_port || agent.contentPort)}</span>
         {/if}
         {#if stateStr === 'idle' || stateStr === 'busy'}
           <button class="btn btn-outline-secondary btn-sm ms-auto" on:click={refreshFrameUrl} aria-label="Refresh content">Refresh</button>
