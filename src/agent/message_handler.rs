@@ -506,6 +506,20 @@ impl MessageHandler {
                             if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
                                 if msg_type == "tool_result" {
                                     let tool_name = metadata.get("tool_type").and_then(|v| v.as_str()).map(|s| s.to_string());
+                                    
+                                    // Special handling for tool errors that break conversation flow
+                                    if m.content.starts_with("[error]") || m.content.contains("not found") {
+                                        // Tool errors should be handled as assistant messages with clear error context
+                                        // to avoid confusing the model about tool calling flow
+                                        let error_content = format!("I encountered an error: {}", m.content);
+                                        return ChatMessage { 
+                                            role: "assistant".to_string(), 
+                                            content: error_content, 
+                                            name: None 
+                                        };
+                                    }
+                                    
+                                    // Normal successful tool results
                                     return ChatMessage { 
                                         role: "tool".to_string(), 
                                         content: m.content.clone(), 

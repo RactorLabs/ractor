@@ -408,7 +408,7 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if m.metadata && m.metadata.thinking}
-                        <div class="small fst-italic text-body text-opacity-50 mt-1 mb-2">{m.metadata.thinking}</div>
+                        <div class="small fst-italic text-body text-opacity-50 mt-1 mb-2" style="white-space: pre-wrap;">{m.metadata.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div class="markdown-wrap">
@@ -519,8 +519,24 @@
     }
     :global(.markdown-body) { white-space: normal; }
     :global(.markdown-body p) { margin-bottom: 0.5rem; }
-    :global(.markdown-body pre) { background: #111; color: #fff; padding: 0.5rem; border-radius: 0.25rem; overflow: auto; }
-    :global(.markdown-body code) { background: rgba(0,0,0,0.06); padding: 0.1rem 0.25rem; border-radius: 0.2rem; }
+    :global(.markdown-body pre) {
+      background: #0d1117; /* dark theme for fenced blocks */
+      color: #e6edf3;
+      padding: 0.5rem;
+      border-radius: 0.25rem;
+      overflow: auto;
+    }
+    :global(.markdown-body pre code) {
+      background: transparent !important; /* avoid white inline code bg inside pre */
+      color: inherit;
+      padding: 0;
+      border-radius: 0;
+    }
+    :global(.markdown-body code) {
+      background: rgba(0,0,0,0.06);
+      padding: 0.1rem 0.25rem;
+      border-radius: 0.2rem;
+    }
     :global(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
     :global(.markdown-body th), :global(.markdown-body td) { border: 1px solid var(--bs-border-color); padding: 0.375rem 0.5rem; }
     :global(.markdown-body thead th) { background: var(--bs-light); }
