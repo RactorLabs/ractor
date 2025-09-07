@@ -463,7 +463,7 @@
                       {#if metaOf(m)?.thinking}
                         <details class="mt-1 mb-2">
                           <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            Thought{#if metaOf(m)?.thinking_seconds} for {fmtSeconds(metaOf(m)?.thinking_seconds)}{/if}
+                            Thought {#if metaOf(m)?.thinking_seconds}for {fmtSeconds(metaOf(m)?.thinking_seconds)}{/if}
                           </summary>
                           <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
                         </details>
