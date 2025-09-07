@@ -431,8 +431,10 @@ impl MessageHandler {
                     if let Some(obj) = result_metadata.as_object_mut() {
                         obj.insert("args".to_string(), args.clone());
                     }
+                    // Truncate large tool results for message display
+                    let display_result = self.truncate_tool_result(&tool_result);
                     if let Err(e) = self.api_client
-                        .send_message(tool_result.clone(), Some(result_metadata))
+                        .send_message(display_result, Some(result_metadata))
                         .await
                     {
                         warn!("Failed to send tool result message: {}", e);
@@ -500,8 +502,10 @@ impl MessageHandler {
                 if let Some(obj) = result_metadata.as_object_mut() {
                     obj.insert("args".to_string(), args.clone());
                 }
+                // Truncate large tool results for message display
+                let display_result = self.truncate_tool_result(&tool_result);
                 if let Err(e) = self.api_client
-                    .send_message(tool_result.clone(), Some(result_metadata))
+                    .send_message(display_result, Some(result_metadata))
                     .await
                 {
                     warn!("Failed to send tool result message: {}", e);
@@ -720,6 +724,22 @@ You have complete freedom to execute commands, install packages, and create solu
 
 NEVER just think or plan without taking action. If you identify something that needs to be done, DO IT with your tools immediately.
 
+## Command Efficiency Guidelines
+
+**Use specific commands** instead of broad ones to avoid large outputs:
+- `ls /agent/code` instead of `ls -R /agent/code` (avoid recursive when not needed)
+- `ls /agent/code/*.py` to see only Python files
+- `find /agent/code -name "*.py" -maxdepth 2` for targeted searching
+- `head -20 file.log` instead of `cat file.log` for large files
+- `du -sh /agent/code/*` instead of `ls -la -R` for directory sizes
+
+**When you need recursive listings**: Be specific about depth and file types:
+- `find /agent/code -type f -name "*.py"` (only Python files)
+- `tree -L 2 /agent/code` (limit depth to 2 levels)
+- `ls -la /agent/code/` first, then drill down into specific subdirectories
+
+**For debugging**: Use targeted commands that give useful info without overwhelming output.
+
 "#,
         );
 
@@ -776,6 +796,30 @@ NEVER just think or plan without taking action. If you identify something that n
             .await?;
 
         Ok(())
+    }
+
+    fn truncate_tool_result(&self, tool_result: &str) -> String {
+        const MAX_DISPLAY_LENGTH: usize = 8192; // 8KB limit for message display
+        const TRUNCATION_PREVIEW: usize = 1024; // Show first 1KB, then summary
+        
+        if tool_result.len() <= MAX_DISPLAY_LENGTH {
+            return tool_result.to_string();
+        }
+        
+        // Count lines and estimate content for summary
+        let lines: Vec<&str> = tool_result.lines().collect();
+        let line_count = lines.len();
+        let char_count = tool_result.len();
+        
+        // Take first portion and add summary
+        let preview = tool_result.chars().take(TRUNCATION_PREVIEW).collect::<String>();
+        
+        format!(
+            "{}\n\n[OUTPUT TRUNCATED - {} total lines, {} total characters]\n[Use more specific commands like 'ls /agent/code' (no -R) to avoid large outputs]\n[Full output available in agent logs]",
+            preview,
+            line_count,
+            char_count
+        )
     }
 }
 
