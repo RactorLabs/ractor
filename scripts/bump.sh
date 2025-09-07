@@ -38,7 +38,7 @@ fi
 
 # Update Operator docs badge (safe regex)
 if [[ -f operator/src/routes/docs/+page.svelte ]]; then
-  perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte || true
+  sed -i "s/const API_VERSION = '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\([^']*\)'/const API_VERSION = '$new\1'/" operator/src/routes/docs/+page.svelte || true
   # Fallback: if corrupted, replace the line following the version comment
   if ! rg -n "const\\s+API_VERSION" operator/src/routes/docs/+page.svelte >/dev/null; then
     python3 - "$new" <<'PY'
