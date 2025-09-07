@@ -342,7 +342,7 @@
   async function remixAgent() {
     try {
       const cur = String(name || '').trim();
-      const suggestion = (cur && /^[a-z0-9-]+$/.test(cur)) ? `${cur}-remix` : 'new-agent';
+      const suggestion = nextRemixName(cur);
       const next = typeof window !== 'undefined' ? window.prompt('Enter new agent name', suggestion) : null;
       if (!next) return;
       const newName = String(next).trim();
@@ -362,6 +362,45 @@
     } catch (e) {
       error = e.message || String(e);
     }
+  }
+
+  // Generate a default remix name by adding or incrementing a numeric suffix
+  function nextRemixName(cur) {
+    const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+    const basic = (s) => (s && typeof s === 'string') ? s.toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
+    let s = basic(cur).replace(/^-+/, '').replace(/-+$/, '');
+    if (!s) return 'new-agent-1';
+
+    // If ends with -digits, increment, else add -1
+    const m = s.match(/^(.*?)-(\d+)$/);
+    let candidate;
+    if (m) {
+      const base = m[1];
+      const num = parseInt(m[2] || '0', 10) + 1;
+      candidate = `${base}-${num}`;
+    } else {
+      candidate = `${s}-1`;
+    }
+
+    // Enforce max length 63 by trimming base if needed
+    if (candidate.length > 63) {
+      const parts = candidate.split('-');
+      const suffix = parts.pop();
+      let base = parts.join('-');
+      const keep = Math.max(1, 63 - 1 - String(suffix).length); // at least 1 char + '-' + suffix
+      base = base.slice(0, keep).replace(/-+$/, '');
+      candidate = `${base}-${suffix}`;
+    }
+
+    // Ensure it matches the platform constraints, else fallback
+    if (!valid.test(candidate)) {
+      // Pad start if needed and strip invalid ending
+      candidate = candidate.replace(/^[^a-z]+/, 'a').replace(/[^a-z0-9]$/, '0');
+      if (!valid.test(candidate)) {
+        candidate = 'new-agent-1';
+      }
+    }
+    return candidate;
   }
 
   
