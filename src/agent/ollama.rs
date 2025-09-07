@@ -402,7 +402,9 @@ impl OllamaClient {
             if msg.content.len() <= 200 {
                 tracing::info!("Message[{}] content: {:?}", i, msg.content);
             } else {
-                tracing::info!("Message[{}] content preview: {:?}...", i, &msg.content[..200]);
+                // Use char boundary safe truncation
+                let preview = msg.content.chars().take(200).collect::<String>();
+                tracing::info!("Message[{}] content preview: {:?}...", i, preview);
             }
         }
         
