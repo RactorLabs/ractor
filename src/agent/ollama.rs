@@ -177,9 +177,9 @@ impl OllamaClient {
         let timeout_secs = match std::env::var("OLLAMA_TIMEOUT_SECS").ok() {
             Some(timeout_str) => match timeout_str.parse::<u64>() {
                 Ok(timeout) => {
-                    if timeout < 10 || timeout > 3600 {
+                    if timeout < 10 || timeout > 7200 {
                         return Err(HostError::Model(format!(
-                            "Invalid OLLAMA_TIMEOUT_SECS '{}'. Must be between 10 and 3600 seconds",
+                            "Invalid OLLAMA_TIMEOUT_SECS '{}'. Must be between 10 and 7200 seconds",
                             timeout
                         )));
                     }
@@ -192,7 +192,7 @@ impl OllamaClient {
                     )));
                 }
             },
-            None => 600,
+            None => 1800, // 30 minutes default for large context inference
         };
 
         let client = Client::builder()
