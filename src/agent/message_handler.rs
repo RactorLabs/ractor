@@ -83,6 +83,11 @@ impl MessageHandler {
                         )
                         .await;
 
+                    // Register harmony format aliases
+                    registry
+                        .register_alias("functions", "bash", None)
+                        .await;
+
                     info!("Registered built-in tools and aliases");
                 }
             });

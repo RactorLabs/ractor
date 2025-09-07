@@ -105,19 +105,26 @@ impl ToolRegistry {
 
     /// Execute a tool with the given arguments
     pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<String> {
+        // Strip harmony format syntax from tool name (e.g. "container.exec<|channel|>commentary" -> "container.exec")
+        let clean_name = if let Some(channel_idx) = name.find("<|channel|>") {
+            &name[..channel_idx]
+        } else {
+            name
+        };
+        
         // Map parameters if it's an alias
         let (canonical_name, mapped_args) = {
             let aliases = self.aliases.read().await;
-            if let Some(canonical_name) = aliases.get(name) {
+            if let Some(canonical_name) = aliases.get(clean_name) {
                 let mappers = self.mappers.read().await;
-                let mapped_args = if let Some(mapper) = mappers.get(name) {
+                let mapped_args = if let Some(mapper) = mappers.get(clean_name) {
                     mapper.map(args)
                 } else {
                     args.clone()
                 };
                 (canonical_name.clone(), mapped_args)
             } else {
-                (name.to_string(), args.clone())
+                (clean_name.to_string(), args.clone())
             }
         };
 

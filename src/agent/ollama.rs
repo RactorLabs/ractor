@@ -373,13 +373,20 @@ impl OllamaClient {
         };
 
         let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        // For tool calling, disable thinking as it may cause parsing issues
+        let include_thinking = tools.is_empty(); // Only include thinking when no tools are present
+        
         let req = ChatRequest {
             model: &model,
             messages: chat_messages,
             stream: false,
             tools: if tools.is_empty() { None } else { Some(tools) },
             reasoning: self.reasoning_effort.as_ref().map(|effort| Reasoning { effort: effort.clone() }),
-            thinking: Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget }),
+            thinking: if include_thinking { 
+                Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget })
+            } else { 
+                None 
+            },
         };
 
         // Debug: Log the full request being sent to Ollama
@@ -431,6 +438,15 @@ impl OllamaClient {
             .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
 
         tracing::info!("Raw Ollama response: {}", response_text);
+        
+        // Additional debug: Check if this is a tool calling error
+        if response_text.contains("error parsing tool call") {
+            tracing::error!("=== OLLAMA TOOL CALL PARSING ERROR ===");
+            tracing::error!("Full error response: {}", response_text);
+            tracing::error!("This suggests GPT-OSS is outputting raw function calls instead of JSON");
+            tracing::error!("Consider configuring Ollama for harmony format or updating tool definitions");
+            tracing::error!("=== END ERROR DEBUG ===");
+        }
 
         let parsed: ChatResponse = serde_json::from_str(&response_text).map_err(|e| {
             HostError::Model(format!(
