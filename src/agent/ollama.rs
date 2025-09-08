@@ -1,5 +1,6 @@
 use super::api::RaworcClient;
 use super::error::{HostError, Result};
+use super::harmony_client::HarmonyClient;
 use super::tool_registry::ToolRegistry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -12,6 +13,7 @@ pub struct OllamaClient {
     api_client: Option<Arc<RaworcClient>>, // kept for parity; unused currently
     reasoning_effort: Option<String>,
     thinking_budget: Option<u32>,
+    harmony_client: Option<HarmonyClient>,
 }
 
 #[derive(Debug, Serialize)]
@@ -236,12 +238,22 @@ impl OllamaClient {
             None => Some(4096),
         };
 
+        // Initialize harmony client for GPT-OSS format support
+        let harmony_client = match HarmonyClient::new() {
+            Ok(client) => Some(client),
+            Err(e) => {
+                tracing::warn!("Failed to initialize harmony client: {}, proceeding without harmony format support", e);
+                None
+            }
+        };
+
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             api_client: None,
             reasoning_effort,
             thinking_budget,
+            harmony_client,
         })
     }
 
@@ -464,8 +476,17 @@ impl OllamaClient {
         );
 
         // Handle structured tool calls first (GPT-OSS native format)
-        // Check for harmony format channels in content
-        let (final_content, analysis_thinking, commentary_tools) = self.parse_harmony_channels(&parsed.message.content);
+        // Check for harmony format channels using harmony client
+        let (final_content, analysis_thinking, commentary_tools) = if let Some(ref harmony) = self.harmony_client {
+            let harmony_response = harmony.detect_harmony_channels(&parsed.message.content);
+            tracing::info!("Harmony format detected: final_len={}, thinking={}, tools={}", 
+                harmony_response.final_content.len(), 
+                harmony_response.analysis_thinking.is_some(),
+                harmony_response.tool_calls_found);
+            (harmony_response.final_content, harmony_response.analysis_thinking, None)
+        } else {
+            self.parse_harmony_channels(&parsed.message.content)
+        };
         
         // Use harmony-parsed content if available, otherwise use original
         let response_content = if !final_content.is_empty() {

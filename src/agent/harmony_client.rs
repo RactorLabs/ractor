@@ -3,6 +3,7 @@ use openai_harmony::{load_harmony_encoding, HarmonyEncodingName};
 use tracing::warn;
 
 /// Harmony format client for GPT-OSS models
+#[derive(Clone)]
 pub struct HarmonyClient {
     _encoding: openai_harmony::HarmonyEncoding,
 }
