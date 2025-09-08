@@ -740,6 +740,9 @@ NEVER just think or plan without taking action. If you identify something that n
 
 **For debugging**: Use targeted commands that give useful info without overwhelming output.
 
+**NEVER USE**: `ls -R /agent/code` - This will list the entire Python virtual environment (127KB+ output)
+**Instead use**: `ls /agent/code` to see top-level files only, then explore specific directories as needed
+
 "#,
         );
 
