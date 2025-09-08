@@ -4,6 +4,7 @@ mod builtin_tools;
 mod config;
 mod error;
 mod guardrails;
+mod harmony_client;
 mod message_handler;
 mod ollama;
 mod tool_registry;
