@@ -1,6 +1,6 @@
 use super::api::RaworcClient;
 use super::error::{HostError, Result};
-use super::harmony_client::HarmonyClient;
+use super::harmony_client::{HarmonyClient, HarmonyTool};
 use super::tool_registry::ToolRegistry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -85,6 +85,25 @@ struct Thinking {
 #[derive(Debug, Serialize)]
 struct RequestOptions {
     num_ctx: u32,
+}
+
+#[derive(Debug, Serialize)]
+struct GenerateRequest {
+    model: String,
+    prompt: String,
+    stream: bool,
+    options: Option<GenerateOptions>,
+}
+
+#[derive(Debug, Serialize)]
+struct GenerateOptions {
+    num_ctx: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct GenerateResponse {
+    response: String,
+    done: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -276,7 +295,93 @@ impl OllamaClient {
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
     ) -> Result<ModelResponse> {
+        // Try harmony format first if available
+        if let Some(ref harmony) = self.harmony_client {
+            if let Some(registry) = tool_registry {
+                return self.complete_with_harmony(messages, system_prompt, registry).await;
+            }
+        }
+        
+        // Fallback to legacy JSON format
         self.complete_with_tool_execution(messages, system_prompt, tool_registry, false).await
+    }
+    
+    /// Complete using harmony token format with Ollama generate API
+    async fn complete_with_harmony(
+        &self,
+        messages: Vec<ChatMessage>,
+        system_prompt: Option<String>,
+        registry: &ToolRegistry,
+    ) -> Result<ModelResponse> {
+        let harmony = self.harmony_client.as_ref().unwrap();
+        
+        // Convert tools to harmony format
+        let harmony_tools = self.convert_registry_to_harmony_tools(registry).await;
+        
+        // Render conversation as tokens
+        let tokens = harmony.render_conversation_tokens(messages, system_prompt, harmony_tools)?;
+        
+        // Convert tokens to string for Ollama generate API
+        let token_string = tokens.iter().map(|t| t.to_string()).collect::<Vec<_>>().join(" ");
+        
+        // Send to Ollama generate API instead of chat API
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        let req = GenerateRequest {
+            model,
+            prompt: token_string,
+            stream: false,
+            options: Some(GenerateOptions { num_ctx: 131072 }),
+        };
+        
+        // Log request to file
+        self.log_ollama_generate_request(&req).await;
+        
+        let url = format!("{}/api/generate", self.base_url);
+        let resp = self
+            .client
+            .post(&url)
+            .json(&req)
+            .send()
+            .await
+            .map_err(|e| HostError::Request(e))?;
+            
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<failed to read response>".to_string());
+            return Err(HostError::Model(format!(
+                "Ollama generate error ({}): {}",
+                status, text
+            )));
+        }
+        
+        let response_text = resp
+            .text()
+            .await
+            .map_err(|e| HostError::Model(format!("Failed to read generate response: {}", e)))?;
+            
+        self.log_ollama_response(&response_text).await;
+        
+        let parsed: GenerateResponse = serde_json::from_str(&response_text)
+            .map_err(|e| HostError::Model(format!("Failed to parse generate response: {}", e)))?;
+            
+        // Parse harmony response
+        let harmony_response = harmony.detect_harmony_channels(&parsed.response);
+        
+        tracing::info!(
+            "Harmony generate response: final_len={}, thinking={}, tools={}",
+            harmony_response.final_content.len(),
+            harmony_response.analysis_thinking.is_some(),
+            harmony_response.tool_calls_found
+        );
+        
+        Ok(ModelResponse {
+            content: harmony_response.final_content,
+            thinking: harmony_response.analysis_thinking,
+            tool_calls: None, // Tool calls would be parsed from commentary channel
+        })
     }
 
     pub async fn complete_with_tool_execution(
@@ -696,5 +801,39 @@ impl OllamaClient {
         if let Err(e) = tokio::fs::write(&filename, log_content).await {
             tracing::warn!("Failed to write Ollama response log to {}: {}", filename, e);
         }
+    }
+    
+    async fn log_ollama_generate_request(&self, req: &GenerateRequest) {
+        if let Ok(req_json) = serde_json::to_string_pretty(req) {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let filename = format!("/agent/logs/ollama_generate_request_{}.json", timestamp);
+            
+            let log_content = format!(
+                "=== OLLAMA GENERATE REQUEST {} ===\nModel: {}\nPrompt Length: {}\n\n{}",
+                timestamp,
+                req.model,
+                req.prompt.len(),
+                req_json
+            );
+            
+            if let Err(e) = tokio::fs::write(&filename, log_content).await {
+                tracing::warn!("Failed to write Ollama generate request log to {}: {}", filename, e);
+            }
+        }
+    }
+    
+    async fn convert_registry_to_harmony_tools(&self, registry: &ToolRegistry) -> Vec<HarmonyTool> {
+        let ollama_tools = registry.generate_ollama_tools().await;
+        
+        ollama_tools.into_iter().map(|tool| {
+            HarmonyTool {
+                name: tool.function.name,
+                description: tool.function.description,
+                parameters: tool.function.parameters,
+            }
+        }).collect()
     }
 }
