@@ -828,12 +828,16 @@ impl OllamaClient {
     async fn convert_registry_to_harmony_tools(&self, registry: &ToolRegistry) -> Vec<HarmonyTool> {
         let ollama_tools = registry.generate_ollama_tools().await;
         
-        ollama_tools.into_iter().map(|tool| {
+        let harmony_tools: Vec<HarmonyTool> = ollama_tools.into_iter().map(|tool| {
+            tracing::info!("Converting tool: '{}' -> harmony format", tool.function.name);
             HarmonyTool {
                 name: tool.function.name,
                 description: tool.function.description,
                 parameters: tool.function.parameters,
             }
-        }).collect()
+        }).collect();
+        
+        tracing::info!("Converted {} tools to harmony format", harmony_tools.len());
+        harmony_tools
     }
 }

@@ -115,9 +115,13 @@ impl HarmonyClient {
         
         // Add tool definitions as developer message if tools exist
         if !tools.is_empty() {
+            info!("Adding {} tools to harmony conversation", tools.len());
             let tools_content = self.format_tools_for_developer_message(&tools);
+            info!("Developer message content: {}", tools_content);
             let developer_msg = Message::from_role_and_content(Role::Developer, tools_content);
             harmony_messages.push(developer_msg);
+        } else {
+            info!("No tools provided for harmony conversation");
         }
         
         // Convert our chat messages
@@ -142,6 +146,12 @@ impl HarmonyClient {
         let mut content = String::from("# Tools\n\nnamespace functions {\n\n");
         
         for tool in tools {
+            // Ensure tool has valid name
+            if tool.name.is_empty() {
+                warn!("Skipping tool with empty name: {}", tool.description);
+                continue;
+            }
+            
             content.push_str(&format!(
                 "// {}\ntype {} = ({}) => any;\n\n",
                 tool.description,
@@ -151,6 +161,8 @@ impl HarmonyClient {
         }
         
         content.push_str("} // namespace functions");
+        
+        info!("Formatted {} tools for harmony developer message", tools.len());
         content
     }
     
