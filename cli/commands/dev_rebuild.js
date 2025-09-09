@@ -13,7 +13,7 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('rebuild')
-    .description('[developer convenience] Run ./scripts/rebuild.sh (for development only)')
+    .description('[development only] Run ./scripts/rebuild.sh')
     .argument('<components...>', 'Components to rebuild (server, controller, agent, operator, content, gateway)')
     .action(async (components) => {
       try {

@@ -13,7 +13,7 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('build')
-    .description('[developer convenience] Run ./scripts/build.sh (for development only)')
+    .description('[development only] Run ./scripts/build.sh')
     .argument('[args...]', 'Arguments passed to scripts/build.sh (e.g., server controller)')
     .action(async (args = []) => {
       try {
