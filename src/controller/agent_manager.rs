@@ -111,10 +111,13 @@ impl AgentManager {
             r#"
             SELECT name
             FROM agents
-            WHERE auto_sleep_at <= NOW() 
-              AND auto_sleep_at IS NOT NULL
-              AND state = 'idle'
-            ORDER BY auto_sleep_at ASC
+            WHERE state = 'idle'
+              AND (
+                (auto_sleep_at IS NOT NULL AND auto_sleep_at <= NOW())
+                OR
+                (auto_sleep_at IS NULL AND TIMESTAMPADD(SECOND, timeout_seconds, COALESCE(last_activity_at, created_at)) <= NOW())
+              )
+            ORDER BY COALESCE(auto_sleep_at, TIMESTAMPADD(SECOND, timeout_seconds, COALESCE(last_activity_at, created_at))) ASC
             LIMIT 50
             "#,
         )
