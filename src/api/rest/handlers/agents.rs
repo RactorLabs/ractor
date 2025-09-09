@@ -27,6 +27,7 @@ pub struct AgentResponse {
     pub name: String, // Primary key - no more id field
     pub created_by: String,
     pub state: String,
+    pub description: Option<String>,
     pub parent_agent_name: Option<String>, // Changed from parent_agent_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
@@ -63,6 +64,7 @@ impl AgentResponse {
             name: agent.name,
             created_by: agent.created_by,
             state: agent.state,
+            description: agent.description,
             parent_agent_name: agent.parent_agent_name,
             created_at: agent.created_at.to_rfc3339(),
             last_activity_at: agent.last_activity_at.map(|dt| dt.to_rfc3339()),

@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS agents (
     name VARCHAR(64) PRIMARY KEY,
     created_by VARCHAR(255) NOT NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
+    description TEXT NULL,
     parent_agent_name VARCHAR(64) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,

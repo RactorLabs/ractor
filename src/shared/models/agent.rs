@@ -8,6 +8,7 @@ pub struct Agent {
     pub name: String, // Primary key - no more UUID id
     pub created_by: String,
     pub state: String,
+    pub description: Option<String>,
     pub parent_agent_name: Option<String>, // Changed from parent_agent_id
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
@@ -31,6 +32,8 @@ pub struct CreateAgentRequest {
     pub metadata: serde_json::Value,
     #[serde(deserialize_with = "deserialize_required_name")] // Required for now
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(default, deserialize_with = "deserialize_tags_vec")]
     pub tags: Vec<String>,
     #[serde(default)]
@@ -112,6 +115,8 @@ pub struct UpdateAgentRequest {
     // Removed name field - names cannot be changed in v0.4.0
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_tags_vec")]
     pub tags: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
@@ -560,7 +565,7 @@ impl Agent {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Agent>, sqlx::Error> {
         sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_agent_name,
+            SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
@@ -578,7 +583,7 @@ impl Agent {
     ) -> Result<Option<Agent>, sqlx::Error> {
         sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_agent_name,
+            SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
@@ -626,12 +631,13 @@ impl Agent {
         // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO agents (name, created_by, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agents (name, created_by, description, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&agent_name)
         .bind(created_by)
+        .bind(&req.description)
         .bind(&req.metadata)
         .bind(serde_json::json!(req.tags))
         .bind(idle_timeout)
@@ -672,14 +678,15 @@ impl Agent {
         sqlx::query(
             r#"
             INSERT INTO agents (
-                name, created_by, parent_agent_name,
+                name, created_by, description, parent_agent_name,
                 metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
         .bind(created_by) // Use actual remixer as owner
+        .bind(&parent.description)
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .bind(&parent.tags)
@@ -760,6 +767,9 @@ impl Agent {
         if req.metadata.is_some() {
             updates.push(" metadata = ?".to_string());
         }
+        if req.description.is_some() {
+            updates.push(" description = ?".to_string());
+        }
         if req.tags.is_some() {
             updates.push(" tags = ?".to_string());
         }
@@ -782,6 +792,9 @@ impl Agent {
 
         if let Some(metadata) = req.metadata {
             query = query.bind(metadata);
+        }
+        if let Some(description) = req.description {
+            query = query.bind(description);
         }
         if let Some(tags) = req.tags {
             query = query.bind(serde_json::json!(tags));
@@ -877,7 +890,7 @@ impl Agent {
     pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Agent>, sqlx::Error> {
         sqlx::query_as::<_, Agent>(
             r#"
-            SELECT name, created_by, state, parent_agent_name,
+            SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port

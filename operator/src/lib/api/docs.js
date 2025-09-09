@@ -121,6 +121,7 @@ export function getApiDocs(base) {
       ] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
+        { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
         { in: 'body', name: 'secrets', type: 'object<string,string>', required: false, desc: 'Key/value secrets map (default: empty)' },
         { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
@@ -135,6 +136,7 @@ export function getApiDocs(base) {
       { method: 'PUT', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Update agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
+        { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Update description' },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
         { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
       ] },

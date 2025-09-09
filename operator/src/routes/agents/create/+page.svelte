@@ -33,7 +33,7 @@
   let name = genName();
   let idleTimeoutSeconds = 300; // default 5 minutes
   let busyTimeoutSeconds = 900; // default 15 minutes
-  let metadataText = '{\n  "description": ""\n}';
+  let metadataText = '{}';
   // Tags input (comma-separated, alphanumeric only per tag)
   let tagsInput = '';
   function parseTags() {
@@ -50,6 +50,7 @@
   const sampleInstructions = `# Agent Instructions\n\n- Greet the user and explain your purpose.\n- You can run shell commands and edit files via tools when asked.\n- Ask clarifying questions before taking destructive actions.\n- Keep responses concise unless the user requests more detail.`;
   const sampleSetup = `#!/usr/bin/env bash\n# Optional setup script\n# Install packages or prepare files needed by your agent\nset -euo pipefail\n\n# examples:\n# apt-get update && apt-get install -y jq ripgrep\n# echo \"Hello from setup\" > /agent/content/hello.txt`;
   let prompt = '';
+  let description = '';
 
   // Secrets as dynamic rows
   let secrets = [{ key: '', val: '' }];
@@ -87,6 +88,7 @@
 
       const body = {
         name,
+        description: description?.trim() ? description : null,
         metadata,
         tags: parseTags(),
         idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
@@ -123,7 +125,7 @@
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
         <form on:submit|preventDefault={submit}>
           <div class="row g-3">
-            <div class="col-12 col-md-6">
+            <div class="col-12">
               <label class="form-label" for="agent-name">Name</label>
               <div class="input-group">
                 <input id="agent-name" class="form-control" bind:value={name} />
@@ -131,6 +133,11 @@
               </div>
               <div class="form-text">Lowercase letters, digits, dashes; max 63.</div>
             </div>
+            <div class="col-12">
+              <label class="form-label" for="description">Description (optional)</label>
+              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this agent" />
+            </div>
+            <!-- Timeouts moved to a new line below name -->
             <div class="col-12 col-md-3">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
@@ -146,11 +153,6 @@
               <label class="form-label" for="tags">Tags (comma-separated)</label>
               <input id="tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
               <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label" for="metadata">Metadata (JSON)</label>
-              <textarea id="metadata" class="form-control font-monospace" rows="4" bind:value={metadataText}></textarea>
             </div>
 
             <div class="col-12 col-md-6">
@@ -182,6 +184,12 @@
                 {/each}
                 <div class="col-12"><button class="btn btn-outline-secondary btn-sm" on:click|preventDefault={addSecretRow}>+ Add secret</button></div>
               </div>
+            </div>
+
+            <!-- Metadata moved to the bottom of the form -->
+            <div class="col-12">
+              <label class="form-label" for="metadata">Metadata (JSON)</label>
+              <textarea id="metadata" class="form-control font-monospace" rows="4" bind:value={metadataText}></textarea>
             </div>
 
             <div class="col-12 d-flex gap-2">
