@@ -310,7 +310,8 @@
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, {
         method: 'POST',
-        body: JSON.stringify({ content: true })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: true, secrets: true, content: true })
       });
       if (!res.ok) throw new Error(res?.data?.error || `Publish failed (HTTP ${res.status})`);
       if (agent) {

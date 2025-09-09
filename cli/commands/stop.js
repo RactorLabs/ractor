@@ -101,25 +101,7 @@ module.exports = (program) => {
           console.log();
         }
 
-        if (options.volumes) {
-          console.log(chalk.blue('[INFO] ') + 'Removing volumes...');
-          for (const v of ['raworc_mysql_data','raworc_content_data','raworc_ollama_data','raworc_logs']) {
-            try {
-              await docker(['volume','inspect', v], { silent: true });
-              await docker(['volume','rm', v]);
-              console.log(chalk.green('[SUCCESS] ') + `Removed volume ${v}`);
-            } catch (_) {
-              console.log(chalk.green('[SUCCESS] ') + `Volume ${v} already removed`);
-            }
-          }
-          console.log();
-        }
-
-        if (options.network) {
-          console.log(chalk.blue('[INFO] ') + 'Removing Docker network...');
-          try { await docker(['network','rm','raworc_network']); console.log(chalk.green('[SUCCESS] ') + 'Removed raworc_network'); } catch(_) { console.log(chalk.green('[SUCCESS] ') + 'Network raworc_network already removed'); }
-          console.log();
-        }
+        // No volumes or network removal here by design
 
         console.log(chalk.blue('[INFO] ') + 'Checking remaining services...');
         console.log();

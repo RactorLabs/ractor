@@ -365,6 +365,11 @@ impl RaworcClient {
             .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&serde_json::json!({
+                "code": true,
+                "secrets": true,
+                "content": true
+            }))
             .send()
             .await?;
 
