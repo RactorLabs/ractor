@@ -21,13 +21,21 @@ for COMPONENT in "$@"; do
   echo "[INFO] Rebuilding component: $COMPONENT"
 
   echo "[INFO] Stopping $COMPONENT..."
-  raworc stop "$COMPONENT" || true
+  if command -v raworc >/dev/null 2>&1; then
+    raworc stop "$COMPONENT" || true
+  else
+    echo "[WARNING] raworc CLI not found; skipping stop for $COMPONENT" >&2
+  fi
 
   echo "[INFO] Building $COMPONENT..."
   bash "$(dirname "$0")/build.sh" "$COMPONENT"
 
   echo "[INFO] Starting $COMPONENT..."
-  raworc start "$COMPONENT"
+  if command -v raworc >/dev/null 2>&1; then
+    raworc start "$COMPONENT" || true
+  else
+    echo "[WARNING] raworc CLI not found; skipping start for $COMPONENT" >&2
+  fi
 
   echo "[SUCCESS] Rebuilt $COMPONENT"
 done
