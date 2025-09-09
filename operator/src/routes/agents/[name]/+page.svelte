@@ -365,6 +365,26 @@
     }
   }
 
+  // Delete the current agent after confirmation
+  async function deleteAgent() {
+    try {
+      const cur = String(name || '').trim();
+      const promptMsg = `Type the agent name to confirm delete`;
+      const typed = typeof window !== 'undefined' ? window.prompt(promptMsg, '') : null;
+      if (typed == null) return; // cancelled
+      if (String(typed).trim() !== cur) {
+        error = 'Deletion cancelled: name did not match.';
+        return;
+      }
+      const res = await apiFetch(`/agents/${encodeURIComponent(cur)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(res?.data?.error || `Delete failed (HTTP ${res.status})`);
+      // Navigate back to agents list
+      goto('/agents');
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
   // Generate a default remix name by adding or incrementing a numeric suffix
   function nextRemixName(cur) {
     const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
@@ -439,6 +459,8 @@
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
+            <li><hr class="dropdown-divider" /></li>
+            <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
           </ul>
         </div>
         <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
