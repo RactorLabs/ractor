@@ -892,7 +892,7 @@ pub async fn update_agent_to_busy(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to busy using the new method that clears auto_sleep_at
+    // Update agent to busy: clear idle_from and set busy_from (strict busy timeout)
     Agent::update_agent_to_busy(&state.db, &agent.name)
         .await
         .map_err(|e| {
@@ -921,7 +921,7 @@ pub async fn update_agent_to_idle(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to idle using the new method that sets auto_sleep_at
+    // Update agent to idle: set idle_from and clear busy_from (idle timeout active)
     Agent::update_agent_to_idle(&state.db, &agent.name)
         .await
         .map_err(|e| {

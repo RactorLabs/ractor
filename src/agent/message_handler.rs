@@ -683,14 +683,13 @@ You are running as an Agent in the {host_name} system.
 - Operator URL: {operator_url}
 - API URL: {api_url}
 - Your Agent Name: {agent_name}
-- Your Content Port: {content_port}
-- Live Content URL: {live_url}
+- Live Content Base: {live_url}
  - Published Content URL: {published_url}
 - Published: {published_flag}
  - Published At: {published_at}
 
 Platform endpoints:
-- Content Server: {base_url}/content — public gateway that serves published agent content at a stable URL.
+- Content Server: {base_url}/content — public gateway that serves published agent content at a stable URL (path prefix /content).
 - API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
 
 About content and publishing:
@@ -701,7 +700,7 @@ About content and publishing:
 
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
-- Your live content is automatically served at the Live Content URL.
+- Your live content is automatically served at the Live Content URL base (path prefix /content).
 - When you create or modify files under /agent/content/, always include the full, absolute Live URL to the exact file(s) you touched.
   - Example: {live_url}index.html or {live_url}dashboard/report.html
 - When you perform a publish action, always include the full, absolute Published URL to the exact file(s) (and the root if helpful).
@@ -718,9 +717,6 @@ Important behavior:
             operator_url = operator_url,
             api_url = api_url,
             agent_name = agent_name_ctx,
-            content_port = content_port_ctx
-                .map(|p| p.to_string())
-                .unwrap_or_else(|| "N/A".to_string()),
             live_url = live_url,
             published_url = published_url,
             published_flag = if is_published_ctx { "true" } else { "false" },

@@ -501,12 +501,17 @@ impl AgentManager {
             );
         }
 
-        // Set agent state to INIT after container creation (agent will set to IDLE when ready)
-            sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = NOW() WHERE name = ?"#)
-            .bind(AGENT_STATE_INIT)
-            .bind(&agent_name)
-            .execute(&self.pool)
-            .await?;
+        // Mark agent idle after container creation; agent will toggle busy/idle as it works
+        sqlx::query(
+            r#"
+            UPDATE agents 
+            SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL
+            WHERE name = ?
+            "#,
+        )
+        .bind(&agent_name)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
