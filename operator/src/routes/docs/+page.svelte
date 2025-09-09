@@ -5,7 +5,7 @@
   import { page } from '$app/stores';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.6.11 (v0)';
+  const API_VERSION = 'minor (v0)';
   
 
   setPageTitle('API Documentation');

@@ -3,28 +3,61 @@ set -euo pipefail
 
 # bump.sh — safely bump repo version across known refs and build artifacts
 # Usage:
-#   scripts/bump.sh [new_version]
-# If new_version is omitted, bumps patch version from Cargo.toml.
+#   scripts/bump.sh [new_version] [--no-build] [--no-push]
+# If new_version is omitted, bumps patch version from Cargo.toml (when SemVer).
 
 root_dir=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root_dir"
 
+# Parse args
+DO_BUILD=1
+DO_PUSH=1
+DO_COMMIT=1
+new=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-build)
+      DO_BUILD=0; shift ;;
+    --no-push)
+      DO_PUSH=0; shift ;;
+    --no-commit)
+      DO_COMMIT=0; shift ;;
+    *)
+      if [[ -z "$new" ]]; then new="$1"; else echo "Unexpected arg: $1" >&2; exit 2; fi
+      shift ;;
+  esac
+done
+
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1" >&2; exit 1; }; }
 need rg
 
-cur=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+cur=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n1)
 [[ -n "$cur" ]] || { echo "Could not read current version from Cargo.toml" >&2; exit 1; }
 
-new="${1:-}"
+is_semver() {
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
 if [[ -z "$new" ]]; then
-  IFS=. read -r major minor patch <<<"$cur"
-  new="$major.$minor.$((patch+1))"
+  if is_semver "$cur"; then
+    IFS=. read -r major minor patch <<<"$cur"
+    new="$major.$minor.$((patch+1))"
+  else
+    echo "Current version in Cargo.toml ('$cur') is not SemVer (x.y.z)." >&2
+    echo "Provide an explicit new version: scripts/bump.sh 0.X.Y" >&2
+    exit 1
+  fi
+fi
+
+if ! is_semver "$new"; then
+  echo "New version '$new' is not SemVer (x.y.z)" >&2
+  exit 1
 fi
 
 echo "Current: $cur -> New: $new"
 
-# Update Cargo.toml
-sed -i "0,/^version = \"[0-9]\+\.[0-9]\+\.[0-9]\+\"$/s//version = \"$new\"/" Cargo.toml
+# Update Cargo.toml (first standalone version line in [package])
+sed -i "0,/^version = \".*\"$/s//version = \"$new\"/" Cargo.toml
 
 # Update CLI package.json if present
 if [[ -f cli/package.json ]]; then
@@ -58,24 +91,48 @@ PY
   fi
 fi
 
-echo "Building Rust (cargo build --release)"
-cargo build --release
+if [[ $DO_BUILD -eq 1 ]]; then
+  echo "Building Rust (cargo build --release)"
+  cargo build --release
+else
+  echo "Skipping Rust build (--no-build)"
+fi
 
-if [[ -f cli/package.json ]]; then
+if [[ -f cli/package.json && $DO_BUILD -eq 1 ]]; then
   echo "Installing CLI deps and updating lockfile (cli/)"
   (cd cli && npm install)
 fi
 
-if [[ -f operator/package.json ]]; then
+if [[ -f operator/package.json && $DO_BUILD -eq 1 ]]; then
   echo "Installing Operator deps and building (operator/)"
   (cd operator && (npm ci || npm install) >/dev/null && npm run -s build)
 fi
 
-echo "Staging and committing bump"
-git add -A
-if ! git diff --cached --quiet; then
-  git commit -m "chore: bump version to $new"
-  git push origin main
+if [[ $DO_COMMIT -eq 1 ]]; then
+  echo "Staging and committing bump"
+  git add -A
+  if ! git diff --cached --quiet; then
+    git commit -m "chore: bump version to $new"
+    if [[ $DO_PUSH -eq 1 ]]; then
+      # Push only if 'origin' exists and branch 'main' is configured
+      if git remote get-url origin >/dev/null 2>&1; then
+        if git rev-parse --abbrev-ref HEAD | grep -q '^main$'; then
+          if ! git push origin main; then
+            echo "Warning: push to origin/main failed. Please push manually." >&2
+          fi
+        else
+          echo "Not on 'main' branch; skipping automatic push." >&2
+        fi
+      else
+        echo "No 'origin' remote configured; skipping automatic push." >&2
+      fi
+    else
+      echo "Skipping push (--no-push)"
+    fi
+  else
+    echo "No changes to commit"
+  fi
 else
-  echo "No changes to commit"
+  echo "Skipping commit (--no-commit). Files modified (not staged):"
+  git status --porcelain
 fi
