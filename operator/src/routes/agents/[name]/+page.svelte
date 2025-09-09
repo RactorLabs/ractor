@@ -122,6 +122,39 @@
     }
   }
 
+  // Remix modal state and actions
+  let showRemixModal = false;
+  let remixName = '';
+  function openRemixModal() {
+    const cur = String(name || '').trim();
+    remixName = nextRemixName(cur);
+    showRemixModal = true;
+  }
+  function closeRemixModal() { showRemixModal = false; }
+  async function confirmRemix() {
+    try {
+      const newName = String(remixName || '').trim();
+      const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
+      if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, {
+        method: 'POST',
+        body: JSON.stringify({ name: newName, code: true, secrets: true, content: true })
+      });
+      if (!res.ok) throw new Error(res?.data?.error || `Remix failed (HTTP ${res.status})`);
+      showRemixModal = false;
+      goto(`/agents/${encodeURIComponent(newName)}`);
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
+
+  // Delete modal state and actions
+  let showDeleteModal = false;
+  let deleteConfirm = '';
+  function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
+  function closeDeleteModal() { showDeleteModal = false; }
+  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(name || '').trim();
+
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}`);
     if (res.ok && res.data) {
@@ -398,51 +431,11 @@
     }
   }
 
-  // Remix current agent into a new one and navigate to it
-  async function remixAgent() {
-    try {
-      const cur = String(name || '').trim();
-      const suggestion = nextRemixName(cur);
-      const next = typeof window !== 'undefined' ? window.prompt('Enter new agent name', suggestion) : null;
-      if (!next) return;
-      const newName = String(next).trim();
-      const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
-      if (!pattern.test(newName)) {
-        error = 'Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$';
-        return;
-      }
+  // Remix action: open modal instead of prompt
+  function remixAgent() { openRemixModal(); }
 
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, {
-        method: 'POST',
-        body: JSON.stringify({ name: newName, code: true, secrets: true, content: true })
-      });
-      if (!res.ok) throw new Error(res?.data?.error || `Remix failed (HTTP ${res.status})`);
-      // Navigate to the remixed agent
-      goto(`/agents/${encodeURIComponent(newName)}`);
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
-
-  // Delete the current agent after confirmation
-  async function deleteAgent() {
-    try {
-      const cur = String(name || '').trim();
-      const promptMsg = `Type the agent name to confirm delete`;
-      const typed = typeof window !== 'undefined' ? window.prompt(promptMsg, '') : null;
-      if (typed == null) return; // cancelled
-      if (String(typed).trim() !== cur) {
-        error = 'Deletion cancelled: name did not match.';
-        return;
-      }
-      const res = await apiFetch(`/agents/${encodeURIComponent(cur)}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error(res?.data?.error || `Delete failed (HTTP ${res.status})`);
-      // Navigate back to agents list
-      goto('/agents');
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
+  // Delete action: open modal instead of prompt
+  function deleteAgent() { openDeleteModal(); }
 
   // Generate a default remix name by adding or incrementing a numeric suffix
   function nextRemixName(cur) {
@@ -529,6 +522,61 @@
   </div>
 {/if}
 
+<!-- Remix Modal -->
+{#if showRemixModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Remix Agent</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeRemixModal}></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="remix-name">New Agent Name</label>
+          <input id="remix-name" class="form-control" bind:value={remixName} />
+          <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeRemixModal}>Cancel</button>
+          <button class="btn btn-theme" on:click={confirmRemix}>Remix</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Delete Modal -->
+{#if showDeleteModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Agent</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Type <span class="fw-bold">{name}</span> to confirm permanent deletion.</p>
+          <input class="form-control" bind:value={deleteConfirm} placeholder={name} />
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
+          <button class="btn btn-danger" disabled={!canConfirmDelete} on:click={async () => {
+            try {
+              const cur = String(name || '').trim();
+              const res = await apiFetch(`/agents/${encodeURIComponent(cur)}`, { method: 'DELETE' });
+              if (!res.ok) throw new Error(res?.data?.error || `Delete failed (HTTP ${res.status})`);
+              showDeleteModal = false;
+              goto('/agents');
+            } catch (e) {
+              alert(e.message || String(e));
+            }
+          }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <div class="row g-3 h-100">
   <div class="col-12 col-xl-8 d-flex flex-column h-100" style="min-height: 0;">
     <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body">
@@ -552,8 +600,6 @@
           <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
         {:else if stateStr === 'idle' || stateStr === 'busy'}
           <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
-        {:else}
-          <button class="btn btn-outline-warning btn-sm" disabled aria-label="Put agent to sleep" title="Agent not ready">Sleep</button>
         {/if}
       </div>
     </div>
