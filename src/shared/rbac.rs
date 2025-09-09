@@ -130,12 +130,38 @@ pub struct RbacAuthz;
 impl RbacAuthz {
     pub fn has_permission(
         _principal: &AuthPrincipal,
-        _roles: &[Role],
-        _role_bindings: &[RoleBinding],
-        _context: &PermissionContext,
+        roles: &[Role],
+        role_bindings: &[RoleBinding],
+        context: &PermissionContext,
     ) -> bool {
-        // Simplified implementation - for now just return true
-        // TODO: Implement proper RBAC when needed
-        true
+        // Fast path: if no bindings, deny
+        if role_bindings.is_empty() {
+            return false;
+        }
+
+        // Build role lookup map by name
+        use std::collections::HashMap;
+        let role_map: HashMap<&str, &Role> = roles.iter().map(|r| (r.name.as_str(), r)).collect();
+
+        // Helper for wildcard matching
+        fn contains_match(list: &[String], needle: &str) -> bool {
+            list.iter().any(|v| v == "*" || v.eq_ignore_ascii_case(needle))
+        }
+
+        // Evaluate each binding's role rules
+        for rb in role_bindings {
+            if let Some(role) = role_map.get(rb.role_name.as_str()) {
+                for rule in &role.rules {
+                    if contains_match(&rule.api_groups, &context.api_group)
+                        && contains_match(&rule.resources, &context.resource)
+                        && contains_match(&rule.verbs, &context.verb)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 }

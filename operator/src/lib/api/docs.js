@@ -34,7 +34,7 @@ export function getApiDocs(base) {
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
           { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
         ],
-        example: `curl -s -X POST ${BASE}/api/v0/operators/admin/login -H "Content-Type: application/json" -d '{"pass":"admin"}'`
+        example: `curl -s -X POST ${BASE}/api/v0/operators/admin/login -H "Content-Type: application/json" -d '{"pass":"admin123"}'`
       },
       {
         method: 'GET',
@@ -120,7 +120,7 @@ export function getApiDocs(base) {
         { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept)' }
       ] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
-        { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
+        { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
         { in: 'body', name: 'secrets', type: 'object<string,string>', required: false, desc: 'Key/value secrets map (default: empty)' },
@@ -160,7 +160,7 @@ export function getApiDocs(base) {
       ] },
       { method: 'POST', path: '/api/v0/agents/{name}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent agent name' },
-        { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
+        { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Copy code (default true)' },
         { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Copy secrets (default true)' },

@@ -5,7 +5,6 @@
   import { getApiDocs } from '$lib/api/docs.js';
   import { page } from '$app/stores';
   import { getToken as getCookieTokenFn } from '$lib/auth.js';
-  import { playground, clearPlaygroundToken } from '/src/stores/playground.js';
 
   setPageTitle('API Playground');
 
@@ -25,13 +24,11 @@
   let loading = false;
   let result = null; // { status, ms, data, text }
 
-  $: token = $playground.token || '';
-  $: remember = $playground.remember;
   let cookieToken = '';
   onMount(() => {
     try { cookieToken = getCookieTokenFn() || ''; } catch (_) { cookieToken = ''; }
   });
-  $: effectiveToken = (token && token.trim().length > 0) ? token : cookieToken;
+  $: effectiveToken = cookieToken;
 
   function onSelect(idx) {
     selected = endpoints[idx];
@@ -149,30 +146,12 @@
             </select>
           </div>
           <div class="col-12 col-md-4 d-flex justify-content-md-end align-items-center gap-2 text-md-end">
-            {#if !token && cookieToken}
+            {#if cookieToken}
               <span class="badge bg-secondary">Cookie token</span>
             {/if}
             <button class="btn btn-theme" on:click|preventDefault={execute} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Calling…{:else}Call API{/if}
             </button>
-          </div>
-        </div>
-
-        <!-- Token input moved to its own line -->
-        <div class="row g-3 mt-1">
-          <div class="col-12">
-            <label class="form-label" for="pg-token">Auth Token</label>
-            <input id="pg-token" class="form-control" placeholder={cookieToken ? 'Using cookie token if empty' : 'Bearer token'} bind:value={$playground.token} />
-            <div class="form-check mt-1">
-              <input class="form-check-input" type="checkbox" id="rememberToken" bind:checked={$playground.remember}>
-              <label class="form-check-label" for="rememberToken">Remember in this browser</label>
-            </div>
-            <div class="mt-2 d-flex gap-2">
-              <button class="btn btn-outline-secondary btn-sm" on:click={() => { clearPlaygroundToken(); }}>Clear saved token</button>
-            </div>
-            {#if !token && cookieToken}
-              <div class="form-text">Defaulting to cookie token for this session.</div>
-            {/if}
           </div>
         </div>
 
@@ -244,8 +223,8 @@
       <div class="card-header fw-bold">Tips</div>
       <div class="card-body small text-body text-opacity-75">
         <ul class="mb-0 ps-3">
-          <li>Token is stored in this browser only (session/local storage), not cookies.</li>
-          <li>For protected endpoints, paste a Bearer token after logging in.</li>
+          <li>Playground always uses the token from your login cookie.</li>
+          <li>Login first, then call protected endpoints here.</li>
           <li>Use additional query rows to include parameters not listed.</li>
         </ul>
       </div>

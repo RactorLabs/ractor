@@ -78,8 +78,8 @@
     loading = true;
     try {
       // Validate name
-      if (!/^[a-z][a-z0-9-]{0,61}[a-z0-9]$/.test(name)) {
-        throw new Error('Name must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
+      if (!/^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$/.test(name)) {
+        throw new Error('Name must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$');
       }
       // Parse metadata
       let metadata = {};
@@ -131,7 +131,7 @@
                 <input id="agent-name" class="form-control" bind:value={name} />
                 <button class="btn btn-outline-secondary" on:click|preventDefault={() => name = genName()}>Shuffle</button>
               </div>
-              <div class="form-text">Lowercase letters, digits, dashes; max 63.</div>
+              <div class="form-text">Letters, digits, dashes; max 63.</div>
             </div>
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>

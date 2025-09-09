@@ -453,7 +453,7 @@ where
         type Value = String;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("a required valid name (must start with letter, contain only lowercase letters/numbers/hyphens, max 64 chars)")
+            formatter.write_str("a required valid name (must start with a letter; letters/numbers/hyphens only; max 64 chars)")
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -468,21 +468,18 @@ where
                 return Err(E::custom("name too long (max 64 characters)"));
             }
 
-            // v0.4.0 strict validation: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-            if !value.chars().next().unwrap_or(' ').is_ascii_lowercase() {
-                return Err(E::custom("name must start with a lowercase letter"));
+            // Allow A-Z or a-z start
+            if !value.chars().next().unwrap_or(' ').is_ascii_alphabetic() {
+                return Err(E::custom("name must start with a letter"));
             }
 
             if value.len() > 1 && !value.chars().last().unwrap_or(' ').is_ascii_alphanumeric() {
                 return Err(E::custom("name must end with a letter or number"));
             }
 
-            if !value
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            {
+            if !value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                 return Err(E::custom(
-                    "name must contain only lowercase letters, numbers, and hyphens",
+                    "name must contain only letters, numbers, and hyphens",
                 ));
             }
 
@@ -506,7 +503,7 @@ where
         type Value = Option<String>;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("an optional valid name (must start with letter, contain only lowercase letters/numbers/hyphens, max 64 chars) or null")
+            formatter.write_str("an optional valid name (must start with a letter; letters/numbers/hyphens only; max 64 chars) or null")
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -521,21 +518,17 @@ where
                 return Err(E::custom("name too long (max 64 characters)"));
             }
 
-            // v0.4.0 strict validation: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-            if !value.chars().next().unwrap_or(' ').is_ascii_lowercase() {
-                return Err(E::custom("name must start with a lowercase letter"));
+            if !value.chars().next().unwrap_or(' ').is_ascii_alphabetic() {
+                return Err(E::custom("name must start with a letter"));
             }
 
             if value.len() > 1 && !value.chars().last().unwrap_or(' ').is_ascii_alphanumeric() {
                 return Err(E::custom("name must end with a letter or number"));
             }
 
-            if !value
-                .chars()
-                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            {
+            if !value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
                 return Err(E::custom(
-                    "name must contain only lowercase letters, numbers, and hyphens",
+                    "name must contain only letters, numbers, and hyphens",
                 ));
             }
 

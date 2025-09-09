@@ -694,7 +694,7 @@ impl AgentManager {
             }
         }
 
-        let agent_container = format!("raworc_agent_{}", agent_name);
+        let agent_container = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         // First, create the content directory in the content container
         let public_dir = format!("/content/{}", agent_name);

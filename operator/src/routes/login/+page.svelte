@@ -5,7 +5,7 @@
   import { appOptions } from '/src/stores/appOptions.js';
   import { setToken, setOperatorName, isAuthenticated, getToken, logoutClientSide } from '$lib/auth.js';
 
-  let operator = 'admin';
+  let operator = '';
   let pass = '';
   let loading = false;
   let error = null;
@@ -79,7 +79,7 @@
 
       <div class="mb-3">
         <label class="form-label" for="operator">Operator <span class="text-danger">*</span></label>
-        <input type="text" autocomplete="username" class="form-control form-control-lg bg-white bg-opacity-5" id="operator" bind:value={operator} placeholder="admin" required />
+        <input type="text" autocomplete="username" class="form-control form-control-lg bg-white bg-opacity-5" id="operator" bind:value={operator} placeholder="" required />
       </div>
       <div class="mb-3">
         <div class="d-flex">
@@ -101,6 +101,9 @@
         {/if}
       </button>
       <div class="text-center text-inverse text-opacity-50">
+        Have an Auth Token? <a href="/login/token" aria-label="link">Click here</a>.
+      </div>
+      <div class="text-center text-inverse text-opacity-50 mt-2">
         Need API reference? <a href="/docs" aria-label="link">View docs</a>.
       </div>
     </form>

@@ -39,7 +39,7 @@ impl DockerManager {
 
     // NEW: Create agent volume with explicit naming
     async fn create_agent_volume(&self, agent_name: &str) -> Result<String> {
-        let volume_name = format!("raworc_agent_data_{}", agent_name);
+        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         let mut labels = HashMap::new();
         labels.insert("raworc.agent_name".to_string(), agent_name.to_string());
@@ -62,14 +62,14 @@ impl DockerManager {
         Ok(volume_name)
     }
 
-    // Get agent volume name (derived from agent name)
+    // Get agent volume name (derived from agent name). Docker volume names must be lowercase.
     fn get_agent_volume_name(&self, agent_name: &str) -> String {
-        format!("raworc_agent_data_{}", agent_name)
+        format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase())
     }
 
-    // Get agent container name (derived from agent name)
+    // Get agent container name (derived from agent name). Docker container names must be lowercase.
     fn get_agent_container_name(&self, agent_name: &str) -> String {
-        format!("raworc_agent_{}", agent_name)
+        format!("raworc_agent_{}", agent_name.to_ascii_lowercase())
     }
 
     // Check if agent volume exists
@@ -143,7 +143,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     // NEW: Cleanup agent volume
     pub async fn cleanup_agent_volume(&self, agent_name: &str) -> Result<()> {
-        let expected_volume_name = format!("raworc_agent_data_{}", agent_name);
+        let expected_volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
@@ -172,8 +172,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let container_name = self.create_container(agent_name).await?;
 
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
-        let new_volume = format!("raworc_agent_data_{}", agent_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying volume data from {} to {}",
@@ -298,8 +298,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
-        let new_volume = format!("raworc_agent_data_{}", agent_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -507,8 +507,8 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name);
-        let new_volume = format!("raworc_agent_data_{}", agent_name);
+        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -964,7 +964,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     pub async fn wake_container(&self, agent_name: &str) -> Result<String> {
         // Read existing secrets from the volume
-        let volume_name = format!("raworc_agent_data_{}", agent_name);
+        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
             "Waking container for agent {} - reading secrets from volume {}",
             agent_name, volume_name
@@ -1016,7 +1016,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user secrets from the volume (but generate fresh system tokens)
-        let volume_name = format!("raworc_agent_data_{}", agent_name);
+        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
             "Waking container for agent {} with fresh tokens",
             agent_name
@@ -1072,7 +1072,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("raworc_agent_{agent_name}");
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         // Get content port from agent (already allocated during agent creation)
         let content_port: i32 =
@@ -1282,7 +1282,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("raworc_agent_{agent_name}");
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         // Get content port from agent (already allocated during agent creation)
         let content_port: i32 =
@@ -1464,7 +1464,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     // Sleep container but retain persistent volume (for agent pause/sleep)
     pub async fn sleep_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{agent_name}");
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         info!("Sleeping container {}", container_name);
 
@@ -1502,7 +1502,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     // Delete container and remove persistent volume (for agent deletion)
     pub async fn delete_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{agent_name}");
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         info!("Deleting container {}", container_name);
 
@@ -1547,7 +1547,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
     // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
 
     pub async fn execute_command(&self, agent_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("raworc_agent_{agent_name}");
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Executing command in container {}: {}",
@@ -1580,7 +1580,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
     }
 
     pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{}", agent_name);
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
         let public_path = format!("/content/{}", agent_name);
 
         info!(
@@ -1679,7 +1679,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
     /// Check if an agent container exists and is running healthily
     pub async fn is_container_healthy(&self, agent_name: &str) -> Result<bool> {
-        let container_name = format!("raworc_agent_{}", agent_name);
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {

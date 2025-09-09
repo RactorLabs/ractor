@@ -130,19 +130,27 @@ pub async fn list_operators(
     Extension(auth): Extension<AuthContext>,
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<OperatorResponse>>> {
-    // Check permission
-    check_api_permission(&auth, &state, &permissions::OPERATOR_LIST)
-        .await
-        .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => {
-                ApiError::Forbidden("Insufficient permissions".to_string())
-            }
-            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
-        })?;
+    // Admins can list all operators; non-admins only see themselves
+    let is_admin = matches!(&auth.principal, crate::shared::rbac::AuthPrincipal::Operator(op) if op.user == "admin");
+    if is_admin {
+        // Check permission (admin role should allow list)
+        check_api_permission(&auth, &state, &permissions::OPERATOR_LIST)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
 
-    let operators = state.get_all_operators().await?;
-    let response: Vec<OperatorResponse> = operators.into_iter().map(Into::into).collect();
-    Ok(Json(response))
+        let operators = state.get_all_operators().await?;
+        let response: Vec<OperatorResponse> = operators.into_iter().map(Into::into).collect();
+        Ok(Json(response))
+    } else {
+        // Return only the authenticated operator
+        let self_name = match &auth.principal {
+            crate::shared::rbac::AuthPrincipal::Operator(op) => op.user.clone(),
+            crate::shared::rbac::AuthPrincipal::Subject(s) => s.name.clone(),
+        };
+        let mut result = Vec::new();
+        if let Some(op) = state.get_operator(&self_name).await? { result.push(OperatorResponse::from(op)); }
+        Ok(Json(result))
+    }
 }
 
 pub async fn get_operator(
@@ -150,15 +158,24 @@ pub async fn get_operator(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> ApiResult<Json<OperatorResponse>> {
-    // Check permission
-    check_api_permission(&auth, &state, &permissions::OPERATOR_GET)
-        .await
-        .map_err(|e| match e {
-            axum::http::StatusCode::FORBIDDEN => {
-                ApiError::Forbidden("Insufficient permissions".to_string())
-            }
-            _ => ApiError::Internal(anyhow::anyhow!("Permission check failed")),
-        })?;
+    // Allow self-read without RBAC; otherwise require permission
+    let self_name = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+    };
+    let is_self = self_name == &name;
+    if !is_self {
+        check_api_permission(&auth, &state, &permissions::OPERATOR_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
+    }
+    // Non-admins can only read themselves
+    let is_admin = matches!(&auth.principal, crate::shared::rbac::AuthPrincipal::Operator(op) if op.user == "admin");
+    if !is_admin {
+        if self_name != &name {
+            return Err(ApiError::Forbidden("Insufficient permissions".to_string()));
+        }
+    }
     let operator = state.get_operator(&name).await?;
 
     let operator = operator.ok_or(ApiError::NotFound("Operator not found".to_string()))?;

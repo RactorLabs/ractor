@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS agents (
     content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
     
     -- Constraints
-    CONSTRAINT agents_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
+    CONSTRAINT agents_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
     CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept')),
     CONSTRAINT agents_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT agents_publish_check CHECK (
@@ -120,12 +120,21 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     INDEX idx_agent_tasks_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Default admin operator (password: admin123)
+-- Seed operators (admin, demo)
 INSERT IGNORE INTO operators (name, password_hash, description, active) 
 VALUES (
     'admin',
     '$2b$12$dZTOY/3oZQxB10jUMElLZ.NrH8JpUpuVGKxtnnRR7lnVXJF92QkI2',
     'Default admin operator',
+    true
+);
+
+-- Demo operator (password: demo)
+INSERT IGNORE INTO operators (name, password_hash, description, active)
+VALUES (
+    'demo',
+    '$2b$12$mZj.Uuy1CkHbLgoO0IO2ouZW7B8N3bx1GxPtogd3YzzefsfkYP7NW',
+    'Demo user',
     true
 );
 
@@ -144,38 +153,23 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
     )
 );
 
--- Dev role: read-only for RBAC resources; full access to agents
+-- User role: access to agents only; no operator management
 INSERT IGNORE INTO roles (name, description, rules) VALUES
 (
-    'dev',
-    'Developer role: read-only for RBAC resources; full access to agents',
+    'user',
+    'Standard user role with access to agents; no operator management',
     JSON_ARRAY(
-        -- Allow full access to agents
+        -- Allow full access to agents endpoints
         JSON_OBJECT(
             'api_groups', JSON_ARRAY('api'),
             'resources', JSON_ARRAY('agents'),
             'verbs', JSON_ARRAY('*')
-        ),
-        -- Read-only access to RBAC resources
-        JSON_OBJECT(
-            'api_groups', JSON_ARRAY('api'),
-            'resources', JSON_ARRAY('operators', 'roles', 'role_bindings'),
-            'verbs', JSON_ARRAY('get', 'list')
         )
     )
-);
-
--- Dev operator (password: dev)
-INSERT IGNORE INTO operators (name, password_hash, description, active)
-VALUES (
-    'dev',
-    '$2b$12$uzyBAwYaI4zM7ca6u5StOe6IN8WmpM8O41tFUk0xEZAQoyN2hvhFq',
-    'Developer operator',
-    true
 );
 
 -- Role bindings
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
     ('admin', 'Operator', 'admin'),
-    ('dev',   'Operator', 'dev');
+    ('demo',  'Operator', 'user');
