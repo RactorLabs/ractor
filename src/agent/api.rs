@@ -353,4 +353,76 @@ impl RaworcClient {
             }
         }
     }
+
+    /// Publish the current agent by name
+    pub async fn publish_agent(&self) -> Result<()> {
+        let url = format!(
+            "{}/api/v0/agents/{}/publish",
+            self.config.api_url, self.config.agent_name
+        );
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK | StatusCode::NO_CONTENT | StatusCode::CREATED => Ok(()),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
+                "Agent {} not found",
+                self.config.agent_name
+            ))),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to publish agent ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
+    /// Sleep the current agent by name
+    pub async fn sleep_agent(&self) -> Result<()> {
+        let url = format!(
+            "{}/api/v0/agents/{}/sleep",
+            self.config.api_url, self.config.agent_name
+        );
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
+                "Agent {} not found",
+                self.config.agent_name
+            ))),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to sleep agent ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
 }

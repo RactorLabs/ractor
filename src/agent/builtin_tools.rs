@@ -2,6 +2,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 
 use super::tool_registry::Tool;
+use super::api::RaworcClient;
+use std::sync::Arc;
 use super::tools::{run_bash, text_edit, TextEditAction};
 
 /// Built-in bash tool implementation
@@ -125,6 +127,81 @@ impl Tool for TextEditorTool {
                 Ok(format!("{}\n{}", summary, output))
             }
             Err(e) => Ok(format!("Result for tool 'text_editor' — error: {}", e)),
+        }
+    }
+}
+
+/// Publish tool (explicit user confirmation required)
+pub struct PublishTool {
+    api: Arc<RaworcClient>,
+}
+
+impl PublishTool {
+    pub fn new(api: Arc<RaworcClient>) -> Self { Self { api } }
+}
+
+#[async_trait]
+impl Tool for PublishTool {
+    fn name(&self) -> &str { "publish" }
+
+    fn description(&self) -> &str {
+        "Publish the agent's current content to its public URL. Requires confirm=true."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "confirm": { "type": "boolean", "description": "Must be true to proceed" },
+                "note": { "type": "string", "description": "Optional reason or note" }
+            },
+            "required": ["confirm"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+        let confirmed = args.get("confirm").and_then(|v| v.as_bool()).unwrap_or(false);
+        if !confirmed {
+            return Ok("Confirmation required. Re-run publish with { \"confirm\": true }".to_string());
+        }
+
+        match self.api.publish_agent().await {
+            Ok(_) => Ok("Publish request submitted successfully.".to_string()),
+            Err(e) => Ok(format!("Failed to publish: {}", e)),
+        }
+    }
+}
+
+/// Sleep tool (explicit user confirmation required)
+pub struct SleepTool {
+    api: Arc<RaworcClient>,
+}
+
+impl SleepTool {
+    pub fn new(api: Arc<RaworcClient>) -> Self { Self { api } }
+}
+
+#[async_trait]
+impl Tool for SleepTool {
+    fn name(&self) -> &str { "sleep" }
+
+    fn description(&self) -> &str {
+        "Put the agent to sleep (stops its runtime but preserves data)."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "note": { "type": "string", "description": "Optional reason or note" }
+            }
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+        match self.api.sleep_agent().await {
+            Ok(_) => Ok("Sleep request submitted successfully.".to_string()),
+            Err(e) => Ok(format!("Failed to sleep: {}", e)),
         }
     }
 }

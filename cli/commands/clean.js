@@ -5,18 +5,19 @@ const display = require('../lib/display');
 module.exports = (program) => {
   program
     .command('clean')
-    .description('Clean Raworc Docker resources by type (containers | images | volumes | networks)')
-    .argument('<type>', 'Type to clean: containers | images | volumes | networks')
-    .action(async (type) => {
+    .description('Clean Raworc Docker resources by type(s): containers images volumes networks')
+    .argument('<types...>', 'Types to clean: containers | images | volumes | networks (one or more)')
+    .action(async (types) => {
       try {
         const valid = new Set(['containers','images','volumes','networks']);
-        if (!valid.has(type)) {
-          display.error('Invalid type. Use one of: containers, images, volumes, networks');
+        const list = Array.isArray(types) ? types : [types];
+        const invalid = list.filter(t => !valid.has(t));
+        if (invalid.length) {
+          display.error(`Invalid type(s): ${invalid.join(', ')}. Use only: containers, images, volumes, networks`);
           process.exit(1);
         }
-
         // Show command box
-        display.showCommandBox(`${display.icons.clean} Clean Raworc ${type}`, { operation: `Remove Raworc ${type}` });
+        display.showCommandBox(`${display.icons.clean} Clean Raworc`, { operation: `Remove: ${list.join(', ')}` });
 
         // Check Docker availability
         const dockerAvailable = await docker.checkDocker();
@@ -25,7 +26,7 @@ module.exports = (program) => {
           process.exit(1);
         }
 
-        if (type === 'containers') {
+        if (list.includes('containers')) {
           display.info('Stopping and removing Raworc containers...');
           const res = await docker.execDocker(['ps', '-a', '--format', '{{.Names}}'], { silent: true });
           const names = (res.stdout || '').trim().split('\n').filter(Boolean).filter(n => /^raworc_/.test(n) || /^raworc_agent_/.test(n));
@@ -38,7 +39,7 @@ module.exports = (program) => {
           }
         }
 
-        if (type === 'images') {
+        if (list.includes('images')) {
           display.info('Removing Raworc images...');
           const res = await docker.execDocker(['images', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}'], { silent: true });
           const lines = (res.stdout || '').trim().split('\n').filter(Boolean);
@@ -53,7 +54,7 @@ module.exports = (program) => {
           }
         }
 
-        if (type === 'volumes') {
+        if (list.includes('volumes')) {
           display.info('Removing Raworc volumes...');
           const res = await docker.execDocker(['volume', 'ls', '--format', '{{.Name}}'], { silent: true });
           const vols = (res.stdout || '').trim().split('\n').filter(Boolean).filter(v => /^raworc_/.test(v));
@@ -65,7 +66,7 @@ module.exports = (program) => {
           }
         }
 
-        if (type === 'networks') {
+        if (list.includes('networks')) {
           display.info('Removing Raworc networks...');
           try { await docker.execDocker(['network', 'rm', 'raworc_network'], { silent: true }); display.success('Removed network raworc_network'); }
           catch(_) { display.success('Network raworc_network not present'); }

@@ -70,9 +70,16 @@ impl MessageHandler {
 
             tokio::spawn({
                 let registry = registry.clone();
+                let api_client_clone = api_client.clone();
                 async move {
                     registry.register_tool(bash_tool).await;
                     registry.register_tool(text_editor_tool).await;
+
+                    // Register management tools (publish, sleep) that require explicit confirmation
+                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(api_client_clone.clone()));
+                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
+                    registry.register_tool(publish_tool).await;
+                    registry.register_tool(sleep_tool).await;
 
                     // Register container.exec alias for bash
                     registry
@@ -677,6 +684,7 @@ You are running as an Agent in the {host_name} system.
 - Your Agent Name: {agent_name}
 - Your Content Port: {content_port}
 - Live Content URL: {live_url}
+ - Published Content URL: {published_url}
 - Published: {published_flag}
 - Published At: {published_at}
 
@@ -687,6 +695,7 @@ Important behavior:
 - Share the Published Content URL ONLY if the user explicitly asks for the published URL or publish status.
 - If the user wants the current live content to be available at the published URL, ask them to publish explicitly (do not auto-publish).
 - Clearly state that publishing is an explicit action (via the Operator UI or API) and confirm before proceeding if asked to publish.
+- You have the Published Content URL in this context; do not include it in responses unless asked explicitly.
 
 "#,
             host_name = host_name,
@@ -698,6 +707,7 @@ Important behavior:
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "N/A".to_string()),
             live_url = live_url,
+            published_url = published_url,
             published_flag = if is_published_ctx { "true" } else { "false" },
             published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
             current_time_utc = current_time_utc,

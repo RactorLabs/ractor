@@ -12,7 +12,7 @@ pub async fn run() -> Result<()> {
 
     // Resolve OLLAMA_HOST or use default inside Docker network
     let ollama_host =
-        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://raworc_ollama:11434".to_string());
+        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
     tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
     // Initialize agent manager

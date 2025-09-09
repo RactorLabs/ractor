@@ -71,7 +71,7 @@ async function waitForMysql() {
   process.stdout.write(chalk.blue('[INFO] ') + 'Waiting for MySQL to be ready...\n');
   for (let i = 0; i < 30; i++) {
     try {
-      await docker(['exec', 'raworc_mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
+      await docker(['exec', 'mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
       console.log(chalk.green('[SUCCESS] ') + 'MySQL is ready');
       return;
     } catch (_) {
@@ -105,7 +105,7 @@ module.exports = (program) => {
     .option('--mysql-user <user>', 'MySQL user', 'raworc')
     .option('--mysql-password <pw>', 'MySQL user password', 'raworc')
     // Server options
-    .option('--server-database-url <url>', 'Server DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
+    .option('--server-database-url <url>', 'Server DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--server-jwt-secret <secret>', 'Server JWT_SECRET')
     .option('--server-rust-log <level>', 'Server RUST_LOG', 'info')
     .option('--server-raworc-host <host>', 'Server RAWORC_HOST')
@@ -113,7 +113,7 @@ module.exports = (program) => {
     .option('--server-api-port <port>', 'Host port for API (maps to 9000)', '9000')
     .option('--server-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
     // Controller options
-    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@raworc_mysql:3306/raworc')
+    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
@@ -236,9 +236,9 @@ module.exports = (program) => {
           switch (comp) {
             case 'mysql': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring MySQL database is running...');
-              if (await containerRunning('raworc_mysql')) { console.log(chalk.green('[SUCCESS] ') + 'MySQL already running'); console.log(); break; }
-              if (await containerExists('raworc_mysql')) {
-                await docker(['start','raworc_mysql']);
+              if (await containerRunning('mysql')) { console.log(chalk.green('[SUCCESS] ') + 'MySQL already running'); console.log(); break; }
+              if (await containerExists('mysql')) {
+                await docker(['start','mysql']);
                 console.log(chalk.green('[SUCCESS] ') + 'MySQL started');
                 console.log();
                 break;
@@ -246,7 +246,7 @@ module.exports = (program) => {
               const args = ['run'];
               if (detached) args.push('-d');
               args.push(
-                '--name','raworc_mysql',
+                '--name','mysql',
                 '--network','raworc_network',
                 '-p', `${String(options.mysqlPort || '3307')}:3306`,
                 '-v','raworc_mysql_data:/var/lib/mysql',
@@ -271,9 +271,9 @@ module.exports = (program) => {
 
             case 'ollama': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Ollama runtime is running...');
-              if (await containerRunning('raworc_ollama')) { console.log(chalk.green('[SUCCESS] ') + 'Ollama already running'); console.log(); break; }
-              if (await containerExists('raworc_ollama')) {
-                await docker(['start','raworc_ollama']);
+              if (await containerRunning('ollama')) { console.log(chalk.green('[SUCCESS] ') + 'Ollama already running'); console.log(); break; }
+              if (await containerExists('ollama')) {
+                await docker(['start','ollama']);
                 console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
                 console.log();
                 break;
@@ -326,7 +326,7 @@ module.exports = (program) => {
               if (!hostPublish) console.log(chalk.yellow('[WARNING] ') + 'Host port 11434 in use; starting without host port mapping');
 
               const args = ['run','-d',
-                '--name','raworc_ollama',
+                '--name','ollama',
                 '--network','raworc_network',
               ];
               if (hostPublish) args.push('-p','11434:11434');
@@ -357,7 +357,7 @@ module.exports = (program) => {
               } else {
                 console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama container to be ready...');
                 while (Date.now() - start < timeoutMs) {
-                  try { await docker(['exec','raworc_ollama','ollama','list'], { silent: true }); break; } catch(_) {}
+                  try { await docker(['exec','ollama','ollama','list'], { silent: true }); break; } catch(_) {}
                   await new Promise(r=>setTimeout(r,2000));
                 }
               }
@@ -368,7 +368,7 @@ module.exports = (program) => {
 
               // Ensure model available (best-effort)
               console.log(chalk.blue('[INFO] ') + `Pulling ${options.ollamaModel} model (if needed)...`);
-              try { await docker(['exec','raworc_ollama','ollama','pull', options.ollamaModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${options.ollamaModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${options.ollamaModel}. You may need to pull manually.`); }
+              try { await docker(['exec','ollama','ollama','pull', options.ollamaModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${options.ollamaModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${options.ollamaModel}. You may need to pull manually.`); }
               console.log();
               break;
             }
@@ -387,7 +387,7 @@ module.exports = (program) => {
                 '--network','raworc_network',
                 '-p', `${String(options.serverApiPort || '9000')}:9000`,
                 '-v', 'raworc_logs:/app/logs',
-                '-e',`DATABASE_URL=${options.serverDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc'}`,
+                '-e',`DATABASE_URL=${options.serverDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
                 '-e',`JWT_SECRET=${options.serverJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.serverRustLog || 'info'}`,
                 ...(options.serverRaworcHost ? ['-e', `RAWORC_HOST=${options.serverRaworcHost}`] : []),
@@ -412,15 +412,15 @@ module.exports = (program) => {
               // Default OLLAMA_HOST: prefer internal container if running
               let OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
               try {
-                const res = await docker(['ps','-q','--filter','name=raworc_ollama'], { silent: true });
+                const res = await docker(['ps','-q','--filter','name=ollama'], { silent: true });
                 const hasOllama = !!res.stdout.trim();
-                if (!OLLAMA_HOST) OLLAMA_HOST = hasOllama ? 'http://raworc_ollama:11434' : 'http://host.docker.internal:11434';
+                if (!OLLAMA_HOST) OLLAMA_HOST = hasOllama ? 'http://ollama:11434' : 'http://host.docker.internal:11434';
               } catch (_) {
                 if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
               }
 
               const agentImage = options.controllerAgentImage || AGENT_IMAGE;
-              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@raworc_mysql:3306/raworc';
+              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
               const model = options.controllerOllamaModel || options.ollamaModel;
@@ -562,7 +562,7 @@ module.exports = (program) => {
             }
           } catch(_) {}
           try {
-            const m = await docker(['ps','--filter','name=raworc_mysql','--format','{{.Names}}'], { silent: true });
+            const m = await docker(['ps','--filter','name=mysql','--format','{{.Names}}'], { silent: true });
             if (m.stdout.trim()) {
               console.log('  • MySQL Port: 3307');
             }

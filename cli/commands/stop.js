@@ -41,7 +41,7 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { mysql: 'raworc_mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'raworc_ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const map = { mysql: 'mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
         const order = ['gateway','controller','operator','content','server','ollama','mysql'];
         const toStop = (components || []).length ? order.filter((c) => components.includes(c)) : [];
 

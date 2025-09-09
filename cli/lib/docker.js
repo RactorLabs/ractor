@@ -53,13 +53,13 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['raworc_mysql', 'raworc_server', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
+    const serviceList = services.length > 0 ? services : ['mysql', 'raworc_server', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
     
     // Map service names to component names
     const componentMap = {
       'raworc_server': 'server',
       'raworc_controller': 'controller',
-      'raworc_mysql': 'mysql',
+      'mysql': 'mysql',
       'raworc_operator': 'operator',
       'raworc_gateway': 'gateway',
       'raworc_content': 'content'
@@ -120,7 +120,7 @@ class DockerManager {
       case 'mysql':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_mysql',
+          '--name', 'mysql',
           '--network', 'raworc_network',
           '-p', '3307:3306',
           '-v', 'raworc_mysql_data:/var/lib/mysql',
@@ -183,7 +183,7 @@ class DockerManager {
           '--network', 'raworc_network',
           '-p', '9000:9000',
           '-v', 'raworc_logs:/app/logs',
-          '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
+          '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
           this.images.server
@@ -196,7 +196,7 @@ class DockerManager {
           '--name', 'raworc_controller',
           '--network', 'raworc_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
-          '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
+          '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
           ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
@@ -220,7 +220,7 @@ class DockerManager {
     console.log('⏳ Waiting for MySQL to be ready...');
     for (let i = 0; i < 30; i++) {
       try {
-        await this.execDocker(['exec', 'raworc_mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
+        await this.execDocker(['exec', 'mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
         console.log('✅ MySQL is ready');
         return;
       } catch (error) {
@@ -239,7 +239,7 @@ class DockerManager {
     const componentMap = {
       'raworc_server': 'server',
       'raworc_controller': 'controller',
-      'raworc_mysql': 'mysql',
+      'mysql': 'mysql',
       'raworc_operator': 'operator',
       'raworc_gateway': 'gateway',
       'raworc_content': 'content'
