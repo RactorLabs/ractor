@@ -98,7 +98,11 @@ if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
 fi
 
 print_status "Building Raworc Docker images"
-print_status "Tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
+if [[ -n "${PROJECT_VERSION:-}" ]]; then
+  print_status "Tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
+else
+  print_status "Tag: $TAG"
+fi
 print_status "Components: ${COMPONENTS[*]}"
 
 # Change to project root

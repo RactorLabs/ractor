@@ -6,23 +6,22 @@ BUILDABLE_SET=(api agent controller operator content gateway)
 process_args() {
   local input=("$@")
   local unique=()
-  local seen=()
-  # dedupe while preserving order
+  # dedupe while preserving order (no associative arrays)
+  local c i exists
   for c in "${input[@]}"; do
-    if [[ -z "${seen[$c]+x}" ]]; then
-      unique+=("$c")
-      seen[$c]=1
-    fi
+    exists=0
+    for i in "${!unique[@]}"; do
+      if [[ "${unique[$i]}" == "$c" ]]; then exists=1; break; fi
+    done
+    [[ $exists -eq 0 ]] && unique+=("$c")
   done
   # ensure 'agent' precedes 'controller' when both present
   local i_agent=-1 i_controller=-1
-  local i
   for i in "${!unique[@]}"; do
     [[ "${unique[$i]}" == "agent" ]] && i_agent=$i
     [[ "${unique[$i]}" == "controller" ]] && i_controller=$i
   done
   if [[ $i_agent -ge 0 && $i_controller -ge 0 && $i_agent -gt $i_controller ]]; then
-    # move agent to just before controller
     local tmp=( )
     for i in "${!unique[@]}"; do
       if [[ $i -eq $i_agent ]]; then continue; fi
