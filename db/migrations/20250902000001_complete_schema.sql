@@ -1,5 +1,4 @@
--- Raworc complete database schema with publishing and timeout features  
--- Date: 2025-09-02
+
 
 -- Operators
 CREATE TABLE IF NOT EXISTS operators (
