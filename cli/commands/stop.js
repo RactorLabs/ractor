@@ -25,8 +25,17 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop and remove specified Raworc component container(s) (no implicit all)')
-    .argument('<components...>', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway, agents)')
+    .description('Stop and remove containers for specific components (no implicit all)')
+    .argument('<components...>', 'Components to stop. Allowed: mysql, ollama, server, controller, operator, content, gateway, agents (all agent containers)')
+    .addHelpText('after', '\n' +
+      'Notes:\n' +
+      '  • Stops and removes the specified component containers only.\n' +
+      '  • Does not remove images, volumes, or networks.\n' +
+      '  • Use component "agents" to stop/remove all agent containers.\n' +
+      '\nExamples:\n' +
+      '  $ raworc stop server controller\n' +
+      '  $ raworc stop agents\n' +
+      '  $ raworc stop mysql ollama\n')
     .action(async (components) => {
       try {
         if (!components || components.length === 0) {

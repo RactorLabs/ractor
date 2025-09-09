@@ -20,8 +20,13 @@ async function execDocker(args, options = {}) {
 module.exports = (program) => {
   program
     .command('reset')
-    .description('Reset Docker: remove ALL containers, images, volumes, and networks (destructive)')
+    .description('Reset Docker: remove ALL containers, images, volumes, networks (destructive)')
     .option('-y, --yes', 'Confirm without prompting (non-interactive)')
+    .addHelpText('after', '\n' +
+      'WARNING: This resets your entire Docker environment, not just Raworc.\n' +
+      '\nExamples:\n' +
+      '  $ raworc reset           # interactive confirmation\n' +
+      '  $ raworc reset -y       # non-interactive\n')
     .action(async (options) => {
       try {
         display.showCommandBox(`${display.icons.reset} Docker Reset`, { operation: 'ALL containers, images, volumes, networks' });

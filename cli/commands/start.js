@@ -84,8 +84,8 @@ async function waitForMysql() {
 module.exports = (program) => {
   program
     .command('start')
-    .description('Start Raworc services (idempotent): starts only missing or stopped components')
-    .argument('[components...]', 'Components to start (mysql, ollama, server, controller). Default: all', [])
+    .description('Start services: create if missing or start if stopped (never removes)')
+    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, ollama, server, controller, operator, content, gateway', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -118,6 +118,15 @@ module.exports = (program) => {
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
     .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
+    .addHelpText('after', '\n' +
+      'Notes:\n' +
+      '  • Starts each component if stopped, or creates it if missing.\n' +
+      '  • Does not stop or remove any containers.\n' +
+      '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
+      '\nExamples:\n' +
+      '  $ raworc start                                # Start full stack\n' +
+      '  $ raworc start server controller              # Start API + controller\n' +
+      '  $ raworc start mysql                          # Ensure MySQL is up\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
     .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')

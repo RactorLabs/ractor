@@ -5,8 +5,17 @@ const display = require('../lib/display');
 module.exports = (program) => {
   program
     .command('clean')
-    .description('Clean Raworc Docker resources by type(s): containers images volumes networks')
-    .argument('<types...>', 'Types to clean: containers | images | volumes | networks (one or more)')
+    .description('Clean Raworc resources by type(s): containers, images, volumes, networks (scoped)')
+    .argument('<types...>', 'One or more of: containers, images, volumes, networks')
+    .addHelpText('after', '\n' +
+      'Scope:\n' +
+      '  • containers: names starting with raworc_ or raworc_agent_\n' +
+      '  • images: repositories raworc/* or names starting raworc_\n' +
+      '  • volumes: names starting raworc_\n' +
+      '  • networks: raworc_network only\n' +
+      '\nExamples:\n' +
+      '  $ raworc clean containers images\n' +
+      '  $ raworc clean volumes networks\n')
     .action(async (types) => {
       try {
         const valid = new Set(['containers','images','volumes','networks']);
