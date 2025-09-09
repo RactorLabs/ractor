@@ -664,9 +664,21 @@ pub async fn delete_agent(
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Agents can be soft deleted in any state
+    // Hard delete: schedule unpublish and container+volume removal, then remove DB row
+    // Queue unpublish to remove any public content
+    sqlx::query(
+        r#"
+        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
+        VALUES (?, 'unpublish_agent', ?, '{}', 'pending')
+        "#,
+    )
+    .bind(&agent.name)
+    .bind(username)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish task: {}", e)))?;
 
-    // Add task to queue for agent manager to destroy container
+    // Add task to queue for agent manager to destroy container and cleanup volume
     sqlx::query(
         r#"
         INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)

@@ -17,7 +17,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Raw
     - `GET  /api/v0/version`
     - `POST /api/v0/operators/{name}/login`
     - `GET  /api/v0/published/agents`
-    - `GET  /api/v0/published/agents/{id}`
+    - `GET  /api/v0/published/agents/{name}`
   - Protected (Bearer JWT):
     - Auth: `GET /api/v0/auth`, `POST /api/v0/auth/token`
     - Operators: CRUD + password update
@@ -43,7 +43,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Raw
     - `/login` (operator login)
   - Authenticated (guarded layout)
     - `/app/agents` (list)
-    - `/app/agents/[id]` (details + chat/messages)
+    - `/app/agents/[name]` (details + chat/messages)
     - `/app/profile` (basic account info)
     - `/app/settings` (basic settings)
 - UI conventions: follow existing Operator template components, SCSS, and page layout options in `appOptions`.
@@ -79,13 +79,13 @@ Deliverables:
 - `/app/agents` page: table of agents using `GET /api/v0/agents`
   - Columns: id, name, state, published, created_at, updated_at
   - Actions: open details, wake/sleep/idle/busy, publish/unpublish, delete
-- `/app/agents/[id]` page: basic info panel + messaging panel
+- `/app/agents/[name]` page: basic info panel + messaging panel
   - Info: agent metadata and quick actions (wake/sleep/etc.)
   - Messages (chat):
-    - List: `GET /api/v0/agents/{id}/messages`
-    - Send: `POST /api/v0/agents/{id}/messages`
-    - Poll: periodic `GET /api/v0/agents/{id}/messages/count` to detect changes and refresh list
-    - Clear: `DELETE /api/v0/agents/{id}/messages`
+    - List: `GET /api/v0/agents/{name}/messages`
+    - Send: `POST /api/v0/agents/{name}/messages`
+    - Poll: periodic `GET /api/v0/agents/{name}/messages/count` to detect changes and refresh list
+    - Clear: `DELETE /api/v0/agents/{name}/messages`
 - UX: use template components for layout, forms, and toasts; loading states; error banners.
 
 ## Phase 4 — Operators & Profile
@@ -118,7 +118,7 @@ Deliverables:
 - [ ] GET  /api/v0/version (docs)
 - [ ] POST /api/v0/operators/{name}/login (docs + login)
 - [ ] GET  /api/v0/published/agents (docs)
-- [ ] GET  /api/v0/published/agents/{id} (docs)
+- [ ] GET  /api/v0/published/agents/{name} (docs)
 - [ ] GET  /api/v0/auth (docs + profile)
 - [ ] POST /api/v0/auth/token (docs)
 - [ ] GET  /api/v0/operators (docs [+ UI if applicable])
@@ -129,24 +129,23 @@ Deliverables:
 - [ ] PUT  /api/v0/operators/{name}/password (docs)
 - [ ] GET  /api/v0/agents (docs + list UI)
 - [ ] POST /api/v0/agents (docs)
-- [ ] GET  /api/v0/agents/{id} (docs + details UI)
-- [ ] PUT  /api/v0/agents/{id} (docs)
-- [ ] PUT  /api/v0/agents/{id}/state (docs)
-- [ ] POST /api/v0/agents/{id}/busy (docs)
-- [ ] POST /api/v0/agents/{id}/idle (docs)
-- [ ] POST /api/v0/agents/{id}/sleep (docs)
-- [ ] POST /api/v0/agents/{id}/wake (docs + action UI)
-- [ ] POST /api/v0/agents/{id}/remix (docs)
-- [ ] POST /api/v0/agents/{id}/publish (docs)
-- [ ] POST /api/v0/agents/{id}/unpublish (docs)
-- [ ] DELETE /api/v0/agents/{id} (docs)
-- [ ] GET  /api/v0/agents/{id}/messages (docs + chat UI)
-- [ ] POST /api/v0/agents/{id}/messages (docs + chat UI)
-- [ ] GET  /api/v0/agents/{id}/messages/count (docs + polling)
-- [ ] DELETE /api/v0/agents/{id}/messages (docs + clear)
+- [ ] GET  /api/v0/agents/{name} (docs + details UI)
+- [ ] PUT  /api/v0/agents/{name} (docs)
+- [ ] PUT  /api/v0/agents/{name}/state (docs)
+- [ ] POST /api/v0/agents/{name}/busy (docs)
+- [ ] POST /api/v0/agents/{name}/idle (docs)
+- [ ] POST /api/v0/agents/{name}/sleep (docs)
+- [ ] POST /api/v0/agents/{name}/wake (docs + action UI)
+- [ ] POST /api/v0/agents/{name}/remix (docs)
+- [ ] POST /api/v0/agents/{name}/publish (docs)
+- [ ] POST /api/v0/agents/{name}/unpublish (docs)
+- [ ] DELETE /api/v0/agents/{name} (docs)
+- [ ] GET  /api/v0/agents/{name}/messages (docs + chat UI)
+- [ ] POST /api/v0/agents/{name}/messages (docs + chat UI)
+- [ ] GET  /api/v0/agents/{name}/messages/count (docs + polling)
+- [ ] DELETE /api/v0/agents/{name}/messages (docs + clear)
 
 ## Notes
 - Initial implementation will avoid adding new backend endpoints; only consume existing APIs.
 - We’ll follow existing SCSS and Svelte component patterns in `operator/` to keep styling consistent.
 - As we implement each phase, we’ll update this plan with status and any deviations.
-

@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 // Removed uuid::Uuid - no longer using UUIDs in v0.4.0
-use super::constants::AGENT_STATE_DELETED;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Agent {
@@ -462,7 +461,6 @@ impl Agent {
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE state != 'deleted'
             ORDER BY created_at DESC
             "#,
         )
@@ -481,7 +479,7 @@ impl Agent {
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE name = ? AND state != 'deleted'
+            WHERE name = ?
             "#,
         )
         .bind(name)
@@ -501,7 +499,7 @@ impl Agent {
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE name = ? AND created_by = ? AND state != 'deleted'
+            WHERE name = ? AND created_by = ?
             "#,
         )
         .bind(name)
@@ -733,7 +731,7 @@ impl Agent {
         }
 
         query_builder.push_str(&updates.join(","));
-        query_builder.push_str(" WHERE name = ? AND state != 'deleted'");
+        query_builder.push_str(" WHERE name = ?");
 
         let mut query = sqlx::query(&query_builder);
 
@@ -758,13 +756,11 @@ impl Agent {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(r#"UPDATE agents SET state = ? WHERE name = ? AND state != ?"#)
-            .bind(AGENT_STATE_DELETED)
+        // Hard delete agent row; cascades will remove messages; tasks may persist per FK changes
+        let result = sqlx::query(r#"DELETE FROM agents WHERE name = ?"#)
             .bind(name)
-            .bind(AGENT_STATE_DELETED)
             .execute(pool)
             .await?;
-
         Ok(result.rows_affected() > 0)
     }
 
@@ -787,7 +783,7 @@ impl Agent {
                 published_at = NOW(), 
                 published_by = ?,
                 publish_permissions = ?
-            WHERE name = ? AND state != 'deleted'
+            WHERE name = ?
             "#,
         )
         .bind(published_by)
@@ -814,7 +810,7 @@ impl Agent {
                 published_at = NULL, 
                 published_by = NULL,
                 publish_permissions = JSON_OBJECT('code', true, 'secrets', true)
-            WHERE name = ? AND state != 'deleted'
+            WHERE name = ?
             "#,
         )
         .bind(name)
@@ -836,7 +832,7 @@ impl Agent {
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE is_published = true AND state != 'deleted'
+            WHERE is_published = true
             ORDER BY published_at DESC
             "#,
         )
@@ -855,7 +851,7 @@ impl Agent {
                    is_published, published_at, published_by, publish_permissions,
                    timeout_seconds, auto_sleep_at, content_port
             FROM agents
-            WHERE name = ? AND is_published = true AND state != 'deleted'
+            WHERE name = ? AND is_published = true
             ORDER BY published_at DESC
             LIMIT 1
             "#,
@@ -877,7 +873,6 @@ impl Agent {
             FROM agents
             WHERE auto_sleep_at <= NOW() 
               AND state IN ('init', 'idle', 'busy')
-              AND state != 'deleted'
             ORDER BY auto_sleep_at ASC
             LIMIT 50
             "#,
@@ -896,7 +891,7 @@ impl Agent {
             UPDATE agents 
             SET auto_sleep_at = DATE_ADD(COALESCE(last_activity_at, NOW()), INTERVAL timeout_seconds SECOND),
                 last_activity_at = NOW()
-            WHERE name = ? AND state IN ('init', 'idle', 'busy') AND state != 'deleted'
+            WHERE name = ? AND state IN ('init', 'idle', 'busy')
             "#
         )
         .bind(name)
@@ -921,7 +916,7 @@ impl Agent {
             SET state = 'idle',
                 last_activity_at = NOW(),
                 auto_sleep_at = DATE_ADD(NOW(), INTERVAL timeout_seconds SECOND)
-            WHERE name = ? AND state != 'deleted'
+            WHERE name = ?
             "#,
         )
         .bind(name)
@@ -942,7 +937,7 @@ impl Agent {
             SET state = 'busy',
                 last_activity_at = NOW(),
                 auto_sleep_at = NULL
-            WHERE name = ? AND state != 'deleted'
+            WHERE name = ?
             "#,
         )
         .bind(name)

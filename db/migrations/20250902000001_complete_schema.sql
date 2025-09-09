@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS agents (
     
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
-    CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept', 'deleted')),
+    CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept')),
     CONSTRAINT agents_publish_check CHECK (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,
     error TEXT,
-    CONSTRAINT fk_tasks_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
+    -- Note: no FK to agents; tasks may reference agents scheduled for deletion
     INDEX idx_agent_tasks_status (status),
     INDEX idx_agent_tasks_agent_name (agent_name),
     INDEX idx_agent_tasks_created_by (created_by),

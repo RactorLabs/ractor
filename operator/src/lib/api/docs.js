@@ -69,13 +69,13 @@ export const apiDocs = [
       },
       {
         method: 'GET',
-        path: '/api/v0/published/agents/{id}',
+        path: '/api/v0/published/agents/{name}',
         auth: 'public',
-        desc: 'Get details of a published agent by id (id = agent name).',
+        desc: 'Get details of a published agent by name.',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
         ],
-        example: 'curl -s http://localhost:9000/api/v0/published/agents/<id>'
+        example: 'curl -s http://localhost:9000/api/v0/published/agents/<name>'
       }
     ]
   },
@@ -114,7 +114,7 @@ export const apiDocs = [
     description: 'Agent lifecycle and management endpoints (protected).',
     endpoints: [
       { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List agents.', params: [
-        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept|deleted)' }
+        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept)' }
       ] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
@@ -125,34 +125,34 @@ export const apiDocs = [
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
         { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Timeout in seconds (default 60)' }
       ] },
-      { method: 'GET', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Get agent by id (id = agent name).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'GET', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Get agent by name.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'PUT', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Update agent by id.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'PUT', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Update agent by name.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
         { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Update timeout seconds' }
       ] },
-      { method: 'PUT', path: '/api/v0/agents/{id}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'PUT', path: '/api/v0/agents/{name}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' },
         { in: 'body', name: 'content_port', type: 'int|null', required: false, desc: 'Optional port used by agent content server' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/busy', auth: 'bearer', desc: 'Set agent busy.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'POST', path: '/api/v0/agents/{name}/busy', auth: 'bearer', desc: 'Set agent busy.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/idle', auth: 'bearer', desc: 'Set agent idle.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'POST', path: '/api/v0/agents/{name}/idle', auth: 'bearer', desc: 'Set agent idle.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/sleep', auth: 'bearer', desc: 'Put agent to sleep.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'POST', path: '/api/v0/agents/{name}/sleep', auth: 'bearer', desc: 'Put agent to sleep.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/wake', auth: 'bearer', desc: 'Wake agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'POST', path: '/api/v0/agents/{name}/wake', auth: 'bearer', desc: 'Wake agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on wake' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Parent agent name' },
+      { method: 'POST', path: '/api/v0/agents/{name}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent agent name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[a-z][a-z0-9-]{0,61}[a-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Copy code (default true)' },
@@ -160,17 +160,17 @@ export const apiDocs = [
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/publish', auth: 'bearer', desc: 'Publish agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'POST', path: '/api/v0/agents/{name}/publish', auth: 'bearer', desc: 'Publish agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code remix (default true)' },
         { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Allow secrets remix (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/unpublish', auth: 'bearer', desc: 'Unpublish agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'POST', path: '/api/v0/agents/{name}/unpublish', auth: 'bearer', desc: 'Unpublish agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'DELETE', path: '/api/v0/agents/{id}', auth: 'bearer', desc: 'Delete agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'DELETE', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Delete agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] }
     ]
   },
@@ -179,22 +179,22 @@ export const apiDocs = [
     title: 'Agent Messages',
     description: 'Send and retrieve messages for a given agent (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'List messages for agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
       ] },
-      { method: 'POST', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Create a message for agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' },
+      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'role', type: "'user'|'agent'|'system'", required: false, desc: "Message role (default 'user')" },
         { in: 'body', name: 'content', type: 'string', required: true, desc: 'Message text content' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' }
       ] },
-      { method: 'GET', path: '/api/v0/agents/{id}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'GET', path: '/api/v0/agents/{name}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] },
-      { method: 'DELETE', path: '/api/v0/agents/{id}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Agent name' }
+      { method: 'DELETE', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ] }
     ]
   }

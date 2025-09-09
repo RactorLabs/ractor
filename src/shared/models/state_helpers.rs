@@ -16,8 +16,7 @@ pub fn can_transition_to(from: &str, to: &str) -> bool {
         (AGENT_STATE_BUSY, AGENT_STATE_IDLE) => true, // Processing complete
         (AGENT_STATE_BUSY, AGENT_STATE_SLEPT) => true, // Controller detects container failure
 
-        // Terminal state: deleted
-        // This state has no outgoing transitions (can only be remixed)
+        // Terminal states are not enforced here; hard delete removes the record instead
 
         // Cannot transition to same state
         _ => false,

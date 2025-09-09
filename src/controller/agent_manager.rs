@@ -114,7 +114,6 @@ impl AgentManager {
             WHERE auto_sleep_at <= NOW() 
               AND auto_sleep_at IS NOT NULL
               AND state = 'idle'
-              AND state != 'deleted'
             ORDER BY auto_sleep_at ASC
             LIMIT 50
             "#,
@@ -494,7 +493,7 @@ impl AgentManager {
         info!("Deleting container and volume for agent {}", agent_name);
         self.docker_manager.delete_container(&agent_name).await?;
 
-        // No need to update agent state - DELETE endpoint already soft-deletes the agent
+        // No need to update agent state - DELETE endpoint performs hard delete of agent row
 
         Ok(())
     }
@@ -804,13 +803,12 @@ impl AgentManager {
 
     /// Check health of all non-sleeping agents and mark failed containers as slept
     async fn check_agent_health(&self) -> Result<usize> {
-        // Find all agents that are not sleeping or deleted (active agents)
+        // Find all agents that are not sleeping (active agents)
         let active_agents: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT name, state
             FROM agents
-            WHERE state != 'slept' 
-              AND state != 'deleted'
+            WHERE state != 'slept'
             ORDER BY name
             "#,
         )

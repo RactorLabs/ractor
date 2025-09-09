@@ -61,7 +61,7 @@
 
   function isSlept() { return stateStr === 'slept'; }
   function isAwake() { return stateStr === 'idle' || stateStr === 'busy'; }
-  function isInitOrDeleted() { return stateStr === 'init' || stateStr === 'deleted'; }
+  function isInitOrDeleted() { return stateStr === 'init'; }
 
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}`);
@@ -596,7 +596,7 @@
             <div class="d-flex align-items-center justify-content-center h-100 p-4">
               <div class="text-center">
                 <div class="h4 fw-bold mb-2">Agent Not Ready</div>
-                <div class="text-body text-opacity-75">This agent is initializing or has been deleted.</div>
+                <div class="text-body text-opacity-75">This agent is initializing.</div>
               </div>
             </div>
           {/if}

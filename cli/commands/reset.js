@@ -20,59 +20,72 @@ async function execDocker(args, options = {}) {
 module.exports = (program) => {
   program
     .command('reset')
-    .description('Shortcut: clean Raworc containers, images, volumes, networks')
+    .description('Reset Docker: remove ALL containers, images, volumes, and networks (destructive)')
     .option('-y, --yes', 'Confirm without prompting (non-interactive)')
     .action(async (options) => {
       try {
-        display.showCommandBox(`${display.icons.reset} Raworc Reset`, { operation: 'containers, images, volumes, networks' });
+        display.showCommandBox(`${display.icons.reset} Docker Reset`, { operation: 'ALL containers, images, volumes, networks' });
 
         if (!options.yes) {
           const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-          const answer = await new Promise((resolve) => rl.question(chalk.yellow('This will remove Raworc containers/images/volumes/networks. Continue? [y/N]: '), resolve));
+          const answer = await new Promise((resolve) => rl.question(chalk.yellow('This will remove ALL Docker containers/images/volumes/networks. Continue? [y/N]: '), resolve));
           rl.close();
           if (!answer.match(/^[Yy]$/)) { display.info('Operation cancelled'); return; }
         }
 
-        // Stop and remove containers
-        display.info('[1/4] Removing Raworc containers...');
+        // Stop and remove ALL containers
+        display.info('[1/5] Stopping and removing ALL containers...');
         try {
-          const res = await execDocker(['ps','-a','--format','{{.Names}}'], { silent: true });
-          const names = (res.stdout || '').trim().split('\n').filter(Boolean).filter(n => /^raworc_/.test(n) || /^raworc_agent_/.test(n));
-          if (names.length) {
-            try { await execDocker(['stop', ...names], { silent: true }); } catch(_) {}
-            await execDocker(['rm','-f', ...names], { silent: true });
-            display.success(`Removed ${names.length} Raworc containers`);
+          const resRun = await execDocker(['ps','-q'], { silent: true });
+          const running = (resRun.stdout || '').trim().split('\n').filter(Boolean);
+          if (running.length) { try { await execDocker(['stop', ...running], { silent: true }); } catch(_) {} }
+          const resAll = await execDocker(['ps','-a','-q'], { silent: true });
+          const all = (resAll.stdout || '').trim().split('\n').filter(Boolean);
+          if (all.length) {
+            await execDocker(['rm','-f', ...all], { silent: true });
+            display.success(`Removed ${all.length} containers`);
           } else {
-            display.success('No Raworc containers found');
+            display.success('No containers found');
           }
         } catch (e) { display.warning(`Container cleanup warning: ${e.message}`); }
 
-        // Remove images
-        display.info('[2/4] Removing Raworc images...');
+        // Remove ALL images
+        display.info('[2/5] Removing ALL images...');
         try {
-          const ir = await execDocker(['images','--format','{{.Repository}}:{{.Tag}} {{.ID}}'], { silent: true });
-          const lines = (ir.stdout || '').trim().split('\n').filter(Boolean);
-          const imgs = lines.map(l => ({ ref: l.split(' ')[0], id: l.split(' ')[1] })).filter(o => /^raworc\//.test(o.ref) || /^raworc_/.test(o.ref));
-          const ids = imgs.map(o => o.id);
-          if (ids.length) { try { await execDocker(['rmi','-f', ...ids], { silent: true }); } catch(_) {} display.success(`Removed ${ids.length} Raworc images`); }
-          else { display.success('No Raworc images found'); }
+          const ir = await execDocker(['images','-q'], { silent: true });
+          const ids = (ir.stdout || '').trim().split('\n').filter(Boolean);
+          if (ids.length) { try { await execDocker(['rmi','-f', ...ids], { silent: true }); } catch(_) {} display.success(`Removed ${ids.length} images`); }
+          else { display.success('No images found'); }
         } catch (e) { display.warning(`Image cleanup warning: ${e.message}`); }
 
-        // Remove network
-        display.info('[3/4] Removing Raworc network...');
-        try { await execDocker(['network','rm','raworc_network'], { silent: true }); display.success('Removed network raworc_network'); } catch(_) { display.success('Network raworc_network not present'); }
-
-        // Remove volumes
-        display.info('[4/4] Removing Raworc volumes...');
+        // Remove ALL custom networks (Docker won't remove default networks)
+        display.info('[3/5] Removing ALL custom networks...');
         try {
-          const vr = await execDocker(['volume','ls','--format','{{.Name}}'], { silent: true });
-          const vols = (vr.stdout || '').trim().split('\n').filter(Boolean).filter(v => /^raworc_/.test(v));
-          if (vols.length) { try { await execDocker(['volume','rm','-f', ...vols], { silent: true }); } catch(_) {} display.success(`Removed ${vols.length} Raworc volumes`); }
-          else { display.success('No Raworc volumes found'); }
+          const net = await execDocker(['network','ls','--filter','type=custom','-q'], { silent: true });
+          const nets = (net.stdout || '').trim().split('\n').filter(Boolean);
+          if (nets.length) {
+            try { await execDocker(['network','rm', ...nets], { silent: true }); } catch(_) {}
+            display.success(`Removed ${nets.length} custom networks`);
+          } else {
+            display.success('No custom networks found');
+          }
+        } catch (e) { display.warning(`Network cleanup warning: ${e.message}`); }
+
+        // Remove ALL volumes
+        display.info('[4/5] Removing ALL volumes...');
+        try {
+          const vr = await execDocker(['volume','ls','-q'], { silent: true });
+          const vols = (vr.stdout || '').trim().split('\n').filter(Boolean);
+          if (vols.length) { try { await execDocker(['volume','rm','-f', ...vols], { silent: true }); } catch(_) {} display.success(`Removed ${vols.length} volumes`); }
+          else { display.success('No volumes found'); }
         } catch (e) { display.warning(`Volume cleanup warning: ${e.message}`); }
 
+        // Optional prune caches
+        display.info('[5/5] Pruning build cache and dangling resources...');
+        try { await execDocker(['system','prune','-af','--volumes'], { silent: true }); display.success('System pruned'); } catch(_) {}
+
         console.log();
-        display.success('Raworc reset completed!');
+        display.success('Docker reset completed!');
       } catch (error) {
         display.error('Error: ' + error.message);
         process.exit(1);
