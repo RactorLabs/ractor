@@ -182,13 +182,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
                 let operator_url = format!("{}", base_url);
                 let api_url = format!("{}/api", base_url);
                 let live_url = format!("{}:{}/", base_url, content_port);
-                let published_url = format!("{}/content/{}", base_url, agent.name);
 
                 info!("{} environment detected", host_name);
                 info!("Operator: {}", operator_url);
                 info!("API: {}", api_url);
                 info!("Live content: {}", live_url);
-                info!("Published content: {}", published_url);
+                // Note: published URL is intentionally not logged by default to avoid
+                // leaking it unless explicitly requested by the user.
                 info!("Content folder: /agent/content/ - Create HTML files here for visual displays");
             } else {
                 warn!("Content port not available for this agent");

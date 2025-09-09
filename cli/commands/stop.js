@@ -25,16 +25,18 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop Raworc services using direct Docker container management')
-    .argument('[components...]', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway, all). Default: server controller gateway operator content', [])
+    .description('Stop specified Raworc component(s) only (no implicit all)')
+    .argument('<components...>', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway)')
     .option('-c, --cleanup', 'Clean up agent containers after stopping')
     .option('-r, --remove', 'Remove containers after stopping')
     .option('-v, --volumes', 'Remove named volumes after stopping')
     .option('-n, --network', 'Remove Docker network after stopping')
     .action(async (components, options) => {
       try {
-        if (!components || components.length === 0) components = ['server','controller','gateway','operator','content'];
-        if (components.includes('all')) components = ['mysql','ollama','server','operator','content','controller','gateway'];
+        if (!components || components.length === 0) {
+          console.log(chalk.red('[ERROR] ') + 'Please specify one or more components to stop');
+          process.exit(1);
+        }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Cleanup agent containers: ${!!options.cleanup}`);
         console.log(chalk.blue('[INFO] ') + `Remove containers: ${!!options.remove}`);

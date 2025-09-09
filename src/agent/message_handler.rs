@@ -640,15 +640,18 @@ impl MessageHandler {
         let base_url_env = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
-        // Fetch agent info (name and content_port) from API/DB
-        let (agent_name_ctx, content_port_ctx) = match self.api_client.get_agent().await {
-            Ok(agent) => {
-                let nm = agent.name.clone();
-                let cp = agent.content_port;
-                (nm, cp)
-            }
-            Err(_) => ("unknown".to_string(), None),
-        };
+        // Fetch agent info from API/DB (name, content_port, publish state)
+        let (agent_name_ctx, content_port_ctx, is_published_ctx, published_at_ctx) =
+            match self.api_client.get_agent().await {
+                Ok(agent) => {
+                    let nm = agent.name.clone();
+                    let cp = agent.content_port;
+                    let ip = agent.is_published;
+                    let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
+                    (nm, cp, ip, pa)
+                }
+                Err(_) => ("unknown".to_string(), None, false, String::new()),
+            };
 
         // Current timestamp in UTC for context
         let current_time_utc = chrono::Utc::now().to_rfc3339();
@@ -674,13 +677,16 @@ You are running as an Agent in the {host_name} system.
 - Your Agent Name: {agent_name}
 - Your Content Port: {content_port}
 - Live Content URL: {live_url}
-- Published Content URL: {published_url}
+- Published: {published_flag}
+- Published At: {published_at}
 
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Your live content is automatically served at the Live Content URL.
-- The published version is available at the Published Content URL.
-- Whenever you create or update files under /agent/content/, always include BOTH the Live and Published Content URLs in your response.
+- Only include the Live Content URL in your responses when you create or update files under /agent/content/.
+- Share the Published Content URL ONLY if the user explicitly asks for the published URL or publish status.
+- If the user wants the current live content to be available at the published URL, ask them to publish explicitly (do not auto-publish).
+- Clearly state that publishing is an explicit action (via the Operator UI or API) and confirm before proceeding if asked to publish.
 
 "#,
             host_name = host_name,
@@ -692,7 +698,8 @@ Important behavior:
                 .map(|p| p.to_string())
                 .unwrap_or_else(|| "N/A".to_string()),
             live_url = live_url,
-            published_url = published_url,
+            published_flag = if is_published_ctx { "true" } else { "false" },
+            published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
             current_time_utc = current_time_utc,
         ));
 
