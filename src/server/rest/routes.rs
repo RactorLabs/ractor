@@ -22,7 +22,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::agents::list_published_agents),
         )
         .route(
-            "/published/agents/{id}",
+            "/published/agents/{name}",
             get(handlers::agents::get_published_agent),
         );
 
@@ -49,47 +49,47 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Agent endpoints
         .route("/agents", get(handlers::agents::list_agents))
         .route("/agents", post(handlers::agents::create_agent))
-        .route("/agents/{id}", get(handlers::agents::get_agent))
-        .route("/agents/{id}", put(handlers::agents::update_agent))
+        .route("/agents/{name}", get(handlers::agents::get_agent))
+        .route("/agents/{name}", put(handlers::agents::update_agent))
         .route(
-            "/agents/{id}/state",
+            "/agents/{name}/state",
             put(handlers::agents::update_agent_state),
         )
         .route(
-            "/agents/{id}/busy",
+            "/agents/{name}/busy",
             post(handlers::agents::update_agent_to_busy),
         )
         .route(
-            "/agents/{id}/idle",
+            "/agents/{name}/idle",
             post(handlers::agents::update_agent_to_idle),
         )
-        .route("/agents/{id}/sleep", post(handlers::agents::sleep_agent))
-        .route("/agents/{id}/wake", post(handlers::agents::wake_agent))
-        .route("/agents/{id}/remix", post(handlers::agents::remix_agent))
+        .route("/agents/{name}/sleep", post(handlers::agents::sleep_agent))
+        .route("/agents/{name}/wake", post(handlers::agents::wake_agent))
+        .route("/agents/{name}/remix", post(handlers::agents::remix_agent))
         .route(
-            "/agents/{id}/publish",
+            "/agents/{name}/publish",
             post(handlers::agents::publish_agent),
         )
         .route(
-            "/agents/{id}/unpublish",
+            "/agents/{name}/unpublish",
             post(handlers::agents::unpublish_agent),
         )
-        .route("/agents/{id}", delete(handlers::agents::delete_agent))
+        .route("/agents/{name}", delete(handlers::agents::delete_agent))
         // Message endpoints
         .route(
-            "/agents/{id}/messages",
+            "/agents/{name}/messages",
             get(handlers::messages::list_messages),
         )
         .route(
-            "/agents/{id}/messages",
+            "/agents/{name}/messages",
             post(handlers::messages::create_message),
         )
         .route(
-            "/agents/{id}/messages/count",
+            "/agents/{name}/messages/count",
             get(handlers::messages::get_message_count),
         )
         .route(
-            "/agents/{id}/messages",
+            "/agents/{name}/messages",
             delete(handlers::messages::clear_messages),
         )
         .layer(middleware::from_fn_with_state(

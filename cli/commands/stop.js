@@ -26,26 +26,25 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove specified Raworc component container(s) (no implicit all)')
-    .argument('[components...]', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway)')
-    .option('--agents', 'Also stop all agent containers (raworc_agent_*)')
-    .action(async (components, options) => {
+    .argument('<components...>', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway, agents)')
+    .action(async (components) => {
       try {
-        if ((!components || components.length === 0) && !options.agents) {
-          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop, or use --agents to stop all agent containers');
+        if (!components || components.length === 0) {
+          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop (e.g., server controller agents)');
           process.exit(1);
         }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
-        if (components && components.length) {
-          console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
-        }
+        console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
 
         console.log();
 
         const map = { mysql: 'mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const includeAgents = components.includes('agents');
         const order = ['gateway','controller','operator','content','server','ollama','mysql'];
-        const toStop = (components || []).length ? order.filter((c) => components.includes(c)) : [];
+        const toStop = components.filter(c => c !== 'agents');
+        const ordered = order.filter((c) => toStop.includes(c));
 
-        for (const comp of toStop) {
+        for (const comp of ordered) {
           const name = map[comp];
           console.log(chalk.blue('[INFO] ') + `Stopping ${comp} (${name})...`);
           try {
@@ -75,7 +74,7 @@ module.exports = (program) => {
           console.log();
         }
 
-        if (options.agents) {
+        if (includeAgents) {
           console.log(chalk.blue('[INFO] ') + 'Stopping agent containers...');
           try {
             const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=raworc_agent_'], { silent: true });

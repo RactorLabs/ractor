@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['raworc_mysql_data', 'raworc_content_data', 'raworc_ollama_data', 'raworc_logs']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_logs']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -249,7 +249,7 @@ module.exports = (program) => {
                 '--name','mysql',
                 '--network','raworc_network',
                 '-p', `${String(options.mysqlPort || '3307')}:3306`,
-                '-v','raworc_mysql_data:/var/lib/mysql',
+                '-v','mysql_data:/var/lib/mysql',
                 '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
                 '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'raworc'}`,
                 '-e',`MYSQL_USER=${options.mysqlUser || 'raworc'}`,
@@ -331,7 +331,7 @@ module.exports = (program) => {
               ];
               if (hostPublish) args.push('-p','11434:11434');
               args.push(
-                '-v','raworc_ollama_data:/root/.ollama',
+                '-v','ollama_data:/root/.ollama',
                 '-e',`OLLAMA_KEEP_ALIVE=${options.ollamaKeepAlive || '1h'}`,
                 '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
                 '-e',`OLLAMA_NUM_CTX=${contextLength}`,

@@ -92,7 +92,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['raworc_mysql_data', 'raworc_content_data', 'raworc_logs']) {
+    for (const volume of ['mysql_data', 'raworc_content_data', 'raworc_logs']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -123,7 +123,7 @@ class DockerManager {
           '--name', 'mysql',
           '--network', 'raworc_network',
           '-p', '3307:3306',
-          '-v', 'raworc_mysql_data:/var/lib/mysql',
+          '-v', 'mysql_data:/var/lib/mysql',
           '-e', 'MYSQL_ROOT_PASSWORD=root',
           '-e', 'MYSQL_DATABASE=raworc',
           '-e', 'MYSQL_USER=raworc',
