@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 ]]; then
-  echo "Usage: $0 <component> [component ...]" >&2
-  echo "Buildable components: api controller agent operator content gateway" >&2
-  exit 1
+BUILDABLE_SET=(api controller agent operator content gateway)
+
+# If no components specified, rebuild all (like build.sh default)
+if [[ $# -eq 0 ]]; then
+  set -- "${BUILDABLE_SET[@]}"
 fi
 
-BUILDABLE_SET="api controller agent operator content gateway"
-
+# Validate components
 for COMPONENT in "$@"; do
-  if ! grep -qw "$COMPONENT" <<< "$BUILDABLE_SET"; then
-    echo "Error: '$COMPONENT' is not a buildable component." >&2
-    echo "Buildable: $BUILDABLE_SET" >&2
+  if ! printf '%s\n' "${BUILDABLE_SET[@]}" | grep -qx "$COMPONENT"; then
+    echo "Error: '$COMPONENT' is not a rebuildable component." >&2
+    echo "Rebuildable: ${BUILDABLE_SET[*]}" >&2
     exit 1
   fi
 done
