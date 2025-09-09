@@ -19,9 +19,10 @@
   onMount(async () => {
     import('bootstrap');
     document.querySelector('body').classList.add('app-init');
-    // Expose brand name for client-side usage
+    // Expose host name and host URL for client-side usage
     if (typeof window !== 'undefined') {
       window.__RAWORC_HOST_NAME__ = (data && data.hostName) ? data.hostName : 'Raworc';
+      window.__RAWORC_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : 'http://localhost';
     }
     
     $appVariables = generateVariables();

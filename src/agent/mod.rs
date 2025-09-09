@@ -170,9 +170,9 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     match api_client.get_agent().await {
         Ok(agent) => {
             if let Some(content_port) = agent.content_port {
-                // Prefer RAWORC_HOST_URL for user-facing base URL with sensible default
+                // Prefer RAWORC_HOST_URL (injected by start script) for user-facing base URL
                 let base_url = std::env::var("RAWORC_HOST_URL")
-                    .unwrap_or_else(|_| "http://localhost".to_string())
+                    .expect("RAWORC_HOST_URL must be set by the start script")
                     .trim_end_matches('/')
                     .to_string();
 

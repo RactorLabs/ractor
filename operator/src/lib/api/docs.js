@@ -1,5 +1,7 @@
 // API documentation data source for Raworc UI
 // Covers endpoints defined in src/server/rest/routes.rs
+import { getHostUrl } from '../branding.js';
+const BASE = getHostUrl();
 
 export const apiDocs = [
   {
@@ -13,7 +15,7 @@ export const apiDocs = [
         auth: 'public',
         desc: 'Get API version and current version string.',
         params: [],
-        example: 'curl -s http://localhost:9000/api/v0/version'
+        example: `curl -s ${BASE}/api/v0/version`
       }
     ]
   },
@@ -31,7 +33,7 @@ export const apiDocs = [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
           { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
         ],
-        example: "curl -s -X POST http://localhost:9000/api/v0/operators/admin/login -H \"Content-Type: application/json\" -d '{\"pass\":\"admin\"}'"
+        example: `curl -s -X POST ${BASE}/api/v0/operators/admin/login -H "Content-Type: application/json" -d '{"pass":"admin"}'`
       },
       {
         method: 'GET',
@@ -39,7 +41,7 @@ export const apiDocs = [
         auth: 'bearer',
         desc: 'Get authenticated operator profile (validate token).',
         params: [],
-        example: 'curl -s http://localhost:9000/api/v0/auth -H "Authorization: Bearer <token>"'
+        example: `curl -s ${BASE}/api/v0/auth -H "Authorization: Bearer <token>"`
       },
       {
         method: 'POST',
@@ -50,7 +52,7 @@ export const apiDocs = [
           { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or operator id)' },
           { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Operator'" }
         ],
-        example: 'curl -s -X POST http://localhost:9000/api/v0/auth/token -H "Authorization: Bearer <token>"'
+        example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>"`
       }
     ]
   },
@@ -65,7 +67,7 @@ export const apiDocs = [
         auth: 'public',
         desc: 'List all published agents.',
         params: [],
-        example: 'curl -s http://localhost:9000/api/v0/published/agents'
+        example: `curl -s ${BASE}/api/v0/published/agents`
       },
       {
         method: 'GET',
@@ -75,7 +77,7 @@ export const apiDocs = [
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
         ],
-        example: 'curl -s http://localhost:9000/api/v0/published/agents/<name>'
+        example: `curl -s ${BASE}/api/v0/published/agents/<name>`
       }
     ]
   },

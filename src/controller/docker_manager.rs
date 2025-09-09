@@ -1148,9 +1148,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
-        // Propagate host branding and URL to agents with defaults
+        // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        let host_url = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
@@ -1355,9 +1355,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
 
-        // Propagate host branding and URL to agents with defaults
+        // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        let host_url = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 

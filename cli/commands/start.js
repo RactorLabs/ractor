@@ -136,6 +136,22 @@ module.exports = (program) => {
         const detached = options.foreground ? false : (options.detached !== false);
         const tag = readProjectVersionOrLatest();
 
+        // Resolve host branding and URL only here (script-level default allowed)
+        const RAWORC_HOST_NAME = process.env.RAWORC_HOST_NAME || 'Raworc';
+        const RAWORC_HOST_URL = (process.env.RAWORC_HOST_URL || 'http://localhost').replace(/\/$/, '');
+
+        function withPort(baseUrl, port) {
+          try {
+            const u = new URL(baseUrl);
+            // If base already has a port, keep path-only joins; otherwise append port
+            const host = u.hostname;
+            const proto = u.protocol;
+            return `${proto}//${host}:${String(port)}`;
+          } catch (_) {
+            return `${baseUrl}:${String(port)}`;
+          }
+        }
+
         async function imageExistsLocally(name) {
           try {
             const res = await docker(['images','-q', name], { silent: true });
@@ -369,7 +385,7 @@ module.exports = (program) => {
               if (hostPublish) {
                 console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
                 while (Date.now() - start < timeoutMs) {
-                  try { await execCmd('bash',['-lc','curl -fsS http://localhost:11434/api/tags >/dev/null']); break; } catch(_) {}
+              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(RAWORC_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
                   await new Promise(r=>setTimeout(r,2000));
                 }
               } else {
@@ -408,6 +424,8 @@ module.exports = (program) => {
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
+                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
+                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 ...(options.apiRaworcHost ? ['-e', `RAWORC_HOST=${options.apiRaworcHost}`] : []),
                 ...(options.apiRaworcPort ? ['-e', `RAWORC_PORT=${options.apiRaworcPort}`] : []),
                 API_IMAGE
@@ -451,8 +469,8 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`OLLAMA_MODEL=${model}`,
-                ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
-                ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
+                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
+                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
                 '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
                 '-e',`AGENT_MEMORY_LIMIT=${options.controllerAgentMemoryLimit || '536870912'}`,
@@ -497,8 +515,8 @@ module.exports = (program) => {
                 '-p','7000:7000',
                 '-v','raworc_content_data:/content',
                 '-v','raworc_operator_data:/app/logs',
-                ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
-                ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
+                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
+                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 OPERATOR_IMAGE
               );
               await docker(args);
@@ -569,15 +587,15 @@ module.exports = (program) => {
           try {
             const g = await docker(['ps','--filter','name=raworc_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
-              console.log('  • Gateway: http://localhost/');
-              console.log('  • Operator UI: http://localhost/');
-              console.log('  • API via Gateway: http://localhost/api');
-              console.log('  • Content: http://localhost/content');
+              console.log(`  • Gateway: ${RAWORC_HOST_URL}/`);
+              console.log(`  • Operator UI: ${RAWORC_HOST_URL}/`);
+              console.log(`  • API via Gateway: ${RAWORC_HOST_URL}/api`);
+              console.log(`  • Content: ${RAWORC_HOST_URL}/content`);
             } else {
               const s = await docker(['ps','--filter','name=raworc_api','--format','{{.Names}}'], { silent: true });
               if (s.stdout.trim()) {
-                console.log('  • API: http://localhost:9000');
-                console.log('  • Public Content: http://localhost:8000');
+                console.log(`  • API: ${withPort(RAWORC_HOST_URL,9000)}`);
+                console.log(`  • Public Content: ${withPort(RAWORC_HOST_URL,8000)}`);
               }
             }
           } catch(_) {}

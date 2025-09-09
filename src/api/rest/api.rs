@@ -44,9 +44,9 @@ PID: {}
     // Initialize database connection and app state
     info!("Connecting to MySQL database...");
 
-    // Get environment variables or use defaults
+    // Get required environment variables (start script provides these)
     let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "mysql://root:root@localhost:3306/raworc".to_string());
+        .expect("DATABASE_URL must be set by the start script");
     let jwt_secret =
         std::env::var("JWT_SECRET").unwrap_or_else(|_| "development-secret-key".to_string());
     let host = std::env::var("RAWORC_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
@@ -91,4 +91,3 @@ PID: {}
     rest_server_result?;
     Ok(())
 }
-

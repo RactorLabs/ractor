@@ -642,9 +642,9 @@ impl MessageHandler {
     }
 
     async fn build_system_prompt(&self) -> String {
-        // Read hosting context from environment with defaults
+        // Read hosting context from environment (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let base_url_env = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        let base_url_env = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
         // Fetch agent info from API/DB (name, content_port, publish state)
