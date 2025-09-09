@@ -25,10 +25,9 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop specified Raworc component(s) only (no implicit all)')
+    .description('Stop and remove specified Raworc component container(s) (no implicit all)')
     .argument('<components...>', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway)')
     .option('-c, --cleanup', 'Clean up agent containers after stopping')
-    .option('-r, --remove', 'Remove containers after stopping')
     .option('-v, --volumes', 'Remove named volumes after stopping')
     .option('-n, --network', 'Remove Docker network after stopping')
     .action(async (components, options) => {
@@ -39,7 +38,6 @@ module.exports = (program) => {
         }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Cleanup agent containers: ${!!options.cleanup}`);
-        console.log(chalk.blue('[INFO] ') + `Remove containers: ${!!options.remove}`);
         console.log(chalk.blue('[INFO] ') + `Remove volumes: ${!!options.volumes}`);
         console.log(chalk.blue('[INFO] ') + `Remove network: ${!!options.network}`);
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
@@ -64,19 +62,18 @@ module.exports = (program) => {
           } catch (e) {
             console.log(chalk.red('[ERROR] ') + `Failed to stop ${comp}: ${e.message}`);
           }
-          if (options.remove) {
-            console.log(chalk.blue('[INFO] ') + `Removing ${comp} container...`);
-            try {
-              const exists = await docker(['ps','-aq','--filter',`name=${name}`], { silent: true });
-              if (exists.stdout.trim()) {
-                await docker(['rm', name]);
-                console.log(chalk.green('[SUCCESS] ') + `Removed ${comp} container`);
-              } else {
-                console.log(chalk.green('[SUCCESS] ') + `${comp} container already removed`);
-              }
-            } catch (e) {
-              console.log(chalk.yellow('[WARNING] ') + `Failed to remove ${comp} container`);
+          // Always remove container after stopping
+          console.log(chalk.blue('[INFO] ') + `Removing ${comp} container...`);
+          try {
+            const exists = await docker(['ps','-aq','--filter',`name=${name}`], { silent: true });
+            if (exists.stdout.trim()) {
+              await docker(['rm', '-f', name]);
+              console.log(chalk.green('[SUCCESS] ') + `Removed ${comp} container`);
+            } else {
+              console.log(chalk.green('[SUCCESS] ') + `${comp} container already removed`);
             }
+          } catch (e) {
+            console.log(chalk.yellow('[WARNING] ') + `Failed to remove ${comp} container`);
           }
           console.log();
         }
