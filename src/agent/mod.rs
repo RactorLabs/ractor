@@ -58,16 +58,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     let api_client = Arc::new(api::RaworcClient::new(config.clone()));
 
     // Initialize Ollama client
-    let mut ollama_client = match ollama::OllamaClient::new(&ollama_host) {
+    let ollama_client = match ollama::OllamaClient::new(&ollama_host) {
         Ok(client) => client,
         Err(e) => {
             tracing::error!("Failed to initialize Ollama client: {}", e);
             return Err(anyhow::anyhow!("Failed to initialize Ollama client: {}", e));
         }
     };
-
-    // Set the API client for tool message sending
-    ollama_client.set_api_client(api_client.clone());
     let ollama_client = Arc::new(ollama_client);
 
     // Initialize guardrails

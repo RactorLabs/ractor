@@ -1,4 +1,3 @@
-use super::api::RaworcClient;
 use super::error::{HostError, Result};
 use super::tool_registry::ToolRegistry;
 use reqwest::Client;
@@ -9,7 +8,6 @@ use std::sync::Arc;
 pub struct OllamaClient {
     client: Client,
     base_url: String,
-    api_client: Option<Arc<RaworcClient>>, // kept for parity; unused currently
     reasoning_effort: Option<String>,
     thinking_budget: Option<u32>,
 }
@@ -239,14 +237,9 @@ impl OllamaClient {
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_client: None,
             reasoning_effort,
             thinking_budget,
         })
-    }
-
-    pub fn set_api_client(&mut self, api_client: Arc<RaworcClient>) {
-        self.api_client = Some(api_client);
     }
 
     pub async fn complete(

@@ -591,26 +591,7 @@ impl Agent {
         .await
     }
 
-    pub async fn find_by_name_and_creator(
-        pool: &sqlx::MySqlPool,
-        name: &str,
-        created_by: &str,
-    ) -> Result<Option<Agent>, sqlx::Error> {
-        sqlx::query_as::<_, Agent>(
-            r#"
-            SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata, tags,
-                   is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
-            FROM agents
-            WHERE name = ? AND created_by = ?
-            "#,
-        )
-        .bind(name)
-        .bind(created_by)
-        .fetch_optional(pool)
-        .await
-    }
+    
 
     // Helper function to find an available port for Content HTTP server
     async fn find_available_port() -> Result<u16, std::io::Error> {
@@ -621,59 +602,7 @@ impl Agent {
         Ok(port)
     }
 
-    // Helper function to generate random unique agent name
-    async fn generate_random_name(pool: &sqlx::MySqlPool) -> Result<String, sqlx::Error> {
-        use rand::seq::SliceRandom;
-        use rand::Rng;
-
-        // Common adjectives that work well for agent names
-        let adjectives = [
-            "swift", "bold", "keen", "wise", "calm", "brave", "quick", "smart", "bright", "sharp",
-            "clear", "cool", "warm", "soft", "hard", "fast", "slow", "deep", "light", "dark",
-            "rich", "pure", "fresh", "clean",
-        ];
-
-        // Common nouns that work well for agent names
-        let nouns = [
-            "falcon", "tiger", "wolf", "bear", "eagle", "lion", "fox", "hawk", "shark", "whale",
-            "raven", "robin", "swift", "storm", "river", "ocean", "mountain", "forest", "desert",
-            "valley", "cloud", "star", "moon", "sun",
-        ];
-
-        let mut rng = rand::thread_rng();
-
-        // Try to generate a unique name (up to 10 attempts)
-        for _attempt in 0..10 {
-            let adjective = adjectives.choose(&mut rng).unwrap();
-            let noun = nouns.choose(&mut rng).unwrap();
-            let number: u16 = rng.gen_range(10..999);
-
-            let candidate_name = format!("{}-{}-{}", adjective, noun, number);
-
-            // Validate the name follows our pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-            if candidate_name.len() <= 64
-                && candidate_name.chars().next().unwrap().is_ascii_lowercase()
-                && candidate_name
-                    .chars()
-                    .last()
-                    .unwrap()
-                    .is_ascii_alphanumeric()
-                && candidate_name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            {
-                // Check if name is available
-                if Self::find_by_name(pool, &candidate_name).await?.is_none() {
-                    return Ok(candidate_name);
-                }
-            }
-        }
-
-        // Fallback to UUID-based name if we can't generate a unique readable name
-        let uuid = uuid::Uuid::new_v4().to_string();
-        let fallback_name = format!("agent-{}", &uuid[0..8]);
-        Ok(fallback_name)
-    }
+    
 
     pub async fn create(
         pool: &sqlx::MySqlPool,
@@ -961,26 +890,7 @@ impl Agent {
         .await
     }
 
-    pub async fn find_published_by_name(
-        pool: &sqlx::MySqlPool,
-        name: &str,
-    ) -> Result<Option<Agent>, sqlx::Error> {
-        sqlx::query_as::<_, Agent>(
-            r#"
-            SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata, tags,
-                   is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
-            FROM agents
-            WHERE name = ? AND is_published = true
-            ORDER BY published_at DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(name)
-        .fetch_optional(pool)
-        .await
-    }
+    
 
     // find_agents_to_auto_close replaced by controller-side logic
 

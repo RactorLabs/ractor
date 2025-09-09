@@ -37,10 +37,6 @@ pub struct CreateMessageRequest {
 
 // Import constants from shared models
 
-#[derive(Debug, Serialize)]
-pub struct UpdateAgentStateRequest {
-    pub state: String,
-}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Agent {
@@ -232,51 +228,7 @@ impl RaworcClient {
         }
     }
 
-    /// Update agent state (generic)
-    pub async fn update_agent_state(&self, state: String) -> Result<()> {
-        let url = format!(
-            "{}/api/v0/agents/{}/state",
-            self.config.api_url, self.config.agent_name
-        );
-
-        let request = UpdateAgentStateRequest {
-            state: state.clone(),
-        };
-
-        debug!("Updating agent state to: {:?}", state);
-
-        let response = self
-            .client
-            .put(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&request)
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Agent state updated to: {:?}", state);
-                Ok(())
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to update state ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
+    
 
     /// Update agent to busy (clears idle_from)
     pub async fn update_agent_to_busy(&self) -> Result<()> {

@@ -1544,12 +1544,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         }
     }
 
-    // Legacy method - kept for backward compatibility, but deprecated
-    // Use close_container or delete_container instead
-    pub async fn destroy_container(&self, agent_name: &str) -> Result<()> {
-        warn!("destroy_container is deprecated, use close_container or delete_container instead");
-        self.delete_container(agent_name).await
-    }
+    // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
 
     pub async fn execute_command(&self, agent_name: &str, command: &str) -> Result<String> {
         let container_name = format!("raworc_agent_{agent_name}");
