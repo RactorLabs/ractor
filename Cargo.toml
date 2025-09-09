@@ -35,8 +35,8 @@ hyper = { version = "0.14", features = ["full"] }
 url = "2.5"
 
 [[bin]]
-name = "raworc-server"
-path = "src/server/main.rs"
+name = "raworc-api"
+path = "src/api/main.rs"
 
 [[bin]]
 name = "raworc-controller" 

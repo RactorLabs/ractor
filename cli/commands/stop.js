@@ -26,20 +26,20 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove containers for specific components (no implicit all)')
-    .argument('<components...>', 'Components to stop. Allowed: mysql, ollama, server, controller, operator, content, gateway, agents (all agent containers)')
+    .argument('<components...>', 'Components to stop. Allowed: mysql, ollama, api, controller, operator, content, gateway, agents (all agent containers)')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes the specified component containers only.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
       '  • Use component "agents" to stop/remove all agent containers.\n' +
       '\nExamples:\n' +
-      '  $ raworc stop server controller\n' +
+      '  $ raworc stop api controller\n' +
       '  $ raworc stop agents\n' +
       '  $ raworc stop mysql ollama\n')
     .action(async (components, _opts, cmd) => {
       try {
         if (!components || components.length === 0) {
-          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop (e.g., server controller agents)');
+          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop (e.g., api controller agents)');
           cmd.help({ error: true });
         }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
@@ -47,9 +47,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { mysql: 'mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const map = { mysql: 'mysql', api: 'raworc_api', controller: 'raworc_controller', ollama: 'ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
         const includeAgents = components.includes('agents');
-        const order = ['gateway','controller','operator','content','server','ollama','mysql'];
+        const order = ['gateway','controller','operator','content','api','ollama','mysql'];
         const toStop = components.filter(c => c !== 'agents');
         const ordered = order.filter((c) => toStop.includes(c));
 

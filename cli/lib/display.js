@@ -36,8 +36,8 @@ function showCommandBox(title, info = {}) {
   // Build info lines based on what's provided
   const lines = [title];
   
-  if (info.server !== false) {
-    lines.push(`Server: ${configData.server || 'http://localhost:9000'}`);
+  if (info.api !== false) {
+    lines.push(`API: ${configData.api || 'http://localhost:9000'}`);
   }
   
   if (info.user !== false) {

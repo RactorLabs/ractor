@@ -4,7 +4,7 @@ use std::process;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-use crate::server::rest::create_router;
+use crate::api::rest::create_router;
 use crate::shared::init_database;
 
 pub async fn run_rest_server() -> Result<()> {
@@ -21,7 +21,7 @@ pub async fn run_rest_server() -> Result<()> {
     // Set up cleanup on exit
     let pid_file_cleanup = pid_file.to_string();
     ctrlc::set_handler(move || {
-        info!("Shutting down Raworc server...");
+        info!("Shutting down Raworc API...");
         let _ = fs::remove_file(&pid_file_cleanup);
         std::process::exit(0);
     })?;
@@ -76,7 +76,7 @@ PID: {}
     info!("Binding to: {}", bind_addr);
     let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
 
-    info!("Server started successfully!");
+    info!("API started successfully!");
     info!("REST API Endpoint: http://{}:{}/api/v0", host, port);
     info!("Ready to accept requests...");
 
@@ -91,3 +91,4 @@ PID: {}
     rest_server_result?;
     Ok(())
 }
+

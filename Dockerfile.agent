@@ -72,4 +72,4 @@ WORKDIR /agent
 # Configure environment variables for agent structure
 ENV RAWORC_AGENT_DIR=/agent
 
-CMD ["raworc-agent", "--api-url", "http://raworc_server:9000", "--agent-name", "unknown", "--api-key", "unknown"]
+CMD ["raworc-agent", "--api-url", "http://raworc_api:9000", "--agent-name", "unknown", "--api-key", "unknown"]

@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_logs']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, ollama, server, controller, operator, content, gateway', [])
+    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, ollama, api, controller, operator, content, gateway', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -104,14 +104,14 @@ module.exports = (program) => {
     .option('--mysql-database <db>', 'MySQL database name', 'raworc')
     .option('--mysql-user <user>', 'MySQL user', 'raworc')
     .option('--mysql-password <pw>', 'MySQL user password', 'raworc')
-    // Server options
-    .option('--server-database-url <url>', 'Server DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
-    .option('--server-jwt-secret <secret>', 'Server JWT_SECRET')
-    .option('--server-rust-log <level>', 'Server RUST_LOG', 'info')
-    .option('--server-raworc-host <host>', 'Server RAWORC_HOST')
-    .option('--server-raworc-port <port>', 'Server RAWORC_PORT')
-    .option('--server-api-port <port>', 'Host port for API (maps to 9000)', '9000')
-    .option('--server-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
+    // API options
+    .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
+    .option('--api-jwt-secret <secret>', 'API JWT_SECRET')
+    .option('--api-rust-log <level>', 'API RUST_LOG', 'info')
+    .option('--api-raworc-host <host>', 'API RAWORC_HOST')
+    .option('--api-raworc-port <port>', 'API RAWORC_PORT')
+    .option('--api-api-port <port>', 'Host port for API (maps to 9000)', '9000')
+    .option('--api-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
     // Controller options
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
@@ -125,7 +125,7 @@ module.exports = (program) => {
       '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
       '\nExamples:\n' +
       '  $ raworc start                                # Start full stack\n' +
-      '  $ raworc start server controller              # Start API + controller\n' +
+      '  $ raworc start api controller                 # Start API + controller\n' +
       '  $ raworc start mysql                          # Ensure MySQL is up\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
@@ -169,7 +169,7 @@ module.exports = (program) => {
           }
         }
 
-        const SERVER_IMAGE = await resolveRaworcImage('server','raworc_server','raworc/raworc_server', tag);
+        const API_IMAGE = await resolveRaworcImage('api','raworc_api','raworc/raworc_api', tag);
         const CONTROLLER_IMAGE = await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag);
         const AGENT_IMAGE = await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
         const OPERATOR_IMAGE = await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag);
@@ -182,12 +182,12 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'server', 'operator', 'content', 'controller', 'gateway'];
+          components = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
         }
 
-        // Enforce startup order: mysql → ollama → server → controller
-        // In particular, ensure server starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'server', 'operator', 'content', 'controller', 'gateway'];
+        // Enforce startup order: mysql → ollama → api → controller
+        // In particular, ensure api starts before controller when both are requested.
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -268,6 +268,11 @@ module.exports = (program) => {
                 '--health-timeout','5s',
                 '--health-retries','5',
                 'mysql:8.0',
+                // Persist logs into data volume
+                '--log-error=/var/lib/mysql/mysql-error.log',
+                '--slow_query_log=ON',
+                '--long_query_time=2',
+                '--slow_query_log_file=/var/lib/mysql/mysql-slow.log',
                 '--default-authentication-plugin=mysql_native_password',
                 '--collation-server=utf8mb4_unicode_ci',
                 '--character-set-server=utf8mb4'
@@ -341,6 +346,7 @@ module.exports = (program) => {
               if (hostPublish) args.push('-p','11434:11434');
               args.push(
                 '-v','ollama_data:/root/.ollama',
+                '-v','ollama_data:/var/log/ollama',
                 '-e',`OLLAMA_KEEP_ALIVE=${options.ollamaKeepAlive || '1h'}`,
                 '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
                 '-e',`OLLAMA_NUM_CTX=${contextLength}`,
@@ -349,7 +355,10 @@ module.exports = (program) => {
                 ...cpuFlag,
                 ...memFlag,
                 ...shmFlag,
-                'ollama/ollama:latest'
+                '--entrypoint','/bin/sh',
+                'ollama/ollama:latest',
+                '-lc',
+                'mkdir -p /var/log/ollama; exec ollama serve 2>&1 | tee -a /var/log/ollama/ollama.log'
               );
 
               await docker(args);
@@ -382,29 +391,29 @@ module.exports = (program) => {
               break;
             }
 
-            case 'server': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring API server is running...');
-              if (await containerRunning('raworc_server')) { console.log(chalk.green('[SUCCESS] ') + 'Server already running'); console.log(); break; }
-              if (await containerExists('raworc_server')) {
-                await docker(['start','raworc_server']);
-                console.log(chalk.green('[SUCCESS] ') + 'Server started');
+            case 'api': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring API is running...');
+              if (await containerRunning('raworc_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
+              if (await containerExists('raworc_api')) {
+                await docker(['start','raworc_api']);
+                console.log(chalk.green('[SUCCESS] ') + 'API started');
                 console.log();
                 break;
               }
               const args = ['run','-d',
-                '--name','raworc_server',
+                '--name','raworc_api',
                 '--network','raworc_network',
-                '-p', `${String(options.serverApiPort || '9000')}:9000`,
-                '-v', 'raworc_logs:/app/logs',
-                '-e',`DATABASE_URL=${options.serverDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
-                '-e',`JWT_SECRET=${options.serverJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
-                '-e',`RUST_LOG=${options.serverRustLog || 'info'}`,
-                ...(options.serverRaworcHost ? ['-e', `RAWORC_HOST=${options.serverRaworcHost}`] : []),
-                ...(options.serverRaworcPort ? ['-e', `RAWORC_PORT=${options.serverRaworcPort}`] : []),
-                SERVER_IMAGE
+                '-p', `${String(options.apiApiPort || '9000')}:9000`,
+                '-v', 'raworc_api_data:/app/logs',
+                '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
+                '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
+                '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
+                ...(options.apiRaworcHost ? ['-e', `RAWORC_HOST=${options.apiRaworcHost}`] : []),
+                ...(options.apiRaworcPort ? ['-e', `RAWORC_PORT=${options.apiRaworcPort}`] : []),
+                API_IMAGE
               ];
               await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + 'API server container started');
+              console.log(chalk.green('[SUCCESS] ') + 'API container started');
               console.log();
               break;
             }
@@ -437,6 +446,7 @@ module.exports = (program) => {
                 '--name','raworc_controller',
                 '--network','raworc_network',
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
+                '-v','raworc_controller_data:/app/logs',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
@@ -486,6 +496,7 @@ module.exports = (program) => {
                 '--network','raworc_network',
                 '-p','7000:7000',
                 '-v','raworc_content_data:/content',
+                '-v','raworc_operator_data:/app/logs',
                 ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
                 ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
                 OPERATOR_IMAGE
@@ -563,9 +574,9 @@ module.exports = (program) => {
               console.log('  • API via Gateway: http://localhost/api');
               console.log('  • Content: http://localhost/content');
             } else {
-              const s = await docker(['ps','--filter','name=raworc_server','--format','{{.Names}}'], { silent: true });
+              const s = await docker(['ps','--filter','name=raworc_api','--format','{{.Names}}'], { silent: true });
               if (s.stdout.trim()) {
-                console.log('  • API Server: http://localhost:9000');
+                console.log('  • API: http://localhost:9000');
                 console.log('  • Public Content: http://localhost:8000');
               }
             }
@@ -578,7 +589,7 @@ module.exports = (program) => {
           } catch(_) {}
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Next steps:');
-          console.log('  • Check logs: docker logs raworc_server -f');
+          console.log('  • Check logs: docker logs raworc_api -f');
           console.log('  • Authenticate: raworc login -u admin -p admin');
           console.log('  • Check version: raworc api version');
           console.log('  • Start agent: raworc agent create');

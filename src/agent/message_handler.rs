@@ -75,7 +75,7 @@ impl MessageHandler {
                     registry.register_tool(bash_tool).await;
                     registry.register_tool(text_editor_tool).await;
 
-                    // Register management tools (publish, sleep) that require explicit confirmation
+                    // Register management tools (publish, sleep)
                     let publish_tool = Box::new(super::builtin_tools::PublishTool::new(api_client_clone.clone()));
                     let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
                     registry.register_tool(publish_tool).await;
@@ -686,15 +686,25 @@ You are running as an Agent in the {host_name} system.
 - Live Content URL: {live_url}
  - Published Content URL: {published_url}
 - Published: {published_flag}
-- Published At: {published_at}
+ - Published At: {published_at}
+
+Platform endpoints:
+- Content Server: {base_url}/content — public gateway that serves published agent content at a stable URL.
+- API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
+
+About content and publishing:
+- Your live content is everything under /agent/content/. It is served immediately on the Live Content URL while you work.
+- Publishing creates a public, stable snapshot of your current /agent/content/ and makes it available at the Published Content URL: {published_url}.
+- Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
+- The Content Server serves the last published snapshot. It does not auto-update until you explicitly publish again.
 
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Your live content is automatically served at the Live Content URL.
 - Only include the Live Content URL in your responses when you create or update files under /agent/content/.
 - Share the Published Content URL ONLY if the user explicitly asks for the published URL or publish status.
-- If the user wants the current live content to be available at the published URL, ask them to publish explicitly (do not auto-publish).
-- Clearly state that publishing is an explicit action (via the Operator UI or API) and confirm before proceeding if asked to publish.
+- If the user wants the current live content to be available at the published URL, perform an explicit publish action (do not auto-publish without being asked).
+- Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
 - You have the Published Content URL in this context; do not include it in responses unless asked explicitly.
  - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 

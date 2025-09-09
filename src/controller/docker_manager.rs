@@ -1143,7 +1143,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Set environment variables for the agent structure
         let mut env = vec![
-            format!("RAWORC_API_URL=http://raworc_server:9000"),
+            format!("RAWORC_API_URL=http://raworc_api:9000"),
             format!("RAWORC_AGENT_NAME={}", agent_name),
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
@@ -1213,7 +1213,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let cmd = vec![
             "raworc-agent".to_string(),
             "--api-url".to_string(),
-            "http://raworc_server:9000".to_string(),
+            "http://raworc_api:9000".to_string(),
             "--agent-name".to_string(),
             agent_name.to_string(),
         ];
@@ -1346,7 +1346,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Set environment variables for the agent structure
         let mut env = vec![
-            format!("RAWORC_API_URL=http://raworc_server:9000"),
+            format!("RAWORC_API_URL=http://raworc_api:9000"),
             format!("RAWORC_AGENT_NAME={}", agent_name),
             format!("RAWORC_AGENT_DIR=/agent"),
             // Set the generated system tokens directly as environment variables
@@ -1406,7 +1406,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let cmd = vec![
             "raworc-agent".to_string(),
             "--api-url".to_string(),
-            "http://raworc_server:9000".to_string(),
+            "http://raworc_api:9000".to_string(),
             "--agent-name".to_string(),
             agent_name.to_string(),
         ];

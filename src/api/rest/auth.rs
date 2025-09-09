@@ -5,8 +5,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::server::auth::{authenticate_operator, create_operator_jwt};
-use crate::server::rest::error::{ApiError, ApiResult};
+use crate::api::auth::{authenticate_operator, create_operator_jwt};
+use crate::api::rest::error::{ApiError, ApiResult};
 use crate::shared::models::AppState;
 use crate::shared::rbac::TokenResponse;
 
@@ -84,7 +84,7 @@ pub async fn login(
 }
 
 pub async fn me(
-    Extension(auth): Extension<crate::server::rest::middleware::AuthContext>,
+    Extension(auth): Extension<crate::api::rest::middleware::AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     use crate::shared::rbac::AuthPrincipal;
 
@@ -101,7 +101,7 @@ pub async fn me(
 
 pub async fn create_token(
     State(state): State<Arc<AppState>>,
-    Extension(auth): Extension<crate::server::rest::middleware::AuthContext>,
+    Extension(auth): Extension<crate::api::rest::middleware::AuthContext>,
     Json(req): Json<CreateTokenRequest>,
 ) -> ApiResult<Json<LoginResponse>> {
     use crate::shared::rbac::{AuthPrincipal, RbacClaims, SubjectType};
@@ -141,32 +141,39 @@ pub async fn create_token(
         }
     };
 
-    // Create JWT claims for the principal (non-admin, limited access)
-    let exp = Utc::now() + Duration::hours(24);
+    // Create JWT claims
+    let expires_in = 24; // 24 hours
+    let expiration = Utc::now()
+        .checked_add_signed(Duration::hours(expires_in))
+        .expect("valid timestamp");
     let claims = RbacClaims {
         sub: req.principal.clone(),
-        sub_type: principal_type,
-        exp: exp.timestamp() as usize,
+        sub_type: match principal_type {
+            SubjectType::Subject => SubjectType::Subject,
+            SubjectType::Operator => SubjectType::Operator,
+        },
+        exp: expiration.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
-        iss: "raworc-auth".to_string(),
+        iss: "raworc-rbac".to_string(),
     };
 
+    // Sign JWT
     let token = encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(state.jwt_secret.as_ref()),
     )
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("JWT encoding failed: {}", e)))?;
+    .map_err(ApiError::Jwt)?;
 
-    let token_response = TokenResponse {
+    Ok(Json(LoginResponse {
         token,
-        expires_at: exp.to_rfc3339(),
-    };
-
-    // Include principal info in response
-    let mut response: LoginResponse = token_response.into();
-    response.user = req.principal.clone();
-    response.role = "user".to_string(); // Created tokens are non-admin by default
-
-    Ok(Json(response))
+        token_type: "Bearer".to_string(),
+        expires_at: expiration.to_rfc3339(),
+        user: req.principal.clone(),
+        role: match principal_type {
+            SubjectType::Subject => "user".to_string(),
+            SubjectType::Operator => "operator".to_string(),
+        },
+    }))
 }
+

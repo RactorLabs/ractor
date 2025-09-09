@@ -23,7 +23,7 @@ class Config {
     }
     
     return {
-      server: 'http://localhost:9000',
+      api: 'http://localhost:9000',
       timeout: 30000
     };
   }
@@ -62,10 +62,10 @@ class Config {
     }
   }
 
-  // Get server URL
-  getServerUrl() {
+  // Get API URL
+  getApiUrl() {
     const config = this.getConfig();
-    return config.server;
+    return config.api;
   }
 
   // Get timeout

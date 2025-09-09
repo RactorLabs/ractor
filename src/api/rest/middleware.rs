@@ -1,4 +1,4 @@
-use crate::server::auth::decode_jwt;
+use crate::api::auth::decode_jwt;
 use crate::shared::models::AppState;
 use crate::shared::rbac::{AuthPrincipal, Subject, SubjectType};
 use axum::{
@@ -80,3 +80,4 @@ pub async fn auth_middleware(
 
     Ok(next.run(request).await)
 }
+

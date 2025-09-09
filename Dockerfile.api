@@ -16,10 +16,10 @@ RUN mkdir -p /app/logs /var/lib/raworc/volumes
 COPY db ./db
 
 # Copy the pre-built binary from local build
-COPY target/release/raworc-server /usr/local/bin/raworc-server
+COPY target/release/raworc-api /usr/local/bin/raworc-api
 
 # Expose ports
 EXPOSE 9000
 
-# Start the server
-CMD ["raworc-server"]
+# Start the API
+CMD ["raworc-api"]

@@ -131,7 +131,7 @@ impl Tool for TextEditorTool {
     }
 }
 
-/// Publish tool (explicit user confirmation required)
+/// Publish tool (no confirmation required)
 pub struct PublishTool {
     api: Arc<RaworcClient>,
 }
@@ -145,26 +145,19 @@ impl Tool for PublishTool {
     fn name(&self) -> &str { "publish" }
 
     fn description(&self) -> &str {
-        "Publish the agent's current content to its public URL. Requires confirm=true."
+        "Publish the agent's current content to its public URL."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "confirm": { "type": "boolean", "description": "Must be true to proceed" },
                 "note": { "type": "string", "description": "Optional reason or note" }
-            },
-            "required": ["confirm"]
+            }
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<String> {
-        let confirmed = args.get("confirm").and_then(|v| v.as_bool()).unwrap_or(false);
-        if !confirmed {
-            return Ok("Confirmation required. Re-run publish with { \"confirm\": true }".to_string());
-        }
-
         match self.api.publish_agent().await {
             Ok(_) => Ok("Publish request submitted successfully.".to_string()),
             Err(e) => Ok(format!("Failed to publish: {}", e)),

@@ -6,7 +6,7 @@ use axum::{
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
-use crate::server::rest::{
+use crate::api::rest::{
     auth, handlers, logging_middleware::request_logging_middleware, middleware::auth_middleware,
 };
 use crate::shared::models::AppState;
@@ -113,3 +113,4 @@ async fn version() -> axum::Json<serde_json::Value> {
         "api": "v0"
     }))
 }
+

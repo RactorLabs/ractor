@@ -1,15 +1,15 @@
 use anyhow::Result;
 
-#[path = "../server/mod.rs"]
-mod server;
+#[path = "../api/mod.rs"]
+mod api;
 #[path = "../shared/mod.rs"]
 mod shared;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize service logging
-    let _ = shared::logging::init_service_logging("/app/logs", "raworc_server");
+    let _ = shared::logging::init_service_logging("/app/logs", "raworc_api");
 
     // Run the API server
-    server::rest::server::run_rest_server().await
+    api::rest::api::run_rest_server().await
 }

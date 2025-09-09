@@ -5,8 +5,8 @@ use axum::{
 use sqlx;
 use std::sync::Arc;
 
-use crate::server::rest::error::{ApiError, ApiResult};
-use crate::server::rest::middleware::AuthContext;
+use crate::api::rest::error::{ApiError, ApiResult};
+use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::constants::{
     AGENT_STATE_BUSY, AGENT_STATE_IDLE, AGENT_STATE_INIT, AGENT_STATE_SLEPT,
 };

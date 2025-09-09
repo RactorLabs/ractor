@@ -14,8 +14,8 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Run ./scripts/rebuild.sh (fails if script missing)')
-    .argument('[args...]', 'Arguments passed through to scripts/rebuild.sh (e.g., server controller)')
-    .addHelpText('after', '\nExamples:\n  $ raworc rebuild                    # shows script usage (requires args)\n  $ raworc rebuild controller         # rebuild controller\n  $ raworc rebuild server agent       # rebuild multiple components')
+    .argument('[args...]', 'Arguments passed through to scripts/rebuild.sh (e.g., api controller)')
+    .addHelpText('after', '\nExamples:\n  $ raworc rebuild                    # shows script usage (requires args)\n  $ raworc rebuild controller         # rebuild controller\n  $ raworc rebuild api agent          # rebuild multiple components')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');

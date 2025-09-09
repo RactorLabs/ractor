@@ -6,7 +6,7 @@ class DockerManager {
     // Use published Docker images from Docker Hub
     this.images = {
       mysql: 'mysql:8.0',
-      server: 'raworc/raworc_server:latest',
+      api: 'raworc/raworc_api:latest',
       controller: 'raworc/raworc_controller:latest',
       agent: 'raworc/raworc_agent:latest',
       operator: 'raworc/raworc_operator:latest',
@@ -53,11 +53,11 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['mysql', 'raworc_server', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
+    const serviceList = services.length > 0 ? services : ['mysql', 'raworc_api', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
     
     // Map service names to component names
     const componentMap = {
-      'raworc_server': 'server',
+      'raworc_api': 'api',
       'raworc_controller': 'controller',
       'mysql': 'mysql',
       'raworc_operator': 'operator',
@@ -92,7 +92,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'raworc_content_data', 'raworc_logs']) {
+    for (const volume of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -133,6 +133,11 @@ class DockerManager {
           '--health-timeout', '5s',
           '--health-retries', '5',
           this.images.mysql,
+          // Persist logs into data volume
+          '--log-error=/var/lib/mysql/mysql-error.log',
+          '--slow_query_log=ON',
+          '--long_query_time=2',
+          '--slow_query_log_file=/var/lib/mysql/mysql-slow.log',
           '--default-authentication-plugin=mysql_native_password',
           '--collation-server=utf8mb4_unicode_ci',
           '--character-set-server=utf8mb4'
@@ -148,6 +153,7 @@ class DockerManager {
           '--name', 'raworc_operator',
           '--network', 'raworc_network',
           '-v', 'raworc_content_data:/content',
+          '-v', 'raworc_operator_data:/app/logs',
           ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
           ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
           this.images.operator
@@ -176,17 +182,17 @@ class DockerManager {
         console.log('🚀 raworc_gateway started (port 80)');
         break;
 
-      case 'server':
+      case 'api':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_server',
+          '--name', 'raworc_api',
           '--network', 'raworc_network',
           '-p', '9000:9000',
-          '-v', 'raworc_logs:/app/logs',
+          '-v', 'raworc_api_data:/app/logs',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
-          this.images.server
+          this.images.api
         ]);
         break;
 
@@ -196,6 +202,7 @@ class DockerManager {
           '--name', 'raworc_controller',
           '--network', 'raworc_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
+          '-v', 'raworc_controller_data:/app/logs',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
@@ -232,12 +239,12 @@ class DockerManager {
 
   // Stop services
   async stop(services = [], cleanup = false) {
-    // Default to stopping gateway, controller, operator and server
-    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_content', 'raworc_server'];
+    // Default to stopping gateway, controller, operator and api
+    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_content', 'raworc_api'];
     
     // Map service names to component names
     const componentMap = {
-      'raworc_server': 'server',
+      'raworc_api': 'api',
       'raworc_controller': 'controller',
       'mysql': 'mysql',
       'raworc_operator': 'operator',

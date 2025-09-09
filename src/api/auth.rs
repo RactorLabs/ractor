@@ -105,3 +105,4 @@ pub fn decode_jwt(token: &str, secret: &str) -> Result<RbacClaims> {
 }
 
 // Function removed - was unused
+

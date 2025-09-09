@@ -45,7 +45,7 @@ usage() {
   echo "Build Docker images for Raworc components"
   echo ""
   echo "Components:"
-  echo "  server      Build the server image"
+  echo "  api         Build the api image"
   echo "  controller  Build the controller image"
   echo "  agent       Build the agent image"
   echo "  all         Build all components (default)"
@@ -56,9 +56,9 @@ usage() {
   echo ""
   echo "Examples:"
   echo "  $0                      Build all components"
-  echo "  $0 server controller    Build only server and controller"
+  echo "  $0 api controller       Build only api and controller"
   echo "  $0 --no-cache           Build all components without cache"
-  echo "  $0 --no-cache server    Build server without cache"
+  echo "  $0 --no-cache api       Build api without cache"
 }
 
 # Parse command line arguments
@@ -94,7 +94,7 @@ fi
 
 # Expand 'all' to actual components
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("server" "controller" "agent" "operator" "content" "gateway")
+  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway")
 fi
 
 print_status "Building Raworc Docker images"
@@ -130,9 +130,9 @@ echo ""
 # Build components
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server)
-    image_name="raworc_server:${TAG}"
-    dockerfile="Dockerfile.server"
+  api)
+    image_name="raworc_api:${TAG}"
+    dockerfile="Dockerfile.api"
     ;;
   controller)
     image_name="raworc_controller:${TAG}"
@@ -206,7 +206,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  server | controller | agent)
+  api | controller | agent)
     echo "  raworc_${component}:${TAG}"
     ;;
   esac

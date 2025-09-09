@@ -3,11 +3,11 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <component> [component ...]" >&2
-  echo "Buildable components: server controller agent operator content gateway" >&2
+  echo "Buildable components: api controller agent operator content gateway" >&2
   exit 1
 fi
 
-BUILDABLE_SET="server controller agent operator content gateway"
+BUILDABLE_SET="api controller agent operator content gateway"
 
 for COMPONENT in "$@"; do
   if ! grep -qw "$COMPONENT" <<< "$BUILDABLE_SET"; then

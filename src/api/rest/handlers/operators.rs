@@ -6,9 +6,9 @@ use bcrypt::{hash, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::server::rest::error::{ApiError, ApiResult};
-use crate::server::rest::middleware::AuthContext;
-use crate::server::rest::rbac_enforcement::{check_api_permission, permissions};
+use crate::api::rest::error::{ApiError, ApiResult};
+use crate::api::rest::middleware::AuthContext;
+use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::AppState;
 use crate::shared::rbac::Operator;
 
