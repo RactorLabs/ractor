@@ -416,7 +416,6 @@ module.exports = (program) => {
               const args = ['run','-d',
                 '--name','raworc_api',
                 '--network','raworc_network',
-                '-p', `${String(options.apiApiPort || '9000')}:9000`,
                 '-v', 'raworc_api_data:/app/logs',
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
@@ -510,7 +509,6 @@ module.exports = (program) => {
               args.push(
                 '--name','raworc_operator',
                 '--network','raworc_network',
-                '-p','7000:7000',
                 '-v','raworc_content_data:/content',
                 '-v','raworc_operator_data:/app/logs',
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
@@ -591,11 +589,7 @@ module.exports = (program) => {
               console.log(`  • API via Gateway: ${RAWORC_HOST_URL}/api`);
               console.log(`  • Content: ${RAWORC_HOST_URL}/content`);
             } else {
-              const s = await docker(['ps','--filter','name=raworc_api','--format','{{.Names}}'], { silent: true });
-              if (s.stdout.trim()) {
-                console.log(`  • API: ${withPort(RAWORC_HOST_URL,9000)}`);
-                console.log(`  • Public Content: ${withPort(RAWORC_HOST_URL,8000)}`);
-              }
+              console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
           } catch(_) {}
           try {

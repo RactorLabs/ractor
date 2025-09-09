@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/`: Rust services — `server/` (API), `controller/` (orchestration), `agent/` (runtime), `shared/` (common code). Binaries: `raworc-api`, `raworc-controller`, `raworc-agent`.
+- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `agent/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `raworc-api`, `raworc-controller`, `raworc-agent`, `raworc-content`.
 - `cli/`: Node.js CLI (`raworc`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Default admin: `admin/admin`.
@@ -10,8 +10,10 @@
 ## Build, Test, and Development Commands
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
-- Start full stack (Docker): `raworc start` (MySQL on `3307`, API `9000`, public `8000`). Use `./scripts/build.sh` in dev if you need to build images.
-- Stop: `raworc stop`.
+- Start services (Docker via CLI): `raworc start [components...]`
+  - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
+  - In dev, use `./scripts/build.sh` to build images when needed.
+- Stop: `raworc stop [components...]` (supports `agents` to stop all agent containers).
 - Dev CLI link: `./scripts/link.sh` then use `raworc --help` or `raworc start`.
 
 ## Contributor Workflow Rules
@@ -51,6 +53,29 @@ Note on commit message formatting:
 - Example local DB: `mysql://raworc:raworc@localhost:3307/raworc`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
+ - The CLI injects `RAWORC_HOST_NAME`/`RAWORC_HOST_URL` into Operator, Controller and agents for consistent links/branding.
+
+## Data Model Highlights (Agents)
+- Name-based primary key: agents are addressed by `name` (no numeric ID).
+- Core fields: `state` (`init|idle|busy|slept`), `created_by`, timestamps, `metadata` (JSON), `content_port` (host-mapped port for agent content).
+- Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`secrets`,`content`).
+- Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
+- Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
+
+## Agent Lifecycle & API
+- Controller creates the agent container and sets initial DB state to `init` (only if still `init`, to avoid racing agent updates).
+- The agent, on boot, calls the API to report state:
+  - `POST /api/v0/agents/{name}/idle` when ready (sets state to `idle` and starts idle timer).
+  - `POST /api/v0/agents/{name}/busy` when processing (sets `busy` and starts busy timer).
+- Sleep/Wake actions:
+  - `POST /agents/{name}/sleep` schedules container stop and sets state to `slept`.
+  - `POST /agents/{name}/wake` restarts container and transitions via `init`.
+- Messages: `GET/POST /agents/{name}/messages` for user<->agent chat, stored in `agent_messages`.
+
+## Operator UI
+- Primary routes live under `/agents` (list, create, details/chat). Legacy `/app/*` routes have been removed.
+- Agent page shows tags and supports “Remix”, “Edit Tags”, “Delete” via modals. Sleep/Wake buttons appear only when actionable.
+- Published content is served by the `raworc-content` service under `/content/{agent}` and proxied publicly via the Gateway at port 80.
 
 ## Agent-Specific Instructions
 - Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.

@@ -206,7 +206,7 @@
         const port = agent.content_port || agent.contentPort;
         const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
         const proto = typeof window !== 'undefined' ? window.location.protocol : 'http:';
-        next = `${proto}//${host}:${port}/content/`;
+        next = `${proto}//${host}:${port}/content/${encodeURIComponent(agent?.name || name)}/`;
       } else if (agent && agent.name) {
         // Fallback to published content via gateway using absolute host URL
         next = `${getHostUrl()}/content/${agent.name}/`;

@@ -666,8 +666,8 @@ impl MessageHandler {
         let operator_url = format!("{}", base_url);
         let api_url = format!("{}/api", base_url);
         let live_url = content_port_ctx
-            // Live content is mounted under /content for consistency with gateway paths
-            .map(|p| format!("{}:{}/content/", base_url, p))
+            // Live content is mounted under /content/<agent_name> for consistency with gateway paths
+            .map(|p| format!("{}:{}/content/{}/", base_url, p, agent_name_ctx))
             .unwrap_or_else(|| "(content port not assigned)".to_string());
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 

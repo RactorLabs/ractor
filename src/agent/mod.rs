@@ -80,7 +80,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 
     // Start Content HTTP server on port 8000
-    info!("Starting Content HTTP server on port 8000 (mounted under /content)...");
+    info!("Starting Content HTTP server on port 8000 (mounted under /content/<agent_name>)...");
     tokio::spawn(async {
         if let Err(e) = start_content_server().await {
             error!("Content HTTP server failed: {}", e);
@@ -179,7 +179,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
                 let operator_url = format!("{}", base_url);
                 let api_url = format!("{}/api", base_url);
                 // Live server now mounts content under /content for path consistency with the gateway
-                let live_url = format!("{}:{}/content/", base_url, content_port);
+                let live_url = format!("{}:{}/content/{}/", base_url, content_port, agent.name);
 
                 info!("{} environment detected", host_name);
                 info!("Operator: {}", operator_url);
@@ -245,7 +245,7 @@ async fn start_content_server() -> Result<()> {
     use std::path::Path;
     use tokio::fs;
 
-    async fn serve_content(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    async fn serve_content_with_agent(req: Request<Body>, agent_name: String) -> Result<Response<Body>, Infallible> {
         let path = req.uri().path().to_string();
 
         // Security: prevent path traversal
@@ -256,30 +256,50 @@ async fn start_content_server() -> Result<()> {
                 .unwrap());
         }
 
-        // Redirect root to /content/ for consistency
+        // Redirect root to /content/<agent_name>/ for consistency
         if path == "/" {
             return Ok(Response::builder()
                 .status(StatusCode::FOUND)
-                .header("Location", "/content/")
+                .header("Location", format!("/content/{}/", agent_name))
                 .body(Body::empty())
                 .unwrap());
         }
 
-        // Only serve under /content/*
+        // Only serve under /content/<agent_name>/*
         if !path.starts_with("/content/") {
             return Ok(Response::builder()
                 .status(StatusCode::FOUND)
-                .header("Location", "/content/")
+                .header("Location", format!("/content/{}/", agent_name))
                 .body(Body::empty())
                 .unwrap());
         }
 
-        // Map /content/... -> /agent/content/...
-        let stripped = path.trim_start_matches("/content/");
-        let file_path_owned = if stripped.is_empty() {
+        // Split path: /content/<who>/rest...
+        let mut parts = path.splitn(4, '/');
+        let _empty = parts.next(); // ""
+        let _content = parts.next(); // "content"
+        let who = parts.next().unwrap_or("");
+        let rest = parts.next().unwrap_or("");
+
+        if who != agent_name {
+            // Redirect to this agent's namespace, preserve rest
+            let target = if rest.is_empty() {
+                format!("/content/{}/", agent_name)
+            } else {
+                format!("/content/{}/{}", agent_name, rest)
+            };
+            return Ok(Response::builder()
+                .status(StatusCode::FOUND)
+                .header("Location", target)
+                .body(Body::empty())
+                .unwrap());
+        }
+
+        // Map /content/<agent_name>/... -> /agent/content/...
+        let file_path_owned = if rest.is_empty() || rest.ends_with('/') {
             "/agent/content/index.html".to_string()
         } else {
-            format!("/agent/content/{}", stripped)
+            format!("/agent/content/{}", rest)
         };
         let file_path = file_path_owned.as_str();
 
@@ -347,14 +367,22 @@ async fn start_content_server() -> Result<()> {
         }
     }
 
-    let make_svc =
-        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(serve_content)) });
+    let agent_name = std::env::var("RAWORC_AGENT_NAME").unwrap_or_else(|_| "unknown".to_string());
+    let make_svc = make_service_fn(move |_conn| {
+        let agent_name = agent_name.clone();
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| {
+                let agent_name = agent_name.clone();
+                serve_content_with_agent(req, agent_name)
+            }))
+        }
+    });
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     let server = Server::bind(&addr).serve(make_svc);
 
-    info!("Content HTTP server listening on http://0.0.0.0:8000 (URL prefix: /content)");
-    info!("Content directory: /agent/content/ mapped to /content");
+    info!("Content HTTP server listening on http://0.0.0.0:8000 (URL prefix: /content/<agent_name>)");
+    info!("Content directory: /agent/content/ mapped to /content/<agent_name>");
 
     if let Err(e) = server.await {
         error!("Content HTTP server error: {}", e);
