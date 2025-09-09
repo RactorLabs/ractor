@@ -83,7 +83,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 
     // Start Content HTTP server on port 8000
-    info!("Starting Content HTTP server on port 8000...");
+    info!("Starting Content HTTP server on port 8000 (mounted under /content)...");
     tokio::spawn(async {
         if let Err(e) = start_content_server().await {
             error!("Content HTTP server failed: {}", e);
@@ -181,7 +181,8 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
 
                 let operator_url = format!("{}", base_url);
                 let api_url = format!("{}/api", base_url);
-                let live_url = format!("{}:{}/", base_url, content_port);
+                // Live server now mounts content under /content for path consistency with the gateway
+                let live_url = format!("{}:{}/content/", base_url, content_port);
 
                 info!("{} environment detected", host_name);
                 info!("Operator: {}", operator_url);
@@ -248,7 +249,7 @@ async fn start_content_server() -> Result<()> {
     use tokio::fs;
 
     async fn serve_content(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-        let path = req.uri().path();
+        let path = req.uri().path().to_string();
 
         // Security: prevent path traversal
         if path.contains("..") {
@@ -258,14 +259,32 @@ async fn start_content_server() -> Result<()> {
                 .unwrap());
         }
 
-        // Default to index.html for root path
-        let file_path = if path == "/" {
-            "/agent/content/index.html"
+        // Redirect root to /content/ for consistency
+        if path == "/" {
+            return Ok(Response::builder()
+                .status(StatusCode::FOUND)
+                .header("Location", "/content/")
+                .body(Body::empty())
+                .unwrap());
+        }
+
+        // Only serve under /content/*
+        if !path.starts_with("/content/") {
+            return Ok(Response::builder()
+                .status(StatusCode::FOUND)
+                .header("Location", "/content/")
+                .body(Body::empty())
+                .unwrap());
+        }
+
+        // Map /content/... -> /agent/content/...
+        let stripped = path.trim_start_matches("/content/");
+        let file_path_owned = if stripped.is_empty() {
+            "/agent/content/index.html".to_string()
         } else {
-            // Remove leading slash and prepend content directory
-            let clean_path = path.trim_start_matches('/');
-            &format!("/agent/content/{}", clean_path)
+            format!("/agent/content/{}", stripped)
         };
+        let file_path = file_path_owned.as_str();
 
         // Check if file exists and serve it
         if Path::new(file_path).exists() {
@@ -337,8 +356,8 @@ async fn start_content_server() -> Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
     let server = Server::bind(&addr).serve(make_svc);
 
-    info!("Content HTTP server listening on http://0.0.0.0:8000");
-    info!("Content directory: /agent/content/");
+    info!("Content HTTP server listening on http://0.0.0.0:8000 (URL prefix: /content)");
+    info!("Content directory: /agent/content/ mapped to /content");
 
     if let Err(e) = server.await {
         error!("Content HTTP server error: {}", e);
