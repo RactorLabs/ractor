@@ -185,11 +185,7 @@ module.exports = (program) => {
           }
         }
 
-        const API_IMAGE = await resolveRaworcImage('api','raworc_api','raworc/raworc_api', tag);
-        const CONTROLLER_IMAGE = await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag);
-        const AGENT_IMAGE = await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
-        const OPERATOR_IMAGE = await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag);
-        const GATEWAY_IMAGE = await resolveRaworcImage('gateway','raworc_gateway','raworc/raworc_gateway', tag);
+        // Note: resolve images lazily per requested component to avoid unnecessary pulls
 
         console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
@@ -229,7 +225,7 @@ module.exports = (program) => {
         if (options.pull) {
           console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
           try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
-          // Raworc images are already resolved and pulled above if missing.
+          // Raworc images are resolved lazily when each component starts.
           console.log();
         }
 
@@ -416,6 +412,7 @@ module.exports = (program) => {
                 console.log();
                 break;
               }
+              const API_IMAGE = await resolveRaworcImage('api','raworc_api','raworc/raworc_api', tag);
               const args = ['run','-d',
                 '--name','raworc_api',
                 '--network','raworc_network',
@@ -455,7 +452,7 @@ module.exports = (program) => {
                 if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
               }
 
-              const agentImage = options.controllerAgentImage || AGENT_IMAGE;
+              const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
@@ -475,9 +472,10 @@ module.exports = (program) => {
                 '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
                 '-e',`AGENT_MEMORY_LIMIT=${options.controllerAgentMemoryLimit || '536870912'}`,
                 '-e',`AGENT_DISK_LIMIT=${options.controllerAgentDiskLimit || '1073741824'}`,
-                '-e',`RUST_LOG=${controllerRustLog}`,
-                CONTROLLER_IMAGE
+                '-e',`RUST_LOG=${controllerRustLog}`
               ];
+              // append image ref last
+              args.push(await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
@@ -490,7 +488,7 @@ module.exports = (program) => {
                 // If container exists, ensure it matches the desired image; recreate if not
                 const running = await containerRunning('raworc_operator');
                 const currentId = await containerImageId('raworc_operator');
-                const desiredId = await imageId(OPERATOR_IMAGE);
+                const desiredId = await imageId(await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag));
                 if (currentId && desiredId && currentId !== desiredId) {
                   console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
                   try { await docker(['rm','-f','raworc_operator']); } catch (_) {}
@@ -516,9 +514,9 @@ module.exports = (program) => {
                 '-v','raworc_content_data:/content',
                 '-v','raworc_operator_data:/app/logs',
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
-                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
-                OPERATOR_IMAGE
+                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`
               );
+              args.push(await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
@@ -558,7 +556,8 @@ module.exports = (program) => {
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','raworc_gateway','--network','raworc_network','-p','80:80', GATEWAY_IMAGE);
+              args.push('--name','raworc_gateway','--network','raworc_network','-p','80:80');
+              args.push(await resolveRaworcImage('gateway','raworc_gateway','raworc/raworc_gateway', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Gateway container started (port 80)');
               console.log();

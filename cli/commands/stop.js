@@ -25,60 +25,80 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop and remove containers for specific components (no implicit all)')
-    .argument('<components...>', 'Components to stop. Allowed: mysql, ollama, api, controller, operator, content, gateway, agents (all agent containers)')
+    .description('Stop and remove Raworc component containers (defaults to all if none specified)')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, agents (all agent containers). If omitted, stops all Raworc components.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
-      '  • Stops and removes the specified component containers only.\n' +
+      '  • Stops and removes only Raworc component containers.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
       '  • Use component "agents" to stop/remove all agent containers.\n' +
       '\nExamples:\n' +
-      '  $ raworc stop api controller\n' +
-      '  $ raworc stop agents\n' +
-      '  $ raworc stop mysql ollama\n')
+      '  $ raworc stop                     # stop all Raworc components\n' +
+      '  $ raworc stop api controller      # stop specific components\n' +
+      '  $ raworc stop operator content    # stop UI components\n' +
+      '  $ raworc stop agents              # stop all agent containers\n')
     .action(async (components, _opts, cmd) => {
       try {
+        // Default to stopping all Raworc components when none specified
         if (!components || components.length === 0) {
-          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop (e.g., api controller agents)');
+          components = ['gateway','controller','operator','content','api'];
+        }
+        // Validate component names (only Raworc components)
+        const allowed = new Set(['api','controller','operator','content','gateway','agents']);
+        const invalid = components.filter(c => !allowed.has(c));
+        if (invalid.length) {
+          console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, content, gateway, agents`);
           cmd.help({ error: true });
         }
+
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
 
         console.log();
 
-        const map = { mysql: 'mysql', api: 'raworc_api', controller: 'raworc_controller', ollama: 'ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const map = { api: 'raworc_api', controller: 'raworc_controller', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
         const includeAgents = components.includes('agents');
-        const order = ['gateway','controller','operator','content','api','ollama','mysql'];
+        const order = ['gateway','controller','operator','content','api'];
         const toStop = components.filter(c => c !== 'agents');
         const ordered = order.filter((c) => toStop.includes(c));
 
+        // Helper to list all containers matching a base name, including suffixed variants
+        async function listMatchingContainers(base) {
+          try {
+            const res = await docker(['ps','-a','--format','{{.Names}}','--filter',`name=${base}`], { silent: true });
+            const names = (res.stdout || '').trim().split('\n').filter(Boolean);
+            return names.filter(n => n === base || n.startsWith(base + '_') || n.startsWith(base + '-'));
+          } catch (_) { return []; }
+        }
+
         for (const comp of ordered) {
-          const name = map[comp];
-          console.log(chalk.blue('[INFO] ') + `Stopping ${comp} (${name})...`);
-          try {
-            const running = await docker(['ps','-q','--filter',`name=${name}`], { silent: true });
-            if (running.stdout.trim()) {
-              await docker(['stop', name]);
-              console.log(chalk.green('[SUCCESS] ') + `Stopped ${comp}`);
-            } else {
-              console.log(chalk.green('[SUCCESS] ') + `${comp} is not running`);
-            }
-          } catch (e) {
-            console.log(chalk.red('[ERROR] ') + `Failed to stop ${comp}: ${e.message}`);
+          const baseName = map[comp];
+          const matches = await listMatchingContainers(baseName);
+          if (!matches.length) {
+            console.log(chalk.green('[SUCCESS] ') + `${comp}: no containers found (base ${baseName})`);
+            console.log();
+            continue;
           }
-          // Always remove container after stopping
-          console.log(chalk.blue('[INFO] ') + `Removing ${comp} container...`);
-          try {
-            const exists = await docker(['ps','-aq','--filter',`name=${name}`], { silent: true });
-            if (exists.stdout.trim()) {
-              await docker(['rm', '-f', name]);
-              console.log(chalk.green('[SUCCESS] ') + `Removed ${comp} container`);
-            } else {
-              console.log(chalk.green('[SUCCESS] ') + `${comp} container already removed`);
+
+          console.log(chalk.blue('[INFO] ') + `Stopping ${comp} containers: ${matches.join(', ')}`);
+          for (const name of matches) {
+            try {
+              const running = await docker(['ps','-q','--filter',`name=^${name}$`], { silent: true });
+              if (running.stdout.trim()) {
+                await docker(['stop', name]);
+                console.log(chalk.green('[SUCCESS] ') + `Stopped ${name}`);
+              }
+            } catch (e) {
+              console.log(chalk.yellow('[WARNING] ') + `Failed to stop ${name}: ${e.message}`);
             }
+          }
+
+          console.log(chalk.blue('[INFO] ') + `Removing ${comp} containers...`);
+          try {
+            await docker(['rm','-f', ...matches]);
+            console.log(chalk.green('[SUCCESS] ') + `Removed ${matches.length} container(s) for ${comp}`);
           } catch (e) {
-            console.log(chalk.yellow('[WARNING] ') + `Failed to remove ${comp} container`);
+            console.log(chalk.yellow('[WARNING] ') + `Failed to remove some ${comp} containers: ${e.message}`);
           }
           console.log();
         }

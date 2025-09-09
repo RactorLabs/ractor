@@ -13,14 +13,25 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('rebuild')
-    .description('[development only] Run ./scripts/rebuild.sh (fails if script missing)')
-    .argument('[args...]', 'Arguments passed through to scripts/rebuild.sh (e.g., api controller)')
-    .addHelpText('after', '\nExamples:\n  $ raworc rebuild                    # rebuild all components (script default)\n  $ raworc rebuild controller         # rebuild controller\n  $ raworc rebuild api agent          # rebuild multiple components')
+    .description('[development only] Rebuild Raworc components via ./scripts/rebuild.sh')
+    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway. Flags are passed through.')
+    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway\n' +
+      '\nExamples:\n' +
+      '  $ raworc rebuild                    # rebuild all components (script default)\n' +
+      '  $ raworc rebuild controller         # rebuild controller\n' +
+      '  $ raworc rebuild api agent          # rebuild multiple components')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
         if (!fs.existsSync(scriptPath)) {
           console.error('[ERROR] scripts/rebuild.sh not found. This command is for development only.');
+          process.exit(1);
+        }
+        // Validate non-flag args are Raworc components
+        const allowed = new Set(['api','controller','agent','operator','content','gateway']);
+        const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
+        if (invalid.length) {
+          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);
           process.exit(1);
         }
         await runScript(scriptPath, args);

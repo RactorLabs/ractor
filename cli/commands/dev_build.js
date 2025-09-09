@@ -13,14 +13,26 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('build')
-    .description('[development only] Run ./scripts/build.sh (fails if script missing)')
-    .argument('[args...]', 'Arguments passed through to scripts/build.sh (e.g., api controller)')
-    .addHelpText('after', '\nExamples:\n  $ raworc build                       # builds all (script default)\n  $ raworc build api controller        # pass components to script\n  $ raworc build -- -n --no-cache      # pass flags through to script')
+    .description('[development only] Build Raworc images via ./scripts/build.sh')
+    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway. Flags are passed through (e.g., -n, --no-cache).')
+    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway\n' +
+      '\nExamples:\n' +
+      '  $ raworc build                       # builds all (script default)\n' +
+      '  $ raworc build api controller        # build only api and controller\n' +
+      '  $ raworc build operator content      # build Operator UI and Content\n' +
+      '  $ raworc build -- -n --no-cache      # pass flags through to script')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'build.sh');
         if (!fs.existsSync(scriptPath)) {
           console.error('[ERROR] scripts/build.sh not found. This command is for development only.');
+          process.exit(1);
+        }
+        // Validate non-flag args are Raworc components (or 'all')
+        const allowed = new Set(['api','controller','agent','operator','content','gateway','all']);
+        const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
+        if (invalid.length) {
+          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);
           process.exit(1);
         }
         await runScript(scriptPath, args);
