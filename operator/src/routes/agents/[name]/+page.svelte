@@ -59,7 +59,8 @@
 
   let name = '';
   $: name = $page.params.name;
-  setPageTitle(`Agent: ${name}`);
+  // Keep document title as just the agent name (no prefix)
+  $: setPageTitle(name || 'Agent');
 
   let agent = null;
   let stateStr = '';
