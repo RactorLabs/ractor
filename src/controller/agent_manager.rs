@@ -117,16 +117,27 @@ impl AgentManager {
         .execute(&self.pool)
         .await;
 
+        // Ensure all busy agents have busy_from set
+        let _ = sqlx::query(
+            r#"
+            UPDATE agents
+            SET busy_from = NOW()
+            WHERE state = 'busy' AND busy_from IS NULL
+            "#,
+        )
+        .execute(&self.pool)
+        .await;
+
         // Find agents that need auto-sleep due to idle timeout
         let agents_to_close: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT name
             FROM agents
             WHERE (state = 'idle' AND idle_from IS NOT NULL AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW())
-               OR (state = 'busy' AND TIMESTAMPADD(SECOND, busy_timeout_seconds, COALESCE(last_activity_at, created_at)) <= NOW())
+               OR (state = 'busy' AND busy_from IS NOT NULL AND TIMESTAMPADD(SECOND, busy_timeout_seconds, busy_from) <= NOW())
             ORDER BY
               CASE WHEN state = 'idle' THEN TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from)
-                   ELSE TIMESTAMPADD(SECOND, busy_timeout_seconds, COALESCE(last_activity_at, created_at))
+                   ELSE TIMESTAMPADD(SECOND, busy_timeout_seconds, busy_from)
               END ASC
             LIMIT 50
             "#,
@@ -621,9 +632,9 @@ impl AgentManager {
             )
             .await?;
 
-        // Update last_activity_at and clear idle_from since agent is being woken (will set to idle later)
+        // Update last_activity_at and clear idle_from/busy_from since agent is being woken (will set to idle later)
         sqlx::query(
-            r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL WHERE name = ?"#,
+            r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
         )
         .bind(&agent_name)
         .execute(&self.pool)

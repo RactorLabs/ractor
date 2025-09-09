@@ -19,6 +19,7 @@ pub struct Agent {
     pub idle_timeout_seconds: i32,
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
+    pub busy_from: Option<DateTime<Utc>>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id (derived from name)
 }
@@ -466,7 +467,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
             ORDER BY created_at DESC
             "#,
@@ -484,7 +485,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
             WHERE name = ?
             "#,
@@ -504,7 +505,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
             WHERE name = ? AND created_by = ?
             "#,
@@ -586,10 +587,11 @@ impl Agent {
         // Use the provided name (random generation to be implemented later)
         let agent_name = req.name;
 
-        // Calculate timeout - auto_sleep_at will be set when agent becomes idle
+        // Initialize timeouts; idle_from/busy_from will be set on state transitions
         let idle_timeout = req.idle_timeout_seconds.unwrap_or(300);
         let busy_timeout = req.busy_timeout_seconds.unwrap_or(900);
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes idle
+        let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
 
         // Allocate Content port
         let content_port = Self::find_available_port()
@@ -599,8 +601,8 @@ impl Agent {
         // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO agents (name, created_by, metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agents (name, created_by, metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&agent_name)
@@ -609,7 +611,8 @@ impl Agent {
         .bind(idle_timeout)
         .bind(busy_timeout)
         .bind(idle_from)
-.bind(content_port as i32)
+        .bind(busy_from)
+        .bind(content_port as i32)
         .execute(pool)
         .await?;
 
@@ -632,6 +635,8 @@ impl Agent {
 
         // Create new agent based on parent (inherit timeouts)
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes idle
+        let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
+        let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
 
         // Allocate Content port for remix agent
         let content_port = Self::find_available_port()
@@ -642,9 +647,9 @@ impl Agent {
             r#"
             INSERT INTO agents (
                 name, created_by, parent_agent_name,
-                metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
@@ -654,6 +659,7 @@ impl Agent {
         .bind(parent.idle_timeout_seconds) // Inherit idle timeout from parent
         .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
         .bind(idle_from)
+        .bind(busy_from)
         .bind(content_port as i32)
         .execute(pool)
         .await?;
@@ -841,7 +847,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
             WHERE is_published = true
             ORDER BY published_at DESC
@@ -860,7 +866,7 @@ impl Agent {
             SELECT name, created_by, state, parent_agent_name,
                    created_at, last_activity_at, metadata,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
             WHERE name = ? AND is_published = true
             ORDER BY published_at DESC
@@ -880,13 +886,14 @@ impl Agent {
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set agent to idle and record idle_from
+        // Set agent to idle and record idle_from; clear busy_from
         sqlx::query(
             r#"
             UPDATE agents 
             SET state = 'idle',
                 last_activity_at = NOW(),
-                idle_from = NOW()
+                idle_from = NOW(),
+                busy_from = NULL
             WHERE name = ?
             "#,
         )
@@ -901,13 +908,14 @@ impl Agent {
         pool: &sqlx::MySqlPool,
         name: &str,
     ) -> Result<(), sqlx::Error> {
-        // Set agent to busy and clear idle_from (no idle timer while active)
+        // Set agent to busy: clear idle_from, set busy_from
         sqlx::query(
             r#"
             UPDATE agents 
             SET state = 'busy',
                 last_activity_at = NOW(),
-                idle_from = NULL
+                idle_from = NULL,
+                busy_from = NOW()
             WHERE name = ?
             "#,
         )

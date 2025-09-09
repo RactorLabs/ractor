@@ -38,6 +38,7 @@ pub struct AgentResponse {
     pub idle_timeout_seconds: i32,
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<String>,
+    pub busy_from: Option<String>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id
 }
@@ -64,6 +65,7 @@ impl AgentResponse {
             idle_timeout_seconds: agent.idle_timeout_seconds,
             busy_timeout_seconds: agent.busy_timeout_seconds,
             idle_from: agent.idle_from.map(|dt| dt.to_rfc3339()),
+            busy_from: agent.busy_from.map(|dt| dt.to_rfc3339()),
             content_port: agent.content_port,
         })
     }
