@@ -148,6 +148,8 @@ class DockerManager {
           '--name', 'raworc_operator',
           '--network', 'raworc_network',
           '-v', 'raworc_content_data:/content',
+          ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
+          ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
           this.images.operator
         ]);
         console.log('🚀 raworc_operator started');
@@ -197,6 +199,8 @@ class DockerManager {
           '-e', 'DATABASE_URL=mysql://raworc:raworc@raworc_mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
+          ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
+          ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
           '-e', `AGENT_IMAGE=${this.images.agent}`,
           '-e', 'AGENT_CPU_LIMIT=0.5',
           '-e', 'AGENT_MEMORY_LIMIT=536870912',

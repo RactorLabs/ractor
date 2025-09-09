@@ -1,5 +1,8 @@
+import { getHostName } from '$lib/branding.js';
+
 export function setPageTitle(title) {
   if (typeof document !== 'undefined') {
-    document.title = `Raworc | ${title}`;
+    const name = getHostName();
+    document.title = `${name} | ${title}`;
   }
 }

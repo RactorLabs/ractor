@@ -170,19 +170,26 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     match api_client.get_agent().await {
         Ok(agent) => {
             if let Some(content_port) = agent.content_port {
-                // Extract hostname from API URL instead of hardcoding localhost
-                let server_hostname = if let Ok(url) = url::Url::parse(&config.api_url) {
-                    url.host_str().unwrap_or("localhost").to_string()
-                } else {
-                    "localhost".to_string()
-                };
-                info!(
-                    "Content HTTP server available at: http://{}:{}/",
-                    server_hostname, content_port
-                );
-                info!(
-                    "Content folder: /agent/content/ - Create HTML files here for visual displays"
-                );
+                // Prefer RAWORC_HOST_URL for user-facing base URL with sensible default
+                let base_url = std::env::var("RAWORC_HOST_URL")
+                    .unwrap_or_else(|_| "http://localhost".to_string())
+                    .trim_end_matches('/')
+                    .to_string();
+
+                let host_name = std::env::var("RAWORC_HOST_NAME")
+                    .unwrap_or_else(|_| "Raworc".to_string());
+
+                let operator_url = format!("{}", base_url);
+                let api_url = format!("{}/api", base_url);
+                let live_url = format!("{}:{}/", base_url, content_port);
+                let published_url = format!("{}/content/{}", base_url, agent.name);
+
+                info!("{} environment detected", host_name);
+                info!("Operator: {}", operator_url);
+                info!("API: {}", api_url);
+                info!("Live content: {}", live_url);
+                info!("Published content: {}", published_url);
+                info!("Content folder: /agent/content/ - Create HTML files here for visual displays");
             } else {
                 warn!("Content port not available for this agent");
             }

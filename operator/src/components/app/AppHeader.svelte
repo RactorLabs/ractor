@@ -4,6 +4,7 @@
   import { onMount } from 'svelte';
   import { auth, initAuthFromCookies } from '$lib/auth.js';
   
+  export let hostName = 'Raworc';
   let operatorName = '';
   $: operatorName = $auth?.name && $auth.name.trim().length > 0 ? $auth.name : '';
   onMount(() => {
@@ -46,9 +47,9 @@
 	<div class="brand">
 		<a href="/" aria-label="link" class="brand-logo">
 			<span class="brand-img">
-				<span class="brand-img-text text-theme">ர</span>
-			</span>
-			<span class="brand-text">Raworc</span>
+    	<span class="brand-img-text text-theme">ர</span>
+    		</span>
+			<span class="brand-text">{hostName}</span>
 		</a>
 	</div>
 	<!-- END brand -->

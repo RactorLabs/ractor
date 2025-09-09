@@ -1148,6 +1148,12 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
+        // Propagate host branding and URL to agents with defaults
+        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+        let host_url = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        env.push(format!("RAWORC_HOST_NAME={}", host_name));
+        env.push(format!("RAWORC_HOST_URL={}", host_url));
+
         // Configure Ollama host for model inference (default to host.docker.internal)
         let ollama_host = std::env::var("OLLAMA_HOST")
             .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
@@ -1348,6 +1354,12 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_PRINCIPAL={}", principal),
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
+
+        // Propagate host branding and URL to agents with defaults
+        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+        let host_url = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        env.push(format!("RAWORC_HOST_NAME={}", host_name));
+        env.push(format!("RAWORC_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (default to host.docker.internal)
         let ollama_host = std::env::var("OLLAMA_HOST")

@@ -14,10 +14,15 @@
   import { appVariables, generateVariables } from '/src/stores/appVariables.js';
   import { setPageTitle } from '$lib/utils';
   import { page } from '$app/stores';
+  export let data;
 	
   onMount(async () => {
     import('bootstrap');
     document.querySelector('body').classList.add('app-init');
+    // Expose brand name for client-side usage
+    if (typeof window !== 'undefined') {
+      window.__RAWORC_HOST_NAME__ = (data && data.hostName) ? data.hostName : 'Raworc';
+    }
     
     $appVariables = generateVariables();
     // Always keep sidebar minimized
@@ -47,7 +52,7 @@
 	class:app-with-top-nav={$appOptions.appTopNav}
 	class:app-footer-fixed={$appOptions.appFooterFixed}
 >
-	{#if !$appOptions.appHeaderHide}<AppHeader />{/if}
+	{#if !$appOptions.appHeaderHide}<AppHeader hostName={(data && data.hostName) ? data.hostName : 'Raworc'} />{/if}
 	{#if !$appOptions.appSidebarHide}<AppSidebar />{/if}
 	{#if $appOptions.appTopNav}<AppTopNav />{/if}
 	<AppThemePanel />
@@ -56,5 +61,5 @@
 		<slot />
 	</div>
 	
-	{#if $appOptions.appFooter}<AppFooter />{/if}
+	{#if $appOptions.appFooter}<AppFooter hostName={(data && data.hostName) ? data.hostName : 'Raworc'} />{/if}
 </div>

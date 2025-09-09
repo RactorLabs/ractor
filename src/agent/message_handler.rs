@@ -635,7 +635,69 @@ impl MessageHandler {
     }
 
     async fn build_system_prompt(&self) -> String {
-        let mut prompt = String::from(
+        // Read hosting context from environment with defaults
+        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+        let base_url_env = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        let base_url = base_url_env.trim_end_matches('/').to_string();
+
+        // Fetch agent info (name and content_port) from API/DB
+        let (agent_name_ctx, content_port_ctx) = match self.api_client.get_agent().await {
+            Ok(agent) => {
+                let nm = agent.name.clone();
+                let cp = agent.content_port;
+                (nm, cp)
+            }
+            Err(_) => ("unknown".to_string(), None),
+        };
+
+        // Current timestamp in UTC for context
+        let current_time_utc = chrono::Utc::now().to_rfc3339();
+
+        let operator_url = format!("{}", base_url);
+        let api_url = format!("{}/api", base_url);
+        let live_url = content_port_ctx
+            .map(|p| format!("{}:{}/", base_url, p))
+            .unwrap_or_else(|| "(content port not assigned)".to_string());
+        let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
+
+        // Start with System Context specific to Raworc runtime
+        let mut prompt = String::from(format!(
+            r#"SYSTEM CONTEXT
+
+You are running as an Agent in the {host_name} system.
+
+- System Name: {host_name}
+- Base URL: {base_url}
+- Current Time (UTC): {current_time_utc}
+- Operator URL: {operator_url}
+- API URL: {api_url}
+- Your Agent Name: {agent_name}
+- Your Content Port: {content_port}
+- Live Content URL: {live_url}
+- Published Content URL: {published_url}
+
+Important behavior:
+- Do NOT ask the user to start an HTTP server for /agent/content.
+- Your live content is automatically served at the Live Content URL.
+- The published version is available at the Published Content URL.
+- Whenever you create or update files under /agent/content/, always include BOTH the Live and Published Content URLs in your response.
+
+"#,
+            host_name = host_name,
+            base_url = base_url,
+            operator_url = operator_url,
+            api_url = api_url,
+            agent_name = agent_name_ctx,
+            content_port = content_port_ctx
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "N/A".to_string()),
+            live_url = live_url,
+            published_url = published_url,
+            current_time_utc = current_time_utc,
+        ));
+
+        // Continue with the general capabilities prompt
+        prompt.push_str(
             r#"You are a highly capable AI agent with full access to bash commands and text editing capabilities. You operate in an isolated container environment where you can execute commands, install packages, and create any type of content to help users accomplish their goals.
 
 ## Core Capabilities
