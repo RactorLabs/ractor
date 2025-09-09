@@ -402,10 +402,12 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              // Always recreate to apply updated environment
+              if (await containerRunning('raworc_controller')) { console.log(chalk.green('[SUCCESS] ') + 'Controller already running'); console.log(); break; }
               if (await containerExists('raworc_controller')) {
-                console.log(chalk.blue('[INFO] ') + 'Recreating controller to apply configuration...');
-                try { await docker(['rm','-f','raworc_controller']); } catch (_) {}
+                await docker(['start','raworc_controller']);
+                console.log(chalk.green('[SUCCESS] ') + 'Controller started');
+                console.log();
+                break;
               }
               // Default OLLAMA_HOST: prefer internal container if running
               let OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
