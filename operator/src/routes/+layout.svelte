@@ -40,6 +40,11 @@
   })();
 </script>
 
+<svelte:head>
+  <title>{getHostName()}</title>
+  <meta name="application-name" content={getHostName()}>
+</svelte:head>
+
 <div id="app" class="app" 
 	class:app-header-menu-search-toggled={$appOptions.appHeaderSearchToggled}
 	class:app-sidebar-toggled={$appOptions.appSidebarToggled && !$appOptions.appSidebarHide}
