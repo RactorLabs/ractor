@@ -140,7 +140,7 @@
       </div>
       <div class="card-body">
         <div class="row g-3 align-items-end">
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-8">
             <label class="form-label" for="ep-select">Endpoint</label>
             <select id="ep-select" class="form-select" on:change={(e)=>onSelect(e.target.selectedIndex)}>
               {#each endpoints as ep, i}
@@ -148,7 +148,19 @@
               {/each}
             </select>
           </div>
-          <div class="col-12 col-md-4">
+          <div class="col-12 col-md-4 d-flex justify-content-md-end align-items-center gap-2 text-md-end">
+            {#if !token && cookieToken}
+              <span class="badge bg-secondary">Cookie token</span>
+            {/if}
+            <button class="btn btn-theme" on:click|preventDefault={execute} disabled={loading}>
+              {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Calling…{:else}Call API{/if}
+            </button>
+          </div>
+        </div>
+
+        <!-- Token input moved to its own line -->
+        <div class="row g-3 mt-1">
+          <div class="col-12">
             <label class="form-label" for="pg-token">Auth Token</label>
             <input id="pg-token" class="form-control" placeholder={cookieToken ? 'Using cookie token if empty' : 'Bearer token'} bind:value={$playground.token} />
             <div class="form-check mt-1">
@@ -161,14 +173,6 @@
             {#if !token && cookieToken}
               <div class="form-text">Defaulting to cookie token for this session.</div>
             {/if}
-          </div>
-          <div class="col-12 col-md-4 d-flex justify-content-md-end align-items-center gap-2 text-md-end">
-            {#if !token && cookieToken}
-              <span class="badge bg-secondary">Cookie token</span>
-            {/if}
-            <button class="btn btn-theme" on:click|preventDefault={execute} disabled={loading}>
-              {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Calling…{:else}Call API{/if}
-            </button>
           </div>
         </div>
 
