@@ -9,10 +9,37 @@
   import MarkdownIt from 'markdown-it';
   import taskLists from 'markdown-it-task-lists';
   import { browser } from '$app/environment';
+  import { getHostUrl } from '$lib/branding.js';
 
   let md;
   try {
     md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
+    // Ensure all markdown links open in a new tab (chat panel)
+    if (md && md.renderer && md.renderer.rules) {
+      const defaultRender = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
+        return self.renderToken(tokens, idx, options);
+      };
+      md.renderer.rules.link_open = function(tokens, idx, options, env, self) {
+        // target="_blank"
+        const tgtIdx = tokens[idx].attrIndex('target');
+        if (tgtIdx < 0) tokens[idx].attrPush(['target', '_blank']);
+        else tokens[idx].attrs[tgtIdx][1] = '_blank';
+
+        // rel="noopener noreferrer" (merge with existing if present)
+        const relRequired = 'noopener noreferrer';
+        const relIdx = tokens[idx].attrIndex('rel');
+        if (relIdx < 0) {
+          tokens[idx].attrPush(['rel', relRequired]);
+        } else {
+          const current = tokens[idx].attrs[relIdx][1] || '';
+          const set = new Set(current.split(/\s+/).filter(Boolean));
+          relRequired.split(' ').forEach((v) => set.add(v));
+          tokens[idx].attrs[relIdx][1] = Array.from(set).join(' ');
+        }
+
+        return defaultRender(tokens, idx, options, env, self);
+      };
+    }
   } catch (e) {
     console.error('Markdown init failed', e);
     md = null;
@@ -116,8 +143,8 @@
         const proto = typeof window !== 'undefined' ? window.location.protocol : 'http:';
         next = `${proto}//${host}:${port}/`;
       } else if (agent && agent.name) {
-        // Fallback to published content via gateway
-        next = `/content/${agent.name}/`;
+        // Fallback to published content via gateway using absolute host URL
+        next = `${getHostUrl()}/content/${agent.name}/`;
       } else {
         next = '';
       }
@@ -565,7 +592,7 @@
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
                     <li>
-                      <a class="dropdown-item" href={`/content/${agent.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                      <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
                     </li>
                     <li>
                       <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>

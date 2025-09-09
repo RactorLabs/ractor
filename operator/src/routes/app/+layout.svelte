@@ -19,6 +19,7 @@
       const res = await fetch('/api/v0/auth', { headers: { 'Authorization': `Bearer ${token || ''}` } });
       if (!res.ok) throw new Error('unauthorized');
     } catch (_) {
+      // Token invalid
       goto('/login');
       return;
     }

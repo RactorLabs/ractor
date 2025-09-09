@@ -14,15 +14,16 @@
   import { appVariables, generateVariables } from '/src/stores/appVariables.js';
   import { setPageTitle } from '$lib/utils';
   import { page } from '$app/stores';
+  import { getHostName, getHostUrl } from '$lib/branding.js';
   export let data;
-	
+
   onMount(async () => {
     import('bootstrap');
     document.querySelector('body').classList.add('app-init');
     // Expose host name and host URL for client-side usage
     if (typeof window !== 'undefined') {
-      window.__RAWORC_HOST_NAME__ = (data && data.hostName) ? data.hostName : 'Raworc';
-      window.__RAWORC_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : 'http://localhost';
+      window.__RAWORC_HOST_NAME__ = (data && data.hostName) ? data.hostName : getHostName();
+      window.__RAWORC_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : getHostUrl();
     }
     
     $appVariables = generateVariables();
@@ -53,7 +54,7 @@
 	class:app-with-top-nav={$appOptions.appTopNav}
 	class:app-footer-fixed={$appOptions.appFooterFixed}
 >
-	{#if !$appOptions.appHeaderHide}<AppHeader hostName={(data && data.hostName) ? data.hostName : 'Raworc'} />{/if}
+  {#if !$appOptions.appHeaderHide}<AppHeader hostName={(data && data.hostName) ? data.hostName : getHostName()} />{/if}
 	{#if !$appOptions.appSidebarHide}<AppSidebar />{/if}
 	{#if $appOptions.appTopNav}<AppTopNav />{/if}
 	<AppThemePanel />
@@ -62,5 +63,5 @@
 		<slot />
 	</div>
 	
-	{#if $appOptions.appFooter}<AppFooter hostName={(data && data.hostName) ? data.hostName : 'Raworc'} />{/if}
+  {#if $appOptions.appFooter}<AppFooter hostName={(data && data.hostName) ? data.hostName : getHostName()} />{/if}
 </div>

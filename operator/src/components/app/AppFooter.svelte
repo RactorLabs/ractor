@@ -1,7 +1,9 @@
 <script>
 	let year = (new Date()).getFullYear();
-  export let hostName = 'Raworc';
+  import { getHostName } from '$lib/branding.js';
+  export let hostName = '';
+  $: resolvedHostName = hostName || getHostName();
 </script>
 <div id="footer" class="app-footer">
-	&copy; {year } {hostName}
+	&copy; {year } {resolvedHostName}
 </div>

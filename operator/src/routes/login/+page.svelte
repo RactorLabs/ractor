@@ -3,7 +3,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { onMount, onDestroy } from 'svelte';
   import { appOptions } from '/src/stores/appOptions.js';
-  import { setToken, setOperatorName, isAuthenticated } from '$lib/auth.js';
+  import { setToken, setOperatorName, isAuthenticated, getToken, logoutClientSide } from '$lib/auth.js';
 
   let operator = 'admin';
   let pass = '';
@@ -34,12 +34,27 @@
     }
   }
 
-  onMount(() => {
+  onMount(async () => {
     setPageTitle('Login');
     $appOptions.appContentClass = 'p-0';
     $appOptions.appSidebarHide = true;
     $appOptions.appHeaderHide = true;
-    if (isAuthenticated()) goto('/agents');
+    // If a token is present, validate it to prevent redirect loops with stale cookies
+    try {
+      if (isAuthenticated()) {
+        const t = getToken();
+        const res = await fetch('/api/v0/auth', { headers: { 'Authorization': `Bearer ${t || ''}` } });
+        if (res.ok) {
+          goto('/agents');
+          return;
+        }
+        // Invalid token – clear and stay on login
+        logoutClientSide();
+      }
+    } catch (_) {
+      // On any error, clear cookies and show login
+      logoutClientSide();
+    }
   });
 
   onDestroy(() => {

@@ -3,7 +3,8 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   setPageTitle('Home');
   import { page } from '$app/stores';
-  $: hostName = $page?.data?.hostName || 'Raworc';
+  import { getHostName } from '$lib/branding.js';
+  $: hostName = $page?.data?.hostName || getHostName();
 </script>
 
 <div class="row">

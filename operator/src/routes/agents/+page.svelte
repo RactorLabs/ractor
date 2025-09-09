@@ -26,10 +26,6 @@
       return;
     }
     const res = await apiFetch('/agents');
-    if (res.status === 401 || res.status === 403) {
-      goto('/login');
-      return;
-    }
     if (!res.ok) {
       error = `Failed to load agents (HTTP ${res.status})`;
     } else {

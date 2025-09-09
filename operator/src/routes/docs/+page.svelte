@@ -3,6 +3,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { page } from '$app/stores';
+  import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
   const API_VERSION = 'minor (v0)';
@@ -77,7 +78,7 @@
     <Card class="mb-3">
       <div class="card-body p-4">
         <div class="text-center mb-2">
-          <div class="fs-20px fw-bold">{$page?.data?.hostName || 'Raworc'} REST API</div>
+          <div class="fs-20px fw-bold">{$page?.data?.hostName || getHostName()} REST API</div>
           <div class="text-body text-opacity-75">Public documentation of REST endpoints. Interactive pages require login.</div>
         </div>
         <div class="text-center">
