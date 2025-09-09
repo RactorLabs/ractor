@@ -36,11 +36,11 @@ module.exports = (program) => {
       '  $ raworc stop server controller\n' +
       '  $ raworc stop agents\n' +
       '  $ raworc stop mysql ollama\n')
-    .action(async (components) => {
+    .action(async (components, _opts, cmd) => {
       try {
         if (!components || components.length === 0) {
           console.log(chalk.red('[ERROR] ') + 'Please specify components to stop (e.g., server controller agents)');
-          process.exit(1);
+          cmd.help({ error: true });
         }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);

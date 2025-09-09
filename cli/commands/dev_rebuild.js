@@ -14,15 +14,16 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Run ./scripts/rebuild.sh (fails if script missing)')
-    .argument('<components...>', 'Components to rebuild (server, controller, agent, operator, content, gateway)')
-    .action(async (components) => {
+    .argument('[args...]', 'Arguments passed through to scripts/rebuild.sh (e.g., server controller)')
+    .addHelpText('after', '\nExamples:\n  $ raworc rebuild                    # shows script usage (requires args)\n  $ raworc rebuild controller         # rebuild controller\n  $ raworc rebuild server agent       # rebuild multiple components')
+    .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
         if (!fs.existsSync(scriptPath)) {
           console.error('[ERROR] scripts/rebuild.sh not found. This command is for development only.');
           process.exit(1);
         }
-        await runScript(scriptPath, components);
+        await runScript(scriptPath, args);
       } catch (err) {
         console.error('[ERROR] rebuild failed:', err.message);
         process.exit(1);

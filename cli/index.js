@@ -22,6 +22,10 @@ program
   .description('Remote Agentic Work Orchestrator - CLI for Computer use agents')
   .version(pkg.version, '-v, --version', 'output the version number');
 
+// Show help automatically after errors and suggestions for mistyped commands
+program.showHelpAfterError(true);
+program.showSuggestionAfterError(true);
+
 // Configure commands
 startCommand(program);
 stopCommand(program);

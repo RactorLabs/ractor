@@ -9,21 +9,21 @@ module.exports = (program) => {
     .argument('<types...>', 'One or more of: containers, images, volumes, networks')
     .addHelpText('after', '\n' +
       'Scope:\n' +
-      '  • containers: names starting with raworc_ or raworc_agent_\n' +
+      '  • containers: names starting with raworc_\n' +
       '  • images: repositories raworc/* or names starting raworc_\n' +
       '  • volumes: names starting raworc_\n' +
       '  • networks: raworc_network only\n' +
       '\nExamples:\n' +
       '  $ raworc clean containers images\n' +
       '  $ raworc clean volumes networks\n')
-    .action(async (types) => {
+    .action(async (types, _opts, cmd) => {
       try {
         const valid = new Set(['containers','images','volumes','networks']);
         const list = Array.isArray(types) ? types : [types];
         const invalid = list.filter(t => !valid.has(t));
         if (invalid.length) {
           display.error(`Invalid type(s): ${invalid.join(', ')}. Use only: containers, images, volumes, networks`);
-          process.exit(1);
+          cmd.help({ error: true });
         }
         // Show command box
         display.showCommandBox(`${display.icons.clean} Clean Raworc`, { operation: `Remove: ${list.join(', ')}` });
@@ -38,7 +38,7 @@ module.exports = (program) => {
         if (list.includes('containers')) {
           display.info('Stopping and removing Raworc containers...');
           const res = await docker.execDocker(['ps', '-a', '--format', '{{.Names}}'], { silent: true });
-          const names = (res.stdout || '').trim().split('\n').filter(Boolean).filter(n => /^raworc_/.test(n) || /^raworc_agent_/.test(n));
+          const names = (res.stdout || '').trim().split('\n').filter(Boolean).filter(n => /^raworc_/.test(n));
           if (names.length) {
             try { await docker.execDocker(['stop', ...names], { silent: true }); } catch(_) {}
             try { await docker.execDocker(['rm', '-f', ...names], { silent: true }); } catch(_) {}
