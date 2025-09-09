@@ -432,6 +432,8 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`OLLAMA_MODEL=${model}`,
+                ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
+                ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
                 '-e',`AGENT_IMAGE=${agentImage}`,
                 '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
                 '-e',`AGENT_MEMORY_LIMIT=${options.controllerAgentMemoryLimit || '536870912'}`,
@@ -470,7 +472,15 @@ module.exports = (program) => {
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','raworc_operator','--network','raworc_network','-p','7000:7000','-v','raworc_content_data:/content', OPERATOR_IMAGE);
+              args.push(
+                '--name','raworc_operator',
+                '--network','raworc_network',
+                '-p','7000:7000',
+                '-v','raworc_content_data:/content',
+                ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
+                ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
+                OPERATOR_IMAGE
+              );
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
