@@ -31,7 +31,8 @@
   }
 
   let name = genName();
-  let timeoutSeconds = 300; // default 5 minutes
+  let idleTimeoutSeconds = 300; // default 5 minutes
+  let busyTimeoutSeconds = 900; // default 15 minutes
   let metadataText = '{\n  "description": "",\n  "tags": []\n}';
   // Leave empty by default; show samples in the sidebar instead
   let instructions = '';
@@ -77,7 +78,8 @@
       const body = {
         name,
         metadata,
-        timeout_seconds: Number(timeoutSeconds) || 300,
+        idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
+        busy_timeout_seconds: Number(busyTimeoutSeconds) || 900,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
@@ -118,10 +120,15 @@
               </div>
               <div class="form-text">Lowercase letters, digits, dashes; max 63.</div>
             </div>
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="timeout">Timeout (seconds)</label>
-              <input id="timeout" type="number" min="1" class="form-control" bind:value={timeoutSeconds} />
-              <div class="form-text">Auto-sleep timer (default 300).</div>
+            <div class="col-12 col-md-3">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
+              <div class="form-text">Sleep after idle (default 300).</div>
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
+              <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
+              <div class="form-text">Sleep after busy too long (default 900).</div>
             </div>
 
             <div class="col-12">

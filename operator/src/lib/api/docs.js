@@ -1,9 +1,10 @@
 // API documentation data source for Raworc UI
 // Covers endpoints defined in src/server/rest/routes.rs
 import { getHostUrl } from '../branding.js';
-const BASE = getHostUrl();
 
-export const apiDocs = [
+export function getApiDocs(base) {
+  const BASE = base || getHostUrl();
+  return [
   {
     id: 'version',
     title: 'Version',
@@ -125,7 +126,8 @@ export const apiDocs = [
         { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
-        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Timeout in seconds (default 60)' }
+        { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Idle timeout seconds (default 300)' },
+        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Busy timeout seconds (default 900)' }
       ] },
       { method: 'GET', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Get agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
@@ -133,7 +135,8 @@ export const apiDocs = [
       { method: 'PUT', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Update agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
-        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Update timeout seconds' }
+        { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
+        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
       ] },
       { method: 'PUT', path: '/api/v0/agents/{name}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
@@ -200,7 +203,8 @@ export const apiDocs = [
       ] }
     ]
   }
-];
+  ];
+}
 
 export function methodClass(method) {
   switch ((method || '').toUpperCase()) {

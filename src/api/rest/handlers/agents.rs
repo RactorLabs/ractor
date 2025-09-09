@@ -35,8 +35,9 @@ pub struct AgentResponse {
     pub published_at: Option<String>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
-    pub timeout_seconds: i32,
-    pub auto_sleep_at: Option<String>,
+    pub idle_timeout_seconds: i32,
+    pub busy_timeout_seconds: i32,
+    pub idle_from: Option<String>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id
 }
@@ -60,8 +61,9 @@ impl AgentResponse {
             published_at: agent.published_at.map(|dt| dt.to_rfc3339()),
             published_by: agent.published_by,
             publish_permissions: agent.publish_permissions,
-            timeout_seconds: agent.timeout_seconds,
-            auto_sleep_at: agent.auto_sleep_at.map(|dt| dt.to_rfc3339()),
+            idle_timeout_seconds: agent.idle_timeout_seconds,
+            busy_timeout_seconds: agent.busy_timeout_seconds,
+            idle_from: agent.idle_from.map(|dt| dt.to_rfc3339()),
             content_port: agent.content_port,
         })
     }

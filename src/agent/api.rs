@@ -55,8 +55,9 @@ pub struct Agent {
     pub published_at: Option<String>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
-    pub timeout_seconds: i32,
-    pub auto_sleep_at: Option<String>,
+    pub idle_timeout_seconds: i32,
+    pub busy_timeout_seconds: i32,
+    pub idle_from: Option<String>,
     pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
@@ -276,7 +277,7 @@ impl RaworcClient {
         }
     }
 
-    /// Update agent to busy (clears auto_sleep_at)
+    /// Update agent to busy (clears idle_from)
     pub async fn update_agent_to_busy(&self) -> Result<()> {
         let url = format!(
             "{}/api/v0/agents/{}/busy",
@@ -315,7 +316,7 @@ impl RaworcClient {
         }
     }
 
-    /// Update agent to idle (sets auto_sleep_at)
+    /// Update agent to idle (sets idle_from)
     pub async fn update_agent_to_idle(&self) -> Result<()> {
         let url = format!(
             "{}/api/v0/agents/{}/idle",

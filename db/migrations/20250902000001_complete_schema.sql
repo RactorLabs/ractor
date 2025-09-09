@@ -50,9 +50,10 @@ CREATE TABLE IF NOT EXISTS agents (
     published_by VARCHAR(255) NULL,
     publish_permissions JSON DEFAULT ('{"code": true, "secrets": true, "content": true}'),
     
-    -- Timeout functionality  
-    timeout_seconds INT NOT NULL DEFAULT 300,
-    auto_sleep_at TIMESTAMP NULL,
+    -- Timeout functionality (idle/busy)
+    idle_timeout_seconds INT NOT NULL DEFAULT 300,
+    busy_timeout_seconds INT NOT NULL DEFAULT 900,
+    idle_from TIMESTAMP NULL,
     
     -- Content HTTP server port mapping
     content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
@@ -64,7 +65,10 @@ CREATE TABLE IF NOT EXISTS agents (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)
     ),
-    CONSTRAINT agents_timeout_check CHECK (timeout_seconds > 0 AND timeout_seconds <= 604800),
+    CONSTRAINT agents_timeout_check CHECK (
+        idle_timeout_seconds > 0 AND idle_timeout_seconds <= 604800 AND
+        busy_timeout_seconds > 0 AND busy_timeout_seconds <= 604800
+    ),
     CONSTRAINT fk_agents_parent FOREIGN KEY (parent_agent_name) REFERENCES agents(name) ON DELETE SET NULL,
     
     -- Indexes
@@ -72,7 +76,7 @@ CREATE TABLE IF NOT EXISTS agents (
     INDEX idx_agents_state (state),
     INDEX idx_agents_parent_agent_name (parent_agent_name),
     INDEX idx_agents_published (is_published, published_at),
-    INDEX idx_agents_auto_sleep (auto_sleep_at, state),
+    INDEX idx_agents_idle_from (idle_from, state),
     INDEX idx_agents_content_port (content_port)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
