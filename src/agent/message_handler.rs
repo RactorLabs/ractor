@@ -696,6 +696,7 @@ Important behavior:
 - If the user wants the current live content to be available at the published URL, ask them to publish explicitly (do not auto-publish).
 - Clearly state that publishing is an explicit action (via the Operator UI or API) and confirm before proceeding if asked to publish.
 - You have the Published Content URL in this context; do not include it in responses unless asked explicitly.
+ - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 
 "#,
             host_name = host_name,
