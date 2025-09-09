@@ -31,6 +31,7 @@ pub struct AgentResponse {
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
+    pub tags: Vec<String>,
     pub is_published: bool,
     pub published_at: Option<String>,
     pub published_by: Option<String>,
@@ -50,6 +51,14 @@ pub struct ListAgentsQuery {
 
 impl AgentResponse {
     async fn from_agent(agent: Agent, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
+        // Convert tags from JSON value to Vec<String>
+        let tags: Vec<String> = match agent.tags {
+            serde_json::Value::Array(arr) => arr
+                .into_iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect(),
+            _ => Vec::new(),
+        };
         Ok(Self {
             name: agent.name,
             created_by: agent.created_by,
@@ -58,6 +67,7 @@ impl AgentResponse {
             created_at: agent.created_at.to_rfc3339(),
             last_activity_at: agent.last_activity_at.map(|dt| dt.to_rfc3339()),
             metadata: agent.metadata,
+            tags,
             is_published: agent.is_published,
             published_at: agent.published_at.map(|dt| dt.to_rfc3339()),
             published_by: agent.published_by,

@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS agents (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,
     metadata JSON DEFAULT ('{}'),
+    tags JSON NOT NULL DEFAULT ('[]'),
     
     -- Publishing functionality
     is_published BOOLEAN NOT NULL DEFAULT false,
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS agents (
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[a-z][a-z0-9-]{0,61}[a-z0-9]$'),
     CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept')),
+    CONSTRAINT agents_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT agents_publish_check CHECK (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)

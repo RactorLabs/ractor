@@ -33,7 +33,17 @@
   let name = genName();
   let idleTimeoutSeconds = 300; // default 5 minutes
   let busyTimeoutSeconds = 900; // default 15 minutes
-  let metadataText = '{\n  "description": "",\n  "tags": []\n}';
+  let metadataText = '{\n  "description": ""\n}';
+  // Tags input (comma-separated, alphanumeric only per tag)
+  let tagsInput = '';
+  function parseTags() {
+    const parts = tagsInput.split(',').map(s => s.trim()).filter(Boolean);
+    const re = /^[A-Za-z0-9]+$/;
+    for (const t of parts) {
+      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Tags must be alphanumeric.`);
+    }
+    return parts;
+  }
   // Leave empty by default; show samples in the sidebar instead
   let instructions = '';
   let setup = '';
@@ -78,6 +88,7 @@
       const body = {
         name,
         metadata,
+        tags: parseTags(),
         idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
         busy_timeout_seconds: Number(busyTimeoutSeconds) || 900,
         instructions: instructions?.trim() ? instructions : null,
@@ -129,6 +140,12 @@
               <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
               <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
               <div class="form-text">Sleep after busy too long (default 900).</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="tags">Tags (comma-separated)</label>
+              <input id="tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
+              <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
             </div>
 
             <div class="col-12">

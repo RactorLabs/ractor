@@ -12,6 +12,7 @@ pub struct Agent {
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
+    pub tags: serde_json::Value,
     pub is_published: bool,
     pub published_at: Option<DateTime<Utc>>,
     pub published_by: Option<String>,
@@ -30,6 +31,8 @@ pub struct CreateAgentRequest {
     pub metadata: serde_json::Value,
     #[serde(deserialize_with = "deserialize_required_name")] // Required for now
     pub name: String,
+    #[serde(default, deserialize_with = "deserialize_tags_vec")]
+    pub tags: Vec<String>,
     #[serde(default)]
     pub secrets: std::collections::HashMap<String, String>,
     #[serde(default)]
@@ -109,6 +112,8 @@ pub struct UpdateAgentRequest {
     // Removed name field - names cannot be changed in v0.4.0
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "deserialize_optional_tags_vec")]
+    pub tags: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
     pub idle_timeout_seconds: Option<i32>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
@@ -282,6 +287,97 @@ where
     }
 
     deserializer.deserialize_any(StrictOptionI32Visitor)
+}
+
+// Validation helpers for tags: alphanumeric only, no spaces or special chars
+fn validate_tag_str(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+fn deserialize_tags_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, SeqAccess, Visitor};
+
+    struct TagsVisitor;
+
+    impl<'de> Visitor<'de> for TagsVisitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("an array of alphanumeric tag strings")
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut out = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                let t = item.trim();
+                if !validate_tag_str(t) {
+                    return Err(A::Error::custom(
+                        "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
+                    ));
+                }
+                out.push(t.to_string());
+            }
+            Ok(out)
+        }
+    }
+
+    deserializer.deserialize_any(TagsVisitor)
+}
+
+fn deserialize_optional_tags_vec<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, SeqAccess, Visitor};
+
+    struct OptTagsVisitor;
+
+    impl<'de> Visitor<'de> for OptTagsVisitor {
+        type Value = Option<Vec<String>>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("null or an array of alphanumeric tag strings")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut out = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                let t = item.trim();
+                if !validate_tag_str(t) {
+                    return Err(A::Error::custom(
+                        "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
+                    ));
+                }
+                out.push(t.to_string());
+            }
+            Ok(Some(out))
+        }
+    }
+
+    deserializer.deserialize_any(OptTagsVisitor)
 }
 
 // Custom deserializer for name validation (alphanumeric and hyphens only)
@@ -465,7 +561,7 @@ impl Agent {
         sqlx::query_as::<_, Agent>(
             r#"
             SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata,
+                   created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
@@ -483,7 +579,7 @@ impl Agent {
         sqlx::query_as::<_, Agent>(
             r#"
             SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata,
+                   created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
@@ -503,7 +599,7 @@ impl Agent {
         sqlx::query_as::<_, Agent>(
             r#"
             SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata,
+                   created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
@@ -601,13 +697,14 @@ impl Agent {
         // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO agents (name, created_by, metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agents (name, created_by, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&agent_name)
         .bind(created_by)
         .bind(&req.metadata)
+        .bind(serde_json::json!(req.tags))
         .bind(idle_timeout)
         .bind(busy_timeout)
         .bind(idle_from)
@@ -647,15 +744,16 @@ impl Agent {
             r#"
             INSERT INTO agents (
                 name, created_by, parent_agent_name,
-                metadata, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
+                metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
         .bind(created_by) // Use actual remixer as owner
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
+        .bind(&parent.tags)
         .bind(parent.idle_timeout_seconds) // Inherit idle timeout from parent
         .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
         .bind(idle_from)
@@ -733,6 +831,9 @@ impl Agent {
         if req.metadata.is_some() {
             updates.push(" metadata = ?".to_string());
         }
+        if req.tags.is_some() {
+            updates.push(" tags = ?".to_string());
+        }
 
         if req.idle_timeout_seconds.is_some() {
             updates.push(" idle_timeout_seconds = ?".to_string());
@@ -752,6 +853,9 @@ impl Agent {
 
         if let Some(metadata) = req.metadata {
             query = query.bind(metadata);
+        }
+        if let Some(tags) = req.tags {
+            query = query.bind(serde_json::json!(tags));
         }
 
         if let Some(idle_timeout_seconds) = req.idle_timeout_seconds {
@@ -845,7 +949,7 @@ impl Agent {
         sqlx::query_as::<_, Agent>(
             r#"
             SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata,
+                   created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents
@@ -864,7 +968,7 @@ impl Agent {
         sqlx::query_as::<_, Agent>(
             r#"
             SELECT name, created_by, state, parent_agent_name,
-                   created_at, last_activity_at, metadata,
+                   created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
                    idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
             FROM agents

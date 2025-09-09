@@ -72,6 +72,13 @@
                       <span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1">{a.description || a.desc || 'No description'}</div>
+                    {#if Array.isArray(a.tags) && a.tags.length}
+                      <div class="mt-2 d-flex flex-wrap gap-1">
+                        {#each a.tags as t}
+                          <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                        {/each}
+                      </div>
+                    {/if}
                     <div class="mt-2 d-flex gap-2">
                       <a class="btn btn-sm btn-outline-theme" href={'/agents/' + encodeURIComponent(a.name || '')}>Open</a>
                     </div>

@@ -91,6 +91,37 @@
   function isAwake() { return stateStr === 'idle' || stateStr === 'busy'; }
   function isInitOrDeleted() { return stateStr === 'init'; }
 
+  // Edit tags modal state and helpers
+  let showTagsModal = false;
+  let tagsInput = '';
+  function openEditTags() {
+    const current = Array.isArray(agent?.tags) ? agent.tags : [];
+    tagsInput = current.join(', ');
+    showTagsModal = true;
+  }
+  function closeEditTags() { showTagsModal = false; }
+  function parseTagsInput() {
+    const parts = tagsInput.split(',').map(s => s.trim()).filter(Boolean);
+    const re = /^[A-Za-z0-9]+$/;
+    for (const t of parts) {
+      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Tags must be alphanumeric.`);
+    }
+    return parts;
+  }
+  async function saveTags() {
+    try {
+      const tags = parseTagsInput();
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
+      if (!res.ok) throw new Error(res?.data?.error || `Update failed (HTTP ${res.status})`);
+      // Update local agent tags
+      agent = res.data || agent;
+      if (agent && !Array.isArray(agent.tags)) agent.tags = tags;
+      showTagsModal = false;
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
+
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}`);
     if (res.ok && res.data) {
@@ -475,6 +506,29 @@
   onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
 </script>
 
+<!-- Edit Tags Modal -->
+{#if showTagsModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Tags</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeEditTags}></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="edit-tags">Tags (comma-separated)</label>
+          <input id="edit-tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
+          <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeEditTags}>Cancel</button>
+          <button class="btn btn-theme" on:click={saveTags}>Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <div class="row g-3 h-100">
   <div class="col-12 col-xl-8 d-flex flex-column h-100" style="min-height: 0;">
     <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body">
@@ -486,6 +540,7 @@
             Menu
           </button>
           <ul class="dropdown-menu dropdown-menu-end">
+            <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
             <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
             <li><hr class="dropdown-divider" /></li>
             <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
