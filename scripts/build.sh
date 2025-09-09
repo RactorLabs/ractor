@@ -92,9 +92,9 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("all")
 fi
 
-# Expand 'all' to actual components
+# Expand 'all' to actual components (ensure agent precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway")
+  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway")
 fi
 
 print_status "Building Raworc Docker images"
