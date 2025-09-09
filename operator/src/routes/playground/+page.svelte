@@ -2,15 +2,16 @@
   import { onMount } from 'svelte';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
-  import { apiDocs } from '$lib/api/docs.js';
+  import { getApiDocs } from '$lib/api/docs.js';
+  import { page } from '$app/stores';
   import { getToken as getCookieTokenFn } from '$lib/auth.js';
   import { playground, clearPlaygroundToken } from '/src/stores/playground.js';
 
   setPageTitle('API Playground');
 
-  // Flatten endpoints
+  // Flatten endpoints using SSR-provided hostUrl for stability
   const endpoints = [];
-  for (const section of apiDocs) {
+  for (const section of getApiDocs($page?.data?.hostUrl)) {
     for (const ep of section.endpoints) {
       endpoints.push({ ...ep, section: section.title });
     }

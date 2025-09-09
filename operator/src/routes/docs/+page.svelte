@@ -1,12 +1,12 @@
 <script>
-  import { apiDocs, methodClass } from '$lib/api/docs.js';
+  import { getApiDocs, methodClass } from '$lib/api/docs.js';
   import { setPageTitle } from '$lib/utils.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { page } from '$app/stores';
   import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = 'minor (v0)';
+  const API_VERSION = '0.7.0 (v0)';
   
 
   setPageTitle('API Documentation');
@@ -87,7 +87,7 @@
       </div>
     </Card>
 
-    {#each apiDocs as section}
+    {#each getApiDocs($page?.data?.hostUrl) as section}
       <Card id={section.id} class="mb-3">
         <div class="card-header">
           <div class="fw-bold">{section.title}</div>
@@ -193,7 +193,7 @@
     <Card>
       <div class="card-header fw-bold">Sections</div>
       <div class="list-group list-group-flush">
-        {#each apiDocs as section}
+        {#each getApiDocs($page?.data?.hostUrl) as section}
           <a class="list-group-item list-group-item-action" href={'#' + section.id}>{section.title}</a>
         {/each}
       </div>

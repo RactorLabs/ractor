@@ -13,11 +13,13 @@ export function getHostName() {
 export function getHostUrl() {
   // Prefer runtime-injected global set by layout (gateway root)
   if (typeof window !== 'undefined' && window.__RAWORC_HOST_URL__) {
-    return String(window.__RAWORC_HOST_URL__ || '').replace(/\/$/, '') || 'http://localhost';
+    const url = String(window.__RAWORC_HOST_URL__ || '').replace(/\/$/, '');
+    return url || 'http://localhost';
   }
   // Try server-side env during SSR
   if (typeof process !== 'undefined' && process.env && process.env.RAWORC_HOST_URL) {
     return String(process.env.RAWORC_HOST_URL).replace(/\/$/, '');
   }
+  // Final fallback
   return 'http://localhost';
 }

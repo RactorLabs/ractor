@@ -41,8 +41,9 @@
 </script>
 
 <svelte:head>
-  <title>{getHostName()}</title>
-  <meta name="application-name" content={getHostName()}>
+  <!-- Use SSR-provided hostName for hydration stability -->
+  <title>{(data && data.hostName) ? data.hostName : getHostName()}</title>
+  <meta name="application-name" content={(data && data.hostName) ? data.hostName : getHostName()}>
 </svelte:head>
 
 <div id="app" class="app" 
