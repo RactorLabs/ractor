@@ -26,27 +26,24 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove specified Raworc component container(s) (no implicit all)')
-    .argument('<components...>', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway)')
-    .option('-c, --cleanup', 'Clean up agent containers after stopping')
-    .option('-v, --volumes', 'Remove named volumes after stopping')
-    .option('-n, --network', 'Remove Docker network after stopping')
+    .argument('[components...]', 'Components to stop (mysql, ollama, server, operator, content, controller, gateway)')
+    .option('--agents', 'Also stop all agent containers (raworc_agent_*)')
     .action(async (components, options) => {
       try {
-        if (!components || components.length === 0) {
-          console.log(chalk.red('[ERROR] ') + 'Please specify one or more components to stop');
+        if ((!components || components.length === 0) && !options.agents) {
+          console.log(chalk.red('[ERROR] ') + 'Please specify components to stop, or use --agents to stop all agent containers');
           process.exit(1);
         }
         console.log(chalk.blue('[INFO] ') + 'Stopping Raworc services with direct Docker management');
-        console.log(chalk.blue('[INFO] ') + `Cleanup agent containers: ${!!options.cleanup}`);
-        console.log(chalk.blue('[INFO] ') + `Remove volumes: ${!!options.volumes}`);
-        console.log(chalk.blue('[INFO] ') + `Remove network: ${!!options.network}`);
-        console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
+        if (components && components.length) {
+          console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
+        }
 
         console.log();
 
         const map = { mysql: 'raworc_mysql', server: 'raworc_server', controller: 'raworc_controller', ollama: 'raworc_ollama', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
         const order = ['gateway','controller','operator','content','server','ollama','mysql'];
-        const toStop = order.filter((c) => components.includes(c));
+        const toStop = (components || []).length ? order.filter((c) => components.includes(c)) : [];
 
         for (const comp of toStop) {
           const name = map[comp];
@@ -78,20 +75,20 @@ module.exports = (program) => {
           console.log();
         }
 
-        if (options.cleanup) {
-          console.log(chalk.blue('[INFO] ') + 'Cleaning up agent containers...');
+        if (options.agents) {
+          console.log(chalk.blue('[INFO] ') + 'Stopping agent containers...');
           try {
-            const res = await docker(['ps','-a','-q','--filter','name=raworc_agent_'], { silent: true });
-            const ids = res.stdout.trim().split('\n').filter(Boolean);
-            if (ids.length) {
-              await docker(['stop', ...ids]);
-              await docker(['rm', ...ids]);
-              console.log(chalk.green('[SUCCESS] ') + `Cleaned up ${ids.length} agent containers`);
+            const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=raworc_agent_'], { silent: true });
+            const names = res.stdout.trim().split('\n').filter(Boolean);
+            if (names.length) {
+              try { await docker(['stop', ...names]); } catch (_) {}
+              await docker(['rm','-f', ...names]);
+              console.log(chalk.green('[SUCCESS] ') + `Stopped and removed ${names.length} agent containers`);
             } else {
               console.log(chalk.green('[SUCCESS] ') + 'No agent containers found');
             }
           } catch (e) {
-            console.log(chalk.yellow('[WARNING] ') + 'Some agent containers could not be cleaned up');
+            console.log(chalk.yellow('[WARNING] ') + 'Some agent containers could not be removed');
           }
           console.log();
         }
@@ -130,17 +127,6 @@ module.exports = (program) => {
 
         console.log();
         console.log(chalk.green('[SUCCESS] ') + '🛑 Stop completed!');
-        if (!options.remove) {
-          console.log();
-          console.log(chalk.blue('[INFO] ') + 'Services stopped but containers preserved.');
-          console.log(chalk.blue('[INFO] ') + 'To start again: raworc start');
-          console.log(chalk.blue('[INFO] ') + 'To remove containers: raworc stop --remove');
-        }
-        if (!options.volumes && options.remove) {
-          console.log();
-          console.log(chalk.blue('[INFO] ') + 'Containers removed but volumes preserved.');
-          console.log(chalk.blue('[INFO] ') + 'To remove volumes: raworc stop --volumes');
-        }
       } catch (error) {
         console.error(chalk.red('[ERROR] ') + (error && error.message ? error.message : String(error)));
         process.exit(1);
