@@ -701,12 +701,15 @@ About content and publishing:
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Your live content is automatically served at the Live Content URL.
-- Only include the Live Content URL in your responses when you create or update files under /agent/content/.
-- Share the Published Content URL ONLY if the user explicitly asks for the published URL or publish status.
+- When you create or modify files under /agent/content/, always include the full, absolute Live URL to the exact file(s) you touched.
+  - Example: {live_url}index.html or {live_url}dashboard/report.html
+- When you perform a publish action, always include the full, absolute Published URL to the exact file(s) (and the root if helpful).
+  - Example: {published_url}/index.html or {published_url}/dashboard/report.html
+- Use absolute URLs that include protocol and host. Do NOT use relative URLs.
+- Outside of an explicit publish action, only include Published URLs if the user asks for them or asks about publish status.
 - If the user wants the current live content to be available at the published URL, perform an explicit publish action (do not auto-publish without being asked).
 - Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
-- You have the Published Content URL in this context; do not include it in responses unless asked explicitly.
- - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
+- IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 
 "#,
             host_name = host_name,
