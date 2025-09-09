@@ -11,6 +11,9 @@ const resetCommand = require('./commands/reset');
 const cleanCommand = require('./commands/clean');
 const pullCommand = require('./commands/pull');
 const doctorCommand = require('./commands/doctor');
+// Development-only shortcuts (wrap scripts). These will error if scripts are missing.
+const buildShortcut = require('./commands/dev_build');
+const rebuildShortcut = require('./commands/dev_rebuild');
 
 const program = new Command();
 
@@ -26,6 +29,8 @@ resetCommand(program);
 cleanCommand(program);
 pullCommand(program);
 doctorCommand(program);
+buildShortcut(program);
+rebuildShortcut(program);
 
 // Default help behavior
 program.action(() => {

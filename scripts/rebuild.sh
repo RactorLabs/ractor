@@ -1,34 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-COMPONENT=${1:-}
-
-if [[ -z "$COMPONENT" ]]; then
-  echo "Usage: $0 <component>" >&2
+if [[ $# -lt 1 ]]; then
+  echo "Usage: $0 <component> [component ...]" >&2
   echo "Buildable components: server controller agent operator content gateway" >&2
   exit 1
 fi
 
-case "$COMPONENT" in
-  server|controller|agent|operator|content|gateway)
-    ;;
-  *)
+BUILDABLE_SET="server controller agent operator content gateway"
+
+for COMPONENT in "$@"; do
+  if ! grep -qw "$COMPONENT" <<< "$BUILDABLE_SET"; then
     echo "Error: '$COMPONENT' is not a buildable component." >&2
-    echo "Buildable: server controller agent operator content gateway" >&2
+    echo "Buildable: $BUILDABLE_SET" >&2
     exit 1
-    ;;
-esac
+  fi
+done
 
-echo "[INFO] Rebuilding component: $COMPONENT"
+for COMPONENT in "$@"; do
+  echo "[INFO] Rebuilding component: $COMPONENT"
 
-echo "[INFO] Stopping $COMPONENT..."
-raworc stop "$COMPONENT" || true
+  echo "[INFO] Stopping $COMPONENT..."
+  raworc stop "$COMPONENT" || true
 
-echo "[INFO] Building $COMPONENT..."
-bash "$(dirname "$0")/build.sh" "$COMPONENT"
+  echo "[INFO] Building $COMPONENT..."
+  bash "$(dirname "$0")/build.sh" "$COMPONENT"
 
-echo "[INFO] Starting $COMPONENT..."
-raworc start "$COMPONENT"
+  echo "[INFO] Starting $COMPONENT..."
+  raworc start "$COMPONENT"
 
-echo "[SUCCESS] Rebuilt $COMPONENT"
-
+  echo "[SUCCESS] Rebuilt $COMPONENT"
+done
