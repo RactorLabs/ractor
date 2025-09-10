@@ -124,6 +124,8 @@ struct ChatResponse {
 pub struct ModelResponse {
     pub content: String,
     pub thinking: Option<String>,
+    // Text from the harmony "commentary" channel, when present
+    pub commentary: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
@@ -437,6 +439,7 @@ impl OllamaClient {
                 return Ok(ModelResponse {
                     content: "".to_string(),
                     thinking: None,
+                    commentary: None,
                     tool_calls: Some(tool_calls),
                 });
             }
@@ -458,7 +461,8 @@ impl OllamaClient {
 
         // Handle structured tool calls first (GPT-OSS native format)
         // Check for harmony format channels in content
-        let (final_content, analysis_thinking, commentary_tools) = self.parse_harmony_channels(&parsed.message.content);
+        let (final_content, analysis_thinking, commentary_text, commentary_tools) =
+            self.parse_harmony_channels(&parsed.message.content);
         
         // Use harmony-parsed content if available, otherwise use original
         let response_content = if !final_content.is_empty() {
@@ -483,6 +487,7 @@ impl OllamaClient {
         let model_resp = ModelResponse {
             content: response_content,
             thinking: response_thinking,
+            commentary: commentary_text,
             tool_calls: response_tool_calls,
         };
 
@@ -572,13 +577,17 @@ impl OllamaClient {
         }
     }
     
-    fn parse_harmony_channels(&self, content: &str) -> (String, Option<String>, Option<Vec<ToolCall>>) {
+    fn parse_harmony_channels(
+        &self,
+        content: &str,
+    ) -> (String, Option<String>, Option<String>, Option<Vec<ToolCall>>) {
         // Parse harmony format channels from content
         // Format: <|start|>assistant<|channel|>{channel}<|message|>{content}<|end|>
         
         let mut final_content = String::new();
         let mut analysis_content = None;
         let mut commentary_tools = None;
+        let mut commentary_text: Option<String> = None;
         
         // Look for channel patterns
         for line in content.lines() {
@@ -603,19 +612,23 @@ impl OllamaClient {
             } else if line.contains("<|channel|>commentary<|message|>") {
                 if let Some(msg_start) = line.find("<|message|>") {
                     let start_idx = msg_start + 11;
-                    let commentary_text = if let Some(end_idx) = line.find("<|end|>") {
+                    let ctext = if let Some(end_idx) = line.find("<|end|>") {
                         &line[start_idx..end_idx]
                     } else {
                         &line[start_idx..]
                     };
                     
                     // Try to parse tool calls from commentary
-                    commentary_tools = self.parse_commentary_tool_calls(commentary_text);
+                    commentary_tools = self.parse_commentary_tool_calls(ctext);
+                    // Also preserve the commentary text itself for context continuity
+                    if !ctext.trim().is_empty() {
+                        commentary_text = Some(ctext.to_string());
+                    }
                 }
             }
         }
         
-        (final_content, analysis_content, commentary_tools)
+        (final_content, analysis_content, commentary_text, commentary_tools)
     }
     
     fn parse_commentary_tool_calls(&self, commentary: &str) -> Option<Vec<ToolCall>> {

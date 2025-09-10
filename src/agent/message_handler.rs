@@ -393,8 +393,14 @@ impl MessageHandler {
 
                     // Store assistant commentary (pre-tool text) as a regular agent message
                     // and also include it in the ongoing conversation so the model keeps context.
-                    if !model_resp.content.trim().is_empty() {
-                        let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+                    // Prefer commentary channel text if provided; otherwise use content
+                    let commentary_text = model_resp
+                        .commentary
+                        .as_ref()
+                        .map(|s| s.as_str())
+                        .unwrap_or_else(|| model_resp.content.as_str());
+                    if !commentary_text.trim().is_empty() {
+                        let sanitized = self.guardrails.validate_output(commentary_text)?;
                         let mut meta = serde_json::json!({
                             "type": "assistant_commentary",
                             "model": "gpt-oss"
@@ -411,7 +417,9 @@ impl MessageHandler {
                             }
                         }
                         // Persist for UI
-                        self.api_client.send_message(sanitized.clone(), Some(meta)).await?;
+                        self.api_client
+                            .send_message(sanitized.clone(), Some(meta))
+                            .await?;
                         // Add to conversation for next model turn
                         conversation.push(ChatMessage {
                             role: "assistant".to_string(),
@@ -498,8 +506,13 @@ impl MessageHandler {
 
                 // Store assistant commentary (pre-tool text) as a regular agent message
                 // and also include it in the conversation for continuity.
-                if !model_resp.content.trim().is_empty() {
-                    let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+                let commentary_text = model_resp
+                    .commentary
+                    .as_ref()
+                    .map(|s| s.as_str())
+                    .unwrap_or_else(|| model_resp.content.as_str());
+                if !commentary_text.trim().is_empty() {
+                    let sanitized = self.guardrails.validate_output(commentary_text)?;
                     let mut meta = serde_json::json!({
                         "type": "assistant_commentary",
                         "model": "gpt-oss"
