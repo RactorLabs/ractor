@@ -391,6 +391,28 @@ impl MessageHandler {
                     // Log parsed tool call
                     info!("Structured tool call: {} with args: {:?}", tool_name, args);
 
+                    // Store assistant commentary (pre-tool text) as a regular agent message
+                    // so it appears in the conversation like normal output.
+                    if !model_resp.content.trim().is_empty() {
+                        let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+                        let mut meta = serde_json::json!({
+                            "type": "assistant_commentary",
+                            "model": "gpt-oss"
+                        });
+                        if let Some(obj) = meta.as_object_mut() {
+                            if let Some(thinking) = &model_resp.thinking {
+                                obj.insert(
+                                    "thinking".to_string(),
+                                    serde_json::Value::String(thinking.clone()),
+                                );
+                            }
+                            if let Some(secs) = thinking_secs {
+                                obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
+                            }
+                        }
+                        self.api_client.send_message(sanitized, Some(meta)).await?;
+                    }
+
                     // Send tool execution notification to user
                     let tool_description = match tool_name.as_str() {
                         "bash" => {
@@ -465,6 +487,27 @@ impl MessageHandler {
                     "Assistant functions text tool call: {} with args: {:?}",
                     tool_name, args
                 );
+
+                // Store assistant commentary (pre-tool text) as a regular agent message
+                if !model_resp.content.trim().is_empty() {
+                    let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+                    let mut meta = serde_json::json!({
+                        "type": "assistant_commentary",
+                        "model": "gpt-oss"
+                    });
+                    if let Some(obj) = meta.as_object_mut() {
+                        if let Some(thinking) = &model_resp.thinking {
+                            obj.insert(
+                                "thinking".to_string(),
+                                serde_json::Value::String(thinking.clone()),
+                            );
+                        }
+                        if let Some(secs) = thinking_secs {
+                            obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
+                        }
+                    }
+                    self.api_client.send_message(sanitized, Some(meta)).await?;
+                }
 
                 // Notify user
                 let tool_description = match tool_name.as_str() {
