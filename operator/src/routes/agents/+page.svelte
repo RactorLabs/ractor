@@ -11,6 +11,8 @@
   let loading = true;
   let error = null;
   let agents = [];
+  import { getOperatorName } from '$lib/auth.js';
+  let operatorName = '';
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -25,6 +27,7 @@
       goto('/login');
       return;
     }
+    try { operatorName = getOperatorName() || ''; } catch (_) { operatorName = ''; }
     const res = await apiFetch('/agents');
     if (!res.ok) {
       error = `Failed to load agents (HTTP ${res.status})`;
@@ -38,6 +41,13 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
+<div class="alert alert-info d-flex align-items-center" role="alert">
+  <div>
+    You are logged in as <strong>{operatorName || 'operator'}</strong>. Please create a token here and use the system as a user.
+    <a href="/tokens" class="ms-1">Open Tokens</a>
+  </div>
+  
+</div>
 <div class="d-flex align-items-center mb-3">
   <div class="fw-bold">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">

@@ -593,10 +593,12 @@ pub async fn update_agent(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
-    // Check permission for updating agents
-    check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
-        .await
-        .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
+    // Admins require explicit permission; owners can update without RBAC grant
+    if is_admin_user(&auth) {
+        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
+    }
 
     // Get username for ownership check
     let username = match &auth.principal {
@@ -607,6 +609,12 @@ pub async fn update_agent(
     // Find agent by ID or name (admin can access any agent for update/delete)
     let is_admin = is_admin_user(&auth);
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    // Enforce ownership: only admin or owner may update
+    if !is_admin && agent.created_by != *username {
+        return Err(ApiError::Forbidden(
+            "You can only update your own agents".to_string(),
+        ));
+    }
 
     let updated_agent = Agent::update(&state.db, &agent.name, req)
         .await
