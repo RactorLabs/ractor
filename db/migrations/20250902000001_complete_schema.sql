@@ -119,21 +119,12 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     INDEX idx_agent_tasks_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed operators (admin, demo)
+-- Default admin operator (password: admin)
 INSERT IGNORE INTO operators (name, password_hash, description, active) 
 VALUES (
     'admin',
-    '$2b$12$dZTOY/3oZQxB10jUMElLZ.NrH8JpUpuVGKxtnnRR7lnVXJF92QkI2',
+    '$2b$12$xJxdkbovt0jOPDz54RrAeufRUuWRCEJRhClksgUmN9uKKUbG.I8Ly',
     'Default admin operator',
-    true
-);
-
--- Demo operator (password: demo)
-INSERT IGNORE INTO operators (name, password_hash, description, active)
-VALUES (
-    'demo',
-    '$2b$12$mZj.Uuy1CkHbLgoO0IO2ouZW7B8N3bx1GxPtogd3YzzefsfkYP7NW',
-    'Demo user',
     true
 );
 
@@ -152,23 +143,8 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
     )
 );
 
--- User role: access to agents only; no operator management
-INSERT IGNORE INTO roles (name, description, rules) VALUES
-(
-    'user',
-    'Standard user role with access to agents; no operator management',
-    JSON_ARRAY(
-        -- Allow full access to agents endpoints
-        JSON_OBJECT(
-            'api_groups', JSON_ARRAY('api'),
-            'resources', JSON_ARRAY('agents'),
-            'verbs', JSON_ARRAY('*')
-        )
-    )
-);
 
 -- Role bindings
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
-    ('admin', 'Operator', 'admin'),
-    ('demo',  'Operator', 'user');
+    ('admin', 'Operator', 'admin');

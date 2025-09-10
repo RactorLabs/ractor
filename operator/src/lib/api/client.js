@@ -18,8 +18,10 @@ export async function apiFetch(path, options = {}, opts = {}) {
   const res = await fetch(url, { ...options, headers });
   let data = null;
   try { data = await res.json(); } catch (_) { /* ignore */ }
-  // Centralized auth failure handling to prevent redirect loops
-  if (!opts?.noAutoLogout && (res.status === 401 || res.status === 403)) {
+  // Centralized auth failure handling
+  // 401 = invalid/expired token: log out and redirect to login
+  // 403 = insufficient permissions: keep token so UI can show an error state
+  if (!opts?.noAutoLogout && res.status === 401) {
     try {
       const mod = await import('$lib/auth.js');
       mod.logoutClientSide?.();

@@ -3,10 +3,9 @@
   import { setPageTitle } from '$lib/utils.js';
   import { onMount, onDestroy } from 'svelte';
   import { appOptions } from '/src/stores/appOptions.js';
-  import { setToken, setOperatorName, isAuthenticated, getToken, logoutClientSide } from '$lib/auth.js';
+  import { setToken, setOperatorName, logoutClientSide } from '$lib/auth.js';
 
-  let operator = '';
-  let pass = '';
+  let token = '';
   let loading = false;
   let error = null;
 
@@ -15,17 +14,15 @@
     error = null;
     loading = true;
     try {
-      const res = await fetch(`/api/v0/operators/${encodeURIComponent(operator)}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pass })
-      });
+      if (!token || token.trim().length === 0) throw new Error('Token is required');
+      // Validate token by calling /auth
+      const res = await fetch('/api/v0/auth', { headers: { 'Authorization': `Bearer ${token}` } });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `Login failed (HTTP ${res.status})`);
-      const token = data?.token || data?.jwt || data?.access_token;
-      if (!token) throw new Error('Missing token in response');
+      if (!res.ok) throw new Error(data?.error || `Invalid token (HTTP ${res.status})`);
+
+      // Save token and operator name if present
       setToken(token);
-      setOperatorName(operator);
+      if (data?.user) setOperatorName(data.user);
       goto('/agents');
     } catch (e) {
       error = e.message;
@@ -35,26 +32,10 @@
   }
 
   onMount(async () => {
-    setPageTitle('Login');
+    setPageTitle('Login with Token');
     $appOptions.appContentClass = 'p-0';
     $appOptions.appSidebarHide = true;
     $appOptions.appHeaderHide = true;
-    // If a token is present, validate it to prevent redirect loops with stale cookies
-    try {
-      if (isAuthenticated()) {
-        const t = getToken();
-        const res = await fetch('/api/v0/auth', { headers: { 'Authorization': `Bearer ${t || ''}` } });
-        if (res.ok) {
-          goto('/agents');
-          return;
-        }
-        // Invalid token – clear and stay on login
-        logoutClientSide();
-      }
-    } catch (_) {
-      // On any error, clear cookies and show login
-      logoutClientSide();
-    }
   });
 
   onDestroy(() => {
@@ -65,12 +46,11 @@
 </script>
 
 <div class="login">
-  <!-- BEGIN login-content -->
   <div class="login-content">
-    <form on:submit|preventDefault={submitForm} method="POST" name="login_form">
-      <h1 class="text-center">Sign In</h1>
+    <form on:submit|preventDefault={submitForm} method="POST" name="login_token_form">
+      <h1 class="text-center">Sign In with Token</h1>
       <div class="text-inverse text-opacity-50 text-center mb-4">
-        For your protection, please verify your identity.
+        Paste a valid JWT to continue.
       </div>
 
       {#if error}
@@ -78,30 +58,19 @@
       {/if}
 
       <div class="mb-3">
-        <label class="form-label" for="operator">Operator <span class="text-danger">*</span></label>
-        <input type="text" autocomplete="username" class="form-control form-control-lg bg-white bg-opacity-5" id="operator" bind:value={operator} placeholder="" required />
+        <label class="form-label" for="token">Auth Token <span class="text-danger">*</span></label>
+        <textarea class="form-control form-control-lg bg-white bg-opacity-5" id="token" rows="6" bind:value={token} placeholder="eyJhbGciOiJI..." required></textarea>
       </div>
-      <div class="mb-3">
-        <div class="d-flex">
-          <label class="form-label" for="password">Password <span class="text-danger">*</span></label>
-        </div>
-        <input type="password" autocomplete="current-password" class="form-control form-control-lg bg-white bg-opacity-5" id="password" bind:value={pass} placeholder="••••••••" required />
-      </div>
-      <div class="mb-3">
-        <div class="form-check">
-          <input class="form-check-input" type="checkbox" id="remember" />
-          <label class="form-check-label" for="remember">Remember me</label>
-        </div>
-      </div>
+
       <button type="submit" aria-label="button" class="btn btn-outline-theme btn-lg d-block w-100 fw-500 mb-3" disabled={loading}>
         {#if loading}
-          <span class="spinner-border spinner-border-sm me-2"></span>Signing in...
+          <span class="spinner-border spinner-border-sm me-2"></span>Verifying…
         {:else}
           Sign In
         {/if}
       </button>
       <div class="text-center text-inverse text-opacity-50">
-        Have an Auth Token? <a href="/login/token" aria-label="link">Click here</a>.
+        Prefer password? <a href="/login/operator" aria-label="link">Go to operator login</a>.
       </div>
       <div class="text-center text-inverse text-opacity-50 mt-2">
         Need API reference? <a href="/docs" aria-label="link">View docs</a>.

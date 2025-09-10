@@ -34,7 +34,7 @@ export function getApiDocs(base) {
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
           { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
         ],
-        example: `curl -s -X POST ${BASE}/api/v0/operators/admin/login -H "Content-Type: application/json" -d '{"pass":"admin123"}'`
+        example: `curl -s -X POST ${BASE}/api/v0/operators/admin/login -H "Content-Type: application/json" -d '{"pass":"admin"}'`
       },
       {
         method: 'GET',
