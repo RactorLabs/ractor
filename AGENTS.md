@@ -4,7 +4,7 @@
 - `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `agent/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `raworc-api`, `raworc-controller`, `raworc-agent`, `raworc-content`.
 - `cli/`: Node.js CLI (`raworc`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
-- `db/migrations/`: SQLx migrations (MySQL). Default admin: `admin/admin`.
+- `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
 - `assets/`: Static assets.
 
 ## Build, Test, and Development Commands

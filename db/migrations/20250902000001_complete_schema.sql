@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS agent_tasks (
     INDEX idx_agent_tasks_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Default admin operator (password: admin)
+-- Default admin operator
 INSERT IGNORE INTO operators (name, password_hash, description, active) 
 VALUES (
     'admin',
