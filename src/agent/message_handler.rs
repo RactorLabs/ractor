@@ -392,7 +392,7 @@ impl MessageHandler {
                     info!("Structured tool call: {} with args: {:?}", tool_name, args);
 
                     // Store assistant commentary (pre-tool text) as a regular agent message
-                    // so it appears in the conversation like normal output.
+                    // and also include it in the ongoing conversation so the model keeps context.
                     if !model_resp.content.trim().is_empty() {
                         let sanitized = self.guardrails.validate_output(&model_resp.content)?;
                         let mut meta = serde_json::json!({
@@ -410,7 +410,15 @@ impl MessageHandler {
                                 obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
                             }
                         }
-                        self.api_client.send_message(sanitized, Some(meta)).await?;
+                        // Persist for UI
+                        self.api_client.send_message(sanitized.clone(), Some(meta)).await?;
+                        // Add to conversation for next model turn
+                        conversation.push(ChatMessage {
+                            role: "assistant".to_string(),
+                            content: sanitized,
+                            name: None,
+                            tool_call_id: None,
+                        });
                     }
 
                     // Send tool execution notification to user
@@ -489,6 +497,7 @@ impl MessageHandler {
                 );
 
                 // Store assistant commentary (pre-tool text) as a regular agent message
+                // and also include it in the conversation for continuity.
                 if !model_resp.content.trim().is_empty() {
                     let sanitized = self.guardrails.validate_output(&model_resp.content)?;
                     let mut meta = serde_json::json!({
@@ -506,7 +515,15 @@ impl MessageHandler {
                             obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
                         }
                     }
-                    self.api_client.send_message(sanitized, Some(meta)).await?;
+                    // Persist for UI
+                    self.api_client.send_message(sanitized.clone(), Some(meta)).await?;
+                    // Add to conversation for next model turn
+                    conversation.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: sanitized,
+                        name: None,
+                        tool_call_id: None,
+                    });
                 }
 
                 // Notify user
