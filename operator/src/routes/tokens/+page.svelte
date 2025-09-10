@@ -13,6 +13,7 @@
   let token = '';
   let loading = false;
   let error = null;
+  let copyStatus = '';
 
   onMount(() => {
     if (!isAuthenticated()) { goto('/login'); return; }
@@ -29,10 +30,35 @@
     loading = false;
     if (!res.ok) { error = res?.data?.error || `Failed to create token (HTTP ${res.status})`; return; }
     token = res?.data?.token || '';
+    copyStatus = '';
   }
 
   async function copyToken() {
-    try { await navigator.clipboard.writeText(token || ''); } catch (_) {}
+    copyStatus = '';
+    const text = token || '';
+    let ok = false;
+    if (text) {
+      try {
+        // Try modern clipboard API
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      } catch (_) {
+        try {
+          // Fallback using a hidden textarea
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (_) { ok = false; }
+      }
+    }
+    copyStatus = ok ? 'Copied!' : 'Copy failed';
+    try { if (ok) setTimeout(() => { copyStatus = ''; }, 1500); } catch (_) {}
   }
 
   function doLogout() {
@@ -47,7 +73,6 @@
       <Card>
         <div class="card-header fw-bold d-flex align-items-center">
           <div>Generate User Token</div>
-          <div class="ms-auto"><button class="btn btn-outline-danger btn-sm" on:click={doLogout}>Logout</button></div>
         </div>
         <div class="card-body">
           <div class="alert alert-info small">You are logged in as <strong>{operatorName || 'operator'}</strong>. Enter any user name to mint a token for that user.</div>
@@ -58,11 +83,11 @@
             <label class="form-label" for="user">User:</label>
             <input id="user" class="form-control" bind:value={username} placeholder="e.g., alice" />
           </div>
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 align-items-center">
             <button class="btn btn-theme" on:click|preventDefault={generateToken} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Token{/if}
             </button>
-            <a class="btn btn-outline-secondary" href="/agents">Back to Agents</a>
+            <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
           </div>
 
           {#if token}
@@ -72,6 +97,9 @@
                 <input class="form-control" readonly value={token} />
                 <button class="btn btn-outline-secondary" on:click={copyToken}>Copy</button>
               </div>
+              {#if copyStatus}
+                <div class="small mt-1 {copyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{copyStatus}</div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -79,4 +107,3 @@
     </div>
   </div>
 </div>
-

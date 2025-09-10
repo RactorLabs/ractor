@@ -74,11 +74,7 @@ pub async fn login(
     // Include user info in response
     let mut response: LoginResponse = token_response.into();
     response.user = operator.user.clone();
-    response.role = if operator.user == "admin" {
-        "admin".to_string()
-    } else {
-        "user".to_string()
-    };
+    response.role = "operator".to_string();
 
     Ok(Json(response))
 }
@@ -176,4 +172,3 @@ pub async fn create_token(
         },
     }))
 }
-

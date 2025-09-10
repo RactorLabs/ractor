@@ -9,15 +9,17 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
+use crate::shared::rbac::PermissionContext;
 use crate::shared::models::{
     Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
     RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
 };
 
-// Helper function to check if authenticated user is admin
-fn is_admin_user(auth: &AuthContext) -> bool {
-    match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Operator(op) => op.user == "admin",
+// Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
+async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
+    let ctx = PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() };
+    match crate::api::auth::check_permission(&auth.principal, state, &ctx).await {
+        Ok(true) => true,
         _ => false,
     }
 }
@@ -114,7 +116,7 @@ pub async fn list_agents(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<AgentResponse>>> {
     // Admins require explicit permission; non-admins can list only their own agents
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_LIST)
             .await
@@ -158,7 +160,7 @@ pub async fn get_agent(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Admins require explicit permission; non-admins can access only their own agent
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
@@ -191,7 +193,7 @@ pub async fn create_agent(
     );
 
     // Admins require explicit permission; non-admins can create their own agents
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to create agent".to_string()))?;
@@ -278,7 +280,7 @@ pub async fn remix_agent(
     Json(req): Json<RemixAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Admins require explicit permission; non-admins can remix according to publish/ownership checks
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix agent".to_string()))?;
@@ -291,7 +293,7 @@ pub async fn remix_agent(
     };
 
     // Find parent agent by ID or name (admin can remix any agent, users can remix published agents)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let parent = find_agent_by_name(&state, &name, username, true).await?; // Allow finding any agent for remix (permission check below)
 
     // Check remix permissions for non-owners
@@ -394,13 +396,13 @@ pub async fn sleep_agent(
     };
 
     // Find agent by ID or name (admin can sleep any agent)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, created_by, is_admin).await?;
 
     tracing::info!("Found agent in state: {}", agent.state);
 
     // Check permission for updating agents (admin only). Owners can sleep without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to sleep agent".to_string()))?;
@@ -412,7 +414,7 @@ pub async fn sleep_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     if !is_admin && agent.created_by != *username {
         return Err(ApiError::Forbidden(
             "Can only sleep your own agents".to_string(),
@@ -490,7 +492,7 @@ pub async fn wake_agent(
     Json(req): Json<RestoreAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Check permission for updating agents (admin only). Owners can wake without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to wake agent".to_string()))?;
@@ -503,7 +505,7 @@ pub async fn wake_agent(
     };
 
     // Find agent by ID or name (admin can find any agent, but restore has ownership restrictions)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership: Even admins cannot wake other users' agents (only remix)
@@ -594,7 +596,7 @@ pub async fn update_agent(
     Json(req): Json<UpdateAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Admins require explicit permission; owners can update without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
@@ -607,7 +609,7 @@ pub async fn update_agent(
     };
 
     // Find agent by ID or name (admin can access any agent for update/delete)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
     // Enforce ownership: only admin or owner may update
     if !is_admin && agent.created_by != *username {
@@ -651,7 +653,7 @@ pub async fn update_agent_state(
     };
 
     // Find agent by ID or name (admin can access any agent for update/delete)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Update the state with ownership verification
@@ -683,7 +685,7 @@ pub async fn delete_agent(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
     // Check permission for deleting agents (admin only). Owners can delete without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_DELETE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete agent".to_string()))?;
@@ -696,7 +698,7 @@ pub async fn delete_agent(
     };
 
     // Find agent by ID or name (admin can access any agent for update/delete)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Hard delete: schedule unpublish and container+volume removal, then remove DB row
@@ -746,7 +748,7 @@ pub async fn publish_agent(
     Json(req): Json<PublishAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Check permission for updating agents (admin only). Owners can publish without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to publish agent".to_string()))?;
@@ -759,7 +761,7 @@ pub async fn publish_agent(
     };
 
     // Find agent by ID or name (admin can publish any agent)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can publish)
@@ -808,7 +810,7 @@ pub async fn unpublish_agent(
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<AgentResponse>> {
     // Check permission for updating agents (admin only). Owners can unpublish without RBAC grant
-    if is_admin_user(&auth) {
+    if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string()))?;
@@ -821,7 +823,7 @@ pub async fn unpublish_agent(
     };
 
     // Find agent by ID or name (admin can unpublish any agent)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can unpublish)
@@ -910,7 +912,7 @@ pub async fn update_agent_to_busy(
     };
 
     // Find agent (agent token should match agent ownership)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Update agent to busy: clear idle_from and set busy_from (strict busy timeout)
@@ -939,7 +941,7 @@ pub async fn update_agent_to_idle(
     };
 
     // Find agent (agent token should match agent ownership)
-    let is_admin = is_admin_user(&auth);
+    let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     // Update agent to idle: set idle_from and clear busy_from (idle timeout active)

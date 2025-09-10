@@ -10,7 +10,7 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::AppState;
-use crate::shared::rbac::Operator;
+use crate::shared::rbac::{Operator, PermissionContext};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateOperatorRequest {
@@ -130,8 +130,14 @@ pub async fn list_operators(
     Extension(auth): Extension<AuthContext>,
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<Vec<OperatorResponse>>> {
-    // Admins can list all operators; non-admins only see themselves
-    let is_admin = matches!(&auth.principal, crate::shared::rbac::AuthPrincipal::Operator(op) if op.user == "admin");
+    // Principals with wildcard permission can list all; others only see themselves
+    let is_admin = crate::api::auth::check_permission(
+        &auth.principal,
+        &state,
+        &PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() },
+    )
+    .await
+    .unwrap_or(false);
     if is_admin {
         // Check permission (admin role should allow list)
         check_api_permission(&auth, &state, &permissions::OPERATOR_LIST)
@@ -169,8 +175,14 @@ pub async fn get_operator(
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
     }
-    // Non-admins can only read themselves
-    let is_admin = matches!(&auth.principal, crate::shared::rbac::AuthPrincipal::Operator(op) if op.user == "admin");
+    // Principals with wildcard permission can read others; others only self
+    let is_admin = crate::api::auth::check_permission(
+        &auth.principal,
+        &state,
+        &PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() },
+    )
+    .await
+    .unwrap_or(false);
     if !is_admin {
         if self_name != &name {
             return Err(ApiError::Forbidden("Insufficient permissions".to_string()));
