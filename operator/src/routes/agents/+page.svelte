@@ -41,13 +41,14 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
-<div class="alert alert-info d-flex align-items-center" role="alert">
-  <div>
-    You are logged in as <strong>{operatorName || 'operator'}</strong>. Please create a token here and use the system as a user.
-    <a href="/tokens" class="ms-1">Open Tokens</a>
+{#if operatorName === 'admin'}
+  <div class="alert alert-info d-flex align-items-center" role="alert">
+    <div>
+      You are logged in as <strong>{operatorName}</strong>. Please create a token here and use the system as a user.
+      <a href="/tokens" class="ms-1">Open Tokens</a>
+    </div>
   </div>
-  
-</div>
+{/if}
 <div class="d-flex align-items-center mb-3">
   <div class="fw-bold">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
@@ -82,6 +83,9 @@
                       <span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1">{a.description || a.desc || 'No description'}</div>
+                    {#if operatorName === 'admin'}
+                      <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
+                    {/if}
                     {#if Array.isArray(a.tags) && a.tags.length}
                       <div class="mt-2 d-flex flex-wrap gap-1">
                         {#each a.tags as t}
