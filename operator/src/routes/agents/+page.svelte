@@ -84,7 +84,7 @@
                       <span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1">{a.description || a.desc || 'No description'}</div>
-                    {#if operatorName === 'admin'}
+                    {#if principalIsOperator}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
                     {#if Array.isArray(a.tags) && a.tags.length}
