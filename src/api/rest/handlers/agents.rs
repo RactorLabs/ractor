@@ -250,7 +250,7 @@ pub async fn create_agent(
         "principal": created_by,
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
-            crate::shared::rbac::AuthPrincipal::Operator(_) => "Operator",
+            crate::shared::rbac::AuthPrincipal::Operator(_) => "Admin",
         },
         "user_token": auth.token
     });
@@ -362,7 +362,7 @@ pub async fn remix_agent(
         "principal": created_by,
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
-            crate::shared::rbac::AuthPrincipal::Operator(_) => "Operator",
+            crate::shared::rbac::AuthPrincipal::Operator(_) => "Admin",
         }
     });
 

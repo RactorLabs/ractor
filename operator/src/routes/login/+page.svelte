@@ -23,7 +23,7 @@
       // Save token and principal info
       setToken(token);
       if (data?.type) setPrincipalType(data.type);
-      if (data?.type === 'Operator' && data?.user) setOperatorName(data.user);
+      if (data?.user) setOperatorName(data.user);
       goto('/agents');
     } catch (e) {
       error = e.message;

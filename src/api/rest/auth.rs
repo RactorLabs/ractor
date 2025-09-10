@@ -19,7 +19,7 @@ pub struct LoginRequest {
 pub struct CreateTokenRequest {
     pub principal: String,
     #[serde(rename = "type")]
-    pub principal_type: String, // "User" or "Operator"
+    pub principal_type: String, // "User" or "Admin"
 }
 
 #[derive(Debug, Serialize)]
@@ -74,7 +74,7 @@ pub async fn login(
     // Include user info in response
     let mut response: LoginResponse = token_response.into();
     response.user = operator.user.clone();
-    response.role = "operator".to_string();
+    response.role = "admin".to_string();
 
     Ok(Json(response))
 }
@@ -85,8 +85,8 @@ pub async fn me(
     use crate::shared::rbac::AuthPrincipal;
 
     let (user, principal_type) = match &auth.principal {
-        AuthPrincipal::Subject(s) => (&s.name, "Subject"),
-        AuthPrincipal::Operator(op) => (&op.user, "Operator"),
+        AuthPrincipal::Subject(s) => (&s.name, "User"),
+        AuthPrincipal::Operator(op) => (&op.user, "Admin"),
     };
 
     Ok(Json(serde_json::json!({
@@ -129,10 +129,10 @@ pub async fn create_token(
     // Parse principal type
     let principal_type = match req.principal_type.as_str() {
         "User" => SubjectType::Subject,
-        "Operator" => SubjectType::Operator,
+        "Admin" => SubjectType::Admin,
         _ => {
             return Err(ApiError::BadRequest(
-                "Invalid type. Must be 'User' or 'Operator'".to_string(),
+                "Invalid type. Must be 'User' or 'Admin'".to_string(),
             ))
         }
     };
@@ -146,7 +146,7 @@ pub async fn create_token(
         sub: req.principal.clone(),
         sub_type: match principal_type {
             SubjectType::Subject => SubjectType::Subject,
-            SubjectType::Operator => SubjectType::Operator,
+            SubjectType::Admin => SubjectType::Admin,
         },
         exp: expiration.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
@@ -168,7 +168,7 @@ pub async fn create_token(
         user: req.principal.clone(),
         role: match principal_type {
             SubjectType::Subject => "user".to_string(),
-            SubjectType::Operator => "operator".to_string(),
+            SubjectType::Admin => "admin".to_string(),
         },
     }))
 }

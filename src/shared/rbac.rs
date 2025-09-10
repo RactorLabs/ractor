@@ -45,7 +45,7 @@ pub struct Role {
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq, Eq)]
 pub enum SubjectType {
     Subject,
-    Operator,
+    Admin,
 }
 
 // Role Binding Subject
@@ -92,7 +92,7 @@ impl AuthPrincipal {
     pub fn subject_type(&self) -> SubjectType {
         match self {
             AuthPrincipal::Subject(_) => SubjectType::Subject,
-            AuthPrincipal::Operator(_) => SubjectType::Operator,
+            AuthPrincipal::Operator(_) => SubjectType::Admin,
         }
     }
 }

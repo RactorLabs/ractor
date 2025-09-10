@@ -4,7 +4,7 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   setPageTitle('Dashboard');
   let name = '';
-  $: name = getOperatorName() || 'operator';
+  $: name = getOperatorName() || 'admin';
 </script>
 
 <div class="row">

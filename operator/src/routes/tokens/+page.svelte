@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import { isAuthenticated, getOperatorName, logoutClientSide } from '$lib/auth.js';
+  import { isAuthenticated, getOperatorName, getPrincipalType, logoutClientSide } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
@@ -17,6 +17,9 @@
 
   onMount(() => {
     if (!isAuthenticated()) { goto('/login'); return; }
+    let t = '';
+    try { t = getPrincipalType() || ''; } catch (_) { t = ''; }
+    if (String(t || '').toLowerCase() !== 'admin') { goto('/'); return; }
     try { operatorName = getOperatorName() || ''; } catch (_) { operatorName = ''; }
   });
 
@@ -75,7 +78,7 @@
           <div>Generate User Token</div>
         </div>
         <div class="card-body">
-          <div class="alert alert-info small">You are logged in as <strong>{operatorName || 'operator'}</strong>. Enter any user name to mint a token for that user.</div>
+          <div class="alert alert-info small">You are logged in as <strong>{operatorName || 'admin'}</strong>. Enter any user name to mint a token for that user.</div>
           {#if error}
             <div class="alert alert-danger py-2 small">{error}</div>
           {/if}
@@ -100,6 +103,9 @@
               {#if copyStatus}
                 <div class="small mt-1 {copyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{copyStatus}</div>
               {/if}
+              <div class="mt-3">
+                <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
+              </div>
             </div>
           {/if}
         </div>

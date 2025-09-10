@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS roles (
 -- Role Bindings
 CREATE TABLE IF NOT EXISTS role_bindings (
     principal VARCHAR(255) NOT NULL,
-    principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('Operator', 'User')),
+    principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('Admin', 'User')),
     role_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (principal, role_name),
@@ -147,4 +147,4 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
 -- Role bindings
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
-    ('admin', 'Operator', 'admin');
+    ('admin', 'Admin', 'admin');

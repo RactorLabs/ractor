@@ -13,7 +13,7 @@
   let agents = [];
   import { auth, getOperatorName } from '$lib/auth.js';
   let operatorName = '';
-  $: isOperator = $auth && $auth.type === 'Operator';
+  $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -42,10 +42,10 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
-{#if isOperator}
+{#if isAdmin}
   <div class="alert alert-info d-flex align-items-center" role="alert">
     <div>
-      You are logged in as <strong>{operatorName || 'operator'}</strong>. Please create a token here and use the system as a user.
+      You are logged in as <strong>{operatorName || 'admin'}</strong>. Please create a token here and use the system as a user.
       <a href="/tokens" class="ms-1">Open Tokens</a>
     </div>
   </div>
@@ -84,7 +84,7 @@
                       <span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1">{a.description || a.desc || 'No description'}</div>
-                    {#if isOperator}
+                    {#if isAdmin}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
                     {#if Array.isArray(a.tags) && a.tags.length}

@@ -9,7 +9,7 @@
   $: resolvedHostName = hostName || getHostName();
   let operatorName = '';
   $: operatorName = $auth?.name && $auth.name.trim().length > 0 ? $auth.name : '';
-  $: isOperator = $auth && $auth.type === 'Operator';
+  $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
   onMount(() => {
     initAuthFromCookies();
   });
@@ -78,13 +78,13 @@
                   <div class="fw-500 fs-10px text-inverse">PLAYGROUND</div>
                 </a>
               </div>
-              {#if isOperator}
-              <div class="col-4">
-                <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
-                  <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>
-                  <div class="fw-500 fs-10px text-inverse">TOKENS</div>
-                </a>
-              </div>
+              {#if isAdmin}
+                <div class="col-4">
+                  <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
+                    <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>
+                    <div class="fw-500 fs-10px text-inverse">TOKENS</div>
+                  </a>
+                </div>
               {/if}
               <div class="col-4">
                 <a href="/docs" aria-label="Docs" class="dropdown-item text-decoration-none p-3 bg-none">

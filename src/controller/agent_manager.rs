@@ -343,7 +343,7 @@ impl AgentManager {
 
         // Parse principal type for token generation
         let principal_type = match principal_type_str {
-            "Operator" => SubjectType::Operator,
+            "Admin" => SubjectType::Admin,
             "User" => SubjectType::Subject,
             _ => SubjectType::Subject,
         };
@@ -429,7 +429,7 @@ impl AgentManager {
                 remix_principal, remix_principal_type_str
             );
             let remix_principal_type = match remix_principal_type_str {
-                "Operator" => SubjectType::Operator,
+                "Admin" => SubjectType::Admin,
                 "User" => SubjectType::Subject,
                 _ => SubjectType::Subject,
             };

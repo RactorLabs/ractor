@@ -307,7 +307,7 @@ impl AppState {
     ) -> Result<RoleBinding, DatabaseError> {
         // Convert SubjectType enum to string for database
         let principal_type_str = match role_binding.principal_type {
-            SubjectType::Operator => "Operator",
+            SubjectType::Admin => "Admin",
             SubjectType::Subject => "User",
         };
 
@@ -350,7 +350,7 @@ impl AppState {
         Ok(row.map(|r| {
             let principal_type_str: String = r.get("principal_type");
             let principal_type = match principal_type_str.as_str() {
-                "Operator" => SubjectType::Operator,
+                "Admin" => SubjectType::Admin,
                 _ => SubjectType::Subject,
             };
 
@@ -382,7 +382,7 @@ impl AppState {
             .map(|r| {
                 let principal_type_str: String = r.get("principal_type");
                 let principal_type = match principal_type_str.as_str() {
-                    "Operator" => SubjectType::Operator,
+                    "Admin" => SubjectType::Admin,
                     _ => SubjectType::Subject,
                 };
 
@@ -407,7 +407,7 @@ impl AppState {
     ) -> Result<Vec<RoleBinding>, DatabaseError> {
         let principal_type_str = match subject_type {
             SubjectType::Subject => "User",
-            SubjectType::Operator => "Operator",
+            SubjectType::Admin => "Admin",
         };
 
         let rows = query(
@@ -428,7 +428,7 @@ impl AppState {
             .map(|r| {
                 let principal_type_str: String = r.get("principal_type");
                 let principal_type = match principal_type_str.as_str() {
-                    "Operator" => SubjectType::Operator,
+                    "Admin" => SubjectType::Admin,
                     _ => SubjectType::Subject,
                 };
 

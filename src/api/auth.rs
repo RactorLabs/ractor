@@ -21,7 +21,7 @@ pub fn create_operator_jwt(
 
     let claims = RbacClaims {
         sub: operator.user.clone(),
-        sub_type: SubjectType::Operator,
+        sub_type: SubjectType::Admin,
         exp: exp.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
         iss: "raworc-rbac".to_string(),
@@ -105,4 +105,3 @@ pub fn decode_jwt(token: &str, secret: &str) -> Result<RbacClaims> {
 }
 
 // Function removed - was unused
-

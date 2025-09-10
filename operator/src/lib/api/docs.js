@@ -23,7 +23,7 @@ export function getApiDocs(base) {
   {
     id: 'auth',
     title: 'Authentication',
-    description: 'Login and token management for Operators.',
+    description: 'Login and token management for Admin and users.',
     endpoints: [
       {
         method: 'POST',
@@ -40,7 +40,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/auth',
         auth: 'bearer',
-        desc: 'Get authenticated operator profile (validate token).',
+        desc: 'Get authenticated profile (validate token).',
         params: [],
         example: `curl -s ${BASE}/api/v0/auth -H "Authorization: Bearer <token>"`
       },
@@ -50,8 +50,8 @@ export function getApiDocs(base) {
         auth: 'bearer',
         desc: 'Create a new token for a principal (admin-only).',
         params: [
-          { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or operator id)' },
-          { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Operator'" }
+          { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or admin id)' },
+          { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" }
         ],
         example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>"`
       }

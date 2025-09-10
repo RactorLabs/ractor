@@ -43,7 +43,7 @@ pub async fn auth_middleware(
 
     // Get principal from claims
     let principal = match claims.sub_type {
-        SubjectType::Operator => {
+        SubjectType::Admin => {
             let operator = state
                 .get_operator(&claims.sub)
                 .await
@@ -80,4 +80,3 @@ pub async fn auth_middleware(
 
     Ok(next.run(request).await)
 }
-

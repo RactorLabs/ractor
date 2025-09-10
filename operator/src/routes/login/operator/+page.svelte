@@ -25,7 +25,7 @@
       const token = data?.token || data?.jwt || data?.access_token;
       if (!token) throw new Error('Missing token in response');
       setToken(token);
-      setPrincipalType('Operator');
+      setPrincipalType('Admin');
       setOperatorName(operator);
       goto('/agents');
     } catch (e) {
