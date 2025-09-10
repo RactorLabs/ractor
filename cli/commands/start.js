@@ -233,6 +233,28 @@ module.exports = (program) => {
         await ensureVolumes();
         console.log();
 
+        // Helpers: env precedence and parsing (must be defined before use)
+        const getOptionSource = (name) => {
+          try { return program.getOptionValueSource(name); } catch (_) { return undefined; }
+        };
+        const preferEnv = (optName, envName, defaultValue) => {
+          const source = getOptionSource(optName);
+          const optVal = options[optName];
+          if (source === 'cli') return optVal; // explicit flag wins
+          if (process.env[envName] !== undefined && process.env[envName] !== '') return process.env[envName];
+          return optVal !== undefined ? optVal : defaultValue;
+        };
+        const envBool = (name, fallback) => {
+          const v = process.env[name];
+          if (v === undefined) return fallback;
+          if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            if (['1','true','yes','y','on'].includes(s)) return true;
+            if (['0','false','no','n','off'].includes(s)) return false;
+          }
+          return fallback;
+        };
+
         // Helpers for container state
         async function containerRunning(name) {
           try { const res = await docker(['ps','-q','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
@@ -619,27 +641,6 @@ module.exports = (program) => {
               console.log(`  • Gateway: ${RAWORC_HOST_URL}/`);
               console.log(`  • Operator UI: ${RAWORC_HOST_URL}/`);
               console.log(`  • API via Gateway: ${RAWORC_HOST_URL}/api`);
-        // Helpers: env precedence and parsing
-        const getOptionSource = (name) => {
-          try { return program.getOptionValueSource(name); } catch (_) { return undefined; }
-        };
-        const preferEnv = (optName, envName, defaultValue) => {
-          const source = getOptionSource(optName);
-          const optVal = options[optName];
-          if (source === 'cli') return optVal; // explicit flag wins
-          if (process.env[envName] !== undefined && process.env[envName] !== '') return process.env[envName];
-          return optVal !== undefined ? optVal : defaultValue;
-        };
-        const envBool = (name, fallback) => {
-          const v = process.env[name];
-          if (v === undefined) return fallback;
-          if (typeof v === 'string') {
-            const s = v.trim().toLowerCase();
-            if (['1','true','yes','y','on'].includes(s)) return true;
-            if (['0','false','no','n','off'].includes(s)) return false;
-          }
-          return fallback;
-        };
 
               console.log(`  • Content: ${RAWORC_HOST_URL}/content`);
             } else {

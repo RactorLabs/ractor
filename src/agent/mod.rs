@@ -42,8 +42,12 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
 
     // Resolve Ollama host from environment or default to host.docker.internal
-    let ollama_host = std::env::var("OLLAMA_HOST")
+    let mut ollama_host = std::env::var("OLLAMA_HOST")
         .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+    // Be tolerant of missing scheme in OLLAMA_HOST (e.g., "127.0.0.1:11434")
+    if !(ollama_host.starts_with("http://") || ollama_host.starts_with("https://")) {
+        ollama_host = format!("http://{}", ollama_host);
+    }
     tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
     // Initialize configuration

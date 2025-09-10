@@ -1156,7 +1156,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Configure Ollama host for model inference (default to host.docker.internal)
         let ollama_host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+            .unwrap_or_else(|_| "http://ollama:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
@@ -1179,7 +1179,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Add principal information as environment variables
         if let Some(secrets_map) = &secrets {
             // Extract principal info from RAWORC_TOKEN if available
-            if let Some(token) = secrets_map.get("RAWORC_TOKEN") {
+            if let Some(_token) = secrets_map.get("RAWORC_TOKEN") {
                 // Set environment variables for Host principal logging
                 env.push(format!(
                     "RAWORC_PRINCIPAL={}",
@@ -1195,12 +1195,18 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 ));
             }
 
+            // Add user secrets as environment variables, but do NOT override
+            // system-managed values like RAWORC_TOKEN or OLLAMA_HOST.
             for (key, value) in secrets_map {
+                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
+                    info!(
+                        "Skipping user-provided {} - using system-managed value instead for agent {}",
+                        key, agent_name
+                    );
+                    continue;
+                }
                 env.push(format!("{}={}", key, value));
-                if key != "RAWORC_TOKEN"
-                    && key != "RAWORC_PRINCIPAL"
-                    && key != "RAWORC_PRINCIPAL_TYPE"
-                {
+                if key != "RAWORC_PRINCIPAL" && key != "RAWORC_PRINCIPAL_TYPE" {
                     info!(
                         "Adding secret {} as environment variable for agent {}",
                         key, agent_name
@@ -1363,7 +1369,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Configure Ollama host for model inference (default to host.docker.internal)
         let ollama_host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+            .unwrap_or_else(|_| "http://ollama:11434".to_string());
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
