@@ -53,8 +53,8 @@
 <div class="d-flex align-items-center mb-3">
   <div class="fw-bold">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
     <div class="small text-body text-opacity-75">{agents?.length || 0} total</div>
+    <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
   </div>
 </div>
 
