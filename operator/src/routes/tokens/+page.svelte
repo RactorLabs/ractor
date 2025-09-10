@@ -90,7 +90,6 @@
             <button class="btn btn-theme" on:click|preventDefault={generateToken} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Token{/if}
             </button>
-            <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
           </div>
 
           {#if token}
@@ -103,11 +102,12 @@
               {#if copyStatus}
                 <div class="small mt-1 {copyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{copyStatus}</div>
               {/if}
-              <div class="mt-3">
-                <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
-              </div>
             </div>
           {/if}
+
+          <div class="mt-3">
+            <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
+          </div>
         </div>
       </Card>
     </div>
