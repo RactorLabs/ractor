@@ -3,8 +3,9 @@ import { writable } from 'svelte/store';
 
 const TOKEN_COOKIE = 'raworc_token';
 const OPERATOR_COOKIE = 'raworc_operator';
+const PRINCIPAL_COOKIE = 'raworc_principal_type';
 
-export const auth = writable({ token: null, name: null });
+export const auth = writable({ token: null, name: null, type: null });
 
 export function setCookie(name, value, days = 7) {
   const d = new Date();
@@ -52,6 +53,21 @@ export function clearOperatorName() {
   try { auth.update((s) => ({ ...s, name: null })); } catch (_) {}
 }
 
+export function setPrincipalType(t) {
+  if (!t) return;
+  setCookie(PRINCIPAL_COOKIE, t, 7);
+  try { auth.update((s) => ({ ...s, type: t })); } catch (_) {}
+}
+
+export function getPrincipalType() {
+  return getCookie(PRINCIPAL_COOKIE);
+}
+
+export function clearPrincipalType() {
+  deleteCookie(PRINCIPAL_COOKIE);
+  try { auth.update((s) => ({ ...s, type: null })); } catch (_) {}
+}
+
 export function isAuthenticated() {
   return !!getToken();
 }
@@ -60,6 +76,7 @@ export function logoutClientSide() {
   try {
     clearToken();
     clearOperatorName();
+    clearPrincipalType();
   } catch (_) {}
 }
 
@@ -70,6 +87,7 @@ export function initAuthFromCookies() {
     const token = getCookie(TOKEN_COOKIE);
     // Only surface name when a valid token exists to avoid stale name after logout
     const name = token ? getCookie(OPERATOR_COOKIE) : null;
-    auth.set({ token: token || null, name: name || null });
+    const type = token ? getCookie(PRINCIPAL_COOKIE) : null;
+    auth.set({ token: token || null, name: name || null, type: type || null });
   } catch (_) {}
 }

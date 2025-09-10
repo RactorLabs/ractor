@@ -9,6 +9,7 @@
   $: resolvedHostName = hostName || getHostName();
   let operatorName = '';
   $: operatorName = $auth?.name && $auth.name.trim().length > 0 ? $auth.name : '';
+  $: principalIsOperator = $auth && $auth.type === 'Operator';
   onMount(() => {
     initAuthFromCookies();
   });
@@ -77,7 +78,7 @@
                   <div class="fw-500 fs-10px text-inverse">PLAYGROUND</div>
                 </a>
               </div>
-              {#if operatorName === 'admin'}
+              {#if principalIsOperator}
               <div class="col-4">
                 <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
                   <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>

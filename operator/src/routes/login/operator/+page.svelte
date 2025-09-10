@@ -3,7 +3,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { onMount, onDestroy } from 'svelte';
   import { appOptions } from '/src/stores/appOptions.js';
-  import { setToken, setOperatorName, isAuthenticated, getToken, logoutClientSide } from '$lib/auth.js';
+  import { setToken, setOperatorName, setPrincipalType, isAuthenticated, getToken, logoutClientSide } from '$lib/auth.js';
 
   let operator = '';
   let pass = '';
@@ -25,6 +25,7 @@
       const token = data?.token || data?.jwt || data?.access_token;
       if (!token) throw new Error('Missing token in response');
       setToken(token);
+      setPrincipalType('Operator');
       setOperatorName(operator);
       goto('/agents');
     } catch (e) {
@@ -111,4 +112,3 @@
   <!-- END login-content -->
   
 </div>
-

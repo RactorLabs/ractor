@@ -3,7 +3,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { onMount, onDestroy } from 'svelte';
   import { appOptions } from '/src/stores/appOptions.js';
-  import { setToken, setOperatorName, logoutClientSide } from '$lib/auth.js';
+  import { setToken, setOperatorName, setPrincipalType, logoutClientSide } from '$lib/auth.js';
 
   let token = '';
   let loading = false;
@@ -20,9 +20,10 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || `Invalid token (HTTP ${res.status})`);
 
-      // Save token and operator name if present
+      // Save token and principal info
       setToken(token);
-      if (data?.user) setOperatorName(data.user);
+      if (data?.type) setPrincipalType(data.type);
+      if (data?.type === 'Operator' && data?.user) setOperatorName(data.user);
       goto('/agents');
     } catch (e) {
       error = e.message;

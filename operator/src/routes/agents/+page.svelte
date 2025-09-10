@@ -11,8 +11,9 @@
   let loading = true;
   let error = null;
   let agents = [];
-  import { getOperatorName } from '$lib/auth.js';
+  import { auth, getOperatorName } from '$lib/auth.js';
   let operatorName = '';
+  $: principalIsOperator = $auth && $auth.type === 'Operator';
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -41,10 +42,10 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
-{#if operatorName === 'admin'}
+{#if principalIsOperator}
   <div class="alert alert-info d-flex align-items-center" role="alert">
     <div>
-      You are logged in as <strong>{operatorName}</strong>. Please create a token here and use the system as a user.
+      You are logged in as <strong>{operatorName || 'operator'}</strong>. Please create a token here and use the system as a user.
       <a href="/tokens" class="ms-1">Open Tokens</a>
     </div>
   </div>
