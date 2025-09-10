@@ -306,7 +306,21 @@ module.exports = (program) => {
               }
 
               // Determine GPU availability and flags
-              let OLLAMA_ENABLE_GPU = (options.ollamaEnableGpu !== undefined) ? !!options.ollamaEnableGpu : true;
+              // GPU enable: flags > env > default(true). Env can be OLLAMA_ENABLE_GPU or OLLAMA_NO_GPU
+              let OLLAMA_ENABLE_GPU;
+              if (getOptionSource('ollamaEnableGpu') === 'cli') {
+                OLLAMA_ENABLE_GPU = !!options.ollamaEnableGpu;
+              } else {
+                // honor NO_GPU first if set
+                const noGpu = envBool('OLLAMA_NO_GPU', false);
+                if (noGpu) {
+                  OLLAMA_ENABLE_GPU = false;
+                } else if (process.env.OLLAMA_ENABLE_GPU !== undefined) {
+                  OLLAMA_ENABLE_GPU = envBool('OLLAMA_ENABLE_GPU', true);
+                } else {
+                  OLLAMA_ENABLE_GPU = true;
+                }
+              }
               const REQUIRE_GPU = !!options.requireGpu;
               let gpuAvailable = false;
               try {
@@ -336,13 +350,20 @@ module.exports = (program) => {
                 console.log(chalk.blue('[INFO] ') + 'Running Ollama in CPU-only mode');
               }
 
-              // Resource flags
-              const cpuFlag = options.ollamaCpus ? ['--cpus', options.ollamaCpus] : [];
-              let mem = options.ollamaMemory || '16g';
-              let shm = options.ollamaShmSize || '16g';
-              if (!options.ollamaMemory) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
-              if (!options.ollamaShmSize) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
-              const contextLength = options.ollamaContextLength || '131072';
+              // Resource flags (flags > env > defaults)
+              const cpus = preferEnv('ollamaCpus', 'OLLAMA_CPUS', undefined);
+              const cpuFlag = cpus ? ['--cpus', cpus] : [];
+              let mem = preferEnv('ollamaMemory', 'OLLAMA_MEMORY', '16g');
+              let shm = preferEnv('ollamaShmSize', 'OLLAMA_SHM_SIZE', '16g');
+              if (getOptionSource('ollamaMemory') !== 'cli' && process.env.OLLAMA_MEMORY === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
+              if (getOptionSource('ollamaShmSize') !== 'cli' && process.env.OLLAMA_SHM_SIZE === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
+              const contextLength = (() => {
+                const src = getOptionSource('ollamaContextLength');
+                if (src === 'cli') return String(options.ollamaContextLength);
+                if (process.env.OLLAMA_CONTEXT_LENGTH) return String(process.env.OLLAMA_CONTEXT_LENGTH);
+                if (process.env.OLLAMA_NUM_CTX) return String(process.env.OLLAMA_NUM_CTX);
+                return String(options.ollamaContextLength || '131072');
+              })();
               console.log(chalk.blue('[INFO] ') + `Ollama context length: ${contextLength} tokens (128k)`);
               const memFlag = ['--memory', mem, '--memory-swap', mem];
               const shmFlag = ['--shm-size', shm];
@@ -359,7 +380,7 @@ module.exports = (program) => {
               args.push(
                 '-v','ollama_data:/root/.ollama',
                 '-v','ollama_data:/var/log/ollama',
-                '-e',`OLLAMA_KEEP_ALIVE=${options.ollamaKeepAlive || '1h'}`,
+                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','1h')}`,
                 '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
                 '-e',`OLLAMA_NUM_CTX=${contextLength}`,
                 ...cpuEnv,
@@ -397,8 +418,13 @@ module.exports = (program) => {
               console.log(chalk.green('[SUCCESS] ') + 'Ollama is ready');
 
               // Ensure model available (best-effort)
-              console.log(chalk.blue('[INFO] ') + `Pulling ${options.ollamaModel} model (if needed)...`);
-              try { await docker(['exec','ollama','ollama','pull', options.ollamaModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${options.ollamaModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${options.ollamaModel}. You may need to pull manually.`); }
+              const effectiveModel = (() => {
+                const src = getOptionSource('ollamaModel');
+                if (src === 'cli') return options.ollamaModel;
+                return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+              })();
+              console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
+              try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
               console.log();
               break;
             }
@@ -455,7 +481,13 @@ module.exports = (program) => {
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
-              const model = options.controllerOllamaModel || options.ollamaModel;
+              const model = (() => {
+                const srcCtrl = getOptionSource('controllerOllamaModel');
+                const srcOllama = getOptionSource('ollamaModel');
+                if (srcCtrl === 'cli') return options.controllerOllamaModel;
+                if (srcOllama === 'cli') return options.ollamaModel;
+                return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:20b';
+              })();
               const args = ['run','-d',
                 '--name','raworc_controller',
                 '--network','raworc_network',
@@ -469,7 +501,7 @@ module.exports = (program) => {
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
                 '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
-                '-e',`AGENT_MEMORY_LIMIT=${options.controllerAgentMemoryLimit || '536870912'}`,
+                '-e',`AGENT_MEMORY_LIMIT=${(getOptionSource('controllerAgentMemoryLimit')==='cli' ? options.controllerAgentMemoryLimit : (process.env.AGENT_MEMORY_LIMIT || options.controllerAgentMemoryLimit || '536870912'))}`,
                 '-e',`AGENT_DISK_LIMIT=${options.controllerAgentDiskLimit || '1073741824'}`,
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
@@ -587,6 +619,28 @@ module.exports = (program) => {
               console.log(`  • Gateway: ${RAWORC_HOST_URL}/`);
               console.log(`  • Operator UI: ${RAWORC_HOST_URL}/`);
               console.log(`  • API via Gateway: ${RAWORC_HOST_URL}/api`);
+        // Helpers: env precedence and parsing
+        const getOptionSource = (name) => {
+          try { return program.getOptionValueSource(name); } catch (_) { return undefined; }
+        };
+        const preferEnv = (optName, envName, defaultValue) => {
+          const source = getOptionSource(optName);
+          const optVal = options[optName];
+          if (source === 'cli') return optVal; // explicit flag wins
+          if (process.env[envName] !== undefined && process.env[envName] !== '') return process.env[envName];
+          return optVal !== undefined ? optVal : defaultValue;
+        };
+        const envBool = (name, fallback) => {
+          const v = process.env[name];
+          if (v === undefined) return fallback;
+          if (typeof v === 'string') {
+            const s = v.trim().toLowerCase();
+            if (['1','true','yes','y','on'].includes(s)) return true;
+            if (['0','false','no','n','off'].includes(s)) return false;
+          }
+          return fallback;
+        };
+
               console.log(`  • Content: ${RAWORC_HOST_URL}/content`);
             } else {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
