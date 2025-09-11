@@ -70,11 +70,7 @@
   let input = '';
   let sending = false;
   let pollHandle = null;
-  let frameBaseUrl = '';
-  let frameUrl = '';
-  let frameOpacity = 1;
-  let contentAvailable = false;
-  let contentProbing = false;
+  // Content preview via agent ports has been removed.
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -160,13 +156,7 @@
     if (res.ok && res.data) {
       agent = res.data;
     }
-    const baseChanged = computeFrameUrl();
-    if (baseChanged) {
-      // Only reload the iframe when the base URL actually changed
-      refreshFrameUrl();
-      // Probe availability only when base changes (no auto refresh)
-      probeContent();
-    }
+    // No content frame to compute; panel shows status only.
   }
 
   async function fetchMessages() {
@@ -197,58 +187,7 @@
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
 
-  // Auto-refresh logic removed entirely
-
-  function computeFrameUrl() {
-    let next = '';
-    try {
-      if (agent && (agent.content_port || agent.contentPort)) {
-        const port = agent.content_port || agent.contentPort;
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-        const proto = typeof window !== 'undefined' ? window.location.protocol : 'http:';
-        next = `${proto}//${host}:${port}/content/${encodeURIComponent(agent?.name || name)}/`;
-      } else if (agent && agent.name) {
-        // Fallback to published content via gateway using absolute host URL
-        next = `${getHostUrl()}/content/${agent.name}/`;
-      } else {
-        next = '';
-      }
-    } catch (_) {
-      next = '';
-    }
-    const changed = next !== frameBaseUrl;
-    frameBaseUrl = next;
-    return changed;
-  }
-
-  function refreshFrameUrl() {
-    if (!frameBaseUrl) { frameUrl = ''; return; }
-    const sep = frameBaseUrl.includes('?') ? '&' : '?';
-    frameOpacity = 0;
-    frameUrl = `${frameBaseUrl}${sep}t=${Date.now()}`;
-  }
-
-  // No periodic signature checking or automatic refresh
-
-  async function probeContent() {
-    contentAvailable = false;
-    if (!frameBaseUrl) return;
-    contentProbing = true;
-    try {
-      // If using direct port (cross-origin), skip HEAD to avoid CORS and assume available
-      if (/^https?:\/\//.test(frameBaseUrl)) {
-        contentAvailable = true;
-      } else {
-        const url = frameBaseUrl.endsWith('/') ? `${frameBaseUrl}index.html` : frameBaseUrl;
-        const res = await fetch(url, { method: 'HEAD' });
-        contentAvailable = res.ok;
-      }
-    } catch (_) {
-      contentAvailable = false;
-    } finally {
-      contentProbing = false;
-    }
-  }
+  // No content preview probing; only status is shown in the panel.
 
   function scrollToBottom() {
     try {
@@ -489,8 +428,6 @@
       await fetchMessages();
       loading = false;
       startPolling();
-      // Initial iframe load
-      if (frameBaseUrl) refreshFrameUrl();
     } catch (e) {
       error = e.message || String(e);
       loading = false;
@@ -708,40 +645,30 @@
                 <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
               {/if}
             {/if}
-            {#if stateStr === 'idle' || stateStr === 'busy'}
-              <button class="btn btn-outline-secondary btn-sm" on:click={refreshFrameUrl} aria-label="Refresh content">Refresh</button>
-            {/if}
           </div>
         </div>
         <div class="flex-fill border rounded-2" style="min-height: 0;">
           <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
-          {#if stateStr === 'idle' || stateStr === 'busy'}
-            {#if frameUrl && contentAvailable}
-              <iframe src={frameUrl} title="Agent content" style="border:0; width:100%; height:100%; opacity: {frameOpacity}; transition: opacity 200ms ease;" on:load={() => { frameOpacity = 1; }}></iframe>
-            {:else if contentProbing}
-              <div class="d-flex align-items-center justify-content-center h-100 p-4">
-                <div class="text-center text-body text-opacity-75">
-                  <div class="spinner-border text-theme mb-3"></div>
-                  <div>Checking for agent content…</div>
-                </div>
-              </div>
-            {:else}
-              <div class="d-flex align-items-center justify-content-center h-100 p-4">
-                <div class="text-center">
-                  <div class="h4 fw-bold mb-2">No Content</div>
-                  <div class="text-body text-opacity-75 mb-3">This agent has no live page to display.</div>
-                  {#if frameUrl}
-                    <a class="btn btn-outline-theme btn-sm" href={frameUrl} target="_blank" rel="noopener">Open in new tab</a>
-                  {/if}
-                </div>
-              </div>
-            {/if}
-          {:else if stateStr === 'slept'}
+          {#if stateStr === 'slept'}
             <div class="d-flex align-items-center justify-content-center h-100 p-4">
               <div class="text-center">
                 <div class="h4 fw-bold mb-2">Agent is Sleeping</div>
-                <div class="text-body text-opacity-75 mb-3">Wake the agent to view live content.</div>
+                <div class="text-body text-opacity-75 mb-3">Wake the agent to resume work.</div>
                 <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+              </div>
+            </div>
+          {:else if stateStr === 'idle'}
+            <div class="d-flex align-items-center justify-content-center h-100 p-4">
+              <div class="text-center">
+                <div class="h4 fw-bold mb-2">Agent Idle</div>
+                <div class="text-body text-opacity-75">Agent is ready. Send a message in the chat.</div>
+              </div>
+            </div>
+          {:else if stateStr === 'busy'}
+            <div class="d-flex align-items-center justify-content-center h-100 p-4">
+              <div class="text-center">
+                <div class="h4 fw-bold mb-2">Agent Busy</div>
+                <div class="text-body text-opacity-75">Processing your request…</div>
               </div>
             </div>
           {:else}
