@@ -22,7 +22,6 @@ pub struct Agent {
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
-    pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id (derived from name)
 }
 
@@ -105,8 +104,6 @@ pub struct PublishAgentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateAgentStateRequest {
     pub state: String,
-    #[serde(default)]
-    pub content_port: Option<i32>,
     // Removed: container_id, persistent_volume_id (derived from name)
 }
 
@@ -561,7 +558,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
             FROM agents
             ORDER BY created_at DESC
             "#,
@@ -579,7 +576,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
             FROM agents
             WHERE name = ?
             "#,
@@ -590,15 +587,6 @@ impl Agent {
     }
 
     
-
-    // Helper function to find an available port for Content HTTP server
-    async fn find_available_port() -> Result<u16, std::io::Error> {
-        use std::net::TcpListener;
-        let listener = TcpListener::bind("0.0.0.0:0")?;
-        let port = listener.local_addr()?.port();
-        drop(listener);
-        Ok(port)
-    }
 
     
 
@@ -616,16 +604,11 @@ impl Agent {
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
 
-        // Allocate Content port
-        let content_port = Self::find_available_port()
-            .await
-            .map_err(|e| sqlx::Error::Io(e))?;
-
         // Insert the agent using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO agents (name, created_by, description, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agents (name, created_by, description, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&agent_name)
@@ -637,7 +620,6 @@ impl Agent {
         .bind(busy_timeout)
         .bind(idle_from)
         .bind(busy_from)
-        .bind(content_port as i32)
         .execute(pool)
         .await?;
 
@@ -661,20 +643,14 @@ impl Agent {
         // Create new agent based on parent (inherit timeouts)
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
-        let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
-
-        // Allocate Content port for remix agent
-        let content_port = Self::find_available_port()
-            .await
-            .map_err(|e| sqlx::Error::Io(e))?;
 
         sqlx::query(
             r#"
             INSERT INTO agents (
                 name, created_by, description, parent_agent_name,
-                metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
+                metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
@@ -687,7 +663,6 @@ impl Agent {
         .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
         .bind(idle_from)
         .bind(busy_from)
-        .bind(content_port as i32)
         .execute(pool)
         .await?;
 
@@ -721,10 +696,6 @@ impl Agent {
 
         // Removed container_id and persistent_volume_id - derived from name in v0.4.0
 
-        if req.content_port.is_some() {
-            query_builder.push_str(", content_port = ?");
-        }
-
         query_builder.push_str(" WHERE name = ?");
 
         // Build and execute query
@@ -733,10 +704,6 @@ impl Agent {
             .bind(now);
 
         // Removed container_id and persistent_volume_id bindings
-
-        if let Some(content_port) = req.content_port {
-            query = query.bind(content_port);
-        }
 
         query = query.bind(name);
 
@@ -886,7 +853,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, content_port
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
             FROM agents
             WHERE is_published = true
             ORDER BY published_at DESC
