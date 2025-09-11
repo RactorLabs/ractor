@@ -513,12 +513,14 @@ module.exports = (program) => {
                 console.log();
                 break;
               }
-              // Require OLLAMA_HOST to be explicitly provided (no implicit default)
-              const OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
-              if (!OLLAMA_HOST) {
-                console.error(chalk.red('[ERROR] ') + 'OLLAMA_HOST is required for the controller.');
-                console.error(chalk.red('[ERROR] ') + 'Provide via --controller-ollama-host http://ollama:11434 or export OLLAMA_HOST.');
-                process.exit(1);
+              // Default OLLAMA_HOST: prefer internal container if running
+              let OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
+              try {
+                const res = await docker(['ps','-q','--filter','name=ollama'], { silent: true });
+                const hasOllama = !!res.stdout.trim();
+                if (!OLLAMA_HOST) OLLAMA_HOST = hasOllama ? 'http://ollama:11434' : 'http://host.docker.internal:11434';
+              } catch (_) {
+                if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
               }
 
               const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
