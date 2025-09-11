@@ -91,12 +91,12 @@ module.exports = (program) => {
     .option('-f, --foreground', 'Run MySQL in foreground mode')
     .option('--require-gpu', 'Require GPU for Ollama (fail if missing)')
     .option('--ollama-cpus <cpus>', 'CPUs for Ollama (e.g., 4)')
-    .option('--ollama-memory <mem>', 'Memory for Ollama (e.g., 16g)')
-    .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 16g)')
+    .option('--ollama-memory <mem>', 'Memory for Ollama (e.g., 32g)')
+    .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 32g)')
     .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
     .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
-    .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:20b')
-    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '1h')
+    .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:120b')
+    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '2h')
     .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
@@ -325,7 +325,7 @@ module.exports = (program) => {
                 const effectiveModel = (() => {
                   const src = getOptionSource('ollamaModel');
                   if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
                 })();
                 if (effectiveModel) {
                   console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
@@ -341,7 +341,7 @@ module.exports = (program) => {
                 const effectiveModel = (() => {
                   const src = getOptionSource('ollamaModel');
                   if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
                 })();
                 if (effectiveModel) {
                   console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
@@ -399,8 +399,8 @@ module.exports = (program) => {
               // Resource flags (flags > env > defaults)
               const cpus = preferEnv('ollamaCpus', 'OLLAMA_CPUS', undefined);
               const cpuFlag = cpus ? ['--cpus', cpus] : [];
-              let mem = preferEnv('ollamaMemory', 'OLLAMA_MEMORY', '16g');
-              let shm = preferEnv('ollamaShmSize', 'OLLAMA_SHM_SIZE', '16g');
+              let mem = preferEnv('ollamaMemory', 'OLLAMA_MEMORY', '32g');
+              let shm = preferEnv('ollamaShmSize', 'OLLAMA_SHM_SIZE', '32g');
               if (getOptionSource('ollamaMemory') !== 'cli' && process.env.OLLAMA_MEMORY === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
               if (getOptionSource('ollamaShmSize') !== 'cli' && process.env.OLLAMA_SHM_SIZE === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
               const contextLength = (() => {
@@ -426,7 +426,7 @@ module.exports = (program) => {
               args.push(
                 '-v','ollama_data:/root/.ollama',
                 '-v','ollama_data:/var/log/ollama',
-                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','1h')}`,
+                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','2h')}`,
                 '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
                 '-e',`OLLAMA_NUM_CTX=${contextLength}`,
                 ...cpuEnv,
@@ -467,7 +467,7 @@ module.exports = (program) => {
               const effectiveModel = (() => {
                 const src = getOptionSource('ollamaModel');
                 if (src === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+                return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
               })();
               console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
               try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
@@ -549,7 +549,7 @@ module.exports = (program) => {
                 const srcOllama = getOptionSource('ollamaModel');
                 if (srcCtrl === 'cli') return options.controllerOllamaModel;
                 if (srcOllama === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:20b';
+                return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:120b';
               })();
               const args = ['run','-d',
                 '--name','raworc_controller',
@@ -560,6 +560,10 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`OLLAMA_MODEL=${model}`,
+                // Model/runtime defaults for agent calls
+                '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
+                '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
+                '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
