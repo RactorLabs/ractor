@@ -57,7 +57,7 @@ Note on commit message formatting:
 
 ## Data Model Highlights (Agents)
 - Name-based primary key: agents are addressed by `name` (no numeric ID).
-- Core fields: `state` (`init|idle|busy|slept`), `created_by`, timestamps, `metadata` (JSON), `content_port` (host-mapped port for agent content).
+- Core fields: `state` (`init|idle|busy|slept`), `created_by`, timestamps, `metadata` (JSON).
 - Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`secrets`,`content`).
 - Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
