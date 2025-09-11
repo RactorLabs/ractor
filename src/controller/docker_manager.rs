@@ -1074,19 +1074,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
     ) -> Result<String> {
         let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
-        // Get content port from agent (already allocated during agent creation)
-        let content_port: i32 =
-            sqlx::query_scalar::<_, Option<i32>>("SELECT content_port FROM agents WHERE name = ?")
-                .bind(agent_name)
-                .fetch_one(&self.db_pool)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
-                .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
-
-        info!(
-            "Using Content port {} from agent {}",
-            content_port, agent_name
-        );
+        // No content port mapping; preview server is removed.
 
         // Use agent image directly for all agents
         let container_image = self.agent_image.clone();
@@ -1128,18 +1116,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             ..Default::default()
         }];
 
-        // Configure port mapping for Content HTTP server (8000 inside -> random port outside)
-        let mut port_bindings = HashMap::new();
-        port_bindings.insert(
-            "8000/tcp".to_string(),
-            Some(vec![PortBinding {
-                host_ip: Some("0.0.0.0".to_string()),
-                host_port: Some(content_port.to_string()),
-            }]),
-        );
-
-        let mut exposed_ports = HashMap::new();
-        exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
+        // No port bindings or exposed ports needed.
 
         // Set environment variables for the agent structure
         let mut env = vec![
@@ -1154,9 +1131,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (default to host.docker.internal)
+        // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://ollama:11434".to_string());
+            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
@@ -1231,7 +1208,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             env: Some(env),
             cmd: Some(cmd),
             working_dir: Some("/agent".to_string()), // User starts in their agent
-            exposed_ports: Some(exposed_ports),
+            exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
                 cpu_period: Some(100000),
@@ -1239,7 +1216,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 memory_swap: Some(self.memory_limit),
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
-                port_bindings: Some(port_bindings),
+                port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
                 ..Default::default()
             }),
@@ -1270,10 +1247,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             .await?;
         }
 
-        info!(
-            "Container {} created with agent volume {} using Content port {}",
-            container_name, agent_volume, content_port
-        );
+        info!("Container {} created with agent volume {}", container_name, agent_volume);
         Ok(container.id)
     }
 
@@ -1290,19 +1264,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
     ) -> Result<String> {
         let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
 
-        // Get content port from agent (already allocated during agent creation)
-        let content_port: i32 =
-            sqlx::query_scalar::<_, Option<i32>>("SELECT content_port FROM agents WHERE name = ?")
-                .bind(agent_name)
-                .fetch_one(&self.db_pool)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to get content port from agent: {}", e))?
-                .ok_or_else(|| anyhow::anyhow!("Agent has no content port assigned"))?;
-
-        info!(
-            "Using Content port {} from agent {}",
-            content_port, agent_name
-        );
+        // No content port mapping; preview server is removed.
 
         // Use agent image directly for all agents
         let container_image = self.agent_image.clone();
@@ -1337,18 +1299,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             ..Default::default()
         }];
 
-        // Configure port mapping for Content HTTP server (8000 inside -> random port outside)
-        let mut port_bindings = HashMap::new();
-        port_bindings.insert(
-            "8000/tcp".to_string(),
-            Some(vec![PortBinding {
-                host_ip: Some("0.0.0.0".to_string()),
-                host_port: Some(content_port.to_string()),
-            }]),
-        );
-
-        let mut exposed_ports = HashMap::new();
-        exposed_ports.insert("8000/tcp".to_string(), HashMap::new());
+        // No port bindings or exposed ports needed.
 
         // Set environment variables for the agent structure
         let mut env = vec![
@@ -1367,9 +1318,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (default to host.docker.internal)
+        // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST")
-            .unwrap_or_else(|_| "http://ollama:11434".to_string());
+            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
@@ -1424,7 +1375,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             env: Some(env),
             cmd: Some(cmd),
             working_dir: Some("/agent".to_string()), // User starts in their agent
-            exposed_ports: Some(exposed_ports),
+            exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
                 cpu_period: Some(100000),
@@ -1432,7 +1383,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
                 memory_swap: Some(self.memory_limit),
                 network_mode: Some("raworc_network".to_string()),
                 mounts: Some(mounts),
-                port_bindings: Some(port_bindings),
+                port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
                 ..Default::default()
             }),
@@ -1464,7 +1415,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             .await?;
         }
 
-        info!("Container {} created with agent volume {} using Content port {}, and fresh system tokens", container_name, agent_volume, content_port);
+        info!("Container {} created with agent volume {} and fresh system tokens", container_name, agent_volume);
         Ok(container.id)
     }
 

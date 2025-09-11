@@ -319,10 +319,34 @@ module.exports = (program) => {
 
             case 'ollama': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Ollama runtime is running...');
-              if (await containerRunning('ollama')) { console.log(chalk.green('[SUCCESS] ') + 'Ollama already running'); console.log(); break; }
+              if (await containerRunning('ollama')) {
+                console.log(chalk.green('[SUCCESS] ') + 'Ollama already running');
+                // Ensure requested model is available even when container pre-exists
+                const effectiveModel = (() => {
+                  const src = getOptionSource('ollamaModel');
+                  if (src === 'cli') return options.ollamaModel;
+                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+                })();
+                if (effectiveModel) {
+                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
+                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
+                }
+                console.log();
+                break;
+              }
               if (await containerExists('ollama')) {
                 await docker(['start','ollama']);
                 console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
+                // Ensure requested model is available even when container pre-exists
+                const effectiveModel = (() => {
+                  const src = getOptionSource('ollamaModel');
+                  if (src === 'cli') return options.ollamaModel;
+                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:20b';
+                })();
+                if (effectiveModel) {
+                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
+                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
+                }
                 console.log();
                 break;
               }
@@ -489,14 +513,12 @@ module.exports = (program) => {
                 console.log();
                 break;
               }
-              // Default OLLAMA_HOST: prefer internal container if running
-              let OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
-              try {
-                const res = await docker(['ps','-q','--filter','name=ollama'], { silent: true });
-                const hasOllama = !!res.stdout.trim();
-                if (!OLLAMA_HOST) OLLAMA_HOST = hasOllama ? 'http://ollama:11434' : 'http://host.docker.internal:11434';
-              } catch (_) {
-                if (!OLLAMA_HOST) OLLAMA_HOST = 'http://host.docker.internal:11434';
+              // Require OLLAMA_HOST to be explicitly provided (no implicit default)
+              const OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST;
+              if (!OLLAMA_HOST) {
+                console.error(chalk.red('[ERROR] ') + 'OLLAMA_HOST is required for the controller.');
+                console.error(chalk.red('[ERROR] ') + 'Provide via --controller-ollama-host http://ollama:11434 or export OLLAMA_HOST.');
+                process.exit(1);
               }
 
               const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);

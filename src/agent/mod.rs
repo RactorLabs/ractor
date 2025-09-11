@@ -41,9 +41,9 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     };
     tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
 
-    // Resolve Ollama host from environment or default to host.docker.internal
+    // Resolve Ollama host from environment; required (no default)
     let mut ollama_host = std::env::var("OLLAMA_HOST")
-        .unwrap_or_else(|_| "http://host.docker.internal:11434".to_string());
+        .map_err(|_| anyhow::anyhow!("OLLAMA_HOST environment variable is required"))?;
     // Be tolerant of missing scheme in OLLAMA_HOST (e.g., "127.0.0.1:11434")
     if !(ollama_host.starts_with("http://") || ollama_host.starts_with("https://")) {
         ollama_host = format!("http://{}", ollama_host);
@@ -83,13 +83,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         }
     }
 
-    // Start Content HTTP server on port 8000
-    info!("Starting Content HTTP server on port 8000 (mounted under /content/<agent_name>)...");
-    tokio::spawn(async {
-        if let Err(e) = start_content_server().await {
-            error!("Content HTTP server failed: {}", e);
-        }
-    });
+    // No separate content preview server; content is published via raworc-content.
 
     // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/agent/code/setup.sh");
@@ -165,41 +159,20 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         );
     }
 
-    info!("Agent initialized, getting Content port information...");
-
-    // Get agent info to display Content URL
-    match api_client.get_agent().await {
-        Ok(agent) => {
-            if let Some(content_port) = agent.content_port {
-                // Prefer RAWORC_HOST_URL (injected by start script) for user-facing base URL
-                let base_url = std::env::var("RAWORC_HOST_URL")
-                    .expect("RAWORC_HOST_URL must be set by the start script")
-                    .trim_end_matches('/')
-                    .to_string();
-
-                let host_name = std::env::var("RAWORC_HOST_NAME")
-                    .unwrap_or_else(|_| "Raworc".to_string());
-
-                let operator_url = format!("{}", base_url);
-                let api_url = format!("{}/api", base_url);
-                // Live server now mounts content under /content for path consistency with the gateway
-                let live_url = format!("{}:{}/content/{}/", base_url, content_port, agent.name);
-
-                info!("{} environment detected", host_name);
-                info!("Operator: {}", operator_url);
-                info!("API: {}", api_url);
-                info!("Live content: {}", live_url);
-                // Note: published URL is intentionally not logged by default to avoid
-                // leaking it unless explicitly requested by the user.
-                info!("Content folder: /agent/content/ - Create HTML files here for visual displays");
-            } else {
-                warn!("Content port not available for this agent");
-            }
-        }
-        Err(e) => {
-            warn!("Failed to get agent info for Content port: {}", e);
-        }
-    }
+    // Log published content URL hint
+    let base_url = std::env::var("RAWORC_HOST_URL")
+        .expect("RAWORC_HOST_URL must be set by the start script")
+        .trim_end_matches('/')
+        .to_string();
+    let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+    let operator_url = format!("{}", base_url);
+    let api_url = format!("{}/api", base_url);
+    let published_url = format!("{}/content/{}/", base_url, agent_name);
+    info!("{} environment detected", host_name);
+    info!("Operator: {}", operator_url);
+    info!("API: {}", api_url);
+    info!("Content folder: /agent/content/ - Publish when ready to share");
+    info!("Published content (when published): {}", published_url);
 
     info!("Setting agent to idle to start timeout...");
 
@@ -240,158 +213,4 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 }
 
-async fn start_content_server() -> Result<()> {
-    use hyper::header::{CONTENT_LENGTH, CONTENT_TYPE};
-    use hyper::service::{make_service_fn, service_fn};
-    use hyper::{Body, Request, Response, Server, StatusCode};
-    use std::convert::Infallible;
-    use std::net::SocketAddr;
-    use std::path::Path;
-    use tokio::fs;
-
-    async fn serve_content_with_agent(req: Request<Body>, agent_name: String) -> Result<Response<Body>, Infallible> {
-        let path = req.uri().path().to_string();
-
-        // Security: prevent path traversal
-        if path.contains("..") {
-            return Ok(Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Body::from("Forbidden"))
-                .unwrap());
-        }
-
-        // Redirect root to /content/<agent_name>/ for consistency
-        if path == "/" {
-            return Ok(Response::builder()
-                .status(StatusCode::FOUND)
-                .header("Location", format!("/content/{}/", agent_name))
-                .body(Body::empty())
-                .unwrap());
-        }
-
-        // Only serve under /content/<agent_name>/*
-        if !path.starts_with("/content/") {
-            return Ok(Response::builder()
-                .status(StatusCode::FOUND)
-                .header("Location", format!("/content/{}/", agent_name))
-                .body(Body::empty())
-                .unwrap());
-        }
-
-        // Split path: /content/<who>/rest...
-        let mut parts = path.splitn(4, '/');
-        let _empty = parts.next(); // ""
-        let _content = parts.next(); // "content"
-        let who = parts.next().unwrap_or("");
-        let rest = parts.next().unwrap_or("");
-
-        if who != agent_name {
-            // Redirect to this agent's namespace, preserve rest
-            let target = if rest.is_empty() {
-                format!("/content/{}/", agent_name)
-            } else {
-                format!("/content/{}/{}", agent_name, rest)
-            };
-            return Ok(Response::builder()
-                .status(StatusCode::FOUND)
-                .header("Location", target)
-                .body(Body::empty())
-                .unwrap());
-        }
-
-        // Map /content/<agent_name>/... -> /agent/content/...
-        let file_path_owned = if rest.is_empty() || rest.ends_with('/') {
-            "/agent/content/index.html".to_string()
-        } else {
-            format!("/agent/content/{}", rest)
-        };
-        let file_path = file_path_owned.as_str();
-
-        // Check if file exists and serve it
-        if Path::new(file_path).exists() {
-            match fs::read(file_path).await {
-                Ok(contents) => {
-                    // Determine content type based on file extension
-                    let content_type = match Path::new(file_path)
-                        .extension()
-                        .and_then(|ext| ext.to_str())
-                    {
-                        Some("html") => "text/html; charset=utf-8",
-                        Some("css") => "text/css",
-                        Some("js") => "application/javascript",
-                        Some("json") => "application/json",
-                        Some("png") => "image/png",
-                        Some("jpg") | Some("jpeg") => "image/jpeg",
-                        Some("gif") => "image/gif",
-                        Some("svg") => "image/svg+xml",
-                        Some("ico") => "image/x-icon",
-                        _ => "application/octet-stream",
-                    };
-
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .header(CONTENT_TYPE, content_type)
-                        .header(CONTENT_LENGTH, contents.len())
-                        .body(Body::from(contents))
-                        .unwrap())
-                }
-                Err(_) => Ok(Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Body::from("Internal Server Error"))
-                    .unwrap()),
-            }
-        } else {
-            // Return a full-page 404-style response with a helpful message
-            let html = r#"<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-    <title>No Content</title>
-    <style>
-      html, body { height: 100%; margin: 0; }
-      body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background: #fff; color: #111; }
-      .wrap { text-align: center; padding: 24px; }
-      h1 { font-size: 28px; margin: 0 0 8px; font-weight: 600; }
-      p { margin: 0; color: rgba(0,0,0,0.6); }
-    </style>
-  </head>
-  <body>
-    <div class=\"wrap\">
-      <h1>No Content</h1>
-    </div>
-  </body>
-</html>"#;
-
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .header(CONTENT_TYPE, "text/html; charset=utf-8")
-                .body(Body::from(html))
-                .unwrap())
-        }
-    }
-
-    let agent_name = std::env::var("RAWORC_AGENT_NAME").unwrap_or_else(|_| "unknown".to_string());
-    let make_svc = make_service_fn(move |_conn| {
-        let agent_name = agent_name.clone();
-        async move {
-            Ok::<_, Infallible>(service_fn(move |req| {
-                let agent_name = agent_name.clone();
-                serve_content_with_agent(req, agent_name)
-            }))
-        }
-    });
-
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
-    let server = Server::bind(&addr).serve(make_svc);
-
-    info!("Content HTTP server listening on http://0.0.0.0:8000 (URL prefix: /content/<agent_name>)");
-    info!("Content directory: /agent/content/ mapped to /content/<agent_name>");
-
-    if let Err(e) = server.await {
-        error!("Content HTTP server error: {}", e);
-        return Err(anyhow::anyhow!("Content HTTP server failed: {}", e));
-    }
-
-    Ok(())
-}
+    // Content preview server removed.
