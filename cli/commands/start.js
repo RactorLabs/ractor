@@ -506,15 +506,39 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              if (await containerRunning('raworc_controller')) { console.log(chalk.green('[SUCCESS] ') + 'Controller already running'); console.log(); break; }
+              // Resolve desired OLLAMA_HOST for the controller
+              const DESIRED_OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
+
+              // If container exists, verify env matches; recreate if not
               if (await containerExists('raworc_controller')) {
-                await docker(['start','raworc_controller']);
-                console.log(chalk.green('[SUCCESS] ') + 'Controller started');
-                console.log();
-                break;
+                try {
+                  const inspect = await execCmd('docker', ['inspect','raworc_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
+                  const currentEnv = (inspect.stdout || '').split('\n').filter(Boolean);
+                  const envMap = Object.fromEntries(currentEnv.map(e => {
+                    const idx = e.indexOf('=');
+                    return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
+                  }));
+                  const currentHost = envMap['OLLAMA_HOST'];
+                  const needsRecreate = !currentHost || currentHost !== DESIRED_OLLAMA_HOST;
+                  if (needsRecreate) {
+                    console.log(chalk.blue('[INFO] ') + `Recreating controller to apply OLLAMA_HOST=${DESIRED_OLLAMA_HOST}`);
+                    try { await docker(['rm','-f','raworc_controller']); } catch (_) {}
+                  } else if (!(await containerRunning('raworc_controller'))) {
+                    await docker(['start','raworc_controller']);
+                    console.log(chalk.green('[SUCCESS] ') + 'Controller started');
+                    console.log();
+                    break;
+                  } else {
+                    console.log(chalk.green('[SUCCESS] ') + 'Controller already running');
+                    console.log();
+                    break;
+                  }
+                } catch (e) {
+                  // If inspection fails, fall through to create
+                }
               }
               // Default OLLAMA_HOST to internal service always
-              const OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
+              const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
               const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
