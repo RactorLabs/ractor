@@ -142,8 +142,7 @@ export function getApiDocs(base) {
       ] },
       { method: 'PUT', path: '/api/v0/agents/{name}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
-        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' },
-        { in: 'body', name: 'content_port', type: 'int|null', required: false, desc: 'Optional port used by agent content server' }
+        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' }
       ] },
       { method: 'POST', path: '/api/v0/agents/{name}/busy', auth: 'bearer', desc: 'Set agent busy.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
