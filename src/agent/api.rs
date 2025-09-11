@@ -55,7 +55,6 @@ pub struct Agent {
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
-    pub content_port: Option<i32>,
     // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
 
@@ -74,7 +73,7 @@ impl RaworcClient {
         Self { client, config }
     }
 
-    /// Get agent information including content_port
+    /// Get agent information
     pub async fn get_agent(&self) -> Result<Agent> {
         let url = format!(
             "{}/api/v0/agents/{}",
@@ -154,6 +153,52 @@ impl RaworcClient {
                 let messages = response.json::<Vec<Message>>().await?;
                 debug!("Fetched {} messages", messages.len());
                 Ok(messages)
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
+                "Agent {} not found",
+                self.config.agent_name
+            ))),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "API error ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
+    /// Get total message count for the current agent
+    pub async fn get_message_count(&self) -> Result<u64> {
+        let url = format!(
+            "{}/api/v0/agents/{}/messages/count",
+            self.config.api_url, self.config.agent_name
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let v = response
+                    .json::<serde_json::Value>()
+                    .await
+                    .map_err(|e| HostError::Api(format!("Failed to parse count: {}", e)))?;
+                let count = v
+                    .get("count")
+                    .and_then(|c| c.as_u64())
+                    .ok_or_else(|| HostError::Api("Missing count field".to_string()))?;
+                Ok(count)
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))

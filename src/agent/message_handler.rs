@@ -123,7 +123,18 @@ impl MessageHandler {
         info!("Initializing timestamp-based message tracking...");
         info!("Task creation time: {}", self.task_created_at);
 
-        let all_messages = self.api_client.get_messages(None, None).await?;
+        // Fetch up to the latest 500 messages to initialize tracking
+        let total = self.api_client.get_message_count().await.unwrap_or(0);
+        let init_limit: u32 = 500;
+        let offset = if total > init_limit as u64 {
+            (total - init_limit as u64) as u32
+        } else {
+            0
+        };
+        let all_messages = self
+            .api_client
+            .get_messages(Some(init_limit), Some(offset))
+            .await?;
 
         if all_messages.is_empty() {
             info!("No existing messages - fresh agent");
@@ -178,8 +189,18 @@ impl MessageHandler {
     }
 
     pub async fn poll_and_process(&self) -> Result<usize> {
-        // Get recent messages
-        let recent_messages = self.api_client.get_messages(Some(50), None).await?;
+        // Get the latest window of messages (tail of stream)
+        let total = self.api_client.get_message_count().await.unwrap_or(0);
+        let window: u32 = 50;
+        let offset = if total > window as u64 {
+            (total - window as u64) as u32
+        } else {
+            0
+        };
+        let recent_messages = self
+            .api_client
+            .get_messages(Some(window), Some(offset))
+            .await?;
 
         if recent_messages.is_empty() {
             return Ok(0);
@@ -720,17 +741,16 @@ impl MessageHandler {
         let base_url_env = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
-        // Fetch agent info from API/DB (name, content_port, publish state)
-        let (agent_name_ctx, content_port_ctx, is_published_ctx, published_at_ctx) =
+        // Fetch agent info from API/DB (name, publish state)
+        let (agent_name_ctx, is_published_ctx, published_at_ctx) =
             match self.api_client.get_agent().await {
                 Ok(agent) => {
                     let nm = agent.name.clone();
-                    let cp = agent.content_port;
                     let ip = agent.is_published;
                     let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
-                    (nm, cp, ip, pa)
+                    (nm, ip, pa)
                 }
-                Err(_) => ("unknown".to_string(), None, false, String::new()),
+                Err(_) => ("unknown".to_string(), false, String::new()),
             };
 
         // Current timestamp in UTC for context
@@ -738,10 +758,6 @@ impl MessageHandler {
 
         let operator_url = format!("{}", base_url);
         let api_url = format!("{}/api", base_url);
-        let live_url = content_port_ctx
-            // Live content is mounted under /content/<agent_name> for consistency with gateway paths
-            .map(|p| format!("{}:{}/content/{}/", base_url, p, agent_name_ctx))
-            .unwrap_or_else(|| "(content port not assigned)".to_string());
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 
         // Start with System Context specific to Raworc runtime
@@ -756,8 +772,7 @@ You are running as an Agent in the {host_name} system.
 - Operator URL: {operator_url}
 - API URL: {api_url}
 - Your Agent Name: {agent_name}
-- Live Content Base: {live_url}
- - Published Content URL: {published_url}
+- Published Content URL: {published_url}
 - Published: {published_flag}
  - Published At: {published_at}
 
@@ -766,21 +781,19 @@ Platform endpoints:
 - API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
 
 About content and publishing:
-- Your live content is everything under /agent/content/. It is served immediately on the Live Content URL while you work.
-- Publishing creates a public, stable snapshot of your current /agent/content/ and makes it available at the Published Content URL: {published_url}.
+- Your working content lives under /agent/content/.
+- There is no live preview server. When the user wants to view content, publish it.
+- Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
 - Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
-- The Content Server serves the last published snapshot. It does not auto-update until you explicitly publish again.
+- The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
 
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
-- Your live content is automatically served at the Live Content URL base (path prefix /content).
-- When you create or modify files under /agent/content/, always include the full, absolute Live URL to the exact file(s) you touched.
-  - Example: {live_url}index.html or {live_url}dashboard/report.html
-- When you perform a publish action, always include the full, absolute Published URL to the exact file(s) (and the root if helpful).
+- Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
+- When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
   - Example: {published_url}/index.html or {published_url}/dashboard/report.html
 - Use absolute URLs that include protocol and host. Do NOT use relative URLs.
-- Outside of an explicit publish action, only include Published URLs if the user asks for them or asks about publish status.
-- If the user wants the current live content to be available at the published URL, perform an explicit publish action (do not auto-publish without being asked).
+- Outside of an explicit publish action, include Published URLs only if the user asks for them or asks about publish status.
 - Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
 - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 
@@ -790,7 +803,6 @@ Important behavior:
             operator_url = operator_url,
             api_url = api_url,
             agent_name = agent_name_ctx,
-            live_url = live_url,
             published_url = published_url,
             published_flag = if is_published_ctx { "true" } else { "false" },
             published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
