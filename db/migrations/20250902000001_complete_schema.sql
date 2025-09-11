@@ -57,9 +57,6 @@ CREATE TABLE IF NOT EXISTS agents (
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
     
-    -- Content HTTP server port mapping
-    content_port INT NULL COMMENT 'Mapped host port for Content HTTP server (port 8000 inside container)',
-    
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
     CONSTRAINT agents_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept')),
@@ -80,8 +77,7 @@ CREATE TABLE IF NOT EXISTS agents (
     INDEX idx_agents_parent_agent_name (parent_agent_name),
     INDEX idx_agents_published (is_published, published_at),
     INDEX idx_agents_idle_from (idle_from, state),
-    INDEX idx_agents_busy_from (busy_from, state),
-    INDEX idx_agents_content_port (content_port)
+    INDEX idx_agents_busy_from (busy_from, state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Agent Messages
