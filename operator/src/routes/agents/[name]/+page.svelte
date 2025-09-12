@@ -536,7 +536,6 @@
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if agent}
                 <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
-                <span class={stateClass(agent.state || agent.status)}>{agent.state || agent.status || 'unknown'}</span>
               {:else}
                 <div class="fw-bold">{name}</div>
               {/if}
@@ -553,7 +552,16 @@
               </div>
             {/if}
             <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
-            <div class="mt-2 d-flex align-items-center justify-content-end flex-wrap gap-2">
+            <div class="mt-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <!-- Larger outline state badge on the left -->
+              <div>
+                {#if agent}
+                  <span class={`${stateClass(agent.state || agent.status)} fs-6 border-2 px-3 py-2`}>
+                    {agent.state || agent.status || 'unknown'}
+                  </span>
+                {/if}
+              </div>
+              <!-- Actions on the right -->
               {#if agent}
                 {#if agent.is_published || agent.isPublished}
                   <div class="dropdown">
@@ -612,7 +620,11 @@
       </div>
     </div>
 
-    <!-- Actions: none here; chat panel hosts expand/collapse controls -->
+    <!-- Minimize/Maximize (expand/collapse) tool details outside chat panel -->
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+      <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
+      <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+    </div>
 
     {#if error}
       <div class="alert alert-danger py-2 small mb-2">{error}</div>
@@ -625,14 +637,7 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2 position-relative" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
-        <!-- Chat panel controls (top-right): expand/collapse tool details -->
-        <div class="position-absolute top-0 end-0 p-2" style="z-index: 2;">
-          <div class="btn-group btn-group-sm" role="group" aria-label="Chat controls">
-            <button class="btn btn-outline-secondary" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
-            <button class="btn btn-outline-secondary" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
-          </div>
-        </div>
+      <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
         <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
         {#if messages && messages.length}
           {#each messages as m, i}
