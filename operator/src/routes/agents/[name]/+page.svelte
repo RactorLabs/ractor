@@ -655,8 +655,8 @@
         Total messages <span class="d-none d-sm-inline">(includes tool calls)</span>: {Array.isArray(messages) ? messages.length : 0}
       </div>
       <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-caret-down"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-caret-up"></i></button>
       </div>
     </div>
 
