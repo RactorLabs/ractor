@@ -159,13 +159,15 @@ import { getHostUrl } from '$lib/branding.js';
                     {#if isAdmin}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
-                    {#if Array.isArray(a.tags) && a.tags.length}
-                      <div class="mt-2 d-flex flex-wrap gap-1">
+                    <div class="mt-2 d-flex flex-wrap gap-1">
+                      {#if Array.isArray(a.tags) && a.tags.length}
                         {#each a.tags as t}
                           <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
                         {/each}
-                      </div>
-                    {/if}
+                      {:else}
+                        <span class="text-body-secondary small">No tags</span>
+                      {/if}
+                    </div>
                     <!-- In-card actions: status on left, buttons on right; no Open button -->
                     <div class="mt-2 d-flex align-items-center flex-wrap">
                       <div class="d-flex align-items-center gap-2">
