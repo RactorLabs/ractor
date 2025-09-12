@@ -585,6 +585,11 @@
               </div>
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
+                {#if stateStr === 'slept'}
+                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+                {:else if stateStr === 'idle' || stateStr === 'busy'}
+                  <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+                {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
@@ -607,17 +612,12 @@
                     <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
                   {/if}
                 {/if}
-                <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
-                {#if stateStr === 'slept'}
-                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
-                {:else if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
-                {/if}
                 <div class="dropdown">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
+                    <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
                     <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
                     <li><hr class="dropdown-divider" /></li>
                     <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
