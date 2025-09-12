@@ -560,7 +560,6 @@
         {#if agent}
           <Card class="h-100">
             <div class="card-body small d-flex flex-wrap gap-3">
-              <div>Owner: <span class="font-monospace">{agent.created_by}</span></div>
               <div>Created: <span class="font-monospace">{agent.created_at}</span></div>
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
