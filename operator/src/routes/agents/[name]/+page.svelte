@@ -761,7 +761,10 @@
             on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }}
             on:input={(e)=>{ try { e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
-          <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>Send</button>
+          <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>
+            <i class="fas fa-paper-plane d-inline d-sm-none"></i>
+            <span class="d-none d-sm-inline">Send</span>
+          </button>
         </div>
       </form>
     {/if}
