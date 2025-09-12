@@ -201,7 +201,9 @@
 
 <style>
   /* Ensure dropdown menus overlay adjacent buttons on the list cards */
-  :global(.dropdown-menu) { z-index: 2000; }
+  :global(.dropdown-menu) { z-index: 5000; }
+  :global(.card) { overflow: visible; }
+  .text-truncate { display: block; }
 </style>
                 </Card>
               </div>

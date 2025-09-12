@@ -790,7 +790,8 @@
       border-left-width: 0.5em;
       margin-left: 0.4rem;
     }
-    /* Ensure dropdown menus overlay adjacent buttons */
-    :global(.dropdown-menu) { z-index: 2000; }
+    /* Ensure dropdown menus overlay adjacent buttons and are not clipped */
+    :global(.dropdown-menu) { z-index: 5000; }
+    :global(.card) { overflow: visible; }
   </style>
 </div>
