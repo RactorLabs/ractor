@@ -6,7 +6,7 @@
   import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.7.3 (v0)';
+  const API_VERSION = '0.7.4 (v0)';
   
 
   setPageTitle('API Documentation');
