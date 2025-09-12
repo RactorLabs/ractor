@@ -10,6 +10,7 @@
   import taskLists from 'markdown-it-task-lists';
   import { browser } from '$app/environment';
   import { getHostUrl } from '$lib/branding.js';
+  import Card from '/src/components/bootstrap/Card.svelte';
 
   let md;
   try {
@@ -527,31 +528,56 @@
 {/if}
 
 <div class="row g-3 h-100">
-  <div class="col-12 col-xl-8 d-flex flex-column h-100" style="min-height: 0;">
-    <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body">
-      <div class="fw-bold">{name}</div>
-      <div>{#if agent}<span class={stateClass(stateStr)}>{stateStr}</span>{/if}</div>
-      <div class="ms-auto d-flex gap-2">
-        <div class="dropdown">
-          <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Agent menu">
-            Menu
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
-            <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
-            <li><hr class="dropdown-divider" /></li>
-            <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
-          </ul>
-        </div>
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+  <div class="col-12 d-flex flex-column h-100" style="min-height: 0;">
+    <!-- Header: Agent card on the left, actions on the right -->
+    <div class="d-flex flex-wrap align-items-stretch gap-3 mb-2">
+      <div class="flex-grow-1" style="min-width: 280px; max-width: 640px;">
+        <Card class="h-100">
+          <div class="card-body d-flex flex-column">
+            <div class="d-flex align-items-center gap-2 mb-1">
+              <div class="fw-bold">{agent?.name || name}</div>
+              {#if agent}<span class={stateClass(stateStr)}>{stateStr}</span>{/if}
+            </div>
+            <div class="small text-body text-opacity-75">{agent?.description || 'No description'}</div>
+            {#if Array.isArray(agent?.tags) && agent.tags.length}
+              <div class="mt-2 d-flex flex-wrap gap-1">
+                {#each agent.tags as t}
+                  <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        </Card>
+      </div>
+      <div class="ms-auto d-flex align-items-start justify-content-end flex-wrap gap-2">
+        <button class="btn btn-outline-secondary btn-sm" on:click={openEditTags}>Edit Tags</button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
         {#if stateStr === 'slept'}
           <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
         {:else if stateStr === 'idle' || stateStr === 'busy'}
           <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
         {/if}
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+        <button class="btn btn-danger btn-sm" on:click={deleteAgent}>Delete</button>
       </div>
     </div>
+
+    <!-- Stats row -->
+    {#if agent}
+      <Card class="mb-2">
+        <div class="card-body small d-flex flex-wrap gap-3">
+          <div>Owner: <span class="font-monospace">{agent.created_by}</span></div>
+          <div>Created: <span class="font-monospace">{agent.created_at}</span></div>
+          <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
+          <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
+          <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
+          <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
+          <div>Messages: {Array.isArray(messages) ? messages.length : 0}</div>
+        </div>
+      </Card>
+    {/if}
+
     {#if error}
       <div class="alert alert-danger py-2 small mb-2">{error}</div>
     {/if}
@@ -638,71 +664,6 @@
         </div>
       </form>
     {/if}
-  </div>
-  <div class="col-12 col-xl-4 d-flex flex-column h-100" style="min-height: 0;">
-      <div class="p-0 h-100 d-flex flex-column" style="min-height: 300px;">
-        <div class="d-flex align-items-center gap-2 mb-2 px-3 py-2 border rounded-2 bg-body fw-bold">
-          <span>Content</span>
-          <div class="ms-auto d-flex gap-2">
-            {#if agent}
-              {#if agent.is_published || agent.isPublished}
-                <div class="dropdown">
-                  <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                    Published
-                  </button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li>
-                      <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
-                    </li>
-                    <li>
-                      <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
-                    </li>
-                    <li>
-                      <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
-                    </li>
-                  </ul>
-                </div>
-              {:else}
-                <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
-              {/if}
-            {/if}
-          </div>
-        </div>
-        <div class="flex-fill border rounded-2" style="min-height: 0;">
-          <div class="h-100" style="overflow: auto; min-height: 0; height: 100%;">
-          {#if stateStr === 'slept'}
-            <div class="d-flex align-items-center justify-content-center h-100 p-4">
-              <div class="text-center">
-                <div class="h4 fw-bold mb-2">Agent is Sleeping</div>
-                <div class="text-body text-opacity-75 mb-3">Wake the agent to resume work.</div>
-                <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
-              </div>
-            </div>
-          {:else if stateStr === 'idle'}
-            <div class="d-flex align-items-center justify-content-center h-100 p-4">
-              <div class="text-center">
-                <div class="h4 fw-bold mb-2">Agent Idle</div>
-                <div class="text-body text-opacity-75">Agent is ready. Send a message in the chat.</div>
-              </div>
-            </div>
-          {:else if stateStr === 'busy'}
-            <div class="d-flex align-items-center justify-content-center h-100 p-4">
-              <div class="text-center">
-                <div class="h4 fw-bold mb-2">Agent Busy</div>
-                <div class="text-body text-opacity-75">Processing your request…</div>
-              </div>
-            </div>
-          {:else}
-            <div class="d-flex align-items-center justify-content-center h-100 p-4">
-              <div class="text-center">
-                <div class="h4 fw-bold mb-2">Agent Not Ready</div>
-                <div class="text-body text-opacity-75">This agent is initializing.</div>
-              </div>
-            </div>
-          {/if}
-          </div>
-        </div>
-      </div>
   </div>
 
   <style>
