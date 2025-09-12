@@ -82,6 +82,14 @@
     return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
 
+  function stateColorClass(state) {
+    const s = String(state || '').toLowerCase();
+    if (s === 'idle') return 'bg-success border-success';
+    if (s === 'busy') return 'bg-warning border-warning';
+    if (s === 'init') return 'bg-secondary border-secondary';
+    return 'bg-secondary border-secondary';
+  }
+
   function normState(v) { return String(v || '').trim().toLowerCase(); }
   $: stateStr = normState(agent?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
@@ -553,12 +561,11 @@
             {/if}
             <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
             <div class="mt-2 d-flex align-items-center justify-content-between flex-wrap gap-2">
-              <!-- Larger outline state badge on the left -->
-              <div>
+              <!-- Compact status indicator on the left -->
+              <div class="d-flex align-items-center gap-2">
                 {#if agent}
-                  <span class={`${stateClass(agent.state || agent.status)} fs-6 border-2 px-3 py-2`}>
-                    {agent.state || agent.status || 'unknown'}
-                  </span>
+                  <span class={`d-inline-block rounded-circle ${stateColorClass(agent.state || agent.status)} border`} style="width: 10px; height: 10px;"></span>
+                  <span class="text-uppercase small fw-bold text-body">{agent.state || agent.status || 'unknown'}</span>
                 {/if}
               </div>
               <!-- Actions on the right -->
