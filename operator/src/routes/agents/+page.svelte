@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
@@ -91,6 +91,15 @@
     await refresh();
   }
 
+  let pollHandle = null;
+  function startPolling() {
+    stopPolling();
+    pollHandle = setInterval(async () => { try { await refresh(); } catch (_) {} }, 2000);
+  }
+  function stopPolling() {
+    if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+
   onMount(async () => {
     if (!isAuthenticated()) {
       goto('/login');
@@ -104,7 +113,10 @@
       agents = Array.isArray(res.data) ? res.data : (res.data?.agents || []);
     }
     loading = false;
+    startPolling();
   });
+
+  onDestroy(() => { stopPolling(); });
 </script>
 
 <div class="container-xxl">
