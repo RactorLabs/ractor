@@ -526,9 +526,9 @@
 
 <div class="row g-3 h-100">
   <div class="col-12 d-flex flex-column h-100" style="min-height: 0;">
-    <!-- Header: Agent card on the left, actions on the right -->
-    <div class="d-flex flex-wrap align-items-stretch gap-3 mb-2">
-      <div class="flex-grow-1" style="min-width: 280px; max-width: 640px;">
+    <!-- Header: Agent details on the left, info box on the right -->
+    <div class="row g-3 mb-2">
+      <div class="col-12 col-lg-7">
         <Card class="h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
@@ -546,69 +546,66 @@
           </div>
         </Card>
       </div>
-      <div class="ms-auto d-flex align-items-start justify-content-end flex-wrap gap-2">
-        <!-- Publish/Published control -->
+      <div class="col-12 col-lg-5">
         {#if agent}
-          {#if agent.is_published || agent.isPublished}
-            <div class="dropdown">
-              <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                Published
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li>
-                  <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
-                </li>
-                <li>
-                  <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
-                </li>
-                <li>
-                  <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
-                </li>
-              </ul>
+          <Card class="h-100">
+            <div class="card-body small d-flex flex-wrap gap-3">
+              <div>Owner: <span class="font-monospace">{agent.created_by}</span></div>
+              <div>Created: <span class="font-monospace">{agent.created_at}</span></div>
+              <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
+              <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
+              <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
+              <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
+              <div>Messages: {Array.isArray(messages) ? messages.length : 0}</div>
             </div>
-          {:else}
-            <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
-          {/if}
+          </Card>
         {/if}
-
-        <!-- Common actions -->
-        <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
-        {#if stateStr === 'slept'}
-          <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
-        {:else if stateStr === 'idle' || stateStr === 'busy'}
-          <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
-        {/if}
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
-
-        <!-- Kebab menu for less-used actions -->
-        <div class="dropdown">
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-            <i class="bi bi-three-dots"></i>
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
-            <li><hr class="dropdown-divider" /></li>
-            <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
-          </ul>
-        </div>
       </div>
     </div>
 
-    <!-- Stats row -->
-    {#if agent}
-      <Card class="mb-2">
-        <div class="card-body small d-flex flex-wrap gap-3">
-          <div>Owner: <span class="font-monospace">{agent.created_by}</span></div>
-          <div>Created: <span class="font-monospace">{agent.created_at}</span></div>
-          <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
-          <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
-          <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
-          <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
-          <div>Messages: {Array.isArray(messages) ? messages.length : 0}</div>
-        </div>
-      </Card>
-    {/if}
+    <!-- Actions: full width row below boxes -->
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+      {#if agent}
+        {#if agent.is_published || agent.isPublished}
+          <div class="dropdown">
+            <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+              Published
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li>
+                <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+              </li>
+              <li>
+                <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
+              </li>
+              <li>
+                <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
+              </li>
+            </ul>
+          </div>
+        {:else}
+          <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
+        {/if}
+      {/if}
+      <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
+      {#if stateStr === 'slept'}
+        <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+      {:else if stateStr === 'idle' || stateStr === 'busy'}
+        <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+      {/if}
+      <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
+      <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+      <div class="dropdown">
+        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+          <i class="bi bi-three-dots"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
+          <li><hr class="dropdown-divider" /></li>
+          <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
+        </ul>
+      </div>
+    </div>
 
     {#if error}
       <div class="alert alert-danger py-2 small mb-2">{error}</div>
