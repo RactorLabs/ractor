@@ -608,12 +608,11 @@
         {#if agent}
           <Card class="h-100">
             <div class="card-body small d-flex flex-wrap gap-3">
-              <div>Created: <span class="font-monospace">{agent.created_at}</span></div>
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
-              <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
               <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
               <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
               <div>Total messages (includes tool calls): {Array.isArray(messages) ? messages.length : 0}</div>
+              <div class="w-100 mt-1">Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
             </div>
           </Card>
         {/if}
