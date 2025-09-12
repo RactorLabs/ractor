@@ -160,15 +160,22 @@
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                         {#if (a.state || '').toLowerCase() === 'slept'}
-                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent"><i class="fas fa-sun me-1"></i>Wake</button>
+                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent">
+                            <i class="fas fa-sun d-inline d-sm-none"></i>
+                            <span class="d-none d-sm-inline">Wake</span>
+                          </button>
                         {:else if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep"><i class="fas fa-moon me-1"></i>Sleep</button>
+                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
+                            <i class="fas fa-moon d-inline d-sm-none"></i>
+                            <span class="d-none d-sm-inline">Sleep</span>
+                          </button>
                         {/if}
                         {#if a.is_published}
                           <div class="dropdown">
-                            <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                              <i class="fas fa-globe me-1"></i>Published
-                            </button>
+                          <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                              <i class="fas fa-globe d-inline d-sm-none"></i>
+                              <span class="d-none d-sm-inline">Published</span>
+                          </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                               <li>
                                 <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-2"></i>Open Public URL</a>
@@ -182,7 +189,10 @@
                             </ul>
                           </div>
                         {:else}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content"><i class="fas fa-cloud-arrow-up me-1"></i>Publish</button>
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
+                            <i class="fas fa-cloud-arrow-up d-inline d-sm-none"></i>
+                            <span class="d-none d-sm-inline">Publish</span>
+                          </button>
                         {/if}
                         <div class="dropdown">
                           <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
