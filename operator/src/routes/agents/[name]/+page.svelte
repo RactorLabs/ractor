@@ -620,7 +620,14 @@
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div class="mt-1">Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
               <div class="mt-1">Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
-              <div class="mt-2">Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
+              <div class="mt-2">
+                Public URL:
+                {#if agent.is_published || agent.isPublished}
+                  <a href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">{getHostUrl()}/content/{agent?.name || name}/</a>
+                {:else}
+                  Not Published
+                {/if}
+              </div>
             </div>
           </Card>
         {/if}
