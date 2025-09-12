@@ -95,7 +95,7 @@
     if (s === 'slept') return 'fas fa-moon';
     if (s === 'idle') return 'fas fa-sun';
     if (s === 'busy') return 'fas fa-spinner fa-spin';
-    if (s === 'init') return 'fas fa-seedling';
+    if (s === 'init') return 'fas fa-circle-notch fa-spin';
     return 'fas fa-circle-dot';
   }
 
