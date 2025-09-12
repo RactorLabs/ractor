@@ -578,13 +578,15 @@
             {#if isAdmin && agent}
               <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{agent.created_by}</span></div>
             {/if}
-            {#if Array.isArray(agent?.tags) && agent.tags.length}
-              <div class="mt-2 d-flex flex-wrap gap-1">
+            <div class="mt-2 d-flex flex-wrap gap-1">
+              {#if Array.isArray(agent?.tags) && agent.tags.length}
                 {#each agent.tags as t}
                   <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
                 {/each}
-              </div>
-            {/if}
+              {:else}
+                <span class="text-body-secondary small">No tags</span>
+              {/if}
+            </div>
             <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
             <div class="mt-2 d-flex align-items-center flex-wrap">
               <!-- Compact status indicator on the left -->
