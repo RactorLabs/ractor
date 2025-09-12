@@ -649,9 +649,9 @@
       </div>
     </div>
 
-    <!-- Minimize/Maximize (expand/collapse) tool details outside chat panel -->
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-      <div class="small text-body">
+    <!-- Minimize/Maximize (expand/collapse) tool details row -->
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+      <div class="small text-body me-2">
         Total messages <span class="d-none d-sm-inline">(includes tool calls)</span>: {Array.isArray(messages) ? messages.length : 0}
       </div>
       <div class="d-flex align-items-center gap-2">
