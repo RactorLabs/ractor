@@ -565,7 +565,7 @@
               <div>Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
               <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
               <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
-              <div>Messages: {Array.isArray(messages) ? messages.length : 0}</div>
+              <div>Total messages (includes tool calls): {Array.isArray(messages) ? messages.length : 0}</div>
             </div>
           </Card>
         {/if}
