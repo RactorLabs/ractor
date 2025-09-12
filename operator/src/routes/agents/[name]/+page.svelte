@@ -749,7 +749,7 @@
         <div class="input-group">
           <textarea
             aria-label="Message input"
-            class="form-control chat-no-focus"
+            class="form-control chat-no-focus chat-no-zoom"
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -810,5 +810,9 @@
     /* Ensure dropdown menus overlay adjacent buttons and are not clipped */
     :global(.dropdown-menu) { z-index: 5000; }
     :global(.card) { overflow: visible; }
+    /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
+    @media (max-width: 576px) {
+      :global(textarea.chat-no-zoom) { font-size: 16px; }
+    }
   </style>
 </div>
