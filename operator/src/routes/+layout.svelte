@@ -7,8 +7,9 @@
 	import AppHeader from '/src/components/app/AppHeader.svelte';
 	import AppSidebar from '/src/components/app/AppSidebar.svelte';
 	import AppTopNav from '/src/components/app/AppTopNav.svelte';
-	import AppFooter from '/src/components/app/AppFooter.svelte';
-	import AppThemePanel from '/src/components/app/AppThemePanel.svelte';
+  import AppFooter from '/src/components/app/AppFooter.svelte';
+  import AppThemePanel from '/src/components/app/AppThemePanel.svelte';
+  import Toaster from '/src/components/ui/Toaster.svelte';
 	import { onMount } from 'svelte';
   import { appOptions } from '/src/stores/appOptions.js';
   import { appVariables, generateVariables } from '/src/stores/appVariables.js';
@@ -65,9 +66,11 @@
 	{#if $appOptions.appTopNav}<AppTopNav />{/if}
 	<AppThemePanel />
 	
-	<div id="content" class="app-content{($appOptions.appContentClass) ? ' '+ $appOptions.appContentClass : ''}">
+  <div id="content" class="app-content{($appOptions.appContentClass) ? ' '+ $appOptions.appContentClass : ''}">
 		<slot />
 	</div>
 	
+  <Toaster />
+  
   {#if $appOptions.appFooter}<AppFooter hostName={(data && data.hostName) ? data.hostName : getHostName()} />{/if}
 </div>
