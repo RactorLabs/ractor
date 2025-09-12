@@ -552,7 +552,47 @@
                 {/each}
               </div>
             {/if}
-
+            <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
+            <div class="mt-2 d-flex align-items-center justify-content-end flex-wrap gap-2">
+              {#if agent}
+                {#if agent.is_published || agent.isPublished}
+                  <div class="dropdown">
+                    <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                      Published
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li>
+                        <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                      </li>
+                      <li>
+                        <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
+                      </li>
+                    </ul>
+                  </div>
+                {:else}
+                  <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
+                {/if}
+              {/if}
+              <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
+              {#if stateStr === 'slept'}
+                <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+              {:else if stateStr === 'idle' || stateStr === 'busy'}
+                <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+              {/if}
+              <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+                  <i class="bi bi-three-dots"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                  <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
+                  <li><hr class="dropdown-divider" /></li>
+                  <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
+                </ul>
+              </div>
+            </div>
           </div>
         </Card>
       </div>
@@ -572,48 +612,10 @@
       </div>
     </div>
 
-    <!-- Actions: full width row below boxes -->
+    <!-- Actions: only expand/collapse below boxes -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      {#if agent}
-        {#if agent.is_published || agent.isPublished}
-          <div class="dropdown">
-            <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-              Published
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li>
-                <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
-              </li>
-              <li>
-                <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
-              </li>
-              <li>
-                <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
-              </li>
-            </ul>
-          </div>
-        {:else}
-          <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
-        {/if}
-      {/if}
-      <button class="btn btn-outline-secondary btn-sm" on:click={remixAgent}>Remix</button>
-      {#if stateStr === 'slept'}
-        <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
-      {:else if stateStr === 'idle' || stateStr === 'busy'}
-        <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
-      {/if}
       <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
       <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
-      <div class="dropdown">
-        <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-          <i class="bi bi-three-dots"></i>
-        </button>
-        <ul class="dropdown-menu dropdown-menu-end">
-          <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
-          <li><hr class="dropdown-divider" /></li>
-          <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
-        </ul>
-      </div>
     </div>
 
     {#if error}
