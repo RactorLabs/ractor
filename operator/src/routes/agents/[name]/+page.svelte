@@ -589,25 +589,25 @@
               <div class="d-flex align-items-center gap-2">
                 {#if agent}
                   <i class={`${stateIconClass(agent.state || agent.status)} me-1`}></i>
-                  <span class="text-uppercase small fw-bold text-body d-none d-sm-inline">{agent.state || agent.status || 'unknown'}</span>
+                  <span class="text-uppercase small fw-bold text-body">{agent.state || agent.status || 'unknown'}</span>
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'slept'}
                   <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">
-                    <i class="fas fa-sun me-1"></i><span class="d-none d-sm-inline">Wake</span>
+                    <i class="fas fa-sun me-1"></i><span>Wake</span>
                   </button>
                 {:else if stateStr === 'idle' || stateStr === 'busy'}
                   <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">
-                    <i class="fas fa-moon me-1"></i><span class="d-none d-sm-inline">Sleep</span>
+                    <i class="fas fa-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
                       <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                        <i class="fas fa-globe me-1"></i><span class="d-none d-sm-inline">Published</span>
+                        <i class="fas fa-globe me-1"></i><span>Published</span>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li>
@@ -623,7 +623,7 @@
                     </div>
                   {:else}
                     <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">
-                      <i class="fas fa-cloud-arrow-up me-1"></i><span class="d-none d-sm-inline">Publish</span>
+                      <i class="fas fa-cloud-arrow-up me-1"></i><span>Publish</span>
                     </button>
                   {/if}
                 {/if}
