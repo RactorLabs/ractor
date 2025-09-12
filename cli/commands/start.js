@@ -96,7 +96,7 @@ module.exports = (program) => {
     .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
     .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
     .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:120b')
-    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '2h')
+    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '-1')
     .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
@@ -426,7 +426,7 @@ module.exports = (program) => {
               args.push(
                 '-v','ollama_data:/root/.ollama',
                 '-v','ollama_data:/var/log/ollama',
-                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','2h')}`,
+                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','-1')}`,
                 '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
                 '-e',`OLLAMA_NUM_CTX=${contextLength}`,
                 ...cpuEnv,
