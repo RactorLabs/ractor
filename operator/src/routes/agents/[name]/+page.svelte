@@ -477,7 +477,12 @@
             <div class="alert alert-danger small">{remixError}</div>
           {/if}
           <label class="form-label" for="remix-name">New Agent Name</label>
-          <input id="remix-name" class="form-control" bind:value={remixName} />
+          <input
+            id="remix-name"
+            class="form-control"
+            bind:value={remixName}
+            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRemix(); } }}
+          />
           <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
         </div>
         <div class="modal-footer">
