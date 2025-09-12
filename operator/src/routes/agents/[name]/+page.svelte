@@ -586,30 +586,30 @@
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'slept'}
-                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">Wake</button>
+                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent"><i class="fas fa-sun me-1"></i>Wake</button>
                 {:else if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">Sleep</button>
+                  <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep"><i class="fas fa-moon me-1"></i>Sleep</button>
                 {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
                       <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                        Published
+                        <i class="fas fa-globe me-1"></i>Published
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li>
-                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-2"></i>Open Public URL</a>
                         </li>
                         <li>
-                          <button class="dropdown-item" on:click={publishAgent}>Publish New Version</button>
+                          <button class="dropdown-item" on:click={publishAgent}><i class="fas fa-cloud-arrow-up me-2"></i>Publish New Version</button>
                         </li>
                         <li>
-                          <button class="dropdown-item text-danger" on:click={unpublishAgent}>Unpublish</button>
+                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="fas fa-eye-slash me-2"></i>Unpublish</button>
                         </li>
                       </ul>
                     </div>
                   {:else}
-                    <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">Publish</button>
+                    <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content"><i class="fas fa-cloud-arrow-up me-1"></i>Publish</button>
                   {/if}
                 {/if}
                 <div class="dropdown">
@@ -617,10 +617,10 @@
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={remixAgent}>Remix</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTags}>Edit Tags</button></li>
+                    <li><button class="dropdown-item" on:click={remixAgent}><i class="fas fa-code-branch me-2"></i>Remix</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTags}><i class="fas fa-tags me-2"></i>Edit Tags</button></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}>Delete</button></li>
+                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="fas fa-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>

@@ -160,42 +160,42 @@
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                         {#if (a.state || '').toLowerCase() === 'slept'}
-                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent">Wake</button>
+                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent"><i class="fas fa-sun me-1"></i>Wake</button>
                         {:else if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">Sleep</button>
+                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep"><i class="fas fa-moon me-1"></i>Sleep</button>
                         {/if}
                         {#if a.is_published}
                           <div class="dropdown">
                             <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                              Published
+                              <i class="fas fa-globe me-1"></i>Published
                             </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                               <li>
-                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-2"></i>Open Public URL</a>
                               </li>
                               <li>
-                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}>Publish New Version</button>
+                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}><i class="fas fa-cloud-arrow-up me-2"></i>Publish New Version</button>
                               </li>
                               <li>
-                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}>Unpublish</button>
+                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}><i class="fas fa-eye-slash me-2"></i>Unpublish</button>
                               </li>
                             </ul>
                           </div>
                         {:else}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">Publish</button>
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content"><i class="fas fa-cloud-arrow-up me-1"></i>Publish</button>
                         {/if}
                         <div class="dropdown">
                           <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}>Remix</button></li>
-                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}><i class="fas fa-code-branch me-2"></i>Remix</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}><i class="fas fa-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}>Delete</button></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}><i class="fas fa-trash me-2"></i>Delete</button></li>
                           </ul>
-</div>
-</div>
+                        </div>
+                      </div>
 </div>
 </div>
 
