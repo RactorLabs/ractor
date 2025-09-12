@@ -552,11 +552,7 @@
                 {/each}
               </div>
             {/if}
-            <div class="mt-2 d-flex gap-2">
-              {#if agent}
-                <a class="btn btn-sm btn-outline-theme" href={'/agents/' + encodeURIComponent(agent.name || '')}>Open</a>
-              {/if}
-            </div>
+
           </div>
         </Card>
       </div>
