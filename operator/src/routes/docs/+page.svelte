@@ -87,6 +87,16 @@
       </div>
     </Card>
 
+    <Card class="mb-3">
+      <div class="card-header fw-bold">Error Format</div>
+      <div class="card-body p-3 p-sm-4 small">
+        <div>On error, endpoints return an HTTP status and a JSON body:</div>
+        <pre class="bg-light p-2 rounded mb-0 code-wrap"><code>{`{
+  "message": "Error description"
+}`}</code></pre>
+      </div>
+    </Card>
+
     {#each getApiDocs($page?.data?.hostUrl) as section}
       <Card id={section.id} class="mb-3">
         <div class="card-header">
@@ -162,6 +172,20 @@
                       <div class="mt-3">
                         <div class="fw-500 small text-body text-opacity-75 mb-1">Example</div>
                         <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{formatCurl(ep.example)}</code></pre>
+                      </div>
+                    {/if}
+
+                    {#if ep.responses && ep.responses.length}
+                      <div class="mt-3">
+                        <div class="fw-500 small text-body text-opacity-75 mb-1">Response</div>
+                        {#each ep.responses as r}
+                          <div class="mb-2">
+                            <span class="badge bg-primary">HTTP {r.status}</span>
+                          </div>
+                          {#if r.body}
+                            <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{r.body}</code></pre>
+                          {/if}
+                        {/each}
                       </div>
                     {/if}
                   </div>
