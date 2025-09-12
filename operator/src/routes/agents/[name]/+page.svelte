@@ -618,7 +618,6 @@
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
               <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
-              <div>Total messages (includes tool calls): {Array.isArray(messages) ? messages.length : 0}</div>
               <div class="w-100 mt-1">Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
             </div>
           </Card>
@@ -627,9 +626,14 @@
     </div>
 
     <!-- Minimize/Maximize (expand/collapse) tool details outside chat panel -->
-    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
-      <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+      <div class="small text-body">
+        Total messages<span class="d-none d-sm-inline"> (includes tool calls)</span>: {Array.isArray(messages) ? messages.length : 0}
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="bi bi-arrows-expand"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="bi bi-arrows-collapse"></i></button>
+      </div>
     </div>
 
     {#if error}
