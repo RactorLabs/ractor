@@ -224,11 +224,12 @@ pub async fn create_agent(
                             name_display
                         );
                         if db_err.message().contains("agents.PRIMARY")
+                            || db_err.message().contains("unique_agent_name")
                             || db_err.message().contains("Duplicate entry")
                         {
                             tracing::info!("Confirmed duplicate agent name constraint violation");
-                            return ApiError::BadRequest(format!(
-                                "Agent name '{}' is already taken. Please choose a different name.",
+                            return ApiError::Conflict(format!(
+                                "Agent name '{}' already exists. Choose a different name.",
                                 name_display
                             ));
                         }

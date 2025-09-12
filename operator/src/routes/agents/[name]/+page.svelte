@@ -108,7 +108,7 @@
     try {
       const tags = parseTagsInput();
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
-      if (!res.ok) throw new Error(res?.data?.error || `Update failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
       // Update local agent tags
       agent = res.data || agent;
       if (agent && !Array.isArray(agent.tags)) agent.tags = tags;
@@ -127,6 +127,7 @@
     showRemixModal = true;
   }
   function closeRemixModal() { showRemixModal = false; }
+  let remixError = null;
   async function confirmRemix() {
     try {
       const newName = String(remixName || '').trim();
@@ -136,11 +137,14 @@
         method: 'POST',
         body: JSON.stringify({ name: newName, code: true, secrets: true, content: true })
       });
-      if (!res.ok) throw new Error(res?.data?.error || `Remix failed (HTTP ${res.status})`);
+      if (!res.ok) {
+        remixError = res?.data?.message || res?.data?.error || `Remix failed (HTTP ${res.status})`;
+        return;
+      }
       showRemixModal = false;
       goto(`/agents/${encodeURIComponent(newName)}`);
     } catch (e) {
-      alert(e.message || String(e));
+      remixError = e.message || String(e);
     }
   }
 
@@ -293,7 +297,7 @@
         method: 'POST',
         body: JSON.stringify({ role: 'user', content })
       });
-      if (!res.ok) throw new Error(res?.data?.error || `Send failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       input = '';
       // Optimistic add
       messages = [...messages, { role: 'user', content }];
@@ -310,7 +314,7 @@
   async function sleepAgent() {
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST' });
-      if (!res.ok) throw new Error(res?.data?.error || `Sleep failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
       // Optimistic UI update to reflect new state immediately
       if (agent) agent = { ...(agent || {}), state: 'slept' };
       // Give the controller a moment to persist the state before fetching
@@ -325,7 +329,7 @@
   async function wakeAgent() {
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
-      if (!res.ok) throw new Error(res?.data?.error || `Wake failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Wake failed (HTTP ${res.status})`);
       // Optimistic UI update: reflect server semantics (state becomes 'init' first)
       if (agent) agent = { ...(agent || {}), state: 'init' };
       // Give the controller a moment to recreate the container before fetching
@@ -344,7 +348,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: true, secrets: true, content: true })
       });
-      if (!res.ok) throw new Error(res?.data?.error || `Publish failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Publish failed (HTTP ${res.status})`);
       if (agent) {
         agent = { ...(agent || {}), is_published: true, isPublished: true };
       }
@@ -359,7 +363,7 @@
   async function unpublishAgent() {
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
-      if (!res.ok) throw new Error(res?.data?.error || `Unpublish failed (HTTP ${res.status})`);
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Unpublish failed (HTTP ${res.status})`);
       if (agent) {
         agent = { ...(agent || {}), is_published: false, isPublished: false };
       }
@@ -469,6 +473,9 @@
           <button type="button" class="btn-close" aria-label="Close" on:click={closeRemixModal}></button>
         </div>
         <div class="modal-body">
+          {#if remixError}
+            <div class="alert alert-danger small">{remixError}</div>
+          {/if}
           <label class="form-label" for="remix-name">New Agent Name</label>
           <input id="remix-name" class="form-control" bind:value={remixName} />
           <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
@@ -501,7 +508,7 @@
             try {
               const cur = String(name || '').trim();
               const res = await apiFetch(`/agents/${encodeURIComponent(cur)}`, { method: 'DELETE' });
-              if (!res.ok) throw new Error(res?.data?.error || `Delete failed (HTTP ${res.status})`);
+              if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
               showDeleteModal = false;
               goto('/agents');
             } catch (e) {

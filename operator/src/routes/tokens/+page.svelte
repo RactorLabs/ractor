@@ -31,7 +31,7 @@
     const body = { principal: username.trim(), type: 'User' };
     const res = await apiFetch('/auth/token', { method: 'POST', body: JSON.stringify(body) }, { noAutoLogout: true });
     loading = false;
-    if (!res.ok) { error = res?.data?.error || `Failed to create token (HTTP ${res.status})`; return; }
+    if (!res.ok) { error = res?.data?.message || res?.data?.error || `Failed to create token (HTTP ${res.status})`; return; }
     token = res?.data?.token || '';
     copyStatus = '';
   }

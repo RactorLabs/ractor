@@ -100,7 +100,10 @@
       };
 
       const res = await apiFetch('/agents', { method: 'POST', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(res?.data?.error || `Create failed (HTTP ${res.status})`);
+      if (!res.ok) {
+        const msg = res?.data?.message || res?.data?.error || `Create failed (HTTP ${res.status})`;
+        throw new Error(msg);
+      }
       // Navigate to the created agent page
       goto(`/agents/${encodeURIComponent(name)}`);
     } catch (e) {
