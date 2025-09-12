@@ -345,9 +345,28 @@ pub async fn remix_agent(
     let copy_content = true;
     let initial_prompt = req.prompt.clone();
 
-    let agent = Agent::remix(&state.db, &parent.name, req, created_by)
+    let agent = Agent::remix(&state.db, &parent.name, req.clone(), created_by)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to remix agent: {}", e)))?;
+        .map_err(|e| {
+            // Provide a clearer error on duplicate name conflicts
+            if let sqlx::Error::Database(db_err) = &e {
+                if let Some(code) = db_err.code() {
+                    // MySQL duplicate/constraint codes: 23000 (SQLSTATE), 1062 (ER_DUP_ENTRY)
+                    if code == "23000" || code == "1062" {
+                        if db_err.message().contains("agents.PRIMARY")
+                            || db_err.message().contains("unique_agent_name")
+                            || db_err.message().contains("Duplicate entry")
+                        {
+                            return ApiError::Conflict(format!(
+                                "Agent name '{}' already exists. Choose a different name.",
+                                req.name
+                            ));
+                        }
+                    }
+                }
+            }
+            ApiError::Internal(anyhow::anyhow!("Failed to remix agent: {}", e))
+        })?;
 
     // Add task to queue for agent manager to create container with remix options
     let task_payload = serde_json::json!({
