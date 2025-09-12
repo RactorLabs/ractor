@@ -569,7 +569,7 @@
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
-              <div class="ms-auto d-flex align-items-center flex-wrap gap-1">
+              <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
