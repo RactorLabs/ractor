@@ -560,7 +560,7 @@
           </div>
         </Card>
       </div>
-      <div class="col-12 col-lg-5">
+      <div class="col-12 col-lg-5 d-none d-lg-block">
         {#if agent}
           <Card class="h-100">
             <div class="card-body small d-flex flex-wrap gap-3">
