@@ -194,10 +194,15 @@
                             <li><hr class="dropdown-divider" /></li>
                             <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}>Delete</button></li>
                           </ul>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+</div>
+</div>
+</div>
+</div>
+
+<style>
+  /* Ensure dropdown menus overlay adjacent buttons on the list cards */
+  :global(.dropdown-menu) { z-index: 2000; }
+</style>
                 </Card>
               </div>
             {/each}
