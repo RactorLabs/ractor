@@ -258,6 +258,21 @@
     return `${Math.round(n)}s`;
   }
 
+  // Format seconds as human-readable hours/minutes/seconds, e.g., 1h 5m 3s, 5m, 30s
+  function fmtDuration(v) {
+    let total = Number(v || 0);
+    if (!isFinite(total) || total < 0) total = 0;
+    const h = Math.floor(total / 3600);
+    total -= h * 3600;
+    const m = Math.floor(total / 60);
+    const s = Math.floor(total - m * 60);
+    const parts = [];
+    if (h) parts.push(`${h}h`);
+    if (m) parts.push(`${m}m`);
+    if (s || parts.length === 0) parts.push(`${s}s`);
+    return parts.join(' ');
+  }
+
   // Expand/Collapse all tool details helpers
   function expandAllTools() {
     try {
@@ -618,8 +633,8 @@
           <Card class="h-100">
             <div class="card-body small">
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
-              <div class="mt-1">Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
-              <div class="mt-1">Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
+              <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
+              <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
               <div class="mt-2">
                 Public URL:
                 {#if agent.is_published || agent.isPublished}
