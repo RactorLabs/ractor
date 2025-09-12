@@ -616,11 +616,11 @@
       <div class="col-12 col-lg-5 d-none d-lg-block">
         {#if agent}
           <Card class="h-100">
-            <div class="card-body small d-flex flex-wrap gap-3">
+            <div class="card-body small">
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
-              <div>Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
-              <div>Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
-              <div class="w-100 mt-1">Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
+              <div class="mt-1">Idle Timeout: {agent.idle_timeout_seconds || 0}s</div>
+              <div class="mt-1">Busy Timeout: {agent.busy_timeout_seconds || 0}s</div>
+              <div class="mt-2">Published: <span class="badge {agent.is_published || agent.isPublished ? 'bg-success' : 'bg-secondary'}">{agent.is_published || agent.isPublished ? 'Yes' : 'No'}</span></div>
             </div>
           </Card>
         {/if}
