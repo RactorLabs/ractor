@@ -462,6 +462,8 @@
     try {
       await fetchAgent();
       await fetchMessages();
+      await tick();
+      scrollToBottom();
       loading = false;
       startPolling();
     } catch (e) {
