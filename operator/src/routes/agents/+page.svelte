@@ -30,6 +30,15 @@
     return 'bg-secondary border-secondary';
   }
 
+  function stateIconClass(state) {
+    const s = String(state || '').toLowerCase();
+    if (s === 'slept') return 'fas fa-moon';
+    if (s === 'idle') return 'fas fa-sun';
+    if (s === 'busy') return 'fas fa-spinner fa-spin';
+    if (s === 'init') return 'fas fa-seedling';
+    return 'fas fa-circle-dot';
+  }
+
   import { getHostUrl } from '$lib/branding.js';
   import { toast } from '/src/stores/toast.js';
 
@@ -155,8 +164,8 @@
                     <!-- In-card actions: status on left, buttons on right; no Open button -->
                     <div class="mt-2 d-flex align-items-center flex-wrap">
                       <div class="d-flex align-items-center gap-2">
-                        <span class={`d-inline-block rounded-circle ${stateColorClass(a.state || a.status)} border`} style="width: 10px; height: 10px;"></span>
-                        <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
+                        <i class={`${stateIconClass(a.state || a.status)} d-inline d-sm-none`}></i>
+                        <span class="d-none d-sm-inline text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                         {#if (a.state || '').toLowerCase() === 'slept'}

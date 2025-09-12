@@ -90,6 +90,15 @@
     return 'bg-secondary border-secondary';
   }
 
+  function stateIconClass(state) {
+    const s = String(state || '').toLowerCase();
+    if (s === 'slept') return 'fas fa-moon';
+    if (s === 'idle') return 'fas fa-sun';
+    if (s === 'busy') return 'fas fa-spinner fa-spin';
+    if (s === 'init') return 'fas fa-seedling';
+    return 'fas fa-circle-dot';
+  }
+
   function normState(v) { return String(v || '').trim().toLowerCase(); }
   $: stateStr = normState(agent?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
@@ -579,8 +588,8 @@
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
                 {#if agent}
-                  <span class={`d-inline-block rounded-circle ${stateColorClass(agent.state || agent.status)} border`} style="width: 10px; height: 10px;"></span>
-                  <span class="text-uppercase small fw-bold text-body">{agent.state || agent.status || 'unknown'}</span>
+                  <i class={`${stateIconClass(agent.state || agent.status)} d-inline d-sm-none`}></i>
+                  <span class="d-none d-sm-inline text-uppercase small fw-bold text-body">{agent.state || agent.status || 'unknown'}</span>
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
