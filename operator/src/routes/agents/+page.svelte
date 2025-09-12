@@ -17,10 +17,69 @@
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'init') return 'badge rounded-pill bg-light text-dark';
-    if (s === 'idle') return 'badge rounded-pill bg-success';
-    if (s === 'busy') return 'badge rounded-pill bg-warning text-dark';
-    return 'badge rounded-pill bg-secondary';
+    if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
+    if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
+    if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
+    return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
+  }
+  function stateColorClass(state) {
+    const s = String(state || '').toLowerCase();
+    if (s === 'idle') return 'bg-success border-success';
+    if (s === 'busy') return 'bg-warning border-warning';
+    if (s === 'init') return 'bg-secondary border-secondary';
+    return 'bg-secondary border-secondary';
+  }
+
+  import { getHostUrl } from '$lib/branding.js';
+  import { toast } from '/src/stores/toast.js';
+
+  async function refresh() {
+    const res = await apiFetch('/agents');
+    if (res.ok) {
+      agents = Array.isArray(res.data) ? res.data : (res.data?.agents || []);
+    }
+  }
+
+  async function sleepAgent(name) {
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST' });
+    if (!res.ok) return toast.error(res?.data?.message || 'Sleep failed');
+    toast.success('Agent put to sleep');
+    await refresh();
+  }
+  async function wakeAgent(name) {
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
+    if (!res.ok) return toast.error(res?.data?.message || 'Wake failed');
+    toast.success('Agent waking');
+    await refresh();
+  }
+  async function publishAgent(name) {
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, secrets: true, content: true }) });
+    if (!res.ok) return toast.error(res?.data?.message || 'Publish failed');
+    toast.success('Agent published');
+    await refresh();
+  }
+  async function unpublishAgent(name) {
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
+    if (!res.ok) return toast.error(res?.data?.message || 'Unpublish failed');
+    toast.success('Agent unpublished');
+    await refresh();
+  }
+  async function remixAgent(name) {
+    const newName = prompt('New Agent Name for Remix');
+    if (!newName) return;
+    const body = { name: newName.trim(), code: true, secrets: true, content: true };
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, { method: 'POST', body: JSON.stringify(body) });
+    if (!res.ok) return toast.error(res?.data?.message || 'Remix failed');
+    toast.success('Agent remixed');
+    await refresh();
+  }
+  async function deleteAgent(name) {
+    const ok = confirm(`Delete agent '${name}'? This cannot be undone.`);
+    if (!ok) return;
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    if (!res.ok) return toast.error(res?.data?.message || 'Delete failed');
+    toast.success('Agent deleted');
+    await refresh();
   }
 
   onMount(async () => {
@@ -81,9 +140,8 @@
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
                       <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
-                      <span class={stateClass(a.state || a.status)}>{a.state || a.status || 'unknown'}</span>
                     </div>
-                    <div class="small text-body text-opacity-75 flex-grow-1">{a.description || a.desc || 'No description'}</div>
+                    <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
@@ -94,8 +152,50 @@
                         {/each}
                       </div>
                     {/if}
-                    <div class="mt-2 d-flex gap-2">
-                      <a class="btn btn-sm btn-outline-theme" href={'/agents/' + encodeURIComponent(a.name || '')}>Open</a>
+                    <!-- In-card actions: status on left, buttons on right; no Open button -->
+                    <div class="mt-2 d-flex align-items-center flex-wrap">
+                      <div class="d-flex align-items-center gap-2">
+                        <span class={`d-inline-block rounded-circle ${stateColorClass(a.state || a.status)} border`} style="width: 10px; height: 10px;"></span>
+                        <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
+                      </div>
+                      <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
+                        {#if (a.state || '').toLowerCase() === 'slept'}
+                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent">Wake</button>
+                        {:else if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
+                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">Sleep</button>
+                        {/if}
+                        {#if a.is_published}
+                          <div class="dropdown">
+                            <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                              Published
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                              <li>
+                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">Open Public URL ↗</a>
+                              </li>
+                              <li>
+                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}>Publish New Version</button>
+                              </li>
+                              <li>
+                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}>Unpublish</button>
+                              </li>
+                            </ul>
+                          </div>
+                        {:else}
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">Publish</button>
+                        {/if}
+                        <div class="dropdown">
+                          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+                            <i class="bi bi-three-dots"></i>
+                          </button>
+                          <ul class="dropdown-menu dropdown-menu-end">
+                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}>Remix</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}>Edit Tags</button></li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}>Delete</button></li>
+                          </ul>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Card>
