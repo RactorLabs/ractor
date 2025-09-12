@@ -39,8 +39,7 @@
     return 'fas fa-circle-dot';
   }
 
-  import { getHostUrl } from '$lib/branding.js';
-  import { toast } from '/src/stores/toast.js';
+import { getHostUrl } from '$lib/branding.js';
 
   async function refresh() {
     const res = await apiFetch('/agents');
@@ -51,26 +50,22 @@
 
   async function sleepAgent(name) {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST' });
-    if (!res.ok) return toast.error(res?.data?.message || 'Sleep failed');
-    toast.success('Agent put to sleep');
+    if (!res.ok) { error = res?.data?.message || 'Sleep failed'; return; }
     await refresh();
   }
   async function wakeAgent(name) {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
-    if (!res.ok) return toast.error(res?.data?.message || 'Wake failed');
-    toast.success('Agent waking');
+    if (!res.ok) { error = res?.data?.message || 'Wake failed'; return; }
     await refresh();
   }
   async function publishAgent(name) {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, secrets: true, content: true }) });
-    if (!res.ok) return toast.error(res?.data?.message || 'Publish failed');
-    toast.success('Agent published');
+    if (!res.ok) { error = res?.data?.message || 'Publish failed'; return; }
     await refresh();
   }
   async function unpublishAgent(name) {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
-    if (!res.ok) return toast.error(res?.data?.message || 'Unpublish failed');
-    toast.success('Agent unpublished');
+    if (!res.ok) { error = res?.data?.message || 'Unpublish failed'; return; }
     await refresh();
   }
   async function remixAgent(name) {
@@ -78,16 +73,14 @@
     if (!newName) return;
     const body = { name: newName.trim(), code: true, secrets: true, content: true };
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, { method: 'POST', body: JSON.stringify(body) });
-    if (!res.ok) return toast.error(res?.data?.message || 'Remix failed');
-    toast.success('Agent remixed');
+    if (!res.ok) { error = res?.data?.message || 'Remix failed'; return; }
     await refresh();
   }
   async function deleteAgent(name) {
     const ok = confirm(`Delete agent '${name}'? This cannot be undone.`);
     if (!ok) return;
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
-    if (!res.ok) return toast.error(res?.data?.message || 'Delete failed');
-    toast.success('Agent deleted');
+    if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
     await refresh();
   }
 
