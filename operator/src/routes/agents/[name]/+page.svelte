@@ -76,10 +76,10 @@
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'init') return 'badge rounded-pill bg-light text-dark';
-    if (s === 'idle') return 'badge rounded-pill bg-success';
-    if (s === 'busy') return 'badge rounded-pill bg-warning text-dark';
-    return 'badge rounded-pill bg-secondary';
+    if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
+    if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
+    if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
+    return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
 
   function normState(v) { return String(v || '').trim().toLowerCase(); }
