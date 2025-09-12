@@ -10,6 +10,7 @@
   import taskLists from 'markdown-it-task-lists';
   import { browser } from '$app/environment';
   import { getHostUrl } from '$lib/branding.js';
+  import { auth } from '$lib/auth.js';
   import Card from '/src/components/bootstrap/Card.svelte';
 
   let md;
@@ -83,6 +84,7 @@
 
   function normState(v) { return String(v || '').trim().toLowerCase(); }
   $: stateStr = normState(agent?.state);
+  $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
   function isSlept() { return stateStr === 'slept'; }
   function isAwake() { return stateStr === 'idle' || stateStr === 'busy'; }
@@ -532,10 +534,17 @@
         <Card class="h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
-              <div class="fw-bold">{agent?.name || name}</div>
-              {#if agent}<span class={stateClass(stateStr)}>{stateStr}</span>{/if}
+              {#if agent}
+                <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
+                <span class={stateClass(agent.state || agent.status)}>{agent.state || agent.status || 'unknown'}</span>
+              {:else}
+                <div class="fw-bold">{name}</div>
+              {/if}
             </div>
-            <div class="small text-body text-opacity-75">{agent?.description || 'No description'}</div>
+            <div class="small text-body text-opacity-75 flex-grow-1">{agent?.description || agent?.desc || 'No description'}</div>
+            {#if isAdmin && agent}
+              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{agent.created_by}</span></div>
+            {/if}
             {#if Array.isArray(agent?.tags) && agent.tags.length}
               <div class="mt-2 d-flex flex-wrap gap-1">
                 {#each agent.tags as t}
@@ -543,6 +552,11 @@
                 {/each}
               </div>
             {/if}
+            <div class="mt-2 d-flex gap-2">
+              {#if agent}
+                <a class="btn btn-sm btn-outline-theme" href={'/agents/' + encodeURIComponent(agent.name || '')}>Open</a>
+              {/if}
+            </div>
           </div>
         </Card>
       </div>
