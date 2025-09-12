@@ -686,7 +686,7 @@
             aria-label="Message input"
             class="form-control chat-no-focus"
             placeholder="Type a message…"
-            rows="3"
+            rows="2"
             style="resize: none;"
             bind:value={input}
             on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }}
