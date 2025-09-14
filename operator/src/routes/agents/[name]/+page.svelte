@@ -758,7 +758,13 @@
             rows="2"
             style="resize: none;"
             bind:value={input}
-            on:keydown={(e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMessage(); } }}
+            on:keydown={(e)=>{
+              // Send only on plain Enter (no modifiers). Allow Shift/Alt/Ctrl/Meta + Enter to insert newline.
+              if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             on:input={(e)=>{ try { e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
           <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>
