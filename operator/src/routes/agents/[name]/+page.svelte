@@ -72,6 +72,7 @@
   let input = '';
   let sending = false;
   let pollHandle = null;
+  let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
 
   function stateClass(state) {
@@ -334,6 +335,9 @@
       });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       input = '';
+      // Reset textarea height back to default (2 rows) after clearing
+      await tick();
+      try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
       // Optimistic add
       messages = [...messages, { role: 'user', content }];
       await tick();
@@ -757,6 +761,7 @@
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
+            bind:this={inputEl}
             bind:value={input}
             on:keydown={(e)=>{
               // Send only on plain Enter (no modifiers). Allow Shift/Alt/Ctrl/Meta + Enter to insert newline.
@@ -765,7 +770,7 @@
                 sendMessage();
               }
             }}
-            on:input={(e)=>{ try { e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
+            on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
           <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>
             <i class="fas fa-paper-plane"></i>
