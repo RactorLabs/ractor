@@ -15,7 +15,7 @@ module.exports = (program) => {
     .command('build')
     .description('[development only] Build Raworc images via ./scripts/build.sh')
     .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway. Flags are passed through (e.g., -n, --no-cache).')
-    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway\n' +
+    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, gpt\n' +
       '\nExamples:\n' +
       '  $ raworc build                       # builds all (script default)\n' +
       '  $ raworc build api controller        # build only api and controller\n' +
@@ -29,7 +29,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are Raworc components (or 'all')
-        const allowed = new Set(['api','controller','agent','operator','content','gateway','all']);
+        const allowed = new Set(['api','controller','agent','operator','content','gateway','gpt','all']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
           console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import torch
 
@@ -89,11 +89,9 @@ def generate(req: GenerateRequest):
 
     text = tok.decode(out[0], skip_special_tokens=True)
 
-    # Best-effort: If prompt included, trim leading prompt from output for cleaner completion
     if text.startswith(req.prompt):
         text = text[len(req.prompt):]
 
-    # Implement best-effort stop sequences
     if req.stop:
         for s in req.stop:
             idx = text.find(s)

@@ -28,13 +28,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Avoid hard-pinning torch w/ CUDA here to keep image slim; document in README for prod
 
 # App files
-COPY src/python/gpt_server /app/gpt_server
+COPY gpt /app/gpt
 
 ENV RAWORC_GPT_MODEL="gpt-oss:120b"
 ENV HOST=0.0.0.0
-ENV PORT=7001
+ENV PORT=6000
 
-EXPOSE 7001
+EXPOSE 6000
 
-CMD ["/app/.venv/bin/uvicorn", "gpt_server.app:app", "--host", "0.0.0.0", "--port", "7001"]
-
+CMD ["/app/.venv/bin/uvicorn", "gpt.app:app", "--host", "0.0.0.0", "--port", "6000"]

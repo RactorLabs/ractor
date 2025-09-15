@@ -382,7 +382,7 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              const DESIRED_GPT_URL = options.controllerGptUrl || process.env.RAWORC_GPT_URL || 'http://raworc_gpt:7001';
+              const DESIRED_GPT_URL = options.controllerGptUrl || process.env.RAWORC_GPT_URL || 'http://raworc_gpt:6000';
 
               // If container exists, verify env matches; recreate if not
               if (await containerExists('raworc_controller')) {
