@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'raworc_gpt_data', 'raworc_gpt_logs', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,19 +85,17 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, ollama, api, controller, operator, content, gateway', [])
+    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, gpt, api, controller, operator, content, gateway', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--require-gpu', 'Require GPU for Ollama (fail if missing)')
-    .option('--ollama-cpus <cpus>', 'CPUs for Ollama (e.g., 4)')
-    .option('--ollama-memory <mem>', 'Memory for Ollama (e.g., 32g)')
-    .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 32g)')
-    .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
-    .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
-    .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:120b')
-    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '-1')
-    .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
+    .option('--require-gpu', 'Require GPU for GPT server (fail if missing)')
+    .option('--gpt-cpus <cpus>', 'CPUs for GPT server (e.g., 4)')
+    .option('--gpt-memory <mem>', 'Memory for GPT server (e.g., 32g)')
+    .option('--gpt-shm-size <size>', 'Shared memory for GPT server (e.g., 32g)')
+    .option('--gpt-enable-gpu', 'Enable GPU for GPT server (default true)')
+    .option('--no-gpt-enable-gpu', 'Disable GPU for GPT server')
+    .option('--gpt-model <model>', 'HF model id for GPT server', 'gpt-oss:120b')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -116,13 +114,13 @@ module.exports = (program) => {
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
-    .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
-    .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
+    .option('--controller-gpt-url <url>', 'Controller RAWORC_GPT_URL (overrides default)')
+    .option('--controller-gpt-model <model>', 'Controller RAWORC_GPT_MODEL')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
       '  • Does not stop or remove any containers.\n' +
-      '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
+      '  • MySQL container name is "mysql"; GPT server container name is "raworc_gpt".\n' +
       '\nExamples:\n' +
       '  $ raworc start                                # Start full stack\n' +
       '  $ raworc start api controller                 # Start API + controller\n' +
@@ -191,15 +189,15 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
-        console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
+        console.log(chalk.blue('[INFO] ') + `Require GPU for GPT server: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
+          components = ['mysql', 'gpt', 'api', 'operator', 'content', 'controller', 'gateway'];
         }
 
-        // Enforce startup order: mysql → ollama → api → controller
+        // Enforce startup order: mysql → gpt → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
+        const desiredOrder = ['mysql', 'gpt', 'api', 'operator', 'content', 'controller', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -317,160 +315,38 @@ module.exports = (program) => {
               break;
             }
 
-            case 'ollama': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring Ollama runtime is running...');
-              if (await containerRunning('ollama')) {
-                console.log(chalk.green('[SUCCESS] ') + 'Ollama already running');
-                // Ensure requested model is available even when container pre-exists
-                const effectiveModel = (() => {
-                  const src = getOptionSource('ollamaModel');
-                  if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
-                })();
-                if (effectiveModel) {
-                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
-                }
+            case 'gpt': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring GPT (Transformers) server is running...');
+              if (await containerRunning('raworc_gpt')) { console.log(chalk.green('[SUCCESS] ') + 'GPT server already running'); console.log(); break; }
+              if (await containerExists('raworc_gpt')) {
+                await docker(['start','raworc_gpt']);
+                console.log(chalk.green('[SUCCESS] ') + 'GPT server started');
                 console.log();
                 break;
               }
-              if (await containerExists('ollama')) {
-                await docker(['start','ollama']);
-                console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
-                // Ensure requested model is available even when container pre-exists
-                const effectiveModel = (() => {
-                  const src = getOptionSource('ollamaModel');
-                  if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
-                })();
-                if (effectiveModel) {
-                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
-                }
-                console.log();
-                break;
-              }
-
-              // Determine GPU availability and flags
-              // GPU enable: flags > env > default(true). Env can be OLLAMA_ENABLE_GPU or OLLAMA_NO_GPU
-              let OLLAMA_ENABLE_GPU;
-              if (getOptionSource('ollamaEnableGpu') === 'cli') {
-                OLLAMA_ENABLE_GPU = !!options.ollamaEnableGpu;
-              } else {
-                // honor NO_GPU first if set
-                const noGpu = envBool('OLLAMA_NO_GPU', false);
-                if (noGpu) {
-                  OLLAMA_ENABLE_GPU = false;
-                } else if (process.env.OLLAMA_ENABLE_GPU !== undefined) {
-                  OLLAMA_ENABLE_GPU = envBool('OLLAMA_ENABLE_GPU', true);
-                } else {
-                  OLLAMA_ENABLE_GPU = true;
-                }
-              }
-              const REQUIRE_GPU = !!options.requireGpu;
-              let gpuAvailable = false;
-              try {
-                const r1 = await execCmd('docker', ['info','--format','{{json .Runtimes}}'], { silent: true });
-                const r2 = await execCmd('docker', ['info','--format','{{json .DefaultRuntime}}'], { silent: true });
-                if (/nvidia/i.test(r1.stdout) || /nvidia/i.test(r2.stdout)) gpuAvailable = true;
-              } catch (_) {}
-              let gpuFlags = [];
-              let cpuEnv = [];
-              if (OLLAMA_ENABLE_GPU) {
-                if (gpuAvailable) {
-                  gpuFlags = ['--gpus','all'];
-                  console.log(chalk.blue('[INFO] ') + 'GPU enabled for Ollama');
-                } else {
-                  if (REQUIRE_GPU) {
-                    console.error(chalk.red('[ERROR] ') + 'GPU required for Ollama, but Docker GPU runtime is not available.');
-                    console.error(chalk.red('[ERROR] ') + 'Install NVIDIA drivers + NVIDIA Container Toolkit, or omit --require-gpu.');
-                    process.exit(1);
-                  } else {
-                    console.log(chalk.yellow('[WARNING] ') + 'GPU requested but not available; falling back to CPU.');
-                    OLLAMA_ENABLE_GPU = false;
-                  }
-                }
-              }
-              if (!OLLAMA_ENABLE_GPU) {
-                cpuEnv = ['-e','OLLAMA_NO_GPU=1'];
-                console.log(chalk.blue('[INFO] ') + 'Running Ollama in CPU-only mode');
-              }
-
-              // Resource flags (flags > env > defaults)
-              const cpus = preferEnv('ollamaCpus', 'OLLAMA_CPUS', undefined);
-              const cpuFlag = cpus ? ['--cpus', cpus] : [];
-              let mem = preferEnv('ollamaMemory', 'OLLAMA_MEMORY', '32g');
-              let shm = preferEnv('ollamaShmSize', 'OLLAMA_SHM_SIZE', '32g');
-              if (getOptionSource('ollamaMemory') !== 'cli' && process.env.OLLAMA_MEMORY === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
-              if (getOptionSource('ollamaShmSize') !== 'cli' && process.env.OLLAMA_SHM_SIZE === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
-              const contextLength = (() => {
-                const src = getOptionSource('ollamaContextLength');
-                if (src === 'cli') return String(options.ollamaContextLength);
-                if (process.env.OLLAMA_CONTEXT_LENGTH) return String(process.env.OLLAMA_CONTEXT_LENGTH);
-                if (process.env.OLLAMA_NUM_CTX) return String(process.env.OLLAMA_NUM_CTX);
-                return String(options.ollamaContextLength || '131072');
-              })();
-              console.log(chalk.blue('[INFO] ') + `Ollama context length: ${contextLength} tokens (128k)`);
-              const memFlag = ['--memory', mem, '--memory-swap', mem];
-              const shmFlag = ['--shm-size', shm];
-
-              // Host port mapping if free
-              const hostPublish = !(await portInUse(11434));
-              if (!hostPublish) console.log(chalk.yellow('[WARNING] ') + 'Host port 11434 in use; starting without host port mapping');
-
+              const gpuEnabled = options.gptEnableGpu !== false;
+              const requireGpu = !!options.requireGpu;
+              const gpuFlags = [];
+              if (gpuEnabled) { gpuFlags.push('--gpus','all'); }
+              else if (requireGpu) { console.error(chalk.red('[ERROR] ') + 'GPU is required but --no-gpt-enable-gpu given'); process.exit(1); }
+              const cpuFlag = options.gptCpus ? ['--cpus', String(options.gptCpus)] : [];
+              const memFlag = options.gptMemory ? ['-m', String(options.gptMemory)] : [];
+              const shmFlag = options.gptShmSize ? ['--shm-size', String(options.gptShmSize)] : [];
+              const GPT_IMAGE = await resolveRaworcImage('gpt','raworc_gpt','raworc/raworc_gpt', tag);
               const args = ['run','-d',
-                '--name','ollama',
+                '--name','raworc_gpt',
                 '--network','raworc_network',
-              ];
-              if (hostPublish) args.push('-p','11434:11434');
-              args.push(
-                '-v','ollama_data:/root/.ollama',
-                '-v','ollama_data:/var/log/ollama',
-                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','-1')}`,
-                '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
-                '-e',`OLLAMA_NUM_CTX=${contextLength}`,
-                ...cpuEnv,
+                '-v','raworc_gpt_data:/app/data',
+                '-v','raworc_gpt_logs:/app/logs',
+                '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt-oss:120b'}`,
                 ...gpuFlags,
                 ...cpuFlag,
                 ...memFlag,
                 ...shmFlag,
-                '--entrypoint','/bin/sh',
-                'ollama/ollama:latest',
-                '-lc',
-                'mkdir -p /var/log/ollama; exec ollama serve 2>&1 | tee -a /var/log/ollama/ollama.log'
-              );
-
+                GPT_IMAGE
+              ];
               await docker(args);
-
-              // Wait until ready (new container only)
-              let timeoutMs = 600000; // 10 minutes to allow large model loads
-              const start = Date.now();
-              if (hostPublish) {
-                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
-                while (Date.now() - start < timeoutMs) {
-              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(RAWORC_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
-                  await new Promise(r=>setTimeout(r,2000));
-                }
-              } else {
-                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama container to be ready...');
-                while (Date.now() - start < timeoutMs) {
-                  try { await docker(['exec','ollama','ollama','list'], { silent: true }); break; } catch(_) {}
-                  await new Promise(r=>setTimeout(r,2000));
-                }
-              }
-              if (Date.now() - start >= timeoutMs) {
-                throw new Error('Ollama did not become ready in time');
-              }
-              console.log(chalk.green('[SUCCESS] ') + 'Ollama is ready');
-
-              // Ensure model available (best-effort)
-              const effectiveModel = (() => {
-                const src = getOptionSource('ollamaModel');
-                if (src === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
-              })();
-              console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-              try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
+              console.log(chalk.green('[SUCCESS] ') + 'GPT server container started');
               console.log();
               break;
             }
@@ -506,8 +382,7 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              // Resolve desired OLLAMA_HOST for the controller
-              const DESIRED_OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
+              const DESIRED_GPT_URL = options.controllerGptUrl || process.env.RAWORC_GPT_URL || 'http://raworc_gpt:7001';
 
               // If container exists, verify env matches; recreate if not
               if (await containerExists('raworc_controller')) {
@@ -518,10 +393,10 @@ module.exports = (program) => {
                     const idx = e.indexOf('=');
                     return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
                   }));
-                  const currentHost = envMap['OLLAMA_HOST'];
-                  const needsRecreate = !currentHost || currentHost !== DESIRED_OLLAMA_HOST;
+                  const currentHost = envMap['RAWORC_GPT_URL'];
+                  const needsRecreate = !currentHost || currentHost !== DESIRED_GPT_URL;
                   if (needsRecreate) {
-                    console.log(chalk.blue('[INFO] ') + `Recreating controller to apply OLLAMA_HOST=${DESIRED_OLLAMA_HOST}`);
+                    console.log(chalk.blue('[INFO] ') + `Recreating controller to apply RAWORC_GPT_URL=${DESIRED_GPT_URL}`);
                     try { await docker(['rm','-f','raworc_controller']); } catch (_) {}
                   } else if (!(await containerRunning('raworc_controller'))) {
                     await docker(['start','raworc_controller']);
@@ -537,20 +412,13 @@ module.exports = (program) => {
                   // If inspection fails, fall through to create
                 }
               }
-              // Default OLLAMA_HOST to internal service always
-              const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
+              const RAWORC_GPT_URL = DESIRED_GPT_URL;
 
               const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
-              const model = (() => {
-                const srcCtrl = getOptionSource('controllerOllamaModel');
-                const srcOllama = getOptionSource('ollamaModel');
-                if (srcCtrl === 'cli') return options.controllerOllamaModel;
-                if (srcOllama === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:120b';
-              })();
+              const model = options.controllerGptModel || process.env.RAWORC_GPT_MODEL || options.gptModel || 'gpt-oss:120b';
               const args = ['run','-d',
                 '--name','raworc_controller',
                 '--network','raworc_network',
@@ -558,12 +426,8 @@ module.exports = (program) => {
                 '-v','raworc_controller_data:/app/logs',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
-                '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
-                '-e',`OLLAMA_MODEL=${model}`,
-                // Model/runtime defaults for agent calls
-                '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
-                '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
-                '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
+                '-e',`RAWORC_GPT_URL=${RAWORC_GPT_URL}`,
+                '-e',`RAWORC_GPT_MODEL=${model}`,
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,

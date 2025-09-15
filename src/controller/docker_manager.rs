@@ -1131,20 +1131,14 @@ echo 'Agent directories created (code, secrets, logs, content)'
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST")
-            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
-        env.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env.push(format!("OLLAMA_MODEL={}", ollama_model));
-        let ollama_timeout =
-            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
-        // Propagate timeout for model calls; default 600s if unspecified
-        let ollama_timeout =
-            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
+        // Configure GPT server URL for model inference (required; no default)
+        let gpt_url = std::env::var("RAWORC_GPT_URL").map_err(|_| {
+            anyhow::anyhow!(
+                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:7001)"
+            )
+        })?;
+        env.push(format!("RAWORC_GPT_URL={}", gpt_url));
+        // Removed Ollama-specific timeout env
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1173,9 +1167,9 @@ echo 'Agent directories created (code, secrets, logs, content)'
             }
 
             // Add user secrets as environment variables, but do NOT override
-            // system-managed values like RAWORC_TOKEN or OLLAMA_HOST.
+            // system-managed values like RAWORC_TOKEN.
             for (key, value) in secrets_map {
-                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
+                if key == "RAWORC_TOKEN" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for agent {}",
                         key, agent_name
@@ -1318,13 +1312,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST")
-            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
-        env.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env.push(format!("OLLAMA_MODEL={}", ollama_model));
+        // Configure GPT server URL for model inference (required; no default)
+        let gpt_url = std::env::var("RAWORC_GPT_URL").map_err(|_| {
+            anyhow::anyhow!(
+                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:7001)"
+            )
+        })?;
+        env.push(format!("RAWORC_GPT_URL={}", gpt_url));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1338,13 +1332,13 @@ echo 'Agent directories created (code, secrets, logs, content)'
             env.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
-        info!("Set RAWORC_TOKEN and OLLAMA_HOST as environment variables");
+        info!("Set RAWORC_TOKEN and RAWORC_GPT_URL as environment variables");
 
-        // Add user secrets as environment variables (but NOT RAWORC_TOKEN or OLLAMA_HOST)
+        // Add user secrets as environment variables (but NOT RAWORC_TOKEN)
         if let Some(secrets_map) = &secrets {
             for (key, value) in secrets_map {
-                // Skip if user provided their own RAWORC_TOKEN or OLLAMA_HOST - we use system-managed values
-                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
+                // Skip if user provided their own RAWORC_TOKEN - we use system-managed values
+                if key == "RAWORC_TOKEN" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead",
                         key

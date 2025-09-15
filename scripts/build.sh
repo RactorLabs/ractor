@@ -48,6 +48,7 @@ usage() {
   echo "  api         Build the api image"
   echo "  controller  Build the controller image"
   echo "  agent       Build the agent image"
+  echo "  gpt         Build the GPT server image"
   echo "  all         Build all components (default)"
   echo ""
   echo "Options:"
@@ -94,7 +95,7 @@ fi
 
 # Expand 'all' to actual components (ensure agent precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway")
+  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "gpt")
 fi
 
 print_status "Building Raworc Docker images"
@@ -145,6 +146,10 @@ for component in "${COMPONENTS[@]}"; do
   agent)
     image_name="raworc_agent:${TAG}"
     dockerfile="Dockerfile.agent"
+    ;;
+  gpt)
+    image_name="raworc_gpt:${TAG}"
+    dockerfile="Dockerfile.gpt"
     ;;
   operator)
     image_name="raworc_operator:${TAG}"

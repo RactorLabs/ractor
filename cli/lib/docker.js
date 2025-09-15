@@ -92,7 +92,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
+    for (const volume of ['mysql_data', 'raworc_content_data', 'raworc_gpt_data', 'raworc_gpt_logs', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -205,7 +205,7 @@ class DockerManager {
           '-v', 'raworc_controller_data:/app/logs',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
-          ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
+          ...(process.env.RAWORC_GPT_URL ? ['-e', `RAWORC_GPT_URL=${process.env.RAWORC_GPT_URL}`] : []),
           ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
           ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
           '-e', `AGENT_IMAGE=${this.images.agent}`,

@@ -33,7 +33,7 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql api controller && ./scripts/link.sh && raworc --version`.
+- Integration smoke test: `./scripts/build.sh && raworc start gpt mysql api controller && ./scripts/link.sh && raworc --version`.
 
 ## Commit & Pull Request Guidelines
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
