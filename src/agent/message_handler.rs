@@ -1,10 +1,12 @@
-use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
+use super::api::{Message, MessageRole, RaworcClient};
 use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
 use super::guardrails::Guardrails;
 use super::gpt::GptClient;
-use super::tool_registry::{ContainerExecMapper, ToolRegistry};
+use super::tool_registry::{ContainerExecMapper, Tool, ToolRegistry};
 use chrono::{DateTime, Utc};
+use openai_harmony::chat::{Author as HAuthor, Content as HContent, Conversation as HConversation, DeveloperContent, Message as HMessage, Role as HRole, SystemContent, ToolDescription};
+use openai_harmony::{load_harmony_encoding, HarmonyEncodingName};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -21,14 +23,6 @@ pub struct MessageHandler {
 }
 
 impl MessageHandler {
-    /// Map platform roles to LLM roles.
-    fn role_to_model(role: &MessageRole) -> &'static str {
-        match role {
-            MessageRole::User => MESSAGE_ROLE_USER,
-            MessageRole::Agent => "assistant",
-            MessageRole::System => "system",
-        }
-    }
     pub fn new(
         api_client: Arc<RaworcClient>,
         gpt_client: Arc<GptClient>,
@@ -90,16 +84,6 @@ impl MessageHandler {
                         )
                         .await;
 
-                    // Register harmony format aliases
-                    registry
-                        .register_alias("functions", "bash", None)
-                        .await;
-                    
-                    // Also map text_editor harmony calls
-                    registry
-                        .register_alias("text_editor", "text_editor", None)
-                        .await;
-
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -123,51 +107,13 @@ impl MessageHandler {
         info!("Initializing timestamp-based message tracking...");
         info!("Task creation time: {}", self.task_created_at);
 
-        // Fetch up to the latest 500 messages to initialize tracking
-        let total = self.api_client.get_message_count().await.unwrap_or(0);
-        let init_limit: u32 = 500;
-        let offset = if total > init_limit as u64 {
-            (total - init_limit as u64) as u32
-        } else {
-            0
-        };
-        let all_messages = self
-            .api_client
-            .get_messages(Some(init_limit), Some(offset))
-            .await?;
+        // Fetch all messages to initialize tracking
+        let all_messages = self.api_client.get_messages(None, None).await?;
 
         if all_messages.is_empty() {
             info!("No existing messages - fresh agent");
             return Ok(());
         }
-
-        // Compose prompt and call GPT server (single-shot v1)
-        let all_messages = self.fetch_all_agent_messages().await?;
-        let conversation = self.prepare_conversation_history(&all_messages, message);
-        let system_prompt = self.build_system_prompt().await;
-        let mut prompt = String::new();
-        prompt.push_str(&system_prompt);
-        prompt.push_str("\n\n");
-        for m in &conversation {
-            prompt.push_str(&format!("[{}] {}\n", m.role, m.content));
-        }
-        let output = match self
-            .gpt_client
-            .generate(&prompt, Some(serde_json::json!({"max_new_tokens": 512})))
-            .await
-        {
-            Ok(t) => t,
-            Err(e) => {
-                warn!("GPT server failed: {}", e);
-                self.finalize_with_fallback(&message.content).await?;
-                return Ok(());
-            }
-        };
-        let output = self.guardrails.validate_output(&output)?;
-        self.api_client
-            .send_message(output, Some(serde_json::json!({"type":"assistant"})))
-            .await?;
-        return Ok(());
 
         // Mark all user messages created before task creation time as processed
         let mut user_messages_before_task = HashSet::new();
@@ -252,8 +198,7 @@ impl MessageHandler {
                             // Check if this message already has an agent response
                             let has_response = recent_messages.iter().any(|m| {
                                 m.role == MessageRole::Agent && {
-                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at)
-                                    {
+                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at) {
                                         let m_time_utc = m_time.with_timezone(&Utc);
                                         m_time_utc > message_time_utc
                                     } else {
@@ -375,304 +320,110 @@ impl MessageHandler {
             return Ok(());
         }
 
-        #[cfg(any())]
-        {
-        // Native Ollama tool calling with GPT-OSS models
-        // The model will use structured tool calls when tools are needed
+        // Harmony-driven loop
+        let enc = load_harmony_encoding(HarmonyEncodingName::HarmonyGptOss)
+            .map_err(|e| super::error::HostError::Model(format!("Failed to load Harmony encoding: {}", e)))?;
 
-        // Fetch full conversation
-        let all_messages = self.fetch_all_agent_messages().await?;
-        let mut conversation = self.prepare_conversation_history(&all_messages, message);
+        let mut tool_messages: Vec<HMessage> = Vec::new();
+        for step in 0..10 {
+            let convo = self.build_harmony_conversation(&enc, message, &tool_messages).await?;
+            let tokens = enc
+                .render_conversation_for_completion(&convo, HRole::Assistant, None)
+                .map_err(|e| super::error::HostError::Model(format!("Failed to render conversation: {}", e)))?;
+            let prompt = enc
+                .tokenizer()
+                .decode_utf8(&tokens)
+                .map_err(|e| super::error::HostError::Model(format!("Failed to decode prompt: {}", e)))?;
 
-        // Build system prompt
-        let system_prompt = self.build_system_prompt().await;
-
-        // Loop for tool usage with no hard cap on steps
-        loop {
-            // Track model "thinking" duration for UI (best-effort)
-            let mut thinking_secs: Option<f32> = None;
-            // Simple retry/backoff for transient failures
-            let mut resp: Result<ModelResponse> =
-                Err(super::error::HostError::Model("uninitialized".to_string()));
-            for attempt in 0..=2 {
-                let started = std::time::Instant::now();
-                let try_resp = self
-                    .ollama_client
-                    .complete_with_registry(
-                        conversation.clone(),
-                        Some(system_prompt.clone()),
-                        Some(&*self.tool_registry),
-                    )
-                    .await;
-                match try_resp {
-                    Ok(t) => {
-                        // Record approximate thinking time for this successful attempt
-                        thinking_secs = Some(started.elapsed().as_secs_f32());
-                        resp = Ok(t);
-                        break;
-                    }
-                    Err(e) => {
-                        if attempt < 2 {
-                            let delay = 300u64 * 3u64.pow(attempt);
-                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                            resp = Err(e);
-                            continue;
-                        } else {
-                            resp = Err(e);
-                        }
-                    }
-                }
-            }
-
-            let model_resp = match resp {
-                Ok(t) => t,
+            let completion = match self
+                .gpt_client
+                .generate(
+                    &prompt,
+                    Some(serde_json::json!({ "max_new_tokens": 1024, "stop": ["<|end|>", "<|call|>"] })),
+                )
+                .await
+            {
+                Ok(text) => text,
                 Err(e) => {
-                    warn!("Ollama API failed: {}", e);
+                    warn!("GPT server failed: {}", e);
                     self.finalize_with_fallback(&message.content).await?;
                     return Ok(());
                 }
             };
 
-            // Check if response contains structured tool calls (GPT-OSS format)
-            if let Some(tool_calls) = &model_resp.tool_calls {
-                if let Some(tool_call) = tool_calls.first() {
-                    let tool_name = &tool_call.function.name;
-                    let args = &tool_call.function.arguments;
+            let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
+            let parsed = enc
+                .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
+                .map_err(|e| super::error::HostError::Model(format!("Failed to parse completion: {}", e)))?;
 
-                    // Log parsed tool call
-                    info!("Structured tool call: {} with args: {:?}", tool_name, args);
+            let mut made_tool_call = false;
+            for m in parsed.iter() {
+                if m.author.role != HRole::Assistant { continue; }
 
-                    // Store assistant commentary (pre-tool text) as a regular agent message
-                    // and also include it in the ongoing conversation so the model keeps context.
-                    // Prefer commentary channel text if provided; otherwise use content
-                    let commentary_text = model_resp
-                        .commentary
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or_else(|| model_resp.content.as_str());
-                    if !commentary_text.trim().is_empty() {
-                        let sanitized = self.guardrails.validate_output(commentary_text)?;
-                        let mut meta = serde_json::json!({
-                            "type": "assistant_commentary",
-                            "model": "gpt-oss"
+                // commentary/analysis
+                if let Some(ch) = m.channel.as_deref() {
+                    if ch == "analysis" || ch == "commentary" {
+                        if let Some(text) = Self::first_text(&m.content) {
+                            let sanitized = self.guardrails.validate_output(text)?;
+                            let meta = serde_json::json!({ "type": "assistant_commentary", "model": "gpt-oss" });
+                            let _ = self.api_client.send_message(sanitized, Some(meta)).await;
+                        }
+                        continue;
+                    }
+                }
+
+                // Tool call
+                if let Some(recipient) = m.recipient.as_deref() {
+                    if let Some(tool_name) = recipient.strip_prefix("functions.") {
+                        let args_text = Self::first_text(&m.content).unwrap_or("");
+                        let args_json: serde_json::Value = serde_json::from_str(args_text).unwrap_or_else(|_| serde_json::json!({}));
+
+                        let desc = self.describe_tool_call(tool_name, &args_json);
+                        self.send_tool_message(&desc, tool_name, Some(&args_json)).await?;
+
+                        let result = match self.tool_registry.execute_tool(tool_name, &args_json).await {
+                            Ok(r) => r,
+                            Err(e) => format!("[error] {}", e),
+                        };
+
+                        let display = self.truncate_tool_result(&result);
+                        let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
+                        if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args_json.clone()); }
+                        let _ = self.api_client.send_message(display, Some(meta)).await;
+
+                        tool_messages.push(HMessage {
+                            author: HAuthor::new(HRole::Tool, tool_name.to_string()),
+                            recipient: None,
+                            content: vec![HContent::from(result)],
+                            channel: None,
+                            content_type: None,
                         });
-                        if let Some(obj) = meta.as_object_mut() {
-                            if let Some(thinking) = &model_resp.thinking {
-                                obj.insert(
-                                    "thinking".to_string(),
-                                    serde_json::Value::String(thinking.clone()),
-                                );
-                            }
-                            if let Some(secs) = thinking_secs {
-                                obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
-                            }
-                        }
-                        // Persist for UI
-                        self.api_client
-                            .send_message(sanitized.clone(), Some(meta))
-                            .await?;
-                        // Add to conversation for next model turn
-                        conversation.push(ChatMessage {
-                            role: "assistant".to_string(),
-                            content: sanitized,
-                            name: None,
-                            tool_call_id: None,
-                        });
-                    }
 
-                    // Send tool execution notification to user
-                    let tool_description = match tool_name.as_str() {
-                        "bash" => {
-                            if let Some(cmd) = args
-                                .get("command")
-                                .and_then(|v| v.as_str())
-                                .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                            {
-                                cmd.to_string()
-                            } else {
-                                "bash command".to_string()
-                            }
-                        }
-                        "text_editor" => {
-                            let action = args
-                                .get("action")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("edit");
-                            let path = args
-                                .get("path")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            format!("{} {}", action, path)
-                        }
-                        _ => format!("Executing {} tool", tool_name),
-                    };
-
-                    self.send_tool_message(&tool_description, tool_name, Some(args))
-                        .await?;
-
-                    // Execute tool through registry
-                    let tool_result = match self.tool_registry.execute_tool(tool_name, args).await {
-                        Ok(result) => result,
-                        Err(e) => format!("[error] {}", e),
-                    };
-
-                    // Log tool result
-                    info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
-
-                    // Send tool result message to database for UI display
-                    let mut result_metadata = serde_json::json!({
-                        "type": "tool_result",
-                        "tool_type": tool_name
-                    });
-                    if let Some(obj) = result_metadata.as_object_mut() {
-                        obj.insert("args".to_string(), args.clone());
-                    }
-                    // Truncate large tool results for message display
-                    let display_result = self.truncate_tool_result(&tool_result);
-                    if let Err(e) = self.api_client
-                        .send_message(display_result, Some(result_metadata))
-                        .await
-                    {
-                        warn!("Failed to send tool result message: {}", e);
-                    }
-
-                    // Add tool result to conversation following Ollama cookbook
-                    conversation.push(ChatMessage {
-                        role: "tool".to_string(),
-                        content: tool_result,
-                        name: Some(tool_name.clone()),
-                        tool_call_id: None,
-                    });
-
-                    continue;
-                }
-            } else if let Some((tool_name, args)) =
-                parse_assistant_functions_text(&model_resp.content)
-            {
-                // Fallback: parse assistant<|channel|>functions.* style
-                info!(
-                    "Assistant functions text tool call: {} with args: {:?}",
-                    tool_name, args
-                );
-
-                // Store assistant commentary (pre-tool text) as a regular agent message
-                // and also include it in the conversation for continuity.
-                let commentary_text = model_resp
-                    .commentary
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or_else(|| model_resp.content.as_str());
-                if !commentary_text.trim().is_empty() {
-                    let sanitized = self.guardrails.validate_output(commentary_text)?;
-                    let mut meta = serde_json::json!({
-                        "type": "assistant_commentary",
-                        "model": "gpt-oss"
-                    });
-                    if let Some(obj) = meta.as_object_mut() {
-                        if let Some(thinking) = &model_resp.thinking {
-                            obj.insert(
-                                "thinking".to_string(),
-                                serde_json::Value::String(thinking.clone()),
-                            );
-                        }
-                        if let Some(secs) = thinking_secs {
-                            obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
-                        }
-                    }
-                    // Persist for UI
-                    self.api_client.send_message(sanitized.clone(), Some(meta)).await?;
-                    // Add to conversation for next model turn
-                    conversation.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content: sanitized,
-                        name: None,
-                        tool_call_id: None,
-                    });
-                }
-
-                // Notify user
-                let tool_description = match tool_name.as_str() {
-                    "bash" => {
-                        if let Some(cmd) = args
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                        {
-                            cmd.to_string()
-                        } else {
-                            "bash command".to_string()
-                        }
-                    }
-                    "text_editor" => {
-                        let action = args
-                            .get("action")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("edit");
-                        let path = args
-                            .get("path")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        format!("{} {}", action, path)
-                    }
-                    _ => format!("Executing {} tool", tool_name),
-                };
-                self.send_tool_message(&tool_description, &tool_name, Some(&args))
-                    .await?;
-
-                // Execute tool through registry
-                let tool_result = match self.tool_registry.execute_tool(&tool_name, &args).await {
-                    Ok(result) => result,
-                    Err(e) => format!("[error] {}", e),
-                };
-
-                // Send tool result message to database for UI display
-                let mut result_metadata = serde_json::json!({
-                    "type": "tool_result",
-                    "tool_type": &tool_name
-                });
-                if let Some(obj) = result_metadata.as_object_mut() {
-                    obj.insert("args".to_string(), args.clone());
-                }
-                // Truncate large tool results for message display
-                let display_result = self.truncate_tool_result(&tool_result);
-                if let Err(e) = self.api_client
-                    .send_message(display_result, Some(result_metadata))
-                    .await
-                {
-                    warn!("Failed to send tool result message: {}", e);
-                }
-
-                // Add tool result to conversation and continue
-                conversation.push(ChatMessage {
-                    role: "tool".to_string(),
-                    content: tool_result,
-                    name: Some(tool_name.clone()),
-                    tool_call_id: None,
-                });
-                continue;
-            } else {
-                // Treat as final answer
-                let sanitized = self.guardrails.validate_output(&model_resp.content)?;
-                let mut meta = serde_json::json!({
-                    "type": "model_response",
-                    "model": "gpt-oss"
-                });
-                if let Some(obj) = meta.as_object_mut() {
-                    if let Some(thinking) = &model_resp.thinking {
-                        obj.insert(
-                            "thinking".to_string(),
-                            serde_json::Value::String(thinking.clone()),
-                        );
-                    }
-                    if let Some(secs) = thinking_secs {
-                        obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
+                        made_tool_call = true;
+                        continue;
                     }
                 }
-                self.api_client.send_message(sanitized, Some(meta)).await?;
+
+                // Final answer
+                if let Some(text) = Self::first_text(&m.content) {
+                    let sanitized = self.guardrails.validate_output(text)?;
+                    let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss" });
+                    self.api_client.send_message(sanitized, Some(meta)).await?;
+                    return Ok(());
+                }
+            }
+
+            if !made_tool_call {
+                warn!("Harmony completion had no actionable assistant content; returning fallback");
+                self.finalize_with_fallback(&message.content).await?;
                 return Ok(());
             }
+
+            info!("Harmony loop step {} completed; continuing", step + 1);
         }
-        }
+
+        self.finalize_with_note("step cap reached").await?;
+        Ok(())
     }
 
     async fn finalize_with_fallback(&self, original: &str) -> Result<()> {
@@ -708,288 +459,60 @@ impl MessageHandler {
         Ok(())
     }
 
-    async fn fetch_all_agent_messages(&self) -> Result<Vec<Message>> {
-        // Fetch ALL messages in agent without pagination limits
-        let all_messages = self.api_client.get_messages(None, None).await?;
-
-        info!(
-            "Fetched {} total messages for conversation history",
-            all_messages.len()
-        );
-        Ok(all_messages)
-    }
-
-    fn prepare_conversation_history(
+    async fn build_harmony_conversation(
         &self,
-        messages: &[Message],
+        _enc: &openai_harmony::HarmonyEncoding,
         current: &Message,
-    ) -> Vec<ChatMessage> {
-        let mut conversation: Vec<ChatMessage> = Vec::new();
+        tool_messages: &[HMessage],
+    ) -> Result<HConversation> {
+        // System content: set current date (channel config defaults are included by Harmony)
+        let system = SystemContent::new().with_conversation_start_date(chrono::Utc::now().to_rfc3339());
 
-        // Include ALL message history (excluding the current message being processed)
-        let history: Vec<_> = messages
-            .iter()
-            .filter(|m| m.id != current.id)
-            .filter(|m| matches!(m.role, MessageRole::User | MessageRole::Agent | MessageRole::System))
-            .map(|m| {
-                // Pass explicit tool results as tool role with name for the model
-                if let Some(metadata) = &m.metadata {
-                    if let Some(msg_type) = metadata.get("type").and_then(|v| v.as_str()) {
-                        if msg_type == "tool_result" {
-                            let tool_name = metadata
-                                .get("tool_type")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
-                            return ChatMessage { role: "tool".to_string(), content: m.content.clone(), name: tool_name, tool_call_id: None };
-                        }
-                    }
-                }
-                let role = Self::role_to_model(&m.role).to_string();
-                ChatMessage { role, content: m.content.clone(), name: None, tool_call_id: None }
-            })
-            .collect();
-
-        conversation.extend(history);
-
-        // Always add the current message (avoids race if not yet visible in fetched list)
-        conversation.push(ChatMessage {
-            role: MESSAGE_ROLE_USER.to_string(),
-            content: current.content.clone(),
-            name: None,
-            tool_call_id: None,
-        });
-
-        info!(
-            "Prepared conversation with {} messages of history",
-            conversation.len() - 1
-        );
-        conversation
-    }
-
-    async fn build_system_prompt(&self) -> String {
-        // Read hosting context from environment (provided by start script)
-        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let base_url_env = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
-        let base_url = base_url_env.trim_end_matches('/').to_string();
-
-        // Fetch agent info from API/DB (name, publish state)
-        let (agent_name_ctx, is_published_ctx, published_at_ctx) =
-            match self.api_client.get_agent().await {
-                Ok(agent) => {
-                    let nm = agent.name.clone();
-                    let ip = agent.is_published;
-                    let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
-                    (nm, ip, pa)
-                }
-                Err(_) => ("unknown".to_string(), false, String::new()),
-            };
-
-        // Current timestamp in UTC for context
-        let current_time_utc = chrono::Utc::now().to_rfc3339();
-
-        let operator_url = format!("{}", base_url);
-        let api_url = format!("{}/api", base_url);
-        let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
-
-        // Start with System Context specific to Raworc runtime
-        let mut prompt = String::from(format!(
-            r#"SYSTEM CONTEXT
-
-You are running as an Agent in the {host_name} system.
-
-- System Name: {host_name}
-- Base URL: {base_url}
-- Current Time (UTC): {current_time_utc}
-- Operator URL: {operator_url}
-- API URL: {api_url}
-- Your Agent Name: {agent_name}
-- Published Content URL: {published_url}
-- Published: {published_flag}
- - Published At: {published_at}
-
-Platform endpoints:
-- Content Server: {base_url}/content — public gateway that serves published agent content at a stable URL (path prefix /content).
-- API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
-
-About content and publishing:
-- Your working content lives under /agent/content/.
-- There is no live preview server. When the user wants to view content, publish it.
-- Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
-- Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
-- The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
-
-Important behavior:
-- Do NOT ask the user to start an HTTP server for /agent/content.
-- Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
-- When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
-  - Example: {published_url}/index.html or {published_url}/dashboard/report.html
-- Use absolute URLs that include protocol and host. Do NOT use relative URLs.
-- Outside of an explicit publish action, include Published URLs only if the user asks for them or asks about publish status.
-- Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
-- IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
-
-"#,
-            host_name = host_name,
-            base_url = base_url,
-            operator_url = operator_url,
-            api_url = api_url,
-            agent_name = agent_name_ctx,
-            published_url = published_url,
-            published_flag = if is_published_ctx { "true" } else { "false" },
-            published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
-            current_time_utc = current_time_utc,
-        ));
-
-        // Continue with the general capabilities prompt
-        prompt.push_str(
-            r#"You are a highly capable AI agent with full access to bash commands and text editing capabilities. You operate in an isolated container environment where you can execute commands, install packages, and create any type of content to help users accomplish their goals.
-
-## Core Capabilities
-
-You are an AI agent with unrestricted access to:
-- **Bash shell**: Execute any command using semicolons to chain operations efficiently
-- **Text editor**: Create, modify, and view files with precision
-- **Package management**: Install pip, npm, apt packages, or any other tools needed
-- **Internet access**: Use curl to fetch websites, APIs, and download files
-- **Development**: Code in any language, run scripts, build applications
-- **System administration**: Full control within your container environment
-
-## Directory Structure (/agent/)
-
-```
-├── code/        - All development files, scripts, source code, data
-├── content/     - HTML files and web assets for user display
-├── logs/        - Automatic command logs (read-only)
-└── secrets/     - Environment variables (auto-managed)
-```
-
-**Working files**: Use `/agent/code/` for everything - scripts, data files, projects, executables
-**User displays**: Use `/agent/content/` for HTML, visualizations, reports, dashboards
-**Special files**:
-- `/agent/code/instructions.md` - Persistent instructions (auto-loaded)
-- `/agent/code/setup.sh` - Initialization script (auto-executed)
-
-## Tools Available
-
-- **bash**: Execute any shell command - no restrictions within the container
-- **text_editor**: Create, view, edit files with actions: view, create, str_replace, insert
-- **Full package ecosystem**: pip, npm, apt, cargo, composer, etc.
-- **Development tools**: git, curl, wget, grep, find, jq, and more
-- **Programming languages**: Python, Node.js, Rust (pre-installed)
-
-## Tool Resolution Order (Prefer Local Code)
-
-When a user asks you to use a tool by name (e.g., "run foo" or "use tool bar"), prefer locally provided tools in the code workspace before system-wide tools:
-- First, check for an executable or script in `/agent/code/` with the requested name.
-- Consider common forms: `/agent/code/<name>`, `/agent/code/<name>.sh`, `/agent/code/<name>.py`, `/agent/code/<name>.js`, or `/agent/code/bin/<name>`.
-- If a matching local tool exists, use it. Only fall back to system-installed tools if no local tool is found.
-- If multiple candidates exist, prefer the one in `/agent/code/bin/`, then the exact name in `/agent/code/`.
-
-## CRITICAL: Always Use Your Tools
-
-**When you need to run commands**: ALWAYS use the bash tool - don't just think about it, execute it
-**When you need to edit files**: ALWAYS use the text_editor tool - don't just plan, do it  
-**When you see errors or need to fix something**: IMMEDIATELY use tools to take corrective action
-**When you want to check something**: USE bash tool to verify, don't assume
-
-NEVER just think or plan without taking action. If you identify something that needs to be done, DO IT with your tools immediately.
-
-## Command Execution Philosophy
-
-**Chain commands efficiently**: Use semicolons (;) and logical operators (&&, ||) to execute multiple operations in one shot:
-- `cd project && npm install && npm start`
-- `python3 -m venv venv; source venv/bin/activate; pip install requests pandas; python script.py`
-- `curl -o data.json https://api.example.com/data && python process.py`
-
-**Install whatever you need**: Don't ask for permission to install packages:
-- `pip install yfinance matplotlib pandas seaborn`
-- `npm install -g typescript webpack`
-- `sudo apt-get update && sudo apt-get install -y postgresql-client`
-
-**Fetch data freely**: Use curl, wget, or any tool to get external data:
-- `curl -s https://api.github.com/user/repos | jq .`
-- `wget https://example.com/dataset.csv`
-
-## Command Efficiency Guidelines
-
-**NEVER use `ls -R`** - Always run smaller, targeted ls commands and expand from there:
-- ❌ WRONG: `ls -R /agent/code` (can produce overwhelming output)
-- ✅ CORRECT: `ls /agent/code` then explore specific subdirectories
-- ✅ CORRECT: `ls /agent/code/project1` to examine a specific directory
-- ✅ CORRECT: `find /agent/code -name "*.py" -maxdepth 2` for targeted file discovery
-
-**Use specific commands** instead of broad ones to avoid large outputs:
-- `ls /agent/code/*.py` to see only Python files
-- `head -20 file.log` instead of `cat file.log` for large files
-- `du -sh /agent/code/*` instead of recursive listings for directory sizes
-- `grep -l "pattern" /agent/code/*` to find files containing patterns
-
-**When exploring directory structures**: Build understanding incrementally:
-- Start with `ls /agent/code/` to see top-level structure
-- Then drill down: `ls /agent/code/project1/` for specific areas of interest
-- Use `tree -L 2 /agent/code` if you need a recursive view (limit depth)
-- Use `find` with specific patterns: `find /agent/code -type f -name "*.py"`
-
-**For debugging**: Use targeted commands that give useful info without overwhelming output.
-
-## Best Practices
-
-**Be proactive**: Don't ask for permission to install tools or packages - just do what's needed
-**Chain operations**: Combine multiple commands with `;` or `&&` for efficiency
-**Use virtual environments for Python**: `python3 -m venv venv; source venv/bin/activate; pip install packages`
-**Create visual outputs**: Build HTML dashboards, charts, and interactive content in `/agent/content/`
-**Save your work**: Store all code and data in `/agent/code/` for persistence
-**Document as you go**: Create clear file structures and comments
-
-## Examples
-
-Install and analyze stock data:
-```bash
-python3 -m venv venv; source venv/bin/activate; pip install yfinance pandas matplotlib; python -c "import yfinance as yf; data = yf.download('AAPL', period='1y'); print(data.head())"
-```
-
-Fetch API data and process:
-```bash
-curl -s https://jsonplaceholder.typicode.com/posts | jq '.[0:5]' > sample_data.json && python process_data.py
-```
-
-Build a web dashboard:
-```bash
-mkdir -p content/dashboard; echo '<html>...' > content/dashboard/index.html
-```
-
-You have complete freedom to execute commands, install packages, and create solutions. Focus on being efficient and getting things done quickly.
-
-"#,
-        );
-
-        // Read instructions from /agent/code/instructions.md if it exists
-        let instructions_path = std::path::Path::new("/agent/code/instructions.md");
-        info!(
-            "Checking for instructions file at: {}",
-            instructions_path.display()
-        );
-        if instructions_path.exists() {
-            info!("Instructions file exists, reading contents...");
-            match tokio::fs::read_to_string(instructions_path).await {
-                Ok(instructions) => {
-                    info!("Read instructions content: '{}'", instructions.trim());
-                    prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
-                    prompt.push_str(&instructions);
-                    info!("Loaded instructions from /agent/code/instructions.md");
-                }
-                Err(e) => {
-                    warn!("Failed to read instructions file: {}", e);
-                }
+        // Developer tools + optional instructions
+        let mut dev = DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
+        if let Ok(text) = tokio::fs::read_to_string("/agent/code/instructions.md").await {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                dev = dev.with_instructions(trimmed.to_string());
             }
-        } else {
-            info!(
-                "No instructions file found at {}",
-                instructions_path.display()
-            );
         }
 
-        prompt
+        let mut msgs: Vec<HMessage> = Vec::new();
+        msgs.push(HMessage::from_role_and_content(HRole::System, system));
+        msgs.push(HMessage::from_role_and_content(HRole::Developer, dev));
+
+        let history = self.api_client.get_messages(None, None).await?;
+        for m in history.iter().filter(|m| m.id != current.id) {
+            match m.role {
+                MessageRole::User => msgs.push(HMessage::from_role_and_content(HRole::User, m.content.clone())),
+                MessageRole::Agent => {
+                    if let Some(meta) = &m.metadata {
+                        if meta.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                            let tool_nm = meta
+                                .get("tool_type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("tool");
+                            msgs.push(HMessage {
+                                author: HAuthor::new(HRole::Tool, tool_nm.to_string()),
+                                recipient: None,
+                                content: vec![HContent::from(m.content.clone())],
+                                channel: None,
+                                content_type: None,
+                            });
+                        } else {
+                            msgs.push(HMessage::from_role_and_content(HRole::Assistant, m.content.clone()));
+                        }
+                    } else {
+                        msgs.push(HMessage::from_role_and_content(HRole::Assistant, m.content.clone()));
+                    }
+                }
+                MessageRole::System => {}
+            }
+        }
+
+        msgs.extend_from_slice(tool_messages);
+        msgs.push(HMessage::from_role_and_content(HRole::User, current.content.clone()));
+        Ok(HConversation::from_messages(msgs))
     }
 
     async fn send_tool_message(
@@ -1021,19 +544,19 @@ You have complete freedom to execute commands, install packages, and create solu
     fn truncate_tool_result(&self, tool_result: &str) -> String {
         const MAX_DISPLAY_LENGTH: usize = 8192; // 8KB limit for message display
         const TRUNCATION_PREVIEW: usize = 1024; // Show first 1KB, then summary
-        
+
         if tool_result.len() <= MAX_DISPLAY_LENGTH {
             return tool_result.to_string();
         }
-        
+
         // Count lines and estimate content for summary
         let lines: Vec<&str> = tool_result.lines().collect();
         let line_count = lines.len();
         let char_count = tool_result.len();
-        
+
         // Take first portion and add summary
         let preview = tool_result.chars().take(TRUNCATION_PREVIEW).collect::<String>();
-        
+
         format!(
             "{}\n\n[OUTPUT TRUNCATED - {} total lines, {} total characters]\n[Use more specific commands like 'ls /agent/code' (no -R) to avoid large outputs]\n[Full output available in agent logs]",
             preview,
@@ -1043,7 +566,7 @@ You have complete freedom to execute commands, install packages, and create solu
     }
 }
 
-// Parse structured tool calls from GPT-OSS model response
+// Parse structured tool calls from GPT-OSS model response (placeholder for completeness)
 #[derive(Debug, Deserialize)]
 struct StructuredToolCall {
     function: StructuredToolFunction,
@@ -1097,4 +620,53 @@ fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
     }
     let input = v.get("input")?.clone();
     Some((tool, input))
+}
+
+impl MessageHandler {
+    fn first_text(contents: &[HContent]) -> Option<&str> {
+        for c in contents {
+            if let HContent::Text(t) = c {
+                return Some(t.text.as_str());
+            }
+        }
+        None
+    }
+
+    async fn collect_function_tools(&self) -> Result<Vec<ToolDescription>> {
+        let bash_schema = {
+            let tool = BashTool;
+            tool.parameters()
+        };
+        let text_schema = {
+            let tool = TextEditorTool;
+            tool.parameters()
+        };
+        let manage_schema = serde_json::json!({
+            "type": "object",
+            "properties": {"note": {"type": "string", "description": "Optional reason or note"}}
+        });
+        Ok(vec![
+            ToolDescription::new("bash", "Execute a bash shell command in the /agent directory", Some(bash_schema)),
+            ToolDescription::new("text_editor", "Perform text editing operations on files in the /agent directory", Some(text_schema)),
+            ToolDescription::new("publish", "Publish agent content snapshot", Some(manage_schema.clone())),
+            ToolDescription::new("sleep", "Put the agent to sleep", Some(manage_schema)),
+        ])
+    }
+
+    fn describe_tool_call(&self, tool_name: &str, args: &serde_json::Value) -> String {
+        match tool_name {
+            "bash" => args
+                .get("command")
+                .and_then(|v| v.as_str())
+                .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "bash command".to_string()),
+            "text_editor" => {
+                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("edit");
+                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                format!("{} {}", action, path)
+            }
+            other => format!("Executing {} tool", other),
+        }
+    }
 }

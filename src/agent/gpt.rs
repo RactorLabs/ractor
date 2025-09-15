@@ -40,13 +40,14 @@ impl GptClient {
             .await
             .map_err(|e| HostError::Model(format!("GPT server error: {}", e)))?;
         if !resp.status().is_success() {
+            let status = resp.status();
             let text = resp
                 .text()
                 .await
                 .unwrap_or_else(|_| "<no body>".to_string());
             return Err(HostError::Model(format!(
                 "GPT server responded {}: {}",
-                resp.status(), text
+                status, text
             )));
         }
         let v: serde_json::Value = resp
@@ -61,4 +62,3 @@ impl GptClient {
         Ok(text)
     }
 }
-

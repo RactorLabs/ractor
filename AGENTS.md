@@ -11,7 +11,7 @@
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
 - Start services (Docker via CLI): `raworc start [components...]`
-  - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
+  - Defaults to MySQL (`3307`), GPT (`6000`), API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
   - In dev, use `./scripts/build.sh` to build images when needed.
 - Stop: `raworc stop [components...]` (supports `agents` to stop all agent containers).
 - Dev CLI link: `./scripts/link.sh` then use `raworc --help` or `raworc start`.

@@ -33,6 +33,7 @@ tempfile = "3.0"
 tokio-util = { version = "0.7", features = ["codec"] }
 hyper = { version = "0.14", features = ["full"] }
 url = "2.5"
+openai-harmony = { git = "https://github.com/openai/harmony" }
 
 [[bin]]
 name = "raworc-api"
