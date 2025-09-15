@@ -41,9 +41,10 @@ export function getApiDocs(base) {
         desc: 'Login with operator name and password. Returns JWT token and user info.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
-          { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' }
+          { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' },
+          { in: 'body', name: 'ttl_hours', type: 'number', required: false, desc: 'Optional token TTL in hours; omit or <= 0 for no expiry (default)' }
         ],
-        example: `curl -s -X POST ${BASE}/api/v0/operators/<name>/login -H "Content-Type: application/json" -d '{"pass":"<password>"}'`,
+        example: `curl -s -X POST ${BASE}/api/v0/operators/<name>/login -H "Content-Type: application/json" -d '{"pass":"<password>","ttl_hours":24}'\n\n# ttl_hours is optional. Omit or set <=0 for no expiry (default).`,
         responses: [
           {
             status: 200,
@@ -81,9 +82,10 @@ export function getApiDocs(base) {
         desc: 'Create a new token for a principal (admin-only).',
         params: [
           { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or admin id)' },
-          { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" }
+          { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" },
+          { in: 'body', name: 'ttl_hours', type: 'number', required: false, desc: 'Optional token TTL in hours; omit or <= 0 for no expiry (default)' }
         ],
-        example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"some-user","type":"User"}'`,
+        example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"some-user","type":"User","ttl_hours":12}'\n\n# ttl_hours is optional. Omit or set <=0 for no expiry (default).`,
         responses: [
           {
             status: 200,

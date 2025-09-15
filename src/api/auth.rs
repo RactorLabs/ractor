@@ -13,11 +13,17 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 pub fn create_operator_jwt(
     operator: &Operator,
     secret: &str,
-    duration_hours: i64,
+    duration_hours: Option<i64>,
 ) -> Result<TokenResponse> {
-    let exp = Utc::now()
-        .checked_add_signed(Duration::hours(duration_hours))
-        .expect("valid timestamp");
+    // Default to no expiry: use far-future timestamp when not provided or non-positive
+    let exp = match duration_hours {
+        Some(h) if h > 0 => Utc::now()
+            .checked_add_signed(Duration::hours(h))
+            .expect("valid timestamp"),
+        _ => Utc::now()
+            .checked_add_signed(Duration::days(36500)) // ~100 years
+            .expect("valid timestamp"),
+    };
 
     let claims = RbacClaims {
         sub: operator.user.clone(),

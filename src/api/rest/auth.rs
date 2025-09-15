@@ -13,6 +13,8 @@ use crate::shared::rbac::TokenResponse;
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
     pub pass: String,
+    #[serde(default)]
+    pub ttl_hours: Option<i64>, // Optional override; <=0 or None means no expiry
 }
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +22,8 @@ pub struct CreateTokenRequest {
     pub principal: String,
     #[serde(rename = "type")]
     pub principal_type: String, // "User" or "Admin"
+    #[serde(default)]
+    pub ttl_hours: Option<i64>, // Optional override; <=0 or None means no expiry
 }
 
 #[derive(Debug, Serialize)]
@@ -69,7 +73,9 @@ pub async fn login(
     // Update last login timestamp
     let _ = state.update_last_login(&name).await;
 
-    let token_response = create_operator_jwt(&operator, &state.jwt_secret, 24)?;
+    // Use requested TTL if provided (>0). Otherwise, default to no expiry (far future)
+    let ttl = req.ttl_hours.filter(|h| *h > 0);
+    let token_response = create_operator_jwt(&operator, &state.jwt_secret, ttl)?;
 
     // Include user info in response
     let mut response: LoginResponse = token_response.into();
@@ -137,11 +143,15 @@ pub async fn create_token(
         }
     };
 
-    // Create JWT claims
-    let expires_in = 24; // 24 hours
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(expires_in))
-        .expect("valid timestamp");
+    // Compute expiration: honor ttl_hours if provided (>0), otherwise set far-future (no expiry by default)
+    let expiration = match req.ttl_hours.filter(|h| *h > 0) {
+        Some(h) => Utc::now()
+            .checked_add_signed(Duration::hours(h))
+            .expect("valid timestamp"),
+        None => Utc::now()
+            .checked_add_signed(Duration::days(36500)) // ~100 years
+            .expect("valid timestamp"),
+    };
     let claims = RbacClaims {
         sub: req.principal.clone(),
         sub_type: match principal_type {
