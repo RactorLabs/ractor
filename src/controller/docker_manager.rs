@@ -1134,7 +1134,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Configure GPT server URL for model inference (required; no default)
         let gpt_url = std::env::var("RAWORC_GPT_URL").map_err(|_| {
             anyhow::anyhow!(
-                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:7001)"
+                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:6000)"
             )
         })?;
         env.push(format!("RAWORC_GPT_URL={}", gpt_url));
@@ -1315,7 +1315,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         // Configure GPT server URL for model inference (required; no default)
         let gpt_url = std::env::var("RAWORC_GPT_URL").map_err(|_| {
             anyhow::anyhow!(
-                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:7001)"
+                "Controller requires RAWORC_GPT_URL to be set (e.g., http://raworc_gpt:6000)"
             )
         })?;
         env.push(format!("RAWORC_GPT_URL={}", gpt_url));

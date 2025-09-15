@@ -13,7 +13,7 @@ use tracing::{error, info, warn};
 pub mod constants;
 pub use constants::AGENT_STATE_INIT;
 
-// Using local Ollama via OLLAMA_HOST
+// Model service is RAWORC_GPT_URL within the Docker network
 
 #[path = "../shared/rbac.rs"]
 pub mod rbac;

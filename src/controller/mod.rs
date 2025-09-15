@@ -10,10 +10,10 @@ pub async fn run() -> Result<()> {
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Resolve OLLAMA_HOST or use default inside Docker network
-    let ollama_host =
-        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
-    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
+    // Resolve RAWORC_GPT_URL or use default inside Docker network
+    let gpt_url =
+        std::env::var("RAWORC_GPT_URL").unwrap_or_else(|_| "http://raworc_gpt:6000".to_string());
+    tracing::info!("Using RAWORC_GPT_URL: {}", gpt_url);
 
     // Initialize agent manager
     let agent_manager = AgentManager::new(&database_url).await?;

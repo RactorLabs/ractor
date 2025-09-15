@@ -56,7 +56,7 @@
   - `--gpt-enable-gpu` (default true), `--no-gpt-enable-gpu`
   - `--gpt-cpus <n>`, `--gpt-memory <bytes|g>`, `--gpt-shm-size <size>`
   - `--gpt-keep-alive <dur>` (optional; server process stays resident regardless)
-- Export `RAWORC_GPT_URL=http://raworc_gpt:7001` (or similar) to API/Controller/Agent containers for internal routing.
+- Export `RAWORC_GPT_URL=http://raworc_gpt:6000` (or similar) to API/Controller/Agent containers for internal routing.
 - Keep `ollama` component for one release with a deprecation warning; add `--use-ollama` override for fallback.
 
 ### API & Operator
@@ -139,4 +139,3 @@
 - [ ] Default model and dev fallback agreed
 - [ ] Env var names finalized (`RAWORC_GPT_URL`) and CLI flags
 - [ ] Transition window for Ollama (1 release) acceptable
-

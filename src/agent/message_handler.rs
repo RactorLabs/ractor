@@ -2,7 +2,7 @@ use super::api::{Message, MessageRole, RaworcClient, MESSAGE_ROLE_USER};
 use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
 use super::guardrails::Guardrails;
-use super::ollama::{ChatMessage, ModelResponse, OllamaClient};
+use super::gpt::GptClient;
 use super::tool_registry::{ContainerExecMapper, ToolRegistry};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -13,7 +13,7 @@ use tracing::{error, info, warn};
 
 pub struct MessageHandler {
     api_client: Arc<RaworcClient>,
-    ollama_client: Arc<OllamaClient>,
+    gpt_client: Arc<GptClient>,
     guardrails: Arc<Guardrails>,
     processed_user_message_ids: Arc<Mutex<HashSet<String>>>,
     task_created_at: DateTime<Utc>,
@@ -31,15 +31,15 @@ impl MessageHandler {
     }
     pub fn new(
         api_client: Arc<RaworcClient>,
-        ollama_client: Arc<OllamaClient>,
+        gpt_client: Arc<GptClient>,
         guardrails: Arc<Guardrails>,
     ) -> Self {
-        Self::new_with_registry(api_client, ollama_client, guardrails, None)
+        Self::new_with_registry(api_client, gpt_client, guardrails, None)
     }
 
     pub fn new_with_registry(
         api_client: Arc<RaworcClient>,
-        ollama_client: Arc<OllamaClient>,
+        gpt_client: Arc<GptClient>,
         guardrails: Arc<Guardrails>,
         tool_registry: Option<Arc<ToolRegistry>>,
     ) -> Self {
@@ -109,7 +109,7 @@ impl MessageHandler {
 
         Self {
             api_client,
-            ollama_client,
+            gpt_client,
             guardrails,
             processed_user_message_ids: Arc::new(Mutex::new(HashSet::new())),
             task_created_at,
@@ -140,6 +140,34 @@ impl MessageHandler {
             info!("No existing messages - fresh agent");
             return Ok(());
         }
+
+        // Compose prompt and call GPT server (single-shot v1)
+        let all_messages = self.fetch_all_agent_messages().await?;
+        let conversation = self.prepare_conversation_history(&all_messages, message);
+        let system_prompt = self.build_system_prompt().await;
+        let mut prompt = String::new();
+        prompt.push_str(&system_prompt);
+        prompt.push_str("\n\n");
+        for m in &conversation {
+            prompt.push_str(&format!("[{}] {}\n", m.role, m.content));
+        }
+        let output = match self
+            .gpt_client
+            .generate(&prompt, Some(serde_json::json!({"max_new_tokens": 512})))
+            .await
+        {
+            Ok(t) => t,
+            Err(e) => {
+                warn!("GPT server failed: {}", e);
+                self.finalize_with_fallback(&message.content).await?;
+                return Ok(());
+            }
+        };
+        let output = self.guardrails.validate_output(&output)?;
+        self.api_client
+            .send_message(output, Some(serde_json::json!({"type":"assistant"})))
+            .await?;
+        return Ok(());
 
         // Mark all user messages created before task creation time as processed
         let mut user_messages_before_task = HashSet::new();
@@ -347,6 +375,8 @@ impl MessageHandler {
             return Ok(());
         }
 
+        #[cfg(any())]
+        {
         // Native Ollama tool calling with GPT-OSS models
         // The model will use structured tool calls when tools are needed
 
@@ -641,6 +671,7 @@ impl MessageHandler {
                 self.api_client.send_message(sanitized, Some(meta)).await?;
                 return Ok(());
             }
+        }
         }
     }
 

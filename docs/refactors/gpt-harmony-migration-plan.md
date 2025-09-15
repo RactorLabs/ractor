@@ -52,7 +52,7 @@
 
 ### Controller
 - Remove all references to `OLLAMA_HOST`, `OLLAMA_MODEL`, `OLLAMA_TIMEOUT_SECS`.
-- Inject `RAWORC_GPT_URL` into agent containers (e.g., `http://raworc_gpt:7001`).
+- Inject `RAWORC_GPT_URL` into agent containers (e.g., `http://raworc_gpt:6000`).
 - Keep other env (branding, JWT) intact.
 
 ### CLI
@@ -125,7 +125,7 @@ Perform a clean, one‑shot removal — no compatibility shims, no deprecation f
 Note: This is a destructive removal — there is no backward compatibility path or fallback to Ollama.
 
 ## Env Vars (post-change)
-- `RAWORC_GPT_URL` — internal URL of the GPT server (e.g., `http://raworc_gpt:7001`).
+- `RAWORC_GPT_URL` — internal URL of the GPT server (e.g., `http://raworc_gpt:6000`).
 - `RAWORC_GPT_MODEL` — HF model id (default `gpt-oss:120b` with documented alternatives for dev).
 
 ## Implementation Steps

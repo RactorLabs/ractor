@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use super::ollama::{ToolDef, ToolFunction, ToolType};
+// Removed Ollama interop; Harmony parsing is handled on the Rust side.
 
 /// Core trait that all tools must implement
 #[async_trait]
@@ -141,45 +141,7 @@ impl ToolRegistry {
         }
     }
 
-    /// Generate Ollama-compatible tool definitions
-    pub async fn generate_ollama_tools(&self) -> Vec<ToolDef> {
-        let mut tool_defs = Vec::new();
-
-        // Add all registered tools
-        let tools = self.tools.read().await;
-        for (name, tool) in tools.iter() {
-            tool_defs.push(ToolDef {
-                typ: ToolType::Function,
-                function: ToolFunction {
-                    name: name.clone(),
-                    description: tool.description().to_string(),
-                    parameters: tool.parameters(),
-                },
-            });
-        }
-
-        // Add aliases as separate tools
-        let aliases = self.aliases.read().await;
-        for (alias_name, canonical_name) in aliases.iter() {
-            if let Some(tool) = tools.get(canonical_name) {
-                tool_defs.push(ToolDef {
-                    typ: ToolType::Function,
-                    function: ToolFunction {
-                        name: alias_name.clone(),
-                        description: format!(
-                            "{} (alias for {})",
-                            tool.description(),
-                            canonical_name
-                        ),
-                        parameters: tool.parameters(),
-                    },
-                });
-            }
-        }
-
-        info!("Generated {} tool definitions for Ollama", tool_defs.len());
-        tool_defs
-    }
+    // Tool schema exposure for Harmony happens via prompt composition using each tool's parameters.
 
     /// Load tool configuration from file
     pub async fn load_config(&self, config_path: &Path) -> Result<()> {
