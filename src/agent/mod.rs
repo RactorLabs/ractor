@@ -5,7 +5,7 @@ mod config;
 mod error;
 mod guardrails;
 mod message_handler;
-mod ollama;
+mod gpt;
 mod tool_registry;
 mod tools;
 
@@ -41,14 +41,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     };
     tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
 
-    // Resolve Ollama host from environment; required (no default)
-    let mut ollama_host = std::env::var("OLLAMA_HOST")
-        .map_err(|_| anyhow::anyhow!("OLLAMA_HOST environment variable is required"))?;
-    // Be tolerant of missing scheme in OLLAMA_HOST (e.g., "127.0.0.1:11434")
-    if !(ollama_host.starts_with("http://") || ollama_host.starts_with("https://")) {
-        ollama_host = format!("http://{}", ollama_host);
+    // Resolve GPT server URL from environment; required (no default)
+    let mut gpt_url = std::env::var("RAWORC_GPT_URL")
+        .map_err(|_| anyhow::anyhow!("RAWORC_GPT_URL environment variable is required"))?;
+    if !(gpt_url.starts_with("http://") || gpt_url.starts_with("https://")) {
+        gpt_url = format!("http://{}", gpt_url);
     }
-    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
+    tracing::info!("Using RAWORC_GPT_URL: {}", gpt_url);
 
     // Initialize configuration
     let config = Arc::new(config::Config {
@@ -61,15 +60,15 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     // Initialize API client
     let api_client = Arc::new(api::RaworcClient::new(config.clone()));
 
-    // Initialize Ollama client
-    let ollama_client = match ollama::OllamaClient::new(&ollama_host) {
+    // Initialize GPT client
+    let gpt_client = match gpt::GptClient::new(&gpt_url) {
         Ok(client) => client,
         Err(e) => {
-            tracing::error!("Failed to initialize Ollama client: {}", e);
-            return Err(anyhow::anyhow!("Failed to initialize Ollama client: {}", e));
+            tracing::error!("Failed to initialize GPT client: {}", e);
+            return Err(anyhow::anyhow!("Failed to initialize GPT client: {}", e));
         }
     };
-    let ollama_client = Arc::new(ollama_client);
+    let gpt_client = Arc::new(gpt_client);
 
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
@@ -147,7 +146,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     // Initialize message handler
     let message_handler = message_handler::MessageHandler::new(
         api_client.clone(),
-        ollama_client.clone(),
+        gpt_client.clone(),
         guardrails.clone(),
     );
 
