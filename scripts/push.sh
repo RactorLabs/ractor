@@ -50,6 +50,7 @@ usage() {
   echo "  api         Push the api image"
   echo "  controller  Push the controller image"
   echo "  agent       Push the agent image"
+  echo "  gpt         Push the GPT server image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -97,7 +98,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway")
+  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "gpt")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -143,6 +144,9 @@ for component in "${COMPONENTS[@]}"; do
     ;;
   gateway)
     image_name="${REGISTRY}/raworc_gateway:${TAG}"
+    ;;
+  gpt)
+    image_name="${REGISTRY}/raworc_gpt:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -206,7 +210,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | agent | operator | content | gateway)
+  api | controller | agent | operator | content | gateway | gpt)
     echo "  ${REGISTRY}/raworc_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_${component}:latest"

@@ -83,6 +83,7 @@ jobs:
           - \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_controller:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_gpt:${{ steps.get_version.outputs.VERSION }}\`
           
           All images are also tagged as \`:latest\`"
         env:
