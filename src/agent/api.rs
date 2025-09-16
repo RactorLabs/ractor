@@ -440,4 +440,66 @@ impl RaworcClient {
             }
         }
     }
+
+    /// Send a structured message with Harmony fields
+    pub async fn send_message_structured(
+        &self,
+        role: MessageRole,
+        content: String,
+        metadata: Option<serde_json::Value>,
+        author_name: Option<String>,
+        recipient: Option<String>,
+        channel: Option<String>,
+        content_type: Option<String>,
+        content_json: Option<serde_json::Value>,
+    ) -> Result<Message> {
+        let url = format!(
+            "{}/api/v0/agents/{}/messages",
+            self.config.api_url, self.config.agent_name
+        );
+
+        let request = CreateMessageRequest {
+            role,
+            content,
+            metadata,
+            author_name,
+            recipient,
+            channel,
+            content_type,
+            content_json,
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&request)
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK | StatusCode::CREATED => {
+                let message = response.json::<Message>().await?;
+                info!("Message sent successfully: {}", message.id);
+                Ok(message)
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
+                "Agent {} not found",
+                self.config.agent_name
+            ))),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to send message ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
 }

@@ -770,8 +770,7 @@
                           </summary>
                           <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{m.content}</div>
                         </details>
-                      {/if}
-                      {#if m.content && m.content.trim()}
+                      {:else if m.content && m.content.trim()}
                         <div class="markdown-wrap">
                           <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                         </div>

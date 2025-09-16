@@ -331,7 +331,19 @@ impl MessageHandler {
                         if let Some(text) = Self::first_text(&m.content) {
                             let sanitized = self.guardrails.validate_output(text)?;
                             let meta = serde_json::json!({ "type": "assistant_commentary", "model": "gpt-oss" });
-                            let _ = self.api_client.send_message(sanitized, Some(meta)).await;
+                            let _ = self
+                                .api_client
+                                .send_message_structured(
+                                    super::api::MessageRole::Agent,
+                                    sanitized,
+                                    Some(meta),
+                                    None,
+                                    None,
+                                    Some(ch.to_string()),
+                                    None,
+                                    None,
+                                )
+                                .await;
                         }
                         continue;
                     }
@@ -360,7 +372,23 @@ impl MessageHandler {
                         if let Some(obj) = meta.as_object_mut() {
                             obj.insert("args".to_string(), args_json.clone());
                         }
-                        let _ = self.api_client.send_message(display, Some(meta)).await;
+                        let content_json = serde_json::json!({
+                            "args": args_json,
+                            "output": result
+                        });
+                        let _ = self
+                            .api_client
+                            .send_message_structured(
+                                super::api::MessageRole::Agent,
+                                display,
+                                Some(meta),
+                                None,
+                                None,
+                                None,
+                                None,
+                                Some(content_json),
+                            )
+                            .await;
 
                         tool_messages.push(HMessage {
                             author: HAuthor::new(HRole::Tool, tool_name.to_string()),
@@ -515,18 +543,31 @@ impl MessageHandler {
         // Log tool execution notification to Docker logs
         println!("TOOL_EXECUTION: {}: {}", tool_name, description);
 
-        // Send tool execution message to user
+        // Compose metadata and structured fields
         let mut meta = serde_json::json!({
             "type": "tool_execution",
             "tool_type": tool_name
         });
+        let mut content_json: Option<serde_json::Value> = None;
         if let Some(a) = args {
             if let Some(obj) = meta.as_object_mut() {
                 obj.insert("args".to_string(), a.clone());
             }
+            content_json = Some(a.clone());
         }
+
+        // Post structured message: recipient indicates Harmony tool call, args in content_json
         self.api_client
-            .send_message(description.to_string(), Some(meta))
+            .send_message_structured(
+                super::api::MessageRole::Agent,
+                description.to_string(),
+                Some(meta),
+                None,
+                Some(format!("functions.{}", tool_name)),
+                None,
+                None,
+                content_json,
+            )
             .await?;
 
         Ok(())
