@@ -77,8 +77,16 @@ module.exports = (program) => {
         info('Checking GPT service readiness (/ready)...');
         const gptExists = await exec('docker', ['ps','-a','--format','{{.Names}}']);
         if (gptExists.code === 0 && /\braworc_gpt\b/.test(gptExists.stdout)) {
-          // Try ready endpoint via docker exec
-          const ready = await exec('docker', ['exec','raworc_gpt','/app/.venv/bin/python','- <<PY\nimport requests, json\ntry:\n  r=requests.get("http://127.0.0.1:6000/ready", timeout=10)\n  print(r.text)\nexcept Exception as e:\n  print(json.dumps({"status":"error","error":str(e)}))\nPY']);
+          // Try ready endpoint via docker exec using a Python one-liner
+          const py = [
+            'import requests, json',
+            'try:',
+            '  r=requests.get("http://127.0.0.1:6000/ready", timeout=10)',
+            '  print(r.text)',
+            'except Exception as e:',
+            '  print(json.dumps({"status":"error","error":str(e)}))'
+          ].join('\n');
+          const ready = await exec('docker', ['exec','raworc_gpt','/app/.venv/bin/python','-c', py]);
           if (ready.code === 0 && ready.stdout.trim()) {
             try {
               const s = ready.stdout.trim().split(/\r?\n/).pop();
