@@ -439,7 +439,7 @@ impl MessageHandler {
             let mut parsed: Vec<openai_harmony::chat::Message> = Vec::new();
             let mut parse_err: Option<String> = None;
             let mut attempt: u32 = 0;
-            let max_attempts: u32 = 2; // initial + one retry
+            let max_attempts: u32 = 10; // initial + up to 9 guided retries
             let mut completion_cur = completion.clone();
             while attempt < max_attempts {
                 let tokens_cur = enc.tokenizer().encode_with_special_tokens(&completion_cur);
@@ -459,33 +459,59 @@ impl MessageHandler {
                             target: "gpt",
                             request_id = %request_id,
                             error = %parse_err.as_ref().unwrap(),
+                            attempt = attempt + 1,
+                            max_attempts = max_attempts,
                             "HARMONY_PARSE_RETRY"
                         );
                         let mut gp_retry = serde_json::Map::new();
                         gp_retry.insert(
                             "stop".to_string(),
-                            serde_json::json!([
-                                "<|end|>",
-                                "<|call|>",
-                                "<|return|>",
-                                "<|bash|>",
-                                "<|text_editor|>",
-                                "<|publish|>",
-                                "<|sleep|>",
-                                "<|container.exec|>",
-                                "<|functions.bash|>",
-                                "<|functions.text_editor|>",
-                                "<|functions.publish|>",
-                                "<|functions.sleep|>",
-                                "<|functions.container.exec|>"
-                            ]),
+                            serde_json::json!(["<|end|>", "<|call|>", "<|return|>"]),
                         );
-                        if let Some(n) = max_new_env {
-                            gp_retry.insert("max_new_tokens".to_string(), serde_json::json!(n));
+                        if let Some(n) = max_new_env { gp_retry.insert("max_new_tokens".to_string(), serde_json::json!(n)); }
+
+                        // Build a retry prompt that includes an explicit developer hint
+                        let mut msgs_retry = msgs_full.clone();
+                        let hint_text = format!(
+                            "STRICT FORMAT HINT (attempt {}/{}): Your previous reply failed to parse ({}).\n\
+                             - Always begin with <|assistant|> and valid Harmony segments.\n\
+                             - Tool calls must use <|recipient|>functions.<tool> with JSON args in <|message|>.\n\
+                             - Do NOT emit roles like <|bash|>, <|start|>bash, or any non-standard role tags.\n\
+                             - Do NOT output any text before the first control token.\n\
+                             - If calling a tool, use exactly one of: functions.bash, functions.text_editor, functions.publish, functions.sleep.",
+                            attempt + 1,
+                            max_attempts,
+                            parse_err.as_deref().unwrap_or("parse error"),
+                        );
+                        // Insert the hint just before the final user message (last element)
+                        if !msgs_retry.is_empty() {
+                            let insert_at = msgs_retry.len().saturating_sub(1);
+                            msgs_retry.insert(
+                                insert_at,
+                                HMessage::from_role_and_content(HRole::Developer, hint_text),
+                            );
                         }
+                        // Render prompt for retry
+                        let prompt_retry = {
+                            let convo_retry = HConversation::from_messages(msgs_retry.clone());
+                            let toks_retry = enc
+                                .render_conversation_for_completion(&convo_retry, HRole::Assistant, None)
+                                .map_err(|e| super::error::HostError::Model(format!(
+                                    "Failed to render retry conversation: {}",
+                                    e
+                                )))?;
+                            enc
+                                .tokenizer()
+                                .decode_utf8(&toks_retry)
+                                .map_err(|e| super::error::HostError::Model(format!(
+                                    "Failed to decode retry prompt: {}",
+                                    e
+                                )))?
+                        };
+
                         let gen_retry = self
                             .gpt_client
-                            .generate(&prompt, Some(serde_json::Value::Object(gp_retry)))
+                            .generate(&prompt_retry, Some(serde_json::Value::Object(gp_retry)))
                             .await
                             .map_err(|e| super::error::HostError::Model(format!(
                                 "GPT server failed (retry): {}",
@@ -547,6 +573,39 @@ impl MessageHandler {
                         final_msg = Some((ch, text.to_string()));
                     }
                 }
+            }
+
+            // Deduplicate identical tool calls within a single model completion to avoid repeated actions
+            if !tool_execs.is_empty() {
+                use std::collections::HashSet;
+                let mut seen: HashSet<String> = HashSet::new();
+                let mut dedup_execs: Vec<(String, serde_json::Value)> = Vec::new();
+                let mut dedup_segments: Vec<serde_json::Value> = Vec::new();
+                for seg in segments_pre.iter() {
+                    let t = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if t == "tool_call" {
+                        let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = seg.get("args").cloned().unwrap_or_else(|| serde_json::json!({}));
+                        let key = format!("{}|{}", tool, args.to_string());
+                        if seen.insert(key) {
+                            dedup_segments.push(seg.clone());
+                        } else {
+                            // skip duplicate segment
+                        }
+                    } else {
+                        dedup_segments.push(seg.clone());
+                    }
+                }
+                // Now dedup execs in the same order
+                seen.clear();
+                for (tool, args) in tool_execs.into_iter() {
+                    let key = format!("{}|{}", tool, args.to_string());
+                    if seen.insert(key) {
+                        dedup_execs.push((tool, args));
+                    }
+                }
+                segments_pre = dedup_segments;
+                tool_execs = dedup_execs;
             }
 
             // Create in-progress message with pre-segments
@@ -780,13 +839,22 @@ Termination & duplication rules:
 - If a tool returns an error like "file already exists" for create, do not retry the same action/path. Decide (write vs new name) and state the decision in 'final'.
 - If multiple files are needed, include all text_editor tool calls in the same step if possible, then produce one 'final' summarizing the created paths.
  - Sleep is terminal: after issuing the sleep tool and receiving its result, emit a 'final' stating the agent will sleep, then stop.
- - Sleep is terminal: after issuing the sleep tool and receiving its result, emit a 'final' stating the agent will sleep, then stop.
 
 Publishing rules:
 - Publish only if the user asked to view/share/open the created content or the task explicitly requires a public URL. Otherwise, confirm creation and provide the relative path (e.g., content/foo.html) in 'final'.
 - When you do publish, include the absolute published URL(s) only in 'final' (never in analysis/commentary).
  - Publish is not terminal by itself; after publishing, you should still produce a normal 'final' message summarizing results.
- - Publish is not terminal by itself; after publishing, you should still produce a normal 'final' message summarizing results.
+
+Clarify when uncertain:
+- If the next step is ambiguous or you are not highly confident (>80%) about what to do, do NOT call any tools.
+- Instead, in 'final', ask a concise clarifying question and offer 2–3 concrete next-step options (numbered or bulleted). Then wait for the user reply before proceeding.
+
+Secrets and idempotency:
+- If you just wrote a secret (e.g., secrets/openai_key.txt), do not write it again in the same turn. Confirm success in 'final' and ask whether to verify it or continue with a specific task.
+- Within a single turn, never perform the exact same tool call (same tool and args) more than once.
+
+Branding and mentions:
+- Identify as a Raworc Agent. Do not mention ChatGPT, OpenAI, or underlying model names.
 
 Constraints:
 - Tool call content must be valid JSON per schema. No extra prose.
@@ -1296,9 +1364,9 @@ impl MessageHandler {
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 
         let mut prompt = String::from(format!(
-            r#"SYSTEM CONTEXT
+            r#"RAWORC AGENT CONTEXT
 
-You are running as an Agent in the {host_name} system.
+You are a Raworc Agent running in the {host_name} platform.
 
 - System Name: {host_name}
 - Base URL: {base_url}
@@ -1320,6 +1388,10 @@ About content and publishing:
 - Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
 - Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
 - The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
+
+Branding & identity:
+- Identify yourself as a Raworc Agent when needed.
+- Do not mention ChatGPT, OpenAI, or model names; keep responses product-neutral and focused on the task.
 
 Important behavior:
 - Do NOT ask the user to start an HTTP server for /agent/content.
@@ -1344,11 +1416,11 @@ Important behavior:
         ));
 
         prompt.push_str(
-            r#"You are a highly capable AI agent with full access to bash commands and text editing capabilities. You operate in an isolated container environment where you can execute commands, install packages, and create any type of content to help users accomplish their goals.
+            r#"You are a Raworc Agent with full access to bash commands and text editing capabilities. You operate in an isolated container environment where you can execute commands, install packages, and create any type of content to help users accomplish their goals.
 
 ## Core Capabilities
 
-You are an AI agent with unrestricted access to:
+You have unrestricted access to:
 - **Bash shell**: Execute any command using semicolons to chain operations efficiently
 - **Text editor**: Create, modify, and view files with precision
 - **Package management**: Install pip, npm, apt packages, or any other tools needed
