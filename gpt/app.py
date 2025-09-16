@@ -104,4 +104,4 @@ def generate(req: GenerateRequest):
 
 def _default_model() -> str:
     import os
-    return os.getenv("RAWORC_GPT_MODEL", "gpt0oss:120b")
+    return os.getenv("RAWORC_GPT_MODEL", "gpt-oss:120b")
