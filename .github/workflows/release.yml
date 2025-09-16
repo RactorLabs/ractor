@@ -70,7 +70,7 @@ jobs:
             --notes "## Raworc ${{ steps.get_version.outputs.VERSION }}
           
           ### Published Packages
-          - **Docker Images**: \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
+          - **Docker Images**: see list below
           - **npm Package**: \`@raworc/cli@${{ steps.get_version.outputs.VERSION }}\`
           
           ### Installation
@@ -80,9 +80,12 @@ jobs:
           \`\`\`
           
           ### Docker Hub Images
-          - \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_api:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_controller:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_operator:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_content:${{ steps.get_version.outputs.VERSION }}\`
+          - \`raworc/raworc_gateway:${{ steps.get_version.outputs.VERSION }}\`
           - \`raworc/raworc_gpt:${{ steps.get_version.outputs.VERSION }}\`
           
           All images are also tagged as \`:latest\`"
