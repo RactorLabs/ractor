@@ -992,7 +992,7 @@
               <!-- Agent side -->
               {#if hasComposite(m)}
                 <!-- Harmony composite rendering: show commentary, tool calls/results, and final in one message -->
-                <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-4' : 'mb-3')}>
+                <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-3' : 'mb-2')}>
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     <!-- Message-level context metrics hidden by design -->
                     {#each segmentsOf(m) as s, j}
@@ -1095,7 +1095,7 @@
                 <!-- Tool response card or regular agent message -->
                 {#if isToolResult(m)}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
-                  <div class="d-flex mb-2 justify-content-start">
+                  <div class="d-flex mb-1 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                         <span class="badge text-bg-success me-2">Tool Result</span>
@@ -1137,20 +1137,20 @@
             {/if}
           {/each}
         {/if}
+          <div class="status-footer small text-body-secondary d-flex align-items-center gap-2 mt-2 pt-2 pb-1">
+            {#if latestExecInfo() && latestExecInfo().summary}
+              <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
+              <i class={toolIconClass(latestExecInfo().tool)}></i>
+              <span>Executing: {latestExecInfo().summary}</span>
+            {:else if stateStr === 'busy'}
+              <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
+              <span>Working…</span>
+            {:else}
+              <!-- idle: keep reserved space, no text -->
+            {/if}
+          </div>
         </div>
       </div>
-      <!-- Global execution status footer -->
-      {#if latestExecInfo() || stateStr === 'busy'}
-        <div class="status-footer small text-body-secondary d-flex align-items-center gap-2 mt-3 pt-2 pb-1">
-          <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
-          {#if latestExecInfo() && latestExecInfo().summary}
-            <i class={toolIconClass(latestExecInfo().tool)}></i>
-            <span>Executing: {latestExecInfo().summary}</span>
-          {:else}
-            <span>Working…</span>
-          {/if}
-        </div>
-      {/if}
 
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
@@ -1231,6 +1231,7 @@
     :global(.dropdown-menu) { z-index: 5000; }
     :global(.card) { overflow: visible; }
     /* Status footer spacing (no border by request) */
+    .status-footer { min-height: 1.25rem; }
     /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
