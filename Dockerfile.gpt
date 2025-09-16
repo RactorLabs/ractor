@@ -16,14 +16,14 @@ ENV PATH=/app/.venv/bin:$PATH
 
 # Pin library versions for stability; torch with CUDA must match base image
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 \
-      torch==2.4.1 \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 torch==2.4.1 && \
+    pip install --no-cache-dir \
       fastapi==0.115.0 \
       uvicorn[standard]==0.30.6 \
-      transformers==4.44.2 \
-      accelerate==0.34.2 \
-      sentencepiece==0.2.0 \
-      einops==0.8.0
+      transformers \
+      accelerate \
+      sentencepiece \
+      einops
 
 # PyTorch is installed with CUDA 12.1 wheels. Run the container with `--gpus all`.
 
