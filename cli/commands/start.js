@@ -95,7 +95,7 @@ module.exports = (program) => {
     .option('--gpt-shm-size <size>', 'Shared memory for GPT server (e.g., 32g)')
     .option('--gpt-enable-gpu', 'Enable GPU for GPT server (default true)')
     .option('--no-gpt-enable-gpu', 'Disable GPU for GPT server')
-    .option('--gpt-model <model>', 'HF model id for GPT server', 'gpt-oss:120b')
+    .option('--gpt-model <model>', 'HF model id for GPT server', 'gpt0oss:120b')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -338,7 +338,7 @@ module.exports = (program) => {
                 '--network','raworc_network',
                 '-v','raworc_gpt_data:/app/data',
                 '-v','raworc_gpt_logs:/app/logs',
-                '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt-oss:120b'}`,
+                '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt0oss:120b'}`,
                 ...gpuFlags,
                 ...cpuFlag,
                 ...memFlag,
@@ -418,7 +418,7 @@ module.exports = (program) => {
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
-              const model = options.controllerGptModel || process.env.RAWORC_GPT_MODEL || options.gptModel || 'gpt-oss:120b';
+              const model = options.controllerGptModel || process.env.RAWORC_GPT_MODEL || options.gptModel || 'gpt0oss:120b';
               const args = ['run','-d',
                 '--name','raworc_controller',
                 '--network','raworc_network',

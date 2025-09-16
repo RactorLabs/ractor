@@ -30,7 +30,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # App files
 COPY gpt /app/gpt
 
-ENV RAWORC_GPT_MODEL="gpt-oss:120b"
+ENV RAWORC_GPT_MODEL="gpt0oss:120b"
 ENV HOST=0.0.0.0
 ENV PORT=6000
 
