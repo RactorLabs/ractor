@@ -305,35 +305,19 @@ impl MessageHandler {
                 super::error::HostError::Model(format!("Failed to decode prompt: {}", e))
             })?;
 
-            let completion = match self
+            let completion = self
                 .gpt_client
                 .generate(
                     &prompt,
                     Some(serde_json::json!({ "max_new_tokens": 1024, "stop": ["<|end|>", "<|call|>", "<|return|>"] })),
                 )
                 .await
-            {
-                Ok(text) => text,
-                Err(e) => {
-                    warn!("GPT server failed: {}", e);
-                    self.finalize_with_fallback(&message.content).await?;
-                    return Ok(());
-                }
-            };
+                .map_err(|e| super::error::HostError::Model(format!("GPT server failed: {}", e)))?;
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
-            let parsed = match enc
+            let parsed = enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
-            {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!("Harmony parse failed: {} — sending raw text", e);
-                    let sanitized = self.guardrails.validate_output(&completion)?;
-                    let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_parse_error" });
-                    self.api_client.send_message(sanitized, Some(meta)).await?;
-                    return Ok(());
-                }
-            };
+                .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
 
             let mut made_tool_call = false;
             for m in parsed.iter() {
@@ -401,18 +385,17 @@ impl MessageHandler {
             }
 
             if !made_tool_call {
-                warn!("Harmony completion had no actionable assistant content; sending raw text");
-                let sanitized = self.guardrails.validate_output(&completion)?;
-                let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_no_action" });
-                self.api_client.send_message(sanitized, Some(meta)).await?;
-                return Ok(());
+                return Err(super::error::HostError::Model(
+                    "Harmony completion had no actionable assistant content".to_string(),
+                ));
             }
 
             info!("Harmony loop step {} completed; continuing", step + 1);
         }
 
-        self.finalize_with_note("step cap reached").await?;
-        Ok(())
+        Err(super::error::HostError::Model(
+            "Harmony step cap reached".to_string(),
+        ))
     }
 
     async fn finalize_with_fallback(&self, original: &str) -> Result<()> {
