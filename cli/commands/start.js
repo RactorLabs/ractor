@@ -339,12 +339,18 @@ module.exports = (program) => {
                 '-v','raworc_gpt_data:/app/data',
                 '-v','raworc_gpt_logs:/app/logs',
                 '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt-oss:120b'}`,
+                '-e','HF_HOME=/app/data/hf',
+                '-e','TRANSFORMERS_CACHE=/app/data/hf',
+                '-e','HUGGINGFACE_HUB_CACHE=/app/data/hf',
                 ...gpuFlags,
                 ...cpuFlag,
                 ...memFlag,
                 ...shmFlag,
                 GPT_IMAGE
               ];
+              if (process.env.HUGGINGFACE_HUB_TOKEN && String(process.env.HUGGINGFACE_HUB_TOKEN).trim()) {
+                args.splice(args.length-1, 0, '-e', `HUGGINGFACE_HUB_TOKEN=${process.env.HUGGINGFACE_HUB_TOKEN}`);
+              }
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'GPT server container started');
               console.log();
