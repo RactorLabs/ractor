@@ -189,7 +189,8 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
-        console.log(chalk.blue('[INFO] ') + `Require GPU for GPT server: ${!!options.requireGpu}`);
+        const REQUIRE_GPU_DEFAULT = options.requireGpu !== false; // default: true unless explicitly disabled
+        console.log(chalk.blue('[INFO] ') + `Require GPU for GPT server: ${REQUIRE_GPU_DEFAULT}`);
 
         if (!components || components.length === 0) {
           components = ['mysql', 'gpt', 'api', 'operator', 'content', 'controller', 'gateway'];
@@ -325,7 +326,7 @@ module.exports = (program) => {
                 break;
               }
               const gpuEnabled = options.gptEnableGpu !== false;
-              const requireGpu = !!options.requireGpu;
+              const requireGpu = options.requireGpu !== false; // default true
               const gpuFlags = [];
               if (gpuEnabled) { gpuFlags.push('--gpus','all'); }
               else if (requireGpu) { console.error(chalk.red('[ERROR] ') + 'GPU is required but --no-gpt-enable-gpu given'); process.exit(1); }
