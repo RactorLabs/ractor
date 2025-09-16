@@ -59,6 +59,8 @@ class ModelHolder:
         self._lock = threading.Lock()
         self.quant_enforced = True
         self.quant_method: Optional[str] = None
+        # Device to place inputs on for sharded models; None means single-device model
+        self.primary_device: Optional[torch.device] = None
 
     def load(self, model_id: str):
         # Always load the single supported model (120B)
@@ -77,8 +79,33 @@ class ModelHolder:
             load_kwargs["device_map"] = "auto"
         # Load model
         self.model = AutoModelForCausalLM.from_pretrained(model_id, **load_kwargs)
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model.to(device)
+
+        # If model was loaded with a device map (multi-GPU sharded), do NOT .to("cuda")
+        # Keep module placements as decided by accelerate/transformers and choose a primary
+        # CUDA device for inputs (first CUDA device found). Otherwise, move entire model.
+        try:
+            device_map = getattr(self.model, "hf_device_map", None)
+        except Exception:
+            device_map = None
+        if device_map:
+            # Pick first CUDA device (e.g., 'cuda:0') as primary for inputs
+            first_cuda = None
+            try:
+                # device_map is dict[module_name] -> device string
+                devices = set(str(d) for d in device_map.values())
+                for d in sorted(devices):
+                    if str(d).startswith("cuda"):
+                        first_cuda = d
+                        break
+            except Exception:
+                first_cuda = None
+            if first_cuda is None:
+                first_cuda = "cuda:0" if torch.cuda.is_available() else "cpu"
+            self.primary_device = torch.device(first_cuda)
+        else:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model.to(device)
+            self.primary_device = torch.device(device)
         self.model_id = model_id
         self.last_error = None
         # Validate quantization actually active
@@ -188,7 +215,13 @@ def generate(req: GenerateRequest):
     model = holder.model
 
     inputs = tok(req.prompt, return_tensors="pt")
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    # Place inputs on a reasonable primary device; for multi-GPU sharded models, using
+    # the first CUDA device is sufficient — accelerate will handle module dispatch.
+    try:
+        primary = holder.primary_device if holder.primary_device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    except Exception:
+        primary = torch.device("cpu")
+    inputs = {k: v.to(primary) for k, v in inputs.items()}
     # Provide attention_mask explicitly for decoder-only models
     if "attention_mask" not in inputs:
         inputs["attention_mask"] = torch.ones_like(inputs["input_ids"]).to(model.device)

@@ -92,7 +92,7 @@ module.exports = (program) => {
     .option('--require-gpu', 'Require GPU for GPT server (fail if missing)')
     .option('--gpt-cpus <cpus>', 'CPUs for GPT server (e.g., 4)')
     .option('--gpt-memory <mem>', 'Memory for GPT server (e.g., 32g)')
-    .option('--gpt-shm-size <size>', 'Shared memory for GPT server (e.g., 32g)')
+    .option('--gpt-shm-size <size>', 'Shared memory for GPT server (default: 64g)')
     .option('--gpt-enable-gpu', 'Enable GPU for GPT server (default true)')
     .option('--no-gpt-enable-gpu', 'Disable GPU for GPT server')
     .option('--gpt-model <model>', 'HF model id for GPT server', 'openai/gpt-oss-120b')
@@ -331,8 +331,10 @@ module.exports = (program) => {
               if (gpuEnabled) { gpuFlags.push('--gpus','all'); }
               else if (requireGpu) { console.error(chalk.red('[ERROR] ') + 'GPU is required but --no-gpt-enable-gpu given'); process.exit(1); }
               const cpuFlag = options.gptCpus ? ['--cpus', String(options.gptCpus)] : [];
+              // No memory limit by default; only set if user provides --gpt-memory
               const memFlag = options.gptMemory ? ['-m', String(options.gptMemory)] : [];
-              const shmFlag = options.gptShmSize ? ['--shm-size', String(options.gptShmSize)] : [];
+              // Default shared memory to 64g unless overridden by --gpt-shm-size
+              const shmFlag = ['--shm-size', String(options.gptShmSize || '64g')];
               const GPT_IMAGE = await resolveRaworcImage('gpt','raworc_gpt','raworc/raworc_gpt', tag);
               const args = ['run','-d',
                 '--name','raworc_gpt',
