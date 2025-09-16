@@ -772,7 +772,12 @@
                         </details>
                       {:else if m.content && m.content.trim()}
                         <div class="markdown-wrap">
-                          <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
+                          <div class="markdown-body">
+                            {#if channelBadge(m)}
+                              <div class="mb-1"><span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{channelBadge(m)}</span></div>
+                            {/if}
+                            {@html renderMarkdown(m.content)}
+                          </div>
                         </div>
                       {/if}
                     </div>

@@ -305,19 +305,44 @@ impl MessageHandler {
                 super::error::HostError::Model(format!("Failed to decode prompt: {}", e))
             })?;
 
+            // Log full Harmony-rendered request (prompt + params)
+            let request_id = format!("{}:{}", message.id, step + 1);
+            let gen_params = serde_json::json!({
+                "max_new_tokens": 1024,
+                "stop": ["<|end|>", "<|call|>", "<|return|>"]
+            });
+            tracing::info!(
+                target: "gpt",
+                request_id = %request_id,
+                params = %gen_params.to_string(),
+                prompt_len = prompt.len(),
+                "HARMONY_MODEL_REQUEST\n{}",
+                prompt
+            );
+
             let completion = self
                 .gpt_client
                 .generate(
                     &prompt,
-                    Some(serde_json::json!({ "max_new_tokens": 1024, "stop": ["<|end|>", "<|call|>", "<|return|>"] })),
+                    Some(gen_params.clone()),
                 )
                 .await
                 .map_err(|e| super::error::HostError::Model(format!("GPT server failed: {}", e)))?;
+
+            // Log full model response text
+            tracing::info!(
+                target: "gpt",
+                request_id = %request_id,
+                response_len = completion.len(),
+                "HARMONY_MODEL_RESPONSE\n{}",
+                completion
+            );
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
             let parsed = enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
                 .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
+            tracing::info!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
             let mut made_tool_call = false;
             for m in parsed.iter() {
@@ -470,19 +495,32 @@ impl MessageHandler {
         current: &Message,
         tool_messages: &[HMessage],
     ) -> Result<HConversation> {
-        // System content: set current date (channel config defaults are included by Harmony)
-        let system =
-            SystemContent::new().with_conversation_start_date(chrono::Utc::now().to_rfc3339());
+        // System content: require Harmony channels and set start date
+        let system = SystemContent::new()
+            .with_conversation_start_date(chrono::Utc::now().to_rfc3339())
+            .with_required_channels(["analysis", "commentary", "final"]);
 
-        // Developer tools + optional instructions
-        let mut dev =
-            DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
-        if let Ok(text) = tokio::fs::read_to_string("/agent/code/instructions.md").await {
+        // Developer tools + guidance
+        let mut dev = DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
+        let tool_guidance = r#"
+Use function tools to act.
+Channels:
+- analysis/commentary: internal thinking. Do not reveal this in final.
+- final: user-visible answer only.
+
+Tools:
+- Use functions.bash for shell commands (args: {"command": "..."}).
+- Use functions.text_editor for file edits (actions: view/create/str_replace/insert).
+
+Constraints:
+- Tool call content must be valid JSON per schema. No extra prose.
+- Prefer concise, accurate results in 'final' after tools complete.
+"#;
+        let merged_instructions = if let Ok(text) = tokio::fs::read_to_string("/agent/code/instructions.md").await {
             let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                dev = dev.with_instructions(trimmed.to_string());
-            }
-        }
+            if !trimmed.is_empty() { format!("{}\n\n{}", trimmed, tool_guidance) } else { tool_guidance.to_string() }
+        } else { tool_guidance.to_string() };
+        dev = dev.with_instructions(merged_instructions);
 
         let mut msgs: Vec<HMessage> = Vec::new();
         msgs.push(HMessage::from_role_and_content(HRole::System, system));
