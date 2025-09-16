@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.2.0-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -16,7 +16,8 @@ ENV PATH=/app/.venv/bin:$PATH
 
 # Pin library versions for stability; torch with CUDA must match base image
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir \
+    pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 \
+      torch==2.4.1 \
       fastapi==0.115.0 \
       uvicorn[standard]==0.30.6 \
       transformers==4.44.2 \
@@ -24,8 +25,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
       sentencepiece==0.2.0 \
       einops==0.8.0
 
-# Torch install: rely on base image CUDA runtime; user can layer in proper torch if needed
-# Avoid hard-pinning torch w/ CUDA here to keep image slim; document in README for prod
+# PyTorch is installed with CUDA 12.1 wheels. Run the container with `--gpus all`.
 
 # App files
 COPY gpt /app/gpt
