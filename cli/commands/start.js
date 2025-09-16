@@ -425,7 +425,6 @@ module.exports = (program) => {
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
-              const model = options.controllerGptModel || process.env.RAWORC_GPT_MODEL || options.gptModel || 'gpt-oss:120b';
               const args = ['run','-d',
                 '--name','raworc_controller',
                 '--network','raworc_network',
@@ -434,7 +433,6 @@ module.exports = (program) => {
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`RAWORC_GPT_URL=${RAWORC_GPT_URL}`,
-                '-e',`RAWORC_GPT_MODEL=${model}`,
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
