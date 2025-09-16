@@ -213,7 +213,7 @@ def generate(req: GenerateRequest):
     if "attention_mask" not in inputs:
         inputs["attention_mask"] = torch.ones_like(inputs["input_ids"]).to(model.device)
 
-    # Attempt 1: minimal generation
+    # Single-pass generation (no fallback)
     model.eval()
     t0 = time.perf_counter()
     try:
@@ -223,31 +223,11 @@ def generate(req: GenerateRequest):
                 attention_mask=inputs["attention_mask"],
                 max_new_tokens=(req.max_new_tokens or 128),
             )
-    except Exception as e1:
-        # Attempt 2: safe deterministic generation with eos/pad fallbacks
-        gen_kwargs = {
-            "max_new_tokens": (req.max_new_tokens or 128),
-            "do_sample": False,
-        }
-        if tok.eos_token_id is not None:
-            gen_kwargs["eos_token_id"] = tok.eos_token_id
-        if tok.pad_token_id is not None:
-            gen_kwargs["pad_token_id"] = tok.pad_token_id
-        elif tok.eos_token_id is not None:
-            gen_kwargs["pad_token_id"] = tok.eos_token_id
-        try:
-            with torch.inference_mode():
-                out = model.generate(
-                    input_ids=inputs["input_ids"],
-                    attention_mask=inputs["attention_mask"],
-                    **gen_kwargs,
-                )
-        except Exception as e2:
-            return JSONResponse(status_code=503, content={
-                "status": "error",
-                "error": f"generation failed: {e2}",
-                "hint": "If this persists, try reducing max_new_tokens or verify GPU memory",
-            })
+    except Exception as e:
+        return JSONResponse(status_code=503, content={
+            "status": "error",
+            "error": f"generation failed: {e}",
+        })
     gen_ms = (time.perf_counter() - t0) * 1000.0
 
     # Decode only newly generated tokens and preserve special tokens
