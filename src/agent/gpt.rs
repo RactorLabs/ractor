@@ -39,13 +39,53 @@ impl GptClient {
         // Repair a couple of common header glitches without altering content otherwise
         s = s.replace("<|assistant<|channel|>", "<|assistant|><|channel|>");
         s = s.replace("<|assistant<|message|>", "<|assistant|><|message|>");
-        // Map mistaken role tags like <|bash|> to proper assistant + recipient format
-        // Known tools
-        for tool in ["bash", "text_editor", "publish", "sleep"] {
-            let wrong = format!("<|{}|>", tool);
-            let fix = format!("<|assistant|><|recipient|>functions.{}", tool);
-            s = s.replace(&wrong, &fix);
+
+        // Helper to map a tool-ish role into a proper assistant+recipient pair
+        let mut map_role_token = |role: &str| -> Option<String> {
+            // Recognized non-tool roles that should remain untouched
+            match role {
+                "assistant" | "user" | "system" | "developer" | "tool" => return None,
+                _ => {}
+            }
+            // Normalize various tool name spellings
+            let mut name = role.trim();
+            if let Some(rest) = name.strip_prefix("functions.") {
+                name = rest;
+            }
+            if let Some(rest) = name.strip_prefix("tool.") {
+                name = rest;
+            }
+            // Map aliases
+            let mapped = match name {
+                "container.exec" => "bash",
+                other => other,
+            };
+            Some(format!(
+                "<|assistant|><|recipient|>functions.{}",
+                mapped
+            ))
+        };
+
+        // Replace obvious wrong role headers for common tools and their function.* variants
+        let candidates = [
+            "bash",
+            "text_editor",
+            "publish",
+            "sleep",
+            "container.exec",
+            "functions.bash",
+            "functions.text_editor",
+            "functions.publish",
+            "functions.sleep",
+            "functions.container.exec",
+        ];
+        for role in candidates.iter() {
+            let wrong = format!("<|{}|>", role);
+            if let Some(fix) = map_role_token(role) {
+                s = s.replace(&wrong, &fix);
+            }
         }
+
         s
     }
 
