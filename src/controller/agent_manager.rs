@@ -102,7 +102,7 @@ impl AgentManager {
         }
     }
 
-    // No external API key required for local Ollama
+    
 
     /// Process agents that need auto-closing due to timeout
     async fn process_auto_sleep(&self) -> Result<usize> {
