@@ -40,107 +40,61 @@ impl GptClient {
         s = s.replace("<|assistant<|channel|>", "<|assistant|><|channel|>");
         s = s.replace("<|assistant<|message|>", "<|assistant|><|message|>");
 
-        // Valid tags that should not be rewritten when seen inside <|...|>
-        const VALID_SIMPLE_TAGS: &[&str] = &[
-            "assistant",
-            "user",
-            "system",
-            "developer",
-            "tool",
-            "channel",
-            "recipient",
-            "message",
+        // Whitelist normalization only for known tool names and aliases.
+        // This avoids touching Harmony control tokens like <|end|>, <|call|>, <|return|>.
+        let tool_names = ["bash", "text_editor", "publish", "sleep", "container.exec"];
+        let function_names = [
+            "functions.bash",
+            "functions.text_editor",
+            "functions.publish",
+            "functions.sleep",
+            "functions.container.exec",
         ];
 
-        // Map alias names to canonical tool function names
-        fn map_alias(name: &str) -> String {
-            let n = name.trim();
-            let n = n.strip_prefix("functions.").unwrap_or(n);
-            let n = n.strip_prefix("tools.").unwrap_or(n);
-            let n = n.strip_prefix("tool.").unwrap_or(n);
-            match n {
-                "container.exec" => "bash".to_string(),
-                other => other.to_string(),
-            }
+        // 1) Mis-nested after assistant: <|assistant|><|bash|>
+        for name in tool_names.iter() {
+            let wrong = format!("<|assistant|><|{}|>", name);
+            let mapped = if *name == "container.exec" { "bash" } else { name };
+            let fix = format!("<|assistant|><|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
+        }
+        for fname in function_names.iter() {
+            let wrong = format!("<|assistant|><|{}|>", fname);
+            let val = fname.strip_prefix("functions.").unwrap_or(fname);
+            let mapped = if val == "container.exec" { "bash" } else { val };
+            let fix = format!("<|assistant|><|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
         }
 
-        // 1) Fix patterns like <|assistant|><|bash|> to <|assistant|><|recipient|>functions.bash
-        let mut fixed = String::with_capacity(s.len() + 32);
-        let mut i = 0usize;
-        let bytes = s.as_bytes();
-        while i < bytes.len() {
-            if bytes[i..].starts_with(b"<|assistant|><|") {
-                let start = i + "<|assistant|><|".len();
-                if let Some(end_rel) = s[start..].find("|>") {
-                    let end = start + end_rel;
-                    let token = &s[start..end];
-                    if !VALID_SIMPLE_TAGS.contains(&token) {
-                        let mapped = map_alias(token);
-                        fixed.push_str("<|assistant|><|recipient|>functions.");
-                        fixed.push_str(&mapped);
-                        i = end + 2; // skip |>
-                        continue;
-                    }
-                }
-            }
-            fixed.push(bytes[i] as char);
-            i += 1;
+        // 2) Standalone wrong role tags like <|bash|>
+        for name in tool_names.iter() {
+            let wrong = format!("<|{}|>", name);
+            let mapped = if *name == "container.exec" { "bash" } else { name };
+            let fix = format!("<|assistant|><|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
         }
-        s = fixed;
+        for fname in function_names.iter() {
+            let wrong = format!("<|{}|>", fname);
+            let val = fname.strip_prefix("functions.").unwrap_or(fname);
+            let mapped = if val == "container.exec" { "bash" } else { val };
+            let fix = format!("<|assistant|><|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
+        }
 
-        // 2) Fix standalone wrong role tags like <|bash|> → <|assistant|><|recipient|>functions.bash
-        let mut out = String::with_capacity(s.len() + 32);
-        let mut i2 = 0usize;
-        let b2 = s.as_bytes();
-        while i2 < b2.len() {
-            if b2[i2..].starts_with(b"<|") {
-                let start = i2 + 2; // after <|
-                if let Some(end_rel) = s[start..].find("|>") {
-                    let end = start + end_rel;
-                    let token = &s[start..end];
-                    if !VALID_SIMPLE_TAGS.contains(&token) {
-                        let mapped = map_alias(token);
-                        out.push_str("<|assistant|><|recipient|>functions.");
-                        out.push_str(&mapped);
-                        i2 = end + 2;
-                        continue;
-                    }
-                }
-            }
-            out.push(b2[i2] as char);
-            i2 += 1;
+        // 3) Bad recipient payloads like <|recipient|>bash
+        for name in tool_names.iter() {
+            let wrong = format!("<|recipient|>{}", name);
+            let mapped = if *name == "container.exec" { "bash" } else { name };
+            let fix = format!("<|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
         }
-        s = out;
-
-        // 3) Fix bad recipient payloads like <|recipient|>bash → <|recipient|>functions.bash
-        let mut out3 = String::with_capacity(s.len() + 16);
-        let mut j = 0usize;
-        let bj = s.as_bytes();
-        while j < bj.len() {
-            if bj[j..].starts_with(b"<|recipient|>") {
-                out3.push_str("<|recipient|>");
-                j += "<|recipient|>".len();
-                let start = j;
-                while j < bj.len() {
-                    let c = bj[j] as char;
-                    if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
-                        j += 1;
-                    } else {
-                        break;
-                    }
-                }
-                let token = &s[start..j];
-                if !token.is_empty() {
-                    let mapped = map_alias(token);
-                    out3.push_str("functions.");
-                    out3.push_str(&mapped);
-                    continue;
-                }
-            }
-            out3.push(bj[j] as char);
-            j += 1;
+        for fname in function_names.iter() {
+            let wrong = format!("<|recipient|>{}", fname);
+            let val = fname.strip_prefix("functions.").unwrap_or(fname);
+            let mapped = if val == "container.exec" { "bash" } else { val };
+            let fix = format!("<|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
         }
-        s = out3;
 
         s
     }

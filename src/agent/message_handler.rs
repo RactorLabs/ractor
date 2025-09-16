@@ -412,10 +412,7 @@ impl MessageHandler {
 
             let gen = self
                 .gpt_client
-                .generate(
-                    &prompt,
-                    Some(gen_params.clone()),
-                )
+                .generate(&prompt, Some(gen_params.clone()))
                 .await
                 .map_err(|e| super::error::HostError::Model(format!("GPT server failed: {}", e)))?;
             let completion = gen.text.clone();
@@ -438,20 +435,74 @@ impl MessageHandler {
                 );
             }
 
-            let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
-            let parsed = match enc
-                .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
-            {
-                Ok(p) => p,
-                Err(e) => {
-                    // Clean fix: rely on normalization to avoid malformed roles; if it still fails,
-                    // return a clear model error upward without trying to inject raw transcripts.
-                    return Err(super::error::HostError::Model(format!(
-                        "Harmony parse failed: {}",
-                        e
-                    )));
+            // Parse with a silent retry if the model emits malformed tool role tags
+            let mut parsed: Vec<openai_harmony::chat::Message> = Vec::new();
+            let mut parse_err: Option<String> = None;
+            let mut attempt: u32 = 0;
+            let max_attempts: u32 = 2; // initial + one retry
+            let mut completion_cur = completion.clone();
+            while attempt < max_attempts {
+                let tokens_cur = enc.tokenizer().encode_with_special_tokens(&completion_cur);
+                match enc.parse_messages_from_completion_tokens(tokens_cur, Some(HRole::Assistant)) {
+                    Ok(p) => {
+                        parsed = p;
+                        parse_err = None;
+                        break;
+                    }
+                    Err(e) => {
+                        parse_err = Some(format!("{}", e));
+                        if attempt + 1 >= max_attempts {
+                            break;
+                        }
+                        // Silent retry: regenerate once with stricter stop tokens to avoid bad role tags like <|bash|>
+                        tracing::warn!(
+                            target: "gpt",
+                            request_id = %request_id,
+                            error = %parse_err.as_ref().unwrap(),
+                            "HARMONY_PARSE_RETRY"
+                        );
+                        let mut gp_retry = serde_json::Map::new();
+                        gp_retry.insert(
+                            "stop".to_string(),
+                            serde_json::json!([
+                                "<|end|>",
+                                "<|call|>",
+                                "<|return|>",
+                                "<|bash|>",
+                                "<|text_editor|>",
+                                "<|publish|>",
+                                "<|sleep|>",
+                                "<|container.exec|>",
+                                "<|functions.bash|>",
+                                "<|functions.text_editor|>",
+                                "<|functions.publish|>",
+                                "<|functions.sleep|>",
+                                "<|functions.container.exec|>"
+                            ]),
+                        );
+                        if let Some(n) = max_new_env {
+                            gp_retry.insert("max_new_tokens".to_string(), serde_json::json!(n));
+                        }
+                        let gen_retry = self
+                            .gpt_client
+                            .generate(&prompt, Some(serde_json::Value::Object(gp_retry)))
+                            .await
+                            .map_err(|e| super::error::HostError::Model(format!(
+                                "GPT server failed (retry): {}",
+                                e
+                            )))?;
+                        completion_cur = gen_retry.text;
+                    }
                 }
-            };
+                attempt += 1;
+            }
+            if !parse_err.as_deref().unwrap_or("").is_empty() && parsed.is_empty() {
+                return Err(super::error::HostError::Model(format!(
+                    "Harmony parse failed: {}",
+                    parse_err.unwrap()
+                )));
+            }
+            let parsed = parsed;
             tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
             // First pass: commentary + tool_call only (no execution)
@@ -740,6 +791,10 @@ Publishing rules:
 Constraints:
 - Tool call content must be valid JSON per schema. No extra prose.
 - Prefer concise, accurate results in 'final' after tools complete.
+ 
+Avoid repeats and summarize artifacts:
+- Before repeating an operation (e.g., image generation, file creation, installs), check if the target artifact already exists and skip re-doing it unless requirements changed.
+- In your 'final', summarize concrete artifacts created/modified (paths, filenames, URLs) so later turns can rely on that, and avoid re-running completed steps.
 "#;
         let combined_instructions = format!("{}\n\n{}", legacy_prompt, tool_guidance);
         dev = dev.with_instructions(combined_instructions);
@@ -1055,21 +1110,22 @@ Constraints:
 
         while let Some(req_id) = req_order.pop_front() {
             if let Some(turn) = turns_by_req.get(&req_id) {
-                if let Some(txt) = &turn.final_text {
-                    msgs.push(HMessage {
-                        author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
-                        recipient: None,
-                        content: vec![HContent::from(txt.clone())],
-                        channel: Some("final".to_string()),
-                        content_type: None,
-                    });
-                }
+                // Push evidence (tool results) first, then the assistant final summary
                 for (tool, output) in &turn.tool_results {
                     msgs.push(HMessage {
                         author: HAuthor::new(HRole::Tool, tool.clone()),
                         recipient: None,
                         content: vec![HContent::from(output.clone())],
                         channel: None,
+                        content_type: None,
+                    });
+                }
+                if let Some(txt) = &turn.final_text {
+                    msgs.push(HMessage {
+                        author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
+                        recipient: None,
+                        content: vec![HContent::from(txt.clone())],
+                        channel: Some("final".to_string()),
                         content_type: None,
                     });
                 }
