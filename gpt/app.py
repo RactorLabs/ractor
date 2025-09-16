@@ -162,6 +162,23 @@ def ready():
         error=holder.last_error,
     )
 
+@app.on_event("startup")
+def enforce_quant_and_eager_load():
+    # Enforce MXFP4 at startup; if not available or OOM, exit to avoid running in a bad state
+    model_id = _default_model()
+    try:
+        holder.quant_enforced = True
+        holder.load(model_id)
+    except Exception as e:
+        # Print clear fatal error so container logs show why it exited
+        import sys
+        print(
+            f"FATAL: MXFP4 quantization is required and failed during startup for model {model_id}: {e}",
+            file=sys.stderr,
+        )
+        # Re-raise to make Uvicorn exit with non-zero status
+        raise
+
 
 @app.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
