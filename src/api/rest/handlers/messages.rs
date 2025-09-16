@@ -11,7 +11,7 @@ use crate::shared::models::constants::{
     AGENT_STATE_BUSY, AGENT_STATE_IDLE, AGENT_STATE_INIT, AGENT_STATE_SLEPT,
 };
 use crate::shared::models::{
-    AgentMessage, AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse,
+    message::UpdateMessageRequest, AgentMessage, AppState, CreateMessageRequest, ListMessagesQuery, MessageResponse,
 };
 
 pub async fn create_message(
@@ -207,4 +207,44 @@ pub async fn clear_messages(
         "deleted": deleted_count,
         "agent_name": agent_name
     })))
+}
+
+pub async fn update_message(
+    State(state): State<Arc<AppState>>,
+    Path((agent_name, message_id)): Path<(String, String)>,
+    Extension(_auth): Extension<AuthContext>,
+    Json(req): Json<UpdateMessageRequest>,
+) -> ApiResult<Json<MessageResponse>> {
+    // Verify agent exists
+    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+
+    // Verify message belongs to agent
+    let existing = AgentMessage::find_by_id(&state.db, &message_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?;
+    let existing = existing.ok_or_else(|| ApiError::NotFound("Message not found".to_string()))?;
+    if existing.agent_name != agent_name {
+        return Err(ApiError::BadRequest("Message does not belong to agent".to_string()));
+    }
+
+    let updated = AgentMessage::update_by_id(&state.db, &message_id, req)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update message: {}", e)))?;
+
+    Ok(Json(MessageResponse {
+        id: updated.id,
+        agent_name: updated.agent_name,
+        role: updated.role,
+        author_name: updated.author_name,
+        recipient: updated.recipient,
+        channel: updated.channel,
+        content: updated.content,
+        content_type: updated.content_type,
+        content_json: updated.content_json,
+        metadata: updated.metadata,
+        created_at: updated.created_at.to_rfc3339(),
+    }))
 }

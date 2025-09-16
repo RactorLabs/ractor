@@ -295,7 +295,7 @@ export function getApiDocs(base) {
     }
   }
 }` },
-      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent. Supports Harmony composite format when available.', params: [
+      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent. Supports Harmony composite format when available. Rows may include metadata.in_progress=true for steps being updated.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
@@ -314,6 +314,17 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/agents/{name}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages/count -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] },
+      { method: 'PUT', path: '/api/v0/agents/{name}/messages/{id}', auth: 'bearer', desc: 'Update a message (agent-only typical). Used to append tool results and mark in_progress=false. Fields are optional and only provided values are updated.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Message id' },
+        { in: 'body', name: 'content', type: 'string', required: false, desc: 'Updated content (e.g., final text)' },
+        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata; include { in_progress: false, step: N } to mark completion' },
+        { in: 'body', name: 'author_name', type: 'string|null', required: false, desc: 'Optional author name (clear with null)' },
+        { in: 'body', name: 'recipient', type: 'string|null', required: false, desc: 'Optional recipient (clear with null)' },
+        { in: 'body', name: 'channel', type: 'string|null', required: false, desc: 'Optional channel (clear with null)' },
+        { in: 'body', name: 'content_type', type: 'string|null', required: false, desc: 'Optional content type (clear with null)' },
+        { in: 'body', name: 'content_json', type: 'object|null', required: false, desc: 'Structured content; for Harmony, include { harmony: { request_id, segments } } (clear with null)' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name>/messages/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"content":"All set.","metadata":{"in_progress":false},"content_json":{"harmony":{"request_id":"<id>:2","segments":[{"type":"final","channel":"final","text":"All set."}]}}}'`, responses: [{ status: 200, body: `{"id":"uuid","agent_name":"demo","role":"agent","author_name":null,"recipient":null,"channel":"final","content":"All set.","content_type":null,"content_json":{...},"metadata":{},"created_at":"2025-01-01T12:00:00Z"}` }] },
       { method: 'DELETE', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s -X DELETE ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"deleted": 25, "agent_name": "demo"}` }] }

@@ -1,9 +1,25 @@
 use super::error::{HostError, Result};
 use reqwest::Client;
+use serde::Deserialize;
 
 pub struct GptClient {
     base_url: String,
     http: Client,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GenerateUsage {
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+    pub total_tokens: Option<i64>,
+    pub gen_ms: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct GenerateResult {
+    pub text: String,
+    #[serde(default)]
+    pub usage: Option<GenerateUsage>,
 }
 
 impl GptClient {
@@ -23,14 +39,23 @@ impl GptClient {
         // Repair a couple of common header glitches without altering content otherwise
         s = s.replace("<|assistant<|channel|>", "<|assistant|><|channel|>");
         s = s.replace("<|assistant<|message|>", "<|assistant|><|message|>");
+        // Map mistaken role tags like <|bash|> to proper assistant + recipient format
+        // Known tools
+        for tool in ["bash", "text_editor", "publish", "sleep"] {
+            let wrong = format!("<|{}|>", tool);
+            let fix = format!("<|assistant|><|recipient|>functions.{}", tool);
+            s = s.replace(&wrong, &fix);
+        }
         s
     }
+
+    
 
     pub async fn generate(
         &self,
         prompt: &str,
         params: Option<serde_json::Value>,
-    ) -> Result<String> {
+    ) -> Result<GenerateResult> {
         let url = format!("{}/generate", self.base_url);
         let mut body = serde_json::json!({ "prompt": prompt });
         if let Some(obj) = params {
@@ -58,15 +83,11 @@ impl GptClient {
                 status, text
             )));
         }
-        let v: serde_json::Value = resp
+        let mut v: GenerateResult = resp
             .json()
             .await
             .map_err(|e| HostError::Model(format!("Invalid JSON from GPT server: {}", e)))?;
-        let text = v
-            .get("text")
-            .and_then(|s| s.as_str())
-            .unwrap_or("")
-            .to_string();
-        Ok(Self::normalize_completion(&text))
+        v.text = Self::normalize_completion(&v.text);
+        Ok(v)
     }
 }

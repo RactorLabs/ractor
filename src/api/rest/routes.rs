@@ -92,6 +92,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/agents/{name}/messages",
             delete(handlers::messages::clear_messages),
         )
+        .route(
+            "/agents/{name}/messages/{id}",
+            put(handlers::messages::update_message),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

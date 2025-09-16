@@ -75,6 +75,11 @@
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
 
+  // UI: Show/hide model thinking text (analysis/commentary)
+  let showThinking = false; // default off
+  // UI: Show/hide context/token metrics
+  let showContextMetrics = false; // default off
+
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
     if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
@@ -275,6 +280,21 @@
   function segTool(s) { return String(s?.tool || ''); }
   function segArgs(s) { return (s && typeof s.args === 'object') ? s.args : null; }
   function segOutput(s) { return s?.output; }
+  function isInProgress(m) {
+    try {
+      const meta = metaOf(m);
+      return !!(meta && meta.in_progress === true);
+    } catch (_) { return false; }
+  }
+  function hasToolSegments(m) {
+    try {
+      const segs = segmentsOf(m);
+      return segs.some((s) => {
+        const t = segType(s);
+        return t === 'tool_call' || t === 'tool_result';
+      });
+    } catch (_) { return false; }
+  }
 
   // Build a human-friendly one-line summary for a tool call
   function segToolTitle(s) {
@@ -305,6 +325,20 @@
       }
       return v;
     } catch (_) { return null; }
+  }
+
+  // Token metrics helpers
+  function tmOf(m) {
+    try { return metaOf(m)?.token_metrics || null; } catch(_) { return null; }
+  }
+  function tmParts(m) {
+    const tm = tmOf(m); if (!tm) return null; return tm.parts || null;
+  }
+  function tmServer(m) {
+    const tm = tmOf(m); if (!tm) return null; return tm.server_usage || null;
+  }
+  function tmBudget(m) {
+    const tm = tmOf(m); if (!tm) return null; return tm.budget || null;
   }
 
   // Helper: detect a tool execution message
@@ -398,6 +432,27 @@
       const short = json.length > 80 ? json.slice(0, 77) + '…' : json;
       return `(${short})`;
     } catch (_) { return ''; }
+  }
+
+  // Tool output truncation helpers
+  const TOOL_OUTPUT_TRUNCATION = 15000; // ~15KB preview by default
+  let expandedOutputs = {};
+  function keyForSeg(m, j, suffix = '') {
+    const id = (m && m.id) ? String(m.id) : `${Math.random()}`;
+    return `${id}:${j}${suffix ? ':' + suffix : ''}`;
+  }
+  function isExpanded(key) { return !!expandedOutputs[key]; }
+  function toggleExpand(key) { expandedOutputs = { ...expandedOutputs, [key]: !expandedOutputs[key] } }
+  function normalizeOutput(v) {
+    try {
+      if (v == null) return '';
+      if (typeof v === 'string') return v;
+      return JSON.stringify(v);
+    } catch (_) { return String(v); }
+  }
+  function isLargeOutputStr(s) { try { return (s || '').length > TOOL_OUTPUT_TRUNCATION; } catch(_) { return false; } }
+  function previewOutputStr(s) {
+    try { return (s && s.length > TOOL_OUTPUT_TRUNCATION) ? (s.slice(0, TOOL_OUTPUT_TRUNCATION) + '\n…(truncated)') : (s || ''); } catch(_) { return String(s || ''); }
   }
 
   // Harmony thinking/commentary detection
@@ -766,13 +821,21 @@
     </div>
 
     <!-- Minimize/Maximize (expand/collapse) tool details row -->
-      <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
       <div class="small text-body me-2">
         Total messages: {Array.isArray(messages) ? messages.length : 0}
       </div>
       <div class="d-flex align-items-center gap-2">
         <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
         <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
+        <div class="form-check form-switch ms-1" title="Toggle display of thinking (analysis/commentary)">
+          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
+          <label class="form-check-label small" for="toggle-thinking">Show Thinking</label>
+        </div>
+        <div class="form-check form-switch ms-1" title="Toggle display of context/token metrics">
+          <input class="form-check-input" type="checkbox" id="toggle-context" bind:checked={showContextMetrics} />
+          <label class="form-check-label small" for="toggle-context">Show Context</label>
+        </div>
       </div>
     </div>
 
@@ -792,7 +855,7 @@
         {#if messages && messages.length}
           {#each messages as m, i}
             {#if m.role === 'user'}
-              <div class="d-flex mb-3 justify-content-end">
+              <div class="d-flex mb-2 justify-content-end">
                 <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
                   {m.content}
                 </div>
@@ -801,16 +864,33 @@
               <!-- Agent side -->
               {#if hasComposite(m)}
                 <!-- Harmony composite rendering: show commentary, tool calls/results, and final in one message -->
-                <div class="d-flex mb-3 justify-content-start">
+                <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-3' : 'mb-2')}>
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                    {#if showContextMetrics && tmOf(m)}
+                      <div class="small text-body text-opacity-50 mb-1">
+                        {#if tmParts(m)}
+                          Context: {tmOf(m).prompt_tokens || '?'}
+                          {#if tmBudget(m)}
+                            / {tmBudget(m).max_tokens || '?'} tokens
+                            <span class="text-body-secondary">(reserve {tmBudget(m).completion_margin || 0})</span>
+                          {:else}
+                            tokens
+                          {/if}
+                          <span class="text-body-secondary">(sys/dev {tmParts(m).system_dev || 0}, hist {tmParts(m).history || 0}, tools {tmParts(m).tools || 0}, user {tmParts(m).user || 0})</span>
+                        {:else}
+                          Context: {tmOf(m).prompt_tokens || '?'}
+                          {#if tmBudget(m)} / {tmBudget(m).max_tokens || '?'} tokens{/if}
+                        {/if}
+                        {#if tmServer(m)}
+                          <span class="ms-2">• completion {tmServer(m).completion_tokens ?? '?'} tokens</span>
+                        {/if}
+                      </div>
+                    {/if}
                     {#each segmentsOf(m) as s, j}
                       {#if segType(s) === 'commentary' || segChannel(s).toLowerCase() === 'analysis' || segChannel(s).toLowerCase() === 'commentary'}
-                        <details class="mt-1 mb-2">
-                          <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            <span class="badge text-bg-warning-subtle border me-2">Thinking</span>
-                          </summary>
-                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{segText(s)}</div>
-                        </details>
+                        {#if showThinking}
+                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {/if}
                       {:else if segType(s) === 'tool_call'}
                         {#if (segmentsOf(m)[j+1] && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s))}
                           <!-- Combined Tool box: call + result -->
@@ -823,8 +903,21 @@
                               <div class="small text-body">
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
                                 <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s) || 'tool', args: segArgs(s) ?? null }, null, 2)}</code></pre>
-                                <div class="text-body text-opacity-75 mb-1">Result</div>
-                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
+                                <div class="text-body text-opacity-75 mb-1 d-flex align-items-center gap-2">
+                                  <span>Result</span>
+                                  {#if isLargeOutputStr(normalizeOutput(segOutput(segmentsOf(m)[j+1])))}
+                                    {#key keyForSeg(m, j, 'res')}
+                                      <button type="button" class="btn btn-link btn-sm p-0" on:click={() => toggleExpand(keyForSeg(m, j, 'res'))}>
+                                        {isExpanded(keyForSeg(m, j, 'res')) ? 'Hide full' : 'View full'}
+                                      </button>
+                                    {/key}
+                                  {/if}
+                                </div>
+                                {#if isExpanded(keyForSeg(m, j, 'res'))}
+                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: normalizeOutput(segOutput(segmentsOf(m)[j+1])) }, null, 2)}</code></pre>
+                                {:else}
+                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: previewOutputStr(normalizeOutput(segOutput(segmentsOf(m)[j+1]))) }, null, 2)}</code></pre>
+                                {/if}
                               </div>
                             </details>
                           </div>
@@ -849,7 +942,18 @@
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
                                 Result
                               </summary>
-                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s) || 'tool', output: segOutput(s) }, null, 2)}</code></pre>
+                              {#if isLargeOutputStr(normalizeOutput(segOutput(s)))}
+                                {#key keyForSeg(m, j, 'orphan')}
+                                  <button type="button" class="btn btn-link btn-sm p-0" on:click={() => toggleExpand(keyForSeg(m, j, 'orphan'))}>
+                                    {isExpanded(keyForSeg(m, j, 'orphan')) ? 'Hide full' : 'View full'}
+                                  </button>
+                                {/key}
+                              {/if}
+                              {#if isExpanded(keyForSeg(m, j, 'orphan'))}
+                                <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s) || 'tool', output: normalizeOutput(segOutput(s)) }, null, 2)}</code></pre>
+                              {:else}
+                                <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s) || 'tool', output: previewOutputStr(normalizeOutput(segOutput(s))) }, null, 2)}</code></pre>
+                              {/if}
                             </details>
                           </div>
                         {/if}
@@ -863,11 +967,17 @@
                         {/if}
                       {/if}
                     {/each}
+                    {#if isInProgress(m)}
+                      <div class="small text-body-secondary mt-1 d-flex align-items-center gap-2">
+                        <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
+                        <span>Processing…</span>
+                      </div>
+                    {/if}
                   </div>
                 </div>
               {:else if isToolExec(m)}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
-                <div class="d-flex mb-2 justify-content-start">
+                <div class="d-flex mb-3 justify-content-start">
                   <details class="mt-0">
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                       <span class="badge text-bg-primary me-2">Tool Call</span>
@@ -881,26 +991,34 @@
                 <!-- Tool response card or regular agent message -->
                 {#if isToolResult(m)}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
-                  <div class="d-flex mb-2 justify-content-start">
+                  <div class="d-flex mb-3 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                         <span class="badge text-bg-success me-2">Tool Result</span>
                         <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
                         {argsPreview(m)}
                       </summary>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: toolArgs(m) ?? null, output: m.content }, null, 2)}</code></pre>
+                      {#if isLargeOutputStr(normalizeOutput(m.content))}
+                        {#key `legacy:${m.id || i}`}
+                          <button type="button" class="btn btn-link btn-sm p-0 ms-2" on:click={() => toggleExpand(`legacy:${m.id || i}`)}>
+                            {isExpanded(`legacy:${m.id || i}`) ? 'Hide full' : 'View full'}
+                          </button>
+                        {/key}
+                      {/if}
+                      {#if isExpanded(`legacy:${m.id || i}`)}
+                        <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: toolArgs(m) ?? null, output: normalizeOutput(m.content) }, null, 2)}</code></pre>
+                      {:else}
+                        <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: toolArgs(m) ?? null, output: previewOutputStr(normalizeOutput(m.content)) }, null, 2)}</code></pre>
+                      {/if}
                     </details>
                   </div>
                 {:else}
-                  <div class="d-flex mb-3 justify-content-start">
+                  <div class="d-flex mb-2 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if isThinking(m)}
-                        <details class="mt-1 mb-2">
-                          <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            <span class="badge text-bg-warning-subtle border me-2">Thinking</span>
-                          </summary>
-                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{m.content}</div>
-                        </details>
+                        {#if showThinking}
+                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{m.content}</div>
+                        {/if}
                       {:else if m.content && m.content.trim()}
                         <div class="markdown-wrap">
                           <div class="markdown-body">

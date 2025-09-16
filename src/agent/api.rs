@@ -44,6 +44,24 @@ pub struct CreateMessageRequest {
     pub content_json: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Serialize)]
+pub struct UpdateMessageRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_name: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recipient: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<Option<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_json: Option<Option<serde_json::Value>>,
+}
+
 // Import constants from shared models
 
 #[derive(Debug, Clone, Deserialize)]
@@ -499,6 +517,35 @@ impl RaworcClient {
                     "Failed to send message ({}): {}",
                     status, error_text
                 )))
+            }
+        }
+    }
+
+    /// Update an existing message by id (PATCH)
+    pub async fn update_message(
+        &self,
+        message_id: &str,
+        req: UpdateMessageRequest,
+    ) -> Result<Message> {
+        let url = format!(
+            "{}/api/v0/agents/{}/messages/{}",
+            self.config.api_url, self.config.agent_name, message_id
+        );
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&req)
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK => {
+                let message = response.json::<Message>().await?;
+                Ok(message)
+            }
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to update message ({}): {}", status, error_text)))
             }
         }
     }

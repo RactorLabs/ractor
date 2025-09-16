@@ -295,9 +295,44 @@ impl MessageHandler {
         let mut step: u32 = 0;
         loop {
             step += 1;
-            let convo = self
-                .build_harmony_conversation(&enc, message, &tool_messages)
+            // Build full message vector to allow token accounting by parts
+            let msgs_full = self
+                .build_harmony_messages(&enc, message, &tool_messages)
                 .await?;
+
+            // Token accounting by parts (system+dev, history, tools, user)
+            let (mut sys_dev_end, mut hist_end, mut tools_end) = (0usize, 0usize, 0usize);
+            // Identify boundaries consistent with build_harmony_messages
+            // indexes: [0]=system, [1]=developer, [2..hist_end)=history, [hist_end..tools_end)=tool msgs, last=user
+            sys_dev_end = 2.min(msgs_full.len());
+            // Find start index of tool_messages by scanning from the end: last is user
+            // We don't store explicit counts, but we can derive by removing last (user) and subtracting current tool_messages length
+            let user_index = msgs_full.len().saturating_sub(1);
+            // History spans from sys_dev_end up to (user_index - tool_messages.len())
+            let tool_count = tool_messages.len();
+            tools_end = user_index;
+            hist_end = tools_end.saturating_sub(tool_count);
+
+            // Helper to render token count
+            let mut render_tokens = |slice: &[HMessage]| -> Result<usize> {
+                let convo = HConversation::from_messages(slice.to_vec());
+                let v = enc
+                    .render_conversation_for_completion(&convo, HRole::Assistant, None)
+                    .map_err(|e| super::error::HostError::Model(format!("Failed to render conversation: {}", e)))?;
+                Ok(v.len())
+            };
+
+            // Compute token counts
+            let tokens_sysdev = render_tokens(&msgs_full[..sys_dev_end])?;
+            let tokens_sysdev_hist = render_tokens(&msgs_full[..hist_end])?;
+            let tokens_sysdev_hist_tools = render_tokens(&msgs_full[..tools_end])?;
+            let tokens_all = render_tokens(&msgs_full[..])?;
+            let tokens_history = tokens_sysdev_hist.saturating_sub(tokens_sysdev);
+            let tokens_tools = tokens_sysdev_hist_tools.saturating_sub(tokens_sysdev_hist);
+            let tokens_user = tokens_all.saturating_sub(tokens_sysdev_hist_tools);
+
+            // Render full prompt for logging and server
+            let convo = HConversation::from_messages(msgs_full.clone());
             let tokens = enc
                 .render_conversation_for_completion(&convo, HRole::Assistant, None)
                 .map_err(|e| {
@@ -354,7 +389,7 @@ impl MessageHandler {
                 );
             }
 
-            let completion = self
+            let gen = self
                 .gpt_client
                 .generate(
                     &prompt,
@@ -362,6 +397,7 @@ impl MessageHandler {
                 )
                 .await
                 .map_err(|e| super::error::HostError::Model(format!("GPT server failed: {}", e)))?;
+            let completion = gen.text.clone();
 
             // Log model response text (full only if enabled)
             if log_full {
@@ -387,68 +423,33 @@ impl MessageHandler {
                 .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
             tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
-            // Aggregate Harmony segments in original order for a single composite DB row
-            let mut segments: Vec<serde_json::Value> = Vec::new();
-            let mut final_msg: Option<(String, String)> = None; // (channel, text)
+            // First pass: commentary + tool_call only (no execution)
+            let mut segments_pre: Vec<serde_json::Value> = Vec::new();
+            let mut tool_execs: Vec<(String, serde_json::Value)> = Vec::new();
+            let mut final_msg: Option<(String, String)> = None;
 
             for m in parsed.iter() {
                 if m.author.role != HRole::Assistant { continue; }
 
-                // Tool call encountered
                 if let Some(recipient) = m.recipient.as_deref() {
                     if let Some(tool_name) = recipient.strip_prefix("functions.") {
                         let args_text = Self::first_text(&m.content).unwrap_or("");
                         let args_json: serde_json::Value = serde_json::from_str(args_text).unwrap_or_else(|_| serde_json::json!({}));
-
-                        // Add tool_call segment in-order
-                        segments.push(serde_json::json!({
+                        segments_pre.push(serde_json::json!({
                             "type": "tool_call",
                             "tool": tool_name,
-                            "args": args_json.clone(),
+                            "args": args_json,
                         }));
-
-                        // Execute tool immediately and add tool_result segment
-                        let result = match self.tool_registry.execute_tool(tool_name, &args_json).await {
-                            Ok(r) => r,
-                            Err(e) => format!("[error] {}", e),
-                        };
-
-                        segments.push(serde_json::json!({
-                            "type": "tool_result",
-                            "tool": tool_name,
-                            "args": args_json.clone(),
-                            "output": result,
-                        }));
-
-                        // For idempotent management tools, finalize the turn after success
-                        if final_msg.is_none() {
-                            if tool_name == "publish" {
-                                let text = "Publish completed.".to_string();
-                                final_msg = Some(("final".to_string(), text));
-                            } else if tool_name == "sleep" {
-                                let text = "Agent is going to sleep.".to_string();
-                                final_msg = Some(("final".to_string(), text));
-                            }
-                        }
-
-                        // Feed Harmony for the next step
-                        tool_messages.push(HMessage {
-                            author: HAuthor::new(HRole::Tool, tool_name.to_string()),
-                            recipient: None,
-                            content: vec![HContent::from(result)],
-                            channel: None,
-                            content_type: None,
-                        });
+                        tool_execs.push((tool_name.to_string(), args_json));
                         continue;
                     }
                 }
 
-                // Commentary/analysis channel
                 if let Some(ch) = m.channel.as_deref() {
                     if ch == "analysis" || ch == "commentary" {
                         if let Some(text) = Self::first_text(&m.content) {
                             let sanitized = self.guardrails.validate_output(text)?;
-                            segments.push(serde_json::json!({
+                            segments_pre.push(serde_json::json!({
                                 "type": "commentary",
                                 "channel": ch,
                                 "text": sanitized,
@@ -458,7 +459,6 @@ impl MessageHandler {
                     }
                 }
 
-                // Potential final text (first non-tool/non-commentary assistant text)
                 if final_msg.is_none() {
                     if let Some(text) = Self::first_text(&m.content) {
                         let ch = m.channel.clone().unwrap_or_else(|| "final".to_string());
@@ -467,58 +467,175 @@ impl MessageHandler {
                 }
             }
 
-            // Tools and commentary were already aggregated in-order during parsing loop
+            // Create in-progress message with pre-segments
+            let mut created_message_id: Option<String> = None;
+            if !segments_pre.is_empty() || final_msg.is_some() {
+                let mut tm = serde_json::json!({
+                    "prompt_tokens": tokens.len(),
+                    "prompt_bytes": prompt.len(),
+                    "parts": {
+                        "system_dev": tokens_sysdev,
+                        "history": tokens_history,
+                        "tools": tokens_tools,
+                        "user": tokens_user
+                    }
+                });
+                // Budget info (for UI)
+                let max_ctx: usize = std::env::var("RAWORC_MAX_CONTEXT_TOKENS").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(8192);
+                let reserve: usize = std::env::var("RAWORC_COMPLETION_MARGIN").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1024);
+                tm["budget"] = serde_json::json!({ "max_tokens": max_ctx, "completion_margin": reserve });
+                if let Some(u) = gen.usage.as_ref() {
+                    tm["server_usage"] = serde_json::json!({
+                        "prompt_tokens": u.prompt_tokens,
+                        "completion_tokens": u.completion_tokens,
+                        "total_tokens": u.total_tokens,
+                        "gen_ms": u.gen_ms
+                    });
+                }
+                let meta = serde_json::json!({
+                    "type": "model_response_step",
+                    "model": "gpt-oss",
+                    "step": step,
+                    "has_final": false,
+                    "in_progress": true,
+                    "token_metrics": tm,
+                });
+                let content_json_pre = serde_json::json!({ "harmony": { "request_id": request_id, "segments": segments_pre } });
+                let created = self
+                    .api_client
+                    .send_message_structured(
+                        super::api::MessageRole::Agent,
+                        "".to_string(),
+                        Some(meta),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(content_json_pre),
+                    )
+                    .await?;
+                created_message_id = Some(created.id.clone());
+            }
 
-            // 3) Post this loop step as its own message (per-step composite)
-            // Add final segment if present so the step captures it
+            // Execute tools and append results
+            let mut segments_all = segments_pre.clone();
+            for (tool_name, args_json) in tool_execs.into_iter() {
+                let result = match self.tool_registry.execute_tool(&tool_name, &args_json).await {
+                    Ok(r) => r,
+                    Err(e) => format!("[error] {}", e),
+                };
+                segments_all.push(serde_json::json!({
+                    "type": "tool_result",
+                    "tool": tool_name,
+                    "args": args_json,
+                    "output": result,
+                }));
+                tool_messages.push(HMessage {
+                    author: HAuthor::new(HRole::Tool, tool_name.to_string()),
+                    recipient: None,
+                    content: vec![HContent::from(result)],
+                    channel: None,
+                    content_type: None,
+                });
+            }
+
+            // Auto-finalize publish/sleep
+            if final_msg.is_none() {
+                if segments_all.iter().any(|s| s.get("type").and_then(|v| v.as_str()) == Some("tool_result") && s.get("tool").and_then(|v| v.as_str()) == Some("publish")) {
+                    final_msg = Some(("final".to_string(), "Publish completed.".to_string()));
+                } else if segments_all.iter().any(|s| s.get("type").and_then(|v| v.as_str()) == Some("tool_result") && s.get("tool").and_then(|v| v.as_str()) == Some("sleep")) {
+                    final_msg = Some(("final".to_string(), "Agent is going to sleep.".to_string()));
+                }
+            }
+
             let mut content_str = String::new();
             let mut channel_for_row: Option<String> = None;
             if let Some((ch, text)) = final_msg {
                 let sanitized = self.guardrails.validate_output(&text)?;
-                segments.push(serde_json::json!({
-                    "type": "final",
-                    "channel": ch,
-                    "text": sanitized,
-                }));
+                segments_all.push(serde_json::json!({ "type": "final", "channel": ch, "text": sanitized }));
                 content_str = sanitized;
                 channel_for_row = Some(ch);
             }
 
-            if !segments.is_empty() {
+            // Update created message with results/final
+            if let Some(msg_id) = created_message_id.as_ref() {
+                let mut tm = serde_json::json!({
+                    "prompt_tokens": tokens.len(),
+                    "prompt_bytes": prompt.len(),
+                    "parts": {
+                        "system_dev": tokens_sysdev,
+                        "history": tokens_history,
+                        "tools": tokens_tools,
+                        "user": tokens_user
+                    }
+                });
+                // Budget info (for UI)
+                let max_ctx: usize = std::env::var("RAWORC_MAX_CONTEXT_TOKENS").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(8192);
+                let reserve: usize = std::env::var("RAWORC_COMPLETION_MARGIN").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1024);
+                tm["budget"] = serde_json::json!({ "max_tokens": max_ctx, "completion_margin": reserve });
+                if let Some(u) = gen.usage.as_ref() {
+                    tm["server_usage"] = serde_json::json!({
+                        "prompt_tokens": u.prompt_tokens,
+                        "completion_tokens": u.completion_tokens,
+                        "total_tokens": u.total_tokens,
+                        "gen_ms": u.gen_ms
+                    });
+                }
                 let meta = serde_json::json!({
                     "type": "model_response_step",
                     "model": "gpt-oss",
                     "step": step,
                     "has_final": channel_for_row.is_some(),
+                    "in_progress": false,
+                    "token_metrics": tm,
+                });
+                let content_json_all = serde_json::json!({ "harmony": { "request_id": request_id, "segments": segments_all } });
+                let update_req = super::api::UpdateMessageRequest {
+                    content: Some(content_str.clone()),
+                    metadata: Some(meta),
+                    author_name: None,
+                    recipient: None,
+                    channel: Some(channel_for_row.clone()),
+                    content_type: None,
+                    content_json: Some(Some(content_json_all)),
+                };
+                let _ = self.api_client.update_message(&msg_id, update_req).await;
+            }
+
+            // If final was present and no more tools to run, finish
+            if channel_for_row.is_some() && tool_messages.is_empty() {
+                return Ok(());
+            }
+
+            // If we executed tools or appended results, update the previously created message with results/final
+            if let Some(msg_id) = created_message_id.as_ref() {
+                let mut meta = serde_json::json!({
+                    "type": "model_response_step",
+                    "model": "gpt-oss",
+                    "step": step,
+                    "has_final": channel_for_row.is_some(),
+                    "in_progress": false,
                 });
                 let content_json = serde_json::json!({
                     "harmony": {
                         "request_id": request_id,
-                        "segments": segments,
+                        "segments": segments_all,
                     }
                 });
-                self
-                    .api_client
-                    .send_message_structured(
-                        super::api::MessageRole::Agent,
-                        content_str,
-                        Some(meta),
-                        None,
-                        None,
-                        channel_for_row.clone(),
-                        None,
-                        Some(content_json),
-                    )
-                    .await?;
+                let update_req = super::api::UpdateMessageRequest {
+                    content: Some(content_str.clone()),
+                    metadata: Some(meta),
+                    author_name: None,
+                    recipient: None,
+                    channel: Some(channel_for_row.clone()),
+                    content_type: None,
+                    content_json: Some(Some(content_json)),
+                };
+                let _ = self.api_client.update_message(&msg_id, update_req).await;
             }
 
-            // Stop if final was present in this step
-            if channel_for_row.is_some() {
-                return Ok(());
-            }
-
-            // If we executed tools but no final yet, continue the loop for next step
-            if !tool_messages.is_empty() {
+            // If tools were executed and no final yet, continue the loop
+            if !tool_messages.is_empty() && channel_for_row.is_none() {
                 info!("Harmony loop step {} completed; continuing", step);
                 continue;
             }
@@ -582,21 +699,136 @@ Constraints:
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(40);
         let history = self.api_client.get_messages(Some(hist_limit), None).await?;
+
+        // Reconstruct conversation using Harmony composite segments when available.
+        // - For prior agent turns: include only the final text (as assistant, channel "final")
+        //   and each tool_result (as role=tool, author=name=tool, content=output).
+        // - Skip analysis/commentary.
+        // - Ignore in-progress rows and prefer the latest row per request_id.
+        use std::collections::{HashMap, VecDeque};
+        #[derive(Default, Clone)]
+        struct Turn {
+            final_text: Option<String>,
+            tool_results: Vec<(String, String)>, // (tool, output)
+        }
+
+        // Maintain insertion order of request_ids
+        let mut req_order: VecDeque<String> = VecDeque::new();
+        let mut turns_by_req: HashMap<String, Turn> = HashMap::new();
+
         for m in history.iter().filter(|m| m.id != current.id) {
             match m.role {
-                MessageRole::User => msgs.push(HMessage::from_role_and_content(HRole::User, m.content.clone())),
+                MessageRole::User => {
+                    msgs.push(HMessage::from_role_and_content(
+                        HRole::User,
+                        m.content.clone(),
+                    ));
+                }
                 MessageRole::Agent => {
-                    // Prefer treating prior agent messages as final-channel assistant messages
-                    // This avoids leaking prior analysis/commentary and keeps history concise.
+                    // Check metadata.in_progress flag; if true, skip this row
+                    let mut in_progress = false;
+                    if let Some(meta) = &m.metadata {
+                        if let Some(b) = meta.get("in_progress").and_then(|v| v.as_bool()) {
+                            in_progress = b;
+                        }
+                    }
+                    if in_progress {
+                        continue;
+                    }
+
+                    // Parse Harmony segments if present
+                    let (mut req_id_opt, mut turn) = (None::<String>, Turn::default());
+                    if let Some(cj) = &m.content_json {
+                        let req_id = cj
+                            .get("harmony")
+                            .and_then(|h| h.get("request_id"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if let Some(segs) = cj
+                            .get("harmony")
+                            .and_then(|h| h.get("segments"))
+                            .and_then(|v| v.as_array())
+                        {
+                            // Collect last final text and all tool_results
+                            for seg in segs {
+                                let t = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                match t {
+                                    "final" => {
+                                        if let Some(txt) = seg.get("text").and_then(|v| v.as_str()) {
+                                            turn.final_text = Some(txt.to_string());
+                                        }
+                                    }
+                                    "tool_result" => {
+                                        let tool = seg
+                                            .get("tool")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        // Output can be string or object; stringify if not string
+                                        let output_val = seg.get("output");
+                                        let output = match output_val {
+                                            Some(serde_json::Value::String(s)) => s.clone(),
+                                            Some(v) => match serde_json::to_string(v) {
+                                                Ok(s) => s,
+                                                Err(_) => String::new(),
+                                            },
+                                            None => String::new(),
+                                        };
+                                        if !tool.is_empty() {
+                                            turn.tool_results.push((tool, output));
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        req_id_opt = req_id;
+                    }
+
+                    if let Some(req_id) = req_id_opt {
+                        // Prefer the latest row per request_id; replace if already present
+                        if !req_order.contains(&req_id) {
+                            req_order.push_back(req_id.clone());
+                        }
+                        turns_by_req.insert(req_id, turn);
+                    } else {
+                        // Legacy or non-Harmony row: treat entire content as assistant final
+                        msgs.push(HMessage {
+                            author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
+                            recipient: None,
+                            content: vec![HContent::from(m.content.clone())],
+                            channel: Some("final".to_string()),
+                            content_type: None,
+                        });
+                    }
+                }
+                MessageRole::System => {}
+            }
+        }
+
+        // Emit reconstructed agent turns in original order
+        while let Some(req_id) = req_order.pop_front() {
+            if let Some(turn) = turns_by_req.get(&req_id) {
+                // First, the assistant final (if any)
+                if let Some(txt) = &turn.final_text {
                     msgs.push(HMessage {
                         author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
                         recipient: None,
-                        content: vec![HContent::from(m.content.clone())],
+                        content: vec![HContent::from(txt.clone())],
                         channel: Some("final".to_string()),
                         content_type: None,
                     });
                 }
-                MessageRole::System => {}
+                // Then each tool result as a tool message
+                for (tool, output) in &turn.tool_results {
+                    msgs.push(HMessage {
+                        author: HAuthor::new(HRole::Tool, tool.clone()),
+                        recipient: None,
+                        content: vec![HContent::from(output.clone())],
+                        channel: None,
+                        content_type: None,
+                    });
+                }
             }
         }
 
@@ -608,6 +840,226 @@ Constraints:
         Ok(HConversation::from_messages(msgs))
     }
 
+    async fn build_harmony_messages(
+        &self,
+        enc: &openai_harmony::HarmonyEncoding,
+        current: &Message,
+        tool_messages: &[HMessage],
+    ) -> Result<Vec<HMessage>> {
+        // System content: require Harmony channels and set start date
+        let system = SystemContent::new()
+            .with_conversation_start_date(chrono::Utc::now().to_rfc3339())
+            .with_required_channels(["analysis", "commentary", "final"]);
+
+        // Developer tools + guidance: combine legacy 0.7.7 prompt with the newer Harmony guidance
+        let mut dev = DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
+        let legacy_prompt = self.build_legacy_system_prompt().await;
+        let tool_guidance = r#"
+Use function tools to act.
+Channels:
+- analysis/commentary: internal thinking. Do not reveal this in final.
+- final: user-visible answer only.
+
+Tools:
+- Use functions.bash for shell commands (args: {"command": "..."}).
+- Use functions.text_editor for file edits (actions: view/create/str_replace/insert).
+
+File editing guidance:
+- When creating a new file, prefer a single create call with the full content in one go.
+- Avoid issuing many incremental insert/replace calls to build a new file; write the complete HTML content in the create call.
+- Use relative paths only (no leading '/'); paths are rooted at /agent.
+- Only use insert/str_replace for targeted updates to existing files.
+- Do not call view before create when creating a brand new file unless verifying it already exists.
+
+Constraints:
+- Tool call content must be valid JSON per schema. No extra prose.
+- Prefer concise, accurate results in 'final' after tools complete.
+"#;
+        let combined_instructions = format!("{}\n\n{}", legacy_prompt, tool_guidance);
+        dev = dev.with_instructions(combined_instructions);
+
+        let mut msgs: Vec<HMessage> = Vec::new();
+        msgs.push(HMessage::from_role_and_content(HRole::System, system));
+        msgs.push(HMessage::from_role_and_content(HRole::Developer, dev));
+
+        // Use a bounded history window to keep prompt size manageable (override via RAWORC_HISTORY_LIMIT)
+        let hist_limit: u32 = std::env::var("RAWORC_HISTORY_LIMIT")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(40);
+        let history = self.api_client.get_messages(Some(hist_limit), None).await?;
+
+        // Reconstruct conversation using Harmony composite segments when available.
+        use std::collections::{HashMap, VecDeque};
+        #[derive(Default, Clone)]
+        struct Turn {
+            final_text: Option<String>,
+            tool_results: Vec<(String, String)>, // (tool, output)
+        }
+        let mut req_order: VecDeque<String> = VecDeque::new();
+        let mut turns_by_req: HashMap<String, Turn> = HashMap::new();
+
+        for m in history.iter().filter(|m| m.id != current.id) {
+            match m.role {
+                MessageRole::User => {
+                    msgs.push(HMessage::from_role_and_content(
+                        HRole::User,
+                        m.content.clone(),
+                    ));
+                }
+                MessageRole::Agent => {
+                    let mut in_progress = false;
+                    if let Some(meta) = &m.metadata {
+                        if let Some(b) = meta.get("in_progress").and_then(|v| v.as_bool()) {
+                            in_progress = b;
+                        }
+                    }
+                    if in_progress { continue; }
+
+                    let (mut req_id_opt, mut turn) = (None::<String>, Turn::default());
+                    if let Some(cj) = &m.content_json {
+                        let req_id = cj
+                            .get("harmony")
+                            .and_then(|h| h.get("request_id"))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        if let Some(segs) = cj
+                            .get("harmony")
+                            .and_then(|h| h.get("segments"))
+                            .and_then(|v| v.as_array())
+                        {
+                            for seg in segs {
+                                let t = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                match t {
+                                    "final" => {
+                                        if let Some(txt) = seg.get("text").and_then(|v| v.as_str()) {
+                                            turn.final_text = Some(txt.to_string());
+                                        }
+                                    }
+                                    "tool_result" => {
+                                        let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        let output_val = seg.get("output");
+                                        let output = match output_val {
+                                            Some(serde_json::Value::String(s)) => s.clone(),
+                                            Some(v) => match serde_json::to_string(v) { Ok(s) => s, Err(_) => String::new() },
+                                            None => String::new(),
+                                        };
+                                        if !tool.is_empty() { turn.tool_results.push((tool, output)); }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        req_id_opt = req_id;
+                    }
+
+                    if let Some(req_id) = req_id_opt {
+                        if !req_order.contains(&req_id) { req_order.push_back(req_id.clone()); }
+                        turns_by_req.insert(req_id, turn);
+                    } else {
+                        msgs.push(HMessage {
+                            author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
+                            recipient: None,
+                            content: vec![HContent::from(m.content.clone())],
+                            channel: Some("final".to_string()),
+                            content_type: None,
+                        });
+                    }
+                }
+                MessageRole::System => {}
+            }
+        }
+
+        while let Some(req_id) = req_order.pop_front() {
+            if let Some(turn) = turns_by_req.get(&req_id) {
+                if let Some(txt) = &turn.final_text {
+                    msgs.push(HMessage {
+                        author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
+                        recipient: None,
+                        content: vec![HContent::from(txt.clone())],
+                        channel: Some("final".to_string()),
+                        content_type: None,
+                    });
+                }
+                for (tool, output) in &turn.tool_results {
+                    msgs.push(HMessage {
+                        author: HAuthor::new(HRole::Tool, tool.clone()),
+                        recipient: None,
+                        content: vec![HContent::from(output.clone())],
+                        channel: None,
+                        content_type: None,
+                    });
+                }
+            }
+        }
+
+        // At this point msgs = [system, developer, ...history...] in chronological order
+        let history_len = if msgs.len() > 2 { msgs.len() - 2 } else { 0 };
+        let mut prefix: Vec<HMessage> = Vec::new();
+        let mut history_msgs: Vec<HMessage> = Vec::new();
+        for (i, m) in msgs.into_iter().enumerate() {
+            if i < 2 { prefix.push(m); } else { history_msgs.push(m); }
+        }
+
+        // Fixed suffix: tool messages from this loop + current user message
+        let mut suffix: Vec<HMessage> = Vec::new();
+        suffix.extend_from_slice(tool_messages);
+        suffix.push(HMessage::from_role_and_content(HRole::User, current.content.clone()));
+
+        // Token budget decision for history selection
+        let max_ctx: usize = std::env::var("RAWORC_MAX_CONTEXT_TOKENS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(8192);
+        let reserve: usize = std::env::var("RAWORC_COMPLETION_MARGIN")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(1024);
+
+        let mut count_tokens = |parts: &Vec<HMessage>| -> Result<usize> {
+            let c = HConversation::from_messages(parts.clone());
+            let t = enc
+                .render_conversation_for_completion(&c, HRole::Assistant, None)
+                .map_err(|e| super::error::HostError::Model(format!("Failed to render conversation: {}", e)))?;
+            Ok(t.len())
+        };
+
+        // Try with full history first
+        let mut selected_start = 0usize; // index into history_msgs
+        let mut attempt: Vec<HMessage> = Vec::new();
+        attempt.extend(prefix.clone());
+        attempt.extend(history_msgs.clone());
+        attempt.extend(suffix.clone());
+        let mut toks = count_tokens(&attempt)?;
+        if toks > max_ctx.saturating_sub(reserve) {
+            // Remove oldest history until within budget
+            selected_start = 0;
+            let mut i = 0usize;
+            while i < history_msgs.len() {
+                attempt.clear();
+                selected_start = i;
+                attempt.extend(prefix.clone());
+                attempt.extend(history_msgs[selected_start..].to_vec());
+                attempt.extend(suffix.clone());
+                toks = count_tokens(&attempt)?;
+                if toks <= max_ctx.saturating_sub(reserve) {
+                    break;
+                }
+                i += 1;
+            }
+            if i >= history_msgs.len() {
+                // No history fits; use none
+                selected_start = history_msgs.len();
+            }
+        }
+
+        // Build final messages
+        let mut final_msgs: Vec<HMessage> = Vec::new();
+        final_msgs.extend(prefix);
+        final_msgs.extend(history_msgs[selected_start..].to_vec());
+        final_msgs.extend(suffix);
+        Ok(final_msgs)
+    }
     
 }
 

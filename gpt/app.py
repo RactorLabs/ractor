@@ -197,9 +197,35 @@ def generate(req: GenerateRequest):
     model.eval()
     t0 = time.perf_counter()
     try:
+        # Determine default max_new_tokens as the remaining context window, if not provided
         gen_kwargs: Dict[str, Any] = {}
         if req.max_new_tokens is not None:
             gen_kwargs["max_new_tokens"] = req.max_new_tokens
+        else:
+            # Compute remaining tokens in the model's context window
+            max_ctx = None
+            cfg = getattr(model, "config", None)
+            for attr in ("max_position_embeddings", "n_positions", "max_seq_len", "seq_length"):
+                if cfg is not None and hasattr(cfg, attr):
+                    val = getattr(cfg, attr)
+                    if isinstance(val, int) and val > 0 and val < 10_000_000:
+                        max_ctx = val
+                        break
+            try:
+                input_len = int(inputs["input_ids"].shape[1])
+            except Exception:
+                input_len = 0
+            if max_ctx is not None and input_len >= 0:
+                default_new = max(1, max_ctx - input_len)
+                # Optional clamp to avoid OOM from very large defaults
+                import os
+                try:
+                    cap_env = os.getenv("RAWORC_GPT_DEFAULT_MAX_NEW_CAP")
+                    if cap_env is not None and int(cap_env) > 0:
+                        default_new = min(default_new, int(cap_env))
+                except Exception:
+                    pass
+                gen_kwargs["max_new_tokens"] = default_new
         with torch.inference_mode():
             out = model.generate(
                 input_ids=inputs["input_ids"],
