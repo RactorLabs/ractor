@@ -9,15 +9,19 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
-use crate::shared::rbac::PermissionContext;
 use crate::shared::models::{
     Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
     RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
 };
+use crate::shared::rbac::PermissionContext;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
-    let ctx = PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() };
+    let ctx = PermissionContext {
+        api_group: "api".into(),
+        resource: "*".into(),
+        verb: "*".into(),
+    };
     match crate::api::auth::check_permission(&auth.principal, state, &ctx).await {
         Ok(true) => true,
         _ => false,
@@ -118,7 +122,9 @@ pub async fn list_agents(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_LIST)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list agents".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to list agents".to_string())
+            })?;
     }
 
     let mut agents = Agent::find_all(&state.db)
@@ -162,7 +168,9 @@ pub async fn get_agent(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to get agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -194,7 +202,9 @@ pub async fn create_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to create agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to create agent".to_string())
+            })?;
     }
 
     // Get the principal name
@@ -282,7 +292,9 @@ pub async fn remix_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to remix agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -423,7 +435,9 @@ pub async fn sleep_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to sleep agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to sleep agent".to_string())
+            })?;
     }
 
     // Allow sleeping own agents or admin can sleep any agent
@@ -513,7 +527,9 @@ pub async fn wake_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to wake agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to wake agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -617,7 +633,9 @@ pub async fn update_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to update agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -706,7 +724,9 @@ pub async fn delete_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_DELETE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to delete agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -769,7 +789,9 @@ pub async fn publish_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to publish agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to publish agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -831,7 +853,9 @@ pub async fn unpublish_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string())
+            })?;
     }
 
     // Get username for ownership check

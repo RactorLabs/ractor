@@ -113,9 +113,13 @@ impl ToolRegistry {
         } else {
             name
         };
-        
-        tracing::info!("Executing tool: original='{}', clean='{}'", name, clean_name);
-        
+
+        tracing::info!(
+            "Executing tool: original='{}', clean='{}'",
+            name,
+            clean_name
+        );
+
         // Map parameters if it's an alias
         let (canonical_name, mapped_args) = {
             let aliases = self.aliases.read().await;

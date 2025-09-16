@@ -1,10 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::tool_registry::Tool;
 use super::api::RaworcClient;
-use std::sync::Arc;
+use super::tool_registry::Tool;
 use super::tools::{run_bash, text_edit, TextEditAction};
+use std::sync::Arc;
 
 /// Built-in bash tool implementation
 pub struct BashTool;
@@ -43,10 +43,12 @@ impl Tool for BashTool {
             Ok(output) => {
                 // Check if the command actually succeeded by looking for exit_code in output
                 if output.contains("[exit_code:") && !output.contains("[exit_code:0]") {
-                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
+                    let summary =
+                        format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
                     Ok(format!("{}\n{}", summary, output))
                 } else {
-                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
+                    let summary =
+                        format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
                     Ok(format!("{}\n{}", summary, output))
                 }
             }
@@ -119,10 +121,19 @@ impl Tool for TextEditorTool {
         match text_edit(action.clone()).await {
             Ok(output) => {
                 let summary = match &action {
-                    TextEditAction::View { path, .. } => format!("Result for tool 'text_editor' (view {} )", path),
-                    TextEditAction::Create { path, .. } => format!("Result for tool 'text_editor' (create {} )", path),
-                    TextEditAction::StrReplace { path, .. } => format!("Result for tool 'text_editor' (str_replace {} )", path),
-                    TextEditAction::Insert { path, line, .. } => format!("Result for tool 'text_editor' (insert {} at line {} )", path, line),
+                    TextEditAction::View { path, .. } => {
+                        format!("Result for tool 'text_editor' (view {} )", path)
+                    }
+                    TextEditAction::Create { path, .. } => {
+                        format!("Result for tool 'text_editor' (create {} )", path)
+                    }
+                    TextEditAction::StrReplace { path, .. } => {
+                        format!("Result for tool 'text_editor' (str_replace {} )", path)
+                    }
+                    TextEditAction::Insert { path, line, .. } => format!(
+                        "Result for tool 'text_editor' (insert {} at line {} )",
+                        path, line
+                    ),
                 };
                 Ok(format!("{}\n{}", summary, output))
             }
@@ -137,12 +148,16 @@ pub struct PublishTool {
 }
 
 impl PublishTool {
-    pub fn new(api: Arc<RaworcClient>) -> Self { Self { api } }
+    pub fn new(api: Arc<RaworcClient>) -> Self {
+        Self { api }
+    }
 }
 
 #[async_trait]
 impl Tool for PublishTool {
-    fn name(&self) -> &str { "publish" }
+    fn name(&self) -> &str {
+        "publish"
+    }
 
     fn description(&self) -> &str {
         "Publish the agent's current content to its public URL."
@@ -171,12 +186,16 @@ pub struct SleepTool {
 }
 
 impl SleepTool {
-    pub fn new(api: Arc<RaworcClient>) -> Self { Self { api } }
+    pub fn new(api: Arc<RaworcClient>) -> Self {
+        Self { api }
+    }
 }
 
 #[async_trait]
 impl Tool for SleepTool {
-    fn name(&self) -> &str { "sleep" }
+    fn name(&self) -> &str {
+        "sleep"
+    }
 
     fn description(&self) -> &str {
         "Put the agent to sleep (stops its runtime but preserves data)."
@@ -220,7 +239,11 @@ fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> 
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
+    if s.len() <= max {
+        s.to_string()
+    } else {
+        format!("{}…", &s[..max])
+    }
 }
 
 #[cfg(test)]

@@ -246,17 +246,18 @@ def generate(req: GenerateRequest):
                 "hint": "If this persists, try reducing max_new_tokens or verify GPU memory",
             })
 
-    text = tok.decode(out[0], skip_special_tokens=True)
+    # Decode only newly generated tokens and preserve special tokens
+    try:
+        input_len = int(inputs["input_ids"].shape[1])
+        gen_ids = out[0][input_len:]
+        text = tok.decode(gen_ids, skip_special_tokens=False)
+    except Exception as e:
+        return JSONResponse(status_code=503, content={
+            "status": "error",
+            "error": f"decode failed: {e}",
+        })
 
-    if text.startswith(req.prompt):
-        text = text[len(req.prompt):]
-
-    if req.stop:
-        for s in req.stop:
-            idx = text.find(s)
-            if idx != -1:
-                text = text[:idx]
-                break
+    # Do not trim or normalize the generated text on the server side.
 
     return GenerateResponse(text=text, usage=None)
 

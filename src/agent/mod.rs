@@ -3,9 +3,9 @@ mod api;
 mod builtin_tools;
 mod config;
 mod error;
+mod gpt;
 mod guardrails;
 mod message_handler;
-mod gpt;
 mod tool_registry;
 mod tools;
 
@@ -212,4 +212,4 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 }
 
-    // Content preview server removed.
+// Content preview server removed.

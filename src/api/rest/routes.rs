@@ -113,4 +113,3 @@ async fn version() -> axum::Json<serde_json::Value> {
         "api": "v0"
     }))
 }
-

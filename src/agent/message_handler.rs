@@ -1,11 +1,14 @@
 use super::api::{Message, MessageRole, RaworcClient};
 use super::builtin_tools::{BashTool, TextEditorTool};
 use super::error::Result;
-use super::guardrails::Guardrails;
 use super::gpt::GptClient;
+use super::guardrails::Guardrails;
 use super::tool_registry::{ContainerExecMapper, Tool, ToolRegistry};
 use chrono::{DateTime, Utc};
-use openai_harmony::chat::{Author as HAuthor, Content as HContent, Conversation as HConversation, DeveloperContent, Message as HMessage, Role as HRole, SystemContent, ToolDescription};
+use openai_harmony::chat::{
+    Author as HAuthor, Content as HContent, Conversation as HConversation, DeveloperContent,
+    Message as HMessage, Role as HRole, SystemContent, ToolDescription,
+};
 use openai_harmony::{load_harmony_encoding, HarmonyEncodingName};
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -70,8 +73,12 @@ impl MessageHandler {
                     registry.register_tool(text_editor_tool).await;
 
                     // Register management tools (publish, sleep)
-                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(api_client_clone.clone()));
-                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
+                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(
+                        api_client_clone.clone(),
+                    ));
+                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(
+                        api_client_clone.clone(),
+                    ));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
 
@@ -198,7 +205,8 @@ impl MessageHandler {
                             // Check if this message already has an agent response
                             let has_response = recent_messages.iter().any(|m| {
                                 m.role == MessageRole::Agent && {
-                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at) {
+                                    if let Ok(m_time) = DateTime::parse_from_rfc3339(&m.created_at)
+                                    {
                                         let m_time_utc = m_time.with_timezone(&Utc);
                                         m_time_utc > message_time_utc
                                     } else {
@@ -321,25 +329,29 @@ impl MessageHandler {
         }
 
         // Harmony-driven loop
-        let enc = load_harmony_encoding(HarmonyEncodingName::HarmonyGptOss)
-            .map_err(|e| super::error::HostError::Model(format!("Failed to load Harmony encoding: {}", e)))?;
+        let enc = load_harmony_encoding(HarmonyEncodingName::HarmonyGptOss).map_err(|e| {
+            super::error::HostError::Model(format!("Failed to load Harmony encoding: {}", e))
+        })?;
 
         let mut tool_messages: Vec<HMessage> = Vec::new();
         for step in 0..10 {
-            let convo = self.build_harmony_conversation(&enc, message, &tool_messages).await?;
+            let convo = self
+                .build_harmony_conversation(&enc, message, &tool_messages)
+                .await?;
             let tokens = enc
                 .render_conversation_for_completion(&convo, HRole::Assistant, None)
-                .map_err(|e| super::error::HostError::Model(format!("Failed to render conversation: {}", e)))?;
-            let prompt = enc
-                .tokenizer()
-                .decode_utf8(&tokens)
-                .map_err(|e| super::error::HostError::Model(format!("Failed to decode prompt: {}", e)))?;
+                .map_err(|e| {
+                    super::error::HostError::Model(format!("Failed to render conversation: {}", e))
+                })?;
+            let prompt = enc.tokenizer().decode_utf8(&tokens).map_err(|e| {
+                super::error::HostError::Model(format!("Failed to decode prompt: {}", e))
+            })?;
 
             let completion = match self
                 .gpt_client
                 .generate(
                     &prompt,
-                    Some(serde_json::json!({ "max_new_tokens": 1024, "stop": ["<|end|>", "<|call|>"] })),
+                    Some(serde_json::json!({ "max_new_tokens": 1024, "stop": ["<|end|>", "<|call|>", "<|return|>"] })),
                 )
                 .await
             {
@@ -352,13 +364,24 @@ impl MessageHandler {
             };
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
-            let parsed = enc
+            let parsed = match enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
-                .map_err(|e| super::error::HostError::Model(format!("Failed to parse completion: {}", e)))?;
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Harmony parse failed: {} — falling back to raw text", e);
+                    let sanitized = self.guardrails.validate_output(&completion)?;
+                    let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_parse_error" });
+                    self.api_client.send_message(sanitized, Some(meta)).await?;
+                    return Ok(());
+                }
+            };
 
             let mut made_tool_call = false;
             for m in parsed.iter() {
-                if m.author.role != HRole::Assistant { continue; }
+                if m.author.role != HRole::Assistant {
+                    continue;
+                }
 
                 // commentary/analysis
                 if let Some(ch) = m.channel.as_deref() {
@@ -376,19 +399,25 @@ impl MessageHandler {
                 if let Some(recipient) = m.recipient.as_deref() {
                     if let Some(tool_name) = recipient.strip_prefix("functions.") {
                         let args_text = Self::first_text(&m.content).unwrap_or("");
-                        let args_json: serde_json::Value = serde_json::from_str(args_text).unwrap_or_else(|_| serde_json::json!({}));
+                        let args_json: serde_json::Value = serde_json::from_str(args_text)
+                            .unwrap_or_else(|_| serde_json::json!({}));
 
                         let desc = self.describe_tool_call(tool_name, &args_json);
-                        self.send_tool_message(&desc, tool_name, Some(&args_json)).await?;
+                        self.send_tool_message(&desc, tool_name, Some(&args_json))
+                            .await?;
 
-                        let result = match self.tool_registry.execute_tool(tool_name, &args_json).await {
-                            Ok(r) => r,
-                            Err(e) => format!("[error] {}", e),
-                        };
+                        let result =
+                            match self.tool_registry.execute_tool(tool_name, &args_json).await {
+                                Ok(r) => r,
+                                Err(e) => format!("[error] {}", e),
+                            };
 
                         let display = self.truncate_tool_result(&result);
-                        let mut meta = serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
-                        if let Some(obj) = meta.as_object_mut() { obj.insert("args".to_string(), args_json.clone()); }
+                        let mut meta =
+                            serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
+                        if let Some(obj) = meta.as_object_mut() {
+                            obj.insert("args".to_string(), args_json.clone());
+                        }
                         let _ = self.api_client.send_message(display, Some(meta)).await;
 
                         tool_messages.push(HMessage {
@@ -414,8 +443,47 @@ impl MessageHandler {
             }
 
             if !made_tool_call {
-                warn!("Harmony completion had no actionable assistant content; returning fallback");
-                self.finalize_with_fallback(&message.content).await?;
+                // Try to salvage a tool call directly from raw completion text
+                if let Some((tool_name, args_json)) = Self::extract_tool_call_from_raw(&completion)
+                {
+                    info!("Recovered tool call from raw text: {}", tool_name);
+                    let desc = self.describe_tool_call(&tool_name, &args_json);
+                    self.send_tool_message(&desc, &tool_name, Some(&args_json))
+                        .await?;
+
+                    let result = match self
+                        .tool_registry
+                        .execute_tool(&tool_name, &args_json)
+                        .await
+                    {
+                        Ok(r) => r,
+                        Err(e) => format!("[error] {}", e),
+                    };
+
+                    let display = self.truncate_tool_result(&result);
+                    let mut meta =
+                        serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
+                    if let Some(obj) = meta.as_object_mut() {
+                        obj.insert("args".to_string(), args_json.clone());
+                    }
+                    let _ = self.api_client.send_message(display, Some(meta)).await;
+
+                    tool_messages.push(HMessage {
+                        author: HAuthor::new(HRole::Tool, tool_name.to_string()),
+                        recipient: None,
+                        content: vec![HContent::from(result)],
+                        channel: None,
+                        content_type: None,
+                    });
+
+                    info!("Recovered tool execution completed; iterating Harmony loop again");
+                    continue; // go to next step with updated tool_messages
+                }
+
+                warn!("Harmony completion had no actionable assistant content; sending raw text");
+                let sanitized = self.guardrails.validate_output(&completion)?;
+                let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_no_action" });
+                self.api_client.send_message(sanitized, Some(meta)).await?;
                 return Ok(());
             }
 
@@ -459,6 +527,64 @@ impl MessageHandler {
         Ok(())
     }
 
+    // Attempt to salvage a tool call from raw model text in Harmony DSL form.
+    // Looks for patterns like: "to=functions.text_editor" followed by a JSON object.
+    fn extract_tool_call_from_raw(raw: &str) -> Option<(String, serde_json::Value)> {
+        let hay = raw;
+        let needle = "to=functions.";
+        let idx = hay.find(needle)?;
+        let after = &hay[idx + needle.len()..];
+        let mut tool = String::new();
+        for ch in after.chars() {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                tool.push(ch);
+            } else {
+                break;
+            }
+        }
+        if tool.is_empty() {
+            return None;
+        }
+
+        // Find the first '{' after the tool marker and extract a balanced JSON object
+        let rest = &hay[idx..];
+        let brace_pos_rel = rest.find('{')?;
+        let json_start = idx + brace_pos_rel;
+        let json_slice = &hay[json_start..];
+
+        // Balanced brace extraction with simple string awareness
+        let mut depth: i32 = 0;
+        let mut in_str = false;
+        let mut prev: char = '\0';
+        let mut end_idx: Option<usize> = None;
+        for (i, ch) in json_slice.char_indices() {
+            if !in_str {
+                if ch == '"' {
+                    in_str = true;
+                } else if ch == '{' {
+                    depth += 1;
+                } else if ch == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        end_idx = Some(i);
+                        break;
+                    }
+                }
+            } else {
+                if ch == '"' && prev != '\\' {
+                    in_str = false;
+                }
+            }
+            prev = ch;
+        }
+        let end_idx = end_idx?;
+        let json_str = &json_slice[..=end_idx];
+        match serde_json::from_str::<serde_json::Value>(json_str) {
+            Ok(v) => Some((tool, v)),
+            Err(_) => None,
+        }
+    }
+
     async fn build_harmony_conversation(
         &self,
         _enc: &openai_harmony::HarmonyEncoding,
@@ -466,10 +592,12 @@ impl MessageHandler {
         tool_messages: &[HMessage],
     ) -> Result<HConversation> {
         // System content: set current date (channel config defaults are included by Harmony)
-        let system = SystemContent::new().with_conversation_start_date(chrono::Utc::now().to_rfc3339());
+        let system =
+            SystemContent::new().with_conversation_start_date(chrono::Utc::now().to_rfc3339());
 
         // Developer tools + optional instructions
-        let mut dev = DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
+        let mut dev =
+            DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
         if let Ok(text) = tokio::fs::read_to_string("/agent/code/instructions.md").await {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
@@ -484,7 +612,10 @@ impl MessageHandler {
         let history = self.api_client.get_messages(None, None).await?;
         for m in history.iter().filter(|m| m.id != current.id) {
             match m.role {
-                MessageRole::User => msgs.push(HMessage::from_role_and_content(HRole::User, m.content.clone())),
+                MessageRole::User => msgs.push(HMessage::from_role_and_content(
+                    HRole::User,
+                    m.content.clone(),
+                )),
                 MessageRole::Agent => {
                     if let Some(meta) = &m.metadata {
                         if meta.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
@@ -500,10 +631,16 @@ impl MessageHandler {
                                 content_type: None,
                             });
                         } else {
-                            msgs.push(HMessage::from_role_and_content(HRole::Assistant, m.content.clone()));
+                            msgs.push(HMessage::from_role_and_content(
+                                HRole::Assistant,
+                                m.content.clone(),
+                            ));
                         }
                     } else {
-                        msgs.push(HMessage::from_role_and_content(HRole::Assistant, m.content.clone()));
+                        msgs.push(HMessage::from_role_and_content(
+                            HRole::Assistant,
+                            m.content.clone(),
+                        ));
                     }
                 }
                 MessageRole::System => {}
@@ -511,7 +648,10 @@ impl MessageHandler {
         }
 
         msgs.extend_from_slice(tool_messages);
-        msgs.push(HMessage::from_role_and_content(HRole::User, current.content.clone()));
+        msgs.push(HMessage::from_role_and_content(
+            HRole::User,
+            current.content.clone(),
+        ));
         Ok(HConversation::from_messages(msgs))
     }
 
@@ -555,7 +695,10 @@ impl MessageHandler {
         let char_count = tool_result.len();
 
         // Take first portion and add summary
-        let preview = tool_result.chars().take(TRUNCATION_PREVIEW).collect::<String>();
+        let preview = tool_result
+            .chars()
+            .take(TRUNCATION_PREVIEW)
+            .collect::<String>();
 
         format!(
             "{}\n\n[OUTPUT TRUNCATED - {} total lines, {} total characters]\n[Use more specific commands like 'ls /agent/code' (no -R) to avoid large outputs]\n[Full output available in agent logs]",
@@ -607,9 +750,21 @@ impl MessageHandler {
             "properties": {"note": {"type": "string", "description": "Optional reason or note"}}
         });
         Ok(vec![
-            ToolDescription::new("bash", "Execute a bash shell command in the /agent directory", Some(bash_schema)),
-            ToolDescription::new("text_editor", "Perform text editing operations on files in the /agent directory", Some(text_schema)),
-            ToolDescription::new("publish", "Publish agent content snapshot", Some(manage_schema.clone())),
+            ToolDescription::new(
+                "bash",
+                "Execute a bash shell command in the /agent directory",
+                Some(bash_schema),
+            ),
+            ToolDescription::new(
+                "text_editor",
+                "Perform text editing operations on files in the /agent directory",
+                Some(text_schema),
+            ),
+            ToolDescription::new(
+                "publish",
+                "Publish agent content snapshot",
+                Some(manage_schema.clone()),
+            ),
             ToolDescription::new("sleep", "Put the agent to sleep", Some(manage_schema)),
         ])
     }
@@ -623,8 +778,14 @@ impl MessageHandler {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| "bash command".to_string()),
             "text_editor" => {
-                let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("edit");
-                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("edit");
+                let path = args
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 format!("{} {}", action, path)
             }
             other => format!("Executing {} tool", other),

@@ -36,7 +36,6 @@ pub struct CreateMessageRequest {
 
 // Import constants from shared models
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Agent {
     pub name: String, // Primary key in v0.4.0
@@ -271,8 +270,6 @@ impl RaworcClient {
             }
         }
     }
-
-    
 
     /// Update agent to busy (clears idle_from)
     pub async fn update_agent_to_busy(&self) -> Result<()> {

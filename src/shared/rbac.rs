@@ -145,7 +145,8 @@ impl RbacAuthz {
 
         // Helper for wildcard matching
         fn contains_match(list: &[String], needle: &str) -> bool {
-            list.iter().any(|v| v == "*" || v.eq_ignore_ascii_case(needle))
+            list.iter()
+                .any(|v| v == "*" || v.eq_ignore_ascii_case(needle))
         }
 
         // Evaluate each binding's role rules

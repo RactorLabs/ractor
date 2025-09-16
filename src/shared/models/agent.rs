@@ -198,8 +198,12 @@ where
     deserialize_strict_bool(deserializer)
 }
 
-fn default_idle_timeout() -> Option<i32> { Some(300) }
-fn default_busy_timeout() -> Option<i32> { Some(900) } // 15 minutes
+fn default_idle_timeout() -> Option<i32> {
+    Some(300)
+}
+fn default_busy_timeout() -> Option<i32> {
+    Some(900)
+} // 15 minutes
 
 // Custom deserializer for strict optional i32 validation
 fn deserialize_strict_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
@@ -586,10 +590,6 @@ impl Agent {
         .await
     }
 
-    
-
-    
-
     pub async fn create(
         pool: &sqlx::MySqlPool,
         req: CreateAgentRequest,
@@ -862,8 +862,6 @@ impl Agent {
         .fetch_all(pool)
         .await
     }
-
-    
 
     // find_agents_to_auto_close replaced by controller-side logic
 

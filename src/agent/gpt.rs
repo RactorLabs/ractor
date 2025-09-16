@@ -18,6 +18,14 @@ impl GptClient {
         })
     }
 
+    fn normalize_completion(raw: &str) -> String {
+        let mut s = raw.replace('\u{ff5c}', "|");
+        // Repair a couple of common header glitches without altering content otherwise
+        s = s.replace("<|assistant<|channel|>", "<|assistant|><|channel|>");
+        s = s.replace("<|assistant<|message|>", "<|assistant|><|message|>");
+        s
+    }
+
     pub async fn generate(
         &self,
         prompt: &str,
@@ -59,6 +67,6 @@ impl GptClient {
             .and_then(|s| s.as_str())
             .unwrap_or("")
             .to_string();
-        Ok(text)
+        Ok(Self::normalize_completion(&text))
     }
 }
