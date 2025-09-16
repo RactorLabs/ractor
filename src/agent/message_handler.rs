@@ -476,6 +476,48 @@ impl MessageHandler {
                 None
             }
 
+            fn strip_transcript_meta(input: &str) -> String {
+                let mut out = String::new();
+                let mut skipping_block = false;
+                let mut brace_depth: i32 = 0;
+                for line in input.lines() {
+                    let trimmed = line.trim();
+                    let lower = trimmed.to_lowercase();
+                    // Start skipping on headings like "Args" or "Result"
+                    if !skipping_block
+                        && (lower == "args"
+                            || lower.starts_with("args ")
+                            || lower == "result"
+                            || lower.starts_with("result "))
+                    {
+                        skipping_block = true;
+                        brace_depth = 0;
+                        continue;
+                    }
+                    if skipping_block {
+                        for ch in line.chars() {
+                            if ch == '{' {
+                                brace_depth += 1;
+                            } else if ch == '}' {
+                                brace_depth -= 1;
+                            }
+                        }
+                        // Stop skipping when JSON likely ended and a blank line delimiter appears
+                        if brace_depth <= 0 && trimmed.is_empty() {
+                            skipping_block = false;
+                        }
+                        continue;
+                    }
+                    // Drop thought headings like "analysis" / "commentary" lines
+                    if lower.starts_with("analysis") || lower.starts_with("commentary") {
+                        continue;
+                    }
+                    out.push_str(line);
+                    out.push('\n');
+                }
+                out.trim().to_string()
+            }
+
             let parsed = match enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
             {
@@ -485,8 +527,11 @@ impl MessageHandler {
                     // try to extract only the final user-visible content. As a last resort, strip control tokens.
                     let err_msg = format!("{}", e);
                     tracing::warn!(target: "gpt", request_id = %request_id, error = %err_msg, "HARMONY_PARSE_FAILED_FALLBACK");
-                    let candidate = extract_final_from_raw(&completion).unwrap_or_else(|| strip_harmony_tokens(&completion));
-                    let sanitized = self.guardrails.validate_output(&candidate)?;
+                    let candidate = extract_final_from_raw(&completion)
+                        .unwrap_or_else(|| strip_harmony_tokens(&completion));
+                    let cleaned = strip_transcript_meta(&candidate);
+                    let final_text = if cleaned.trim().is_empty() { "Done.".to_string() } else { cleaned };
+                    let sanitized = self.guardrails.validate_output(&final_text)?;
                     // Create a single-step final message and return.
                     let mut tm = serde_json::json!({
                         "prompt_tokens": tokens.len(),
