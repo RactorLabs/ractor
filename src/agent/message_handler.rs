@@ -10,7 +10,6 @@ use openai_harmony::chat::{
     Message as HMessage, Role as HRole, SystemContent, ToolDescription,
 };
 use openai_harmony::{load_harmony_encoding, HarmonyEncodingName};
-use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -285,48 +284,7 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
 
-        // Fast-path: if USER sent a strict top-level tool JSON, execute directly
-        if let Some((tool, input)) = parse_user_tool_call(&message.content) {
-            // Notify
-            let tool_description = match tool.as_str() {
-                "bash" => input
-                    .get("command")
-                    .and_then(|v| v.as_str())
-                    .or_else(|| input.get("cmd").and_then(|v| v.as_str()))
-                    .unwrap_or("bash command")
-                    .to_string(),
-                "text_editor" => {
-                    let action = input
-                        .get("action")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("edit");
-                    let path = input
-                        .get("path")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("unknown");
-                    format!("{} {}", action, path)
-                }
-                _ => format!("Executing {} tool", tool),
-            };
-            self.send_tool_message(&tool_description, &tool, Some(&input))
-                .await?;
-
-            // Execute tool through registry
-            let tool_result = match self.tool_registry.execute_tool(&tool, &input).await {
-                Ok(result) => result,
-                Err(e) => format!("[error] {}", e),
-            };
-
-            // Send result back
-            let mut metadata = serde_json::json!({ "type": "tool_result", "tool_type": tool });
-            if let Some(obj) = metadata.as_object_mut() {
-                obj.insert("args".to_string(), input.clone());
-            }
-            self.api_client
-                .send_message(tool_result, Some(metadata))
-                .await?;
-            return Ok(());
-        }
+        // Pure Harmony: do not execute user-specified JSON tool calls directly
 
         // Harmony-driven loop
         let enc = load_harmony_encoding(HarmonyEncodingName::HarmonyGptOss).map_err(|e| {
@@ -369,7 +327,7 @@ impl MessageHandler {
             {
                 Ok(p) => p,
                 Err(e) => {
-                    warn!("Harmony parse failed: {} — falling back to raw text", e);
+                    warn!("Harmony parse failed: {} — sending raw text", e);
                     let sanitized = self.guardrails.validate_output(&completion)?;
                     let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_parse_error" });
                     self.api_client.send_message(sanitized, Some(meta)).await?;
@@ -443,43 +401,6 @@ impl MessageHandler {
             }
 
             if !made_tool_call {
-                // Try to salvage a tool call directly from raw completion text
-                if let Some((tool_name, args_json)) = Self::extract_tool_call_from_raw(&completion)
-                {
-                    info!("Recovered tool call from raw text: {}", tool_name);
-                    let desc = self.describe_tool_call(&tool_name, &args_json);
-                    self.send_tool_message(&desc, &tool_name, Some(&args_json))
-                        .await?;
-
-                    let result = match self
-                        .tool_registry
-                        .execute_tool(&tool_name, &args_json)
-                        .await
-                    {
-                        Ok(r) => r,
-                        Err(e) => format!("[error] {}", e),
-                    };
-
-                    let display = self.truncate_tool_result(&result);
-                    let mut meta =
-                        serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
-                    if let Some(obj) = meta.as_object_mut() {
-                        obj.insert("args".to_string(), args_json.clone());
-                    }
-                    let _ = self.api_client.send_message(display, Some(meta)).await;
-
-                    tool_messages.push(HMessage {
-                        author: HAuthor::new(HRole::Tool, tool_name.to_string()),
-                        recipient: None,
-                        content: vec![HContent::from(result)],
-                        channel: None,
-                        content_type: None,
-                    });
-
-                    info!("Recovered tool execution completed; iterating Harmony loop again");
-                    continue; // go to next step with updated tool_messages
-                }
-
                 warn!("Harmony completion had no actionable assistant content; sending raw text");
                 let sanitized = self.guardrails.validate_output(&completion)?;
                 let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss", "fallback": "raw_text_no_action" });
@@ -527,62 +448,9 @@ impl MessageHandler {
         Ok(())
     }
 
-    // Attempt to salvage a tool call from raw model text in Harmony DSL form.
-    // Looks for patterns like: "to=functions.text_editor" followed by a JSON object.
-    fn extract_tool_call_from_raw(raw: &str) -> Option<(String, serde_json::Value)> {
-        let hay = raw;
-        let needle = "to=functions.";
-        let idx = hay.find(needle)?;
-        let after = &hay[idx + needle.len()..];
-        let mut tool = String::new();
-        for ch in after.chars() {
-            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-                tool.push(ch);
-            } else {
-                break;
-            }
-        }
-        if tool.is_empty() {
-            return None;
-        }
-
-        // Find the first '{' after the tool marker and extract a balanced JSON object
-        let rest = &hay[idx..];
-        let brace_pos_rel = rest.find('{')?;
-        let json_start = idx + brace_pos_rel;
-        let json_slice = &hay[json_start..];
-
-        // Balanced brace extraction with simple string awareness
-        let mut depth: i32 = 0;
-        let mut in_str = false;
-        let mut prev: char = '\0';
-        let mut end_idx: Option<usize> = None;
-        for (i, ch) in json_slice.char_indices() {
-            if !in_str {
-                if ch == '"' {
-                    in_str = true;
-                } else if ch == '{' {
-                    depth += 1;
-                } else if ch == '}' {
-                    depth -= 1;
-                    if depth == 0 {
-                        end_idx = Some(i);
-                        break;
-                    }
-                }
-            } else {
-                if ch == '"' && prev != '\\' {
-                    in_str = false;
-                }
-            }
-            prev = ch;
-        }
-        let end_idx = end_idx?;
-        let json_str = &json_slice[..=end_idx];
-        match serde_json::from_str::<serde_json::Value>(json_str) {
-            Ok(v) => Some((tool, v)),
-            Err(_) => None,
-        }
+    #[allow(dead_code)]
+    fn extract_tool_call_from_raw(_raw: &str) -> Option<(String, serde_json::Value)> {
+        None
     }
 
     async fn build_harmony_conversation(
@@ -711,20 +579,9 @@ impl MessageHandler {
 
 // Legacy helpers removed; Harmony loop directly parses function calls via enc.parse_messages_from_completion_tokens
 
-// Strict user tool JSON: only accepts a top-level {"tool":"bash|text_editor","input":{...}}
-fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {
-    let trimmed = s.trim();
-    if !(trimmed.starts_with('{') && trimmed.ends_with('}')) {
-        return None;
-    }
-    let v: serde_json::Value = serde_json::from_str(trimmed).ok()?;
-    let tool = v.get("tool")?.as_str()?.to_string();
-    if tool != "bash" && tool != "text_editor" {
-        return None;
-    }
-    let input = v.get("input")?.clone();
-    Some((tool, input))
-}
+// Harmony-only: removed strict JSON user tool fast-path
+#[allow(dead_code)]
+fn parse_user_tool_call(_s: &str) -> Option<(String, serde_json::Value)> { None }
 
 impl MessageHandler {
     fn first_text(contents: &[HContent]) -> Option<&str> {
