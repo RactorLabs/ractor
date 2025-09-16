@@ -2,7 +2,7 @@ use anyhow::Result;
 use bollard::{
     container::{Config, CreateContainerOptions, LogsOptions, RemoveContainerOptions},
     exec::{CreateExecOptions, StartExecResults},
-    models::{HostConfig, Mount, MountTypeEnum, PortBinding},
+    models::{HostConfig, Mount, MountTypeEnum},
     Docker,
 };
 use futures::StreamExt;
@@ -295,7 +295,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
               agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content);
 
         // First create the agent volume (without starting container)
-        let agent_volume = self.create_agent_volume(agent_name).await?;
+        let _agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
@@ -504,7 +504,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         );
 
         // First create the agent volume (without starting container)
-        let agent_volume = self.create_agent_volume(agent_name).await?;
+        let _agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
@@ -1098,7 +1098,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
         labels.insert("raworc.volume".to_string(), agent_volume.clone());
 
         // Get user token from secrets (added automatically by agent manager)
-        let user_token = secrets
+        let _user_token = secrets
             .as_ref()
             .and_then(|s| s.get("RAWORC_TOKEN"))
             .cloned()

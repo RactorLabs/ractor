@@ -240,7 +240,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
             info!(tool = "text_edit", action = "insert", %path, line, len = content.len(), "tool start");
             let full = normalize_path(&path)?;
             let existing = fs::read_to_string(&full).await.unwrap_or_default();
-            let mut lines: Vec<&str> = existing.lines().collect();
+            let lines: Vec<&str> = existing.lines().collect();
             let idx = line.saturating_sub(1).min(lines.len());
             let mut new_lines: Vec<String> = Vec::with_capacity(lines.len() + 1);
             for (i, l) in lines.iter().enumerate() {

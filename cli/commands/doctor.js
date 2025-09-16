@@ -72,6 +72,34 @@ module.exports = (program) => {
         const cuda = await exec('docker', ['run','--rm','--gpus','all','nvidia/cuda:12.4.1-base-ubuntu22.04','nvidia-smi']);
         if (cuda.code === 0) ok('CUDA container test: success (GPU accessible)'); else warn('CUDA container test: failed (GPU not accessible to containers)');
 
+        // GPT service readiness (if container exists)
+        console.log();
+        info('Checking GPT service readiness (/ready)...');
+        const gptExists = await exec('docker', ['ps','-a','--format','{{.Names}}']);
+        if (gptExists.code === 0 && /\braworc_gpt\b/.test(gptExists.stdout)) {
+          // Try ready endpoint via docker exec
+          const ready = await exec('docker', ['exec','raworc_gpt','/app/.venv/bin/python','- <<PY\nimport requests, json\ntry:\n  r=requests.get("http://127.0.0.1:6000/ready", timeout=10)\n  print(r.text)\nexcept Exception as e:\n  print(json.dumps({"status":"error","error":str(e)}))\nPY']);
+          if (ready.code === 0 && ready.stdout.trim()) {
+            try {
+              const s = ready.stdout.trim().split(/\r?\n/).pop();
+              const j = JSON.parse(s);
+              if (j.status === 'ready') {
+                ok(`GPT: ready (model=${j.model}, quant=${j.quant_method || 'unknown'})`);
+              } else if (j.status === 'loading') {
+                warn(`GPT: loading (model=${j.model}) — background load in progress`);
+              } else {
+                bad(`GPT: error — ${j.error || 'unknown'}`);
+              }
+            } catch (e) {
+              warn('GPT: unreadable /ready response');
+            }
+          } else {
+            warn('GPT: /ready request failed');
+          }
+        } else {
+          info('GPT: container not found (start with `raworc start gpt`)');
+        }
+
         console.log();
         ok('Diagnostics completed.');
       } catch (err) {

@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
       transformers \
       accelerate \
       triton==3.4.0 \
+      kernels \
       sentencepiece \
       einops
 

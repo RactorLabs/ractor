@@ -6,6 +6,12 @@ import torch
 import threading
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
+try:
+    # Preferred API for MXFP4 quantization
+    from transformers.utils.quantization_config import Mxfp4Config, QuantizationMethod
+except Exception:  # pragma: no cover
+    Mxfp4Config = None
+    QuantizationMethod = None
 
 app = FastAPI()
 
@@ -32,6 +38,14 @@ class GenerateResponse(BaseModel):
     text: str
     usage: Optional[Dict[str, int]] = None
 
+class ReadyResponse(BaseModel):
+    status: str
+    model: str
+    loaded: bool
+    loading: bool
+    quant_method: Optional[str] = None
+    error: Optional[str] = None
+
 
 class ModelHolder:
     def __init__(self):
@@ -41,6 +55,8 @@ class ModelHolder:
         self.loading = False
         self.last_error: Optional[str] = None
         self._lock = threading.Lock()
+        self.quant_enforced = True
+        self.quant_method: Optional[str] = None
 
     def load(self, model_id: str):
         # Map friendly ids like 'gpt-oss:120b' to HF repo ids
@@ -55,14 +71,34 @@ class ModelHolder:
             return
         # Actual blocking load
         self.tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        # Prefer BF16 to avoid unnecessary quantization warnings if kernels are missing
-        dtype = torch.bfloat16 if torch.cuda.is_available() else None
-        kwargs = {"torch_dtype": dtype} if dtype is not None else {}
-        self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
+        load_kwargs: Dict[str, Any] = {}
+        # Enforce MXFP4 quantization if supported; fail if it falls back
+        if self.quant_enforced:
+            if Mxfp4Config is None:
+                raise RuntimeError("MXFP4 is required but not available in transformers build")
+            qcfg = Mxfp4Config(dequantize=False)
+            load_kwargs["quantization_config"] = qcfg
+            load_kwargs["device_map"] = "auto"
+        # Load model
+        self.model = AutoModelForCausalLM.from_pretrained(model_id, **load_kwargs)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model.to(device)
         self.model_id = model_id
         self.last_error = None
+        # Validate quantization actually active
+        self.quant_method = None
+        if self.quant_enforced:
+            # transformers attaches hf_quantizer to model when quantized
+            hq = getattr(self.model, "hf_quantizer", None)
+            if hq is None:
+                raise RuntimeError("MXFP4 required but model.hf_quantizer missing (dequantized)")
+            qm = getattr(getattr(hq, "quantization_config", None), "quant_method", None)
+            dm = getattr(getattr(hq, "quantization_config", None), "dequantize", None)
+            self.quant_method = str(qm) if qm is not None else None
+            if QuantizationMethod is not None and qm == QuantizationMethod.MXFP4 and dm is False:
+                pass  # OK
+            else:
+                raise RuntimeError("MXFP4 required but quantization fell back (dequantized or different method)")
 
     def ensure_loaded_async(self, model_id: str):
         """Kick off a background load if needed."""
@@ -109,6 +145,23 @@ holder = ModelHolder()
 def health():
     return {"status": "ok"}
 
+@app.get("/ready", response_model=ReadyResponse)
+def ready():
+    model_id = _default_model()
+    # Optionally kick off background load
+    if not holder.ready_for(model_id) and not holder.loading and holder.last_error is None:
+        holder.ensure_loaded_async(model_id)
+    loaded = holder.ready_for(model_id)
+    status = "error" if holder.last_error else ("ready" if loaded else "loading")
+    return ReadyResponse(
+        status=status,
+        model=model_id,
+        loaded=loaded,
+        loading=holder.loading,
+        quant_method=holder.quant_method,
+        error=holder.last_error,
+    )
+
 
 @app.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
@@ -116,6 +169,12 @@ def generate(req: GenerateRequest):
     # Return quickly with 202 while model is loading
     if not holder.ready_for(model_id):
         holder.ensure_loaded_async(model_id)
+        if holder.last_error:
+            return JSONResponse(status_code=503, content={
+                "status": "error",
+                "error": holder.last_error,
+                "hint": "MXFP4 quantization is required. Ensure CUDA GPU (cc>=7.5), triton>=3.4, and kernels package are available."
+            })
         if not holder.ready_for(model_id):
             return JSONResponse(status_code=202, content={
                 "status": "loading",

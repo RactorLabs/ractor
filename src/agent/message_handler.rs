@@ -566,46 +566,7 @@ impl MessageHandler {
     }
 }
 
-// Parse structured tool calls from GPT-OSS model response (placeholder for completeness)
-#[derive(Debug, Deserialize)]
-struct StructuredToolCall {
-    function: StructuredToolFunction,
-}
-
-#[derive(Debug, Deserialize)]
-struct StructuredToolFunction {
-    name: String,
-    arguments: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct ToolCallsResponse {
-    tool_calls: Vec<StructuredToolCall>,
-}
-
-fn parse_structured_tool_calls(_s: &str) -> Option<Vec<StructuredToolCall>> {
-    None
-}
-
-// Parse text that looks like: "assistant<|channel|>functions.bash" followed by a JSON args block
-fn parse_assistant_functions_text(s: &str) -> Option<(String, serde_json::Value)> {
-    let lower = s.to_lowercase();
-    let tool = if lower.contains("assistant<|channel|>functions.bash") {
-        "bash"
-    } else if lower.contains("assistant<|channel|>functions.text_editor") {
-        "text_editor"
-    } else {
-        return None;
-    };
-    let start = s.rfind('{')?;
-    let end = s.rfind('}')?;
-    if end <= start {
-        return None;
-    }
-    let json_str = &s[start..=end];
-    let args: serde_json::Value = serde_json::from_str(json_str).ok()?;
-    Some((tool.to_string(), args))
-}
+// Legacy helpers removed; Harmony loop directly parses function calls via enc.parse_messages_from_completion_tokens
 
 // Strict user tool JSON: only accepts a top-level {"tool":"bash|text_editor","input":{...}}
 fn parse_user_tool_call(s: &str) -> Option<(String, serde_json::Value)> {

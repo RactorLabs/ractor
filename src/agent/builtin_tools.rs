@@ -157,7 +157,7 @@ impl Tool for PublishTool {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+    async fn execute(&self, _args: &serde_json::Value) -> Result<String> {
         match self.api.publish_agent().await {
             Ok(_) => Ok("Publish request submitted successfully.".to_string()),
             Err(e) => Ok(format!("Failed to publish: {}", e)),
@@ -191,7 +191,7 @@ impl Tool for SleepTool {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+    async fn execute(&self, _args: &serde_json::Value) -> Result<String> {
         match self.api.sleep_agent().await {
             Ok(_) => Ok("Sleep request submitted successfully.".to_string()),
             Err(e) => Ok(format!("Failed to sleep: {}", e)),

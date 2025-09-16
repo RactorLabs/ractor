@@ -300,7 +300,7 @@ impl AgentManager {
         let agent_name = task.agent_name.clone();
 
         // Parse the payload to get agent creation parameters
-        let mut secrets = task
+        let secrets = task
             .payload
             .get("secrets")
             .and_then(|v| v.as_object())
