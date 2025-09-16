@@ -67,22 +67,33 @@ impl GptClient {
         };
 
         // Replace obvious wrong role headers for common tools and their function.* variants
-        let candidates = [
-            "bash",
-            "text_editor",
-            "publish",
-            "sleep",
-            "container.exec",
-            "functions.bash",
-            "functions.text_editor",
-            "functions.publish",
-            "functions.sleep",
-            "functions.container.exec",
-        ];
-        for role in candidates.iter() {
-            let wrong = format!("<|{}|>", role);
-            if let Some(fix) = map_role_token(role) {
+        let names = ["bash", "text_editor", "publish", "sleep", "container.exec"];
+        for name in names.iter() {
+            // Standalone wrong role tags like <|bash|>
+            let wrong = format!("<|{}|>", name);
+            if let Some(fix) = map_role_token(name) {
                 s = s.replace(&wrong, &fix);
+            }
+            // Mis-nested after assistant: <|assistant|><|bash|>
+            let wrong = format!("<|assistant|><|{}|>", name);
+            if let Some(fix_only_recipient) = map_role_token(name) {
+                // This already includes <|assistant|>, so keep only recipient part
+                let fix_rec = fix_only_recipient.replace("<|assistant|>", "");
+                s = s.replace(&wrong, &format!("<|assistant|>{}", fix_rec));
+            }
+            // Bad recipient values like <|recipient|>bash → prefix functions.
+            let wrong = format!("<|recipient|>{}", name);
+            let mapped = match *name {
+                "container.exec" => "bash",
+                other => other,
+            };
+            let fix = format!("<|recipient|>functions.{}", mapped);
+            s = s.replace(&wrong, &fix);
+
+            // Wrong role using functions.* as role: <|functions.bash|>
+            let wrong = format!("<|functions.{}|>", name);
+            if let Some(fix2) = map_role_token(&format!("functions.{}", name)) {
+                s = s.replace(&wrong, &fix2);
             }
         }
 
