@@ -4,8 +4,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      python3 python3-venv python3-pip \
-      git ca-certificates \
+      python3 python3-venv python3-pip python3-dev \
+      git ca-certificates curl \
       build-essential gcc g++ && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
       transformers \
       accelerate \
       triton==3.4.0 \
+      hf_transfer \
       kernels \
       sentencepiece \
       einops
@@ -34,10 +35,26 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # App files
 COPY gpt /app/gpt
 
+# Sensible defaults for HF caches and runtime behavior; can be overridden at runtime
 ENV RAWORC_GPT_MODEL="gpt-oss:120b"
 ENV HOST=0.0.0.0
 ENV PORT=6000
+ENV HF_HOME=/app/data/hf
+ENV HUGGINGFACE_HUB_CACHE=/app/data/hf
+ENV TRANSFORMERS_CACHE=/app/data/hf
+ENV HF_HUB_DISABLE_TELEMETRY=1
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+ENV TOKENIZERS_PARALLELISM=false
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True,max_split_size_mb:128
+ENV PYTHONUNBUFFERED=1
+
+# Ensure default data/logs paths exist (volumes may override at runtime)
+RUN mkdir -p /app/data/hf /app/logs
 
 EXPOSE 6000
+
+# Healthcheck hits /ready and expects status=ready
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=10 \
+  CMD curl -fsS http://127.0.0.1:6000/ready | grep -q '"status":"ready"' || exit 1
 
 CMD ["/app/.venv/bin/uvicorn", "gpt.app:app", "--host", "0.0.0.0", "--port", "6000"]
