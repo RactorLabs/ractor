@@ -61,14 +61,8 @@ class ModelHolder:
         self.quant_method: Optional[str] = None
 
     def load(self, model_id: str):
-        # Map friendly ids like 'gpt-oss:120b' to HF repo ids
-        if model_id.startswith('gpt-oss:'):
-            size = model_id.split(':', 1)[1].lower()
-            mapping = {
-                '120b': 'openai/gpt-oss-120b',
-                '20b': 'openai/gpt-oss-20b',
-            }
-            model_id = mapping.get(size, 'openai/gpt-oss-120b')
+        # Always load the single supported model (120B)
+        model_id = _default_model()
         if self.model_id == model_id and self.model is not None:
             return
         # Actual blocking load
@@ -105,21 +99,14 @@ class ModelHolder:
     def ensure_loaded_async(self, model_id: str):
         """Kick off a background load if needed."""
         with self._lock:
-            target = model_id
-            if target.startswith('gpt-oss:'):
-                size = target.split(':', 1)[1].lower()
-                mapping = {
-                    '120b': 'openai/gpt-oss-120b',
-                    '20b': 'openai/gpt-oss-20b',
-                }
-                target = mapping.get(size, 'openai/gpt-oss-120b')
+            target = _default_model()
             if (self.model is not None and self.model_id == target) or self.loading:
                 return
             self.loading = True
 
         def _worker():
             try:
-                self.load(model_id)
+                self.load(_default_model())
             except Exception as e:
                 self.last_error = str(e)
             finally:
@@ -129,14 +116,7 @@ class ModelHolder:
         threading.Thread(target=_worker, daemon=True).start()
 
     def ready_for(self, model_id: str) -> bool:
-        target = model_id
-        if target.startswith('gpt-oss:'):
-            size = target.split(':', 1)[1].lower()
-            mapping = {
-                '120b': 'openai/gpt-oss-120b',
-                '20b': 'openai/gpt-oss-20b',
-            }
-            target = mapping.get(size, 'openai/gpt-oss-120b')
+        target = _default_model()
         return self.model is not None and self.model_id == target
 
 
@@ -184,7 +164,7 @@ def enforce_quant_and_eager_load():
 
 @app.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
-    model_id = req.model or _default_model()
+    model_id = _default_model()
     # Return quickly with 202 while model is loading
     if not holder.ready_for(model_id):
         holder.ensure_loaded_async(model_id)
@@ -271,4 +251,5 @@ def generate(req: GenerateRequest):
 
 def _default_model() -> str:
     import os
-    return os.getenv("RAWORC_GPT_MODEL", "gpt-oss:120b")
+    # Use the canonical HF repo id for the single supported model
+    return os.getenv("RAWORC_GPT_MODEL", "openai/gpt-oss-120b")

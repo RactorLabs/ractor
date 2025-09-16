@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY gpt /app/gpt
 
 # Sensible defaults for HF caches and runtime behavior; can be overridden at runtime
-ENV RAWORC_GPT_MODEL="gpt-oss:120b"
+ENV RAWORC_GPT_MODEL="openai/gpt-oss-120b"
 ENV HOST=0.0.0.0
 ENV PORT=6000
 ENV HF_HOME=/app/data/hf

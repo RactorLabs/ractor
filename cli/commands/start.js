@@ -95,7 +95,7 @@ module.exports = (program) => {
     .option('--gpt-shm-size <size>', 'Shared memory for GPT server (e.g., 32g)')
     .option('--gpt-enable-gpu', 'Enable GPU for GPT server (default true)')
     .option('--no-gpt-enable-gpu', 'Disable GPU for GPT server')
-    .option('--gpt-model <model>', 'HF model id for GPT server', 'gpt-oss:120b')
+    .option('--gpt-model <model>', 'HF model id for GPT server', 'openai/gpt-oss-120b')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -339,7 +339,7 @@ module.exports = (program) => {
                 '--network','raworc_network',
                 '-v','raworc_gpt_data:/app/data',
                 '-v','raworc_gpt_logs:/app/logs',
-                '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt-oss:120b'}`,
+                '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'openai/gpt-oss-120b'}`,
                 '-e','HF_HOME=/app/data/hf',
                 '-e','HUGGINGFACE_HUB_CACHE=/app/data/hf',
                 '-e','HF_HUB_DISABLE_TELEMETRY=1',
