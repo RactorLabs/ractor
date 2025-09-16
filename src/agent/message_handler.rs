@@ -89,16 +89,6 @@ impl MessageHandler {
                         )
                         .await;
 
-                    // Register harmony format aliases
-                    registry
-                        .register_alias("functions", "bash", None)
-                        .await;
-                    
-                    // Also map text_editor harmony calls
-                    registry
-                        .register_alias("text_editor", "text_editor", None)
-                        .await;
-
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -303,6 +293,9 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
 
+        // Accumulate composite segments for a single DB message (one step)
+        let mut composite_segments: Vec<serde_json::Value> = Vec::new();
+
         // Fast-path: if USER sent a strict top-level tool JSON, execute directly
         if let Some((tool, input)) = parse_user_tool_call(&message.content) {
             // Notify
@@ -411,36 +404,9 @@ impl MessageHandler {
                     // Log parsed tool call
                     info!("Structured tool call: {} with args: {:?}", tool_name, args);
 
-                    // Store assistant commentary (pre-tool text) as a regular agent message
-                    // and also include it in the ongoing conversation so the model keeps context.
-                    // Prefer commentary channel text if provided; otherwise use content
-                    let commentary_text = model_resp
-                        .commentary
-                        .as_ref()
-                        .map(|s| s.as_str())
-                        .unwrap_or_else(|| model_resp.content.as_str());
-                    if !commentary_text.trim().is_empty() {
-                        let sanitized = self.guardrails.validate_output(commentary_text)?;
-                        let mut meta = serde_json::json!({
-                            "type": "assistant_commentary",
-                            "model": "gpt-oss"
-                        });
-                        if let Some(obj) = meta.as_object_mut() {
-                            if let Some(thinking) = &model_resp.thinking {
-                                obj.insert(
-                                    "thinking".to_string(),
-                                    serde_json::Value::String(thinking.clone()),
-                                );
-                            }
-                            if let Some(secs) = thinking_secs {
-                                obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
-                            }
-                        }
-                        // Persist for UI
-                        self.api_client
-                            .send_message(sanitized.clone(), Some(meta))
-                            .await?;
-                        // Add to conversation for next model turn
+                    // Keep conversation continuity by adding assistant text (if any)
+                    if !model_resp.content.trim().is_empty() {
+                        let sanitized = self.guardrails.validate_output(&model_resp.content)?;
                         conversation.push(ChatMessage {
                             role: "assistant".to_string(),
                             content: sanitized,
@@ -476,8 +442,12 @@ impl MessageHandler {
                         _ => format!("Executing {} tool", tool_name),
                     };
 
-                    self.send_tool_message(&tool_description, tool_name, Some(args))
-                        .await?;
+                    // Record tool call in composite segments
+                    composite_segments.push(serde_json::json!({
+                        "type": "tool_call",
+                        "tool": tool_name,
+                        "args": args,
+                    }));
 
                     // Execute tool through registry
                     let tool_result = match self.tool_registry.execute_tool(tool_name, args).await {
@@ -488,22 +458,12 @@ impl MessageHandler {
                     // Log tool result
                     info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
 
-                    // Send tool result message to database for UI display
-                    let mut result_metadata = serde_json::json!({
+                    // Record tool result in composite segments
+                    composite_segments.push(serde_json::json!({
                         "type": "tool_result",
-                        "tool_type": tool_name
-                    });
-                    if let Some(obj) = result_metadata.as_object_mut() {
-                        obj.insert("args".to_string(), args.clone());
-                    }
-                    // Truncate large tool results for message display
-                    let display_result = self.truncate_tool_result(&tool_result);
-                    if let Err(e) = self.api_client
-                        .send_message(display_result, Some(result_metadata))
-                        .await
-                    {
-                        warn!("Failed to send tool result message: {}", e);
-                    }
+                        "tool": tool_name,
+                        "output": tool_result,
+                    }));
 
                     // Add tool result to conversation following Ollama cookbook
                     conversation.push(ChatMessage {
@@ -516,24 +476,49 @@ impl MessageHandler {
                     continue;
                 }
             } else {
-                // Treat as final answer
+                // Final assistant answer — send a single composite message for this step
                 let sanitized = self.guardrails.validate_output(&model_resp.content)?;
-                let mut meta = serde_json::json!({
-                    "type": "model_response",
-                    "model": "gpt-oss"
-                });
-                if let Some(obj) = meta.as_object_mut() {
-                    if let Some(thinking) = &model_resp.thinking {
-                        obj.insert(
-                            "thinking".to_string(),
-                            serde_json::Value::String(thinking.clone()),
-                        );
-                    }
-                    if let Some(secs) = thinking_secs {
-                        obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
+
+                // Optional thinking/analysis as commentary segment (shown when toggle enabled)
+                if let Some(thinking) = &model_resp.thinking {
+                    if !thinking.trim().is_empty() {
+                        composite_segments.push(serde_json::json!({
+                            "type": "commentary",
+                            "channel": "analysis",
+                            "text": thinking,
+                            "seconds": thinking_secs,
+                        }));
                     }
                 }
-                self.api_client.send_message(sanitized, Some(meta)).await?;
+
+                composite_segments.push(serde_json::json!({
+                    "type": "final",
+                    "channel": "final",
+                    "text": sanitized,
+                }));
+
+                let meta = serde_json::json!({
+                    "type": "model_response_step",
+                    "model": "gpt-oss",
+                });
+                let content_json = serde_json::json!({
+                    "composite": {
+                        "segments": composite_segments
+                    }
+                });
+                self
+                    .api_client
+                    .send_message_structured(
+                        super::api::MessageRole::Agent,
+                        sanitized,
+                        Some(meta),
+                        None,
+                        None,
+                        None,
+                        None,
+                        Some(content_json),
+                    )
+                    .await?;
                 return Ok(());
             }
         }

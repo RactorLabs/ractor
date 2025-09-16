@@ -7,8 +7,13 @@ pub struct AgentMessage {
     pub id: String,
     pub agent_name: String,
     pub created_by: String,
+    pub author_name: Option<String>,
     pub role: String,
+    pub recipient: Option<String>,
+    pub channel: Option<String>,
     pub content: String,
+    pub content_type: Option<String>,
+    pub content_json: Option<serde_json::Value>,
     pub metadata: serde_json::Value,
     pub created_at: DateTime<Utc>,
 }
@@ -20,6 +25,16 @@ pub struct CreateMessageRequest {
     pub content: String,
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub author_name: Option<String>,
+    #[serde(default)]
+    pub recipient: Option<String>,
+    #[serde(default)]
+    pub channel: Option<String>,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub content_json: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,7 +42,12 @@ pub struct MessageResponse {
     pub id: String,
     pub agent_name: String,
     pub role: String,
+    pub author_name: Option<String>,
+    pub recipient: Option<String>,
+    pub channel: Option<String>,
     pub content: String,
+    pub content_type: Option<String>,
+    pub content_json: Option<serde_json::Value>,
     pub metadata: serde_json::Value,
     pub created_at: String,
 }
@@ -124,15 +144,22 @@ impl AgentMessage {
 
         sqlx::query(
             r#"
-            INSERT INTO agent_messages (id, agent_name, created_by, role, content, metadata, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO agent_messages (
+                id, agent_name, created_by, author_name, role, recipient, channel, content, content_type, content_json, metadata, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
         .bind(agent_name)
         .bind(created_by)
+        .bind(&req.author_name)
         .bind(&req.role)
+        .bind(&req.recipient)
+        .bind(&req.channel)
         .bind(&req.content)
+        .bind(&req.content_type)
+        .bind(&req.content_json)
         .bind(&req.metadata)
         .bind(&now)
         .execute(pool)
@@ -142,8 +169,13 @@ impl AgentMessage {
             id,
             agent_name: agent_name.to_string(),
             created_by: created_by.to_string(),
+            author_name: req.author_name,
             role: req.role,
+            recipient: req.recipient,
+            channel: req.channel,
             content: req.content,
+            content_type: req.content_type,
+            content_json: req.content_json,
             metadata: req.metadata,
             created_at: now,
         })
@@ -161,8 +193,8 @@ impl AgentMessage {
 
         sqlx::query_as::<_, AgentMessage>(
             r#"
-            SELECT id, agent_name, created_by, role, content,
-                   metadata, created_at
+            SELECT id, agent_name, created_by, author_name, role, recipient, channel,
+                   content, content_type, content_json, metadata, created_at
             FROM agent_messages
             WHERE agent_name = ?
             ORDER BY created_at ASC
@@ -187,8 +219,8 @@ impl AgentMessage {
 
         let mut sql = String::from(
             r#"
-            SELECT id, agent_name, created_by, role, content,
-                   metadata, created_at
+            SELECT id, agent_name, created_by, author_name, role, recipient, channel,
+                   content, content_type, content_json, metadata, created_at
             FROM agent_messages
             WHERE agent_name = ?
             "#,

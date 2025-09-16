@@ -124,7 +124,7 @@ struct ChatResponse {
 pub struct ModelResponse {
     pub content: String,
     pub thinking: Option<String>,
-    // Text from the harmony "commentary" channel, when present
+    // Optional model-provided commentary/thinking text, when present
     pub commentary: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
@@ -455,7 +455,7 @@ impl OllamaClient {
                         .map_or(0, |tc| tc.len())
                 );
 
-                // Build structured response for caller (no harmony parsing)
+        // Build structured response for caller (no legacy channel parsing)
                 let model_resp = ModelResponse {
                     content: parsed.message.content.clone(),
                     thinking: parsed.message.thinking.clone(),
@@ -501,7 +501,7 @@ impl OllamaClient {
         }
     }
 
-    // All harmony/error-salvage parsing removed; rely on native tool_calls only and retry on parse errors.
+    // All non-standard error-salvage/channel parsing removed; rely on native tool_calls only and retry on parse errors.
     
     async fn log_ollama_request(&self, req: &ChatRequest<'_>) {
         if let Ok(req_json) = serde_json::to_string_pretty(req) {

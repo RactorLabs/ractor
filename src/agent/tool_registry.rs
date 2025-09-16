@@ -105,16 +105,9 @@ impl ToolRegistry {
 
     /// Execute a tool with the given arguments
     pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<String> {
-        // Strip harmony format syntax from tool name (e.g. "container.exec<|channel|>commentary" -> "container.exec")
-        let clean_name = if let Some(channel_idx) = name.find("<|channel|>") {
-            let stripped = &name[..channel_idx];
-            tracing::info!("Stripped harmony syntax: '{}' -> '{}'", name, stripped);
-            stripped
-        } else {
-            name
-        };
-        
-        tracing::info!("Executing tool: original='{}', clean='{}'", name, clean_name);
+        // No special stripping of non-standard formats; use tool name as-is
+        let clean_name = name;
+        tracing::info!("Executing tool: '{}'", clean_name);
         
         // Map parameters if it's an alias
         let (canonical_name, mapped_args) = {

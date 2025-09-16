@@ -74,6 +74,8 @@
   let pollHandle = null;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
+  // Show/hide thinking (analysis/commentary) text; default off, not persisted
+  let showThinking = false;
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -228,6 +230,35 @@
     if (k === 'bash') return 'Bash';
     if (k === 'text_editor') return 'Text Editor';
     return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
+  }
+
+  // Composite helpers (content_json.composite.segments)
+  function hasComposite(m) {
+    try { return Array.isArray(m?.content_json?.composite?.segments) && m.content_json.composite.segments.length > 0; } catch (_) { return false; }
+  }
+  function segmentsOf(m) { try { return Array.isArray(m?.content_json?.composite?.segments) ? m.content_json.composite.segments : []; } catch (_) { return []; } }
+  function segType(s) { return String(s?.type || '').toLowerCase(); }
+  function segChannel(s) { return String(s?.channel || '').toLowerCase(); }
+  function segText(s) { return String(s?.text || ''); }
+  function segTool(s) { return String(s?.tool || ''); }
+  function segArgs(s) { try { return (s && typeof s.args === 'object') ? s.args : null; } catch(_) { return null; } }
+  function segOutput(s) { return s?.output; }
+  function segToolTitle(s) {
+    try {
+      const t = segTool(s).toLowerCase();
+      const a = segArgs(s) || {};
+      if (t === 'bash') {
+        const cmd = a.command || a.cmd || '';
+        return cmd ? cmd : '(bash)';
+      }
+      if (t === 'text_editor') {
+        const action = a.action || 'edit';
+        const path = a.path || '';
+        return `${action}${path ? ' ' + path : ''}`;
+      }
+      const json = JSON.stringify(a);
+      return json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
+    } catch (_) { return ''; }
   }
 
   // Normalize metadata to an object (handles string-serialized JSON)
@@ -678,6 +709,10 @@
         Total messages <span class="d-none d-sm-inline">(includes tool calls)</span>: {Array.isArray(messages) ? messages.length : 0}
       </div>
       <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
+          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">Show Thinking</label>
+        </div>
         <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
         <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
       </div>
@@ -706,6 +741,66 @@
               </div>
             {:else}
               <!-- Agent side -->
+              {#if hasComposite(m)}
+                <!-- Composite rendering: thinking, tool calls/results, final in one message -->
+                <div class="d-flex mb-3 justify-content-start">
+                  <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                    {#each segmentsOf(m) as s, j}
+                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary') && showThinking}
+                        <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                      {:else if segType(s) === 'tool_call'}
+                        <!-- Combine tool call + immediate tool result if next segment matches -->
+                        {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
+                          <div class="d-flex mb-1 justify-content-start">
+                            <details class="mt-0">
+                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary">{segToolTitle(s)}</span>
+                              </summary>
+                              <div class="small text-body">
+                                <div class="text-body text-opacity-75 mb-1">Args</div>
+                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
+                                <div class="text-body text-opacity-75 mb-1">Result</div>
+                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
+                              </div>
+                            </details>
+                          </div>
+                        {:else}
+                          <!-- Unpaired tool call -->
+                          <div class="d-flex mb-1 justify-content-start">
+                            <details class="mt-0">
+                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary">{segToolTitle(s)}</span>
+                              </summary>
+                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
+                            </details>
+                          </div>
+                        {/if}
+                      {:else if segType(s) === 'tool_result'}
+                        <!-- Orphan tool result (no preceding call) -->
+                        {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
+                          <div class="d-flex mb-1 justify-content-start">
+                            <details class="mt-0">
+                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary">Result</span>
+                              </summary>
+                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
+                            </details>
+                          </div>
+                        {/if}
+                      {:else if segType(s) === 'final'}
+                        {#if segText(s) && segText(s).trim()}
+                          <div class="markdown-wrap mb-2">
+                            <div class="markdown-body">{@html renderMarkdown(segText(s))}</div>
+                          </div>
+                        {/if}
+                      {/if}
+                    {/each}
+                  </div>
+                </div>
+              {:else}
               {#if isToolExec(m)}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
@@ -732,12 +827,9 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if metaOf(m)?.thinking}
-                        <details class="mt-1 mb-2">
-                          <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            Thought {#if metaOf(m)?.thinking_seconds}for {fmtSeconds(metaOf(m)?.thinking_seconds)}{/if}
-                          </summary>
-                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
-                        </details>
+                        {#if showThinking}
+                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                        {/if}
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div class="markdown-wrap">
@@ -747,6 +839,7 @@
                     </div>
                   </div>
                 {/if}
+              {/if}
               {/if}
             {/if}
           {/each}
