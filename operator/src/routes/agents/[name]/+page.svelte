@@ -291,6 +291,69 @@
       return !!(meta && meta.in_progress === true);
     } catch (_) { return false; }
   }
+  // Resolve a human summary for the current executing tool (for in-progress display)
+  function currentExecSummary(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || segs.length === 0) return '';
+      for (let k = segs.length - 1; k >= 0; k--) {
+        const s = segs[k];
+        if (segType(s) === 'tool_call') {
+          // If next segment is an immediate matching tool_result, skip (already completed)
+          const next = segs[k + 1];
+          if (next && segType(next) === 'tool_result' && segTool(next) === segTool(s)) continue;
+          const label = toolLabel(segTool(s));
+          const title = segToolTitle(s);
+          return `${label}${title ? ' ' + title : ''}`.trim();
+        }
+      }
+      return '';
+    } catch (_) { return ''; }
+  }
+
+  // Return { tool, summary } for the current executing tool (pending tool_call without a matching tool_result)
+  function currentExecInfo(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || segs.length === 0) return null;
+      for (let k = segs.length - 1; k >= 0; k--) {
+        const s = segs[k];
+        if (segType(s) === 'tool_call') {
+          const n = segs[k + 1];
+          if (n && segType(n) === 'tool_result' && segTool(n) === segTool(s)) continue;
+          const tool = segTool(s);
+          const summary = segToolTitle(s);
+          return { tool, summary };
+        }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
+
+  function toolIconClass(tool) {
+    const t = String(tool || '').toLowerCase();
+    if (t === 'bash') return 'fas fa-terminal';
+    if (t === 'text_editor') return 'fas fa-file-lines';
+    if (t === 'publish') return 'fas fa-cloud-arrow-up';
+    if (t === 'sleep') return 'fas fa-moon';
+    return 'fas fa-wrench';
+  }
+
+  // Global executing info: scan latest in-progress assistant message
+  function latestExecInfo() {
+    try {
+      if (!Array.isArray(messages) || messages.length === 0) return null;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m && m.role === 'agent' && isInProgress(m)) {
+          const info = currentExecInfo(m);
+          if (info && info.summary) return info;
+          return { tool: '', summary: '' };
+        }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
   function hasToolSegments(m) {
     try {
       const segs = segmentsOf(m);
@@ -929,7 +992,7 @@
               <!-- Agent side -->
               {#if hasComposite(m)}
                 <!-- Harmony composite rendering: show commentary, tool calls/results, and final in one message -->
-                <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-3' : 'mb-2')}>
+                <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-4' : 'mb-3')}>
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     <!-- Message-level context metrics hidden by design -->
                     {#each segmentsOf(m) as s, j}
@@ -940,9 +1003,9 @@
                       {:else if segType(s) === 'tool_call'}
                         {#if (segmentsOf(m)[j+1] && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s))}
                           <!-- Combined Tool box: call + result -->
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
                                 {segToolTitle(s)}
                               </summary>
@@ -969,9 +1032,9 @@
                           </div>
                         {:else}
                           <!-- Tool call without an immediate paired result -->
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
                                 {segToolTitle(s)}
                               </summary>
@@ -982,9 +1045,9 @@
                       {:else if segType(s) === 'tool_result'}
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <!-- Orphan tool result (no preceding call in segments) -->
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
                                 Result
                               </summary>
@@ -1013,19 +1076,14 @@
                         {/if}
                       {/if}
                     {/each}
-                    {#if isInProgress(m)}
-                      <div class="small text-body-secondary mt-1 d-flex align-items-center gap-2">
-                        <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
-                        <span>Processing…</span>
-                      </div>
-                    {/if}
+                    <!-- Per-message working/processing footer removed in favor of global status below the list -->
                   </div>
                 </div>
               {:else if isToolExec(m)}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
-                <div class="d-flex mb-3 justify-content-start">
+                <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
-                    <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                    <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                       <span class="badge text-bg-primary me-2">Tool Call</span>
                       <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
                       {argsPreview(m)}
@@ -1037,9 +1095,9 @@
                 <!-- Tool response card or regular agent message -->
                 {#if isToolResult(m)}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
-                  <div class="d-flex mb-3 justify-content-start">
+                  <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
-                      <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                      <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
                         <span class="badge text-bg-success me-2">Tool Result</span>
                         <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
                         {argsPreview(m)}
@@ -1059,21 +1117,21 @@
                     </details>
                   </div>
                 {:else}
-                  <div class="d-flex mb-2 justify-content-start">
-                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                      {#if isThinking(m)}
-                        {#if showThinking}
+                  {#if !(isThinking(m) && !showThinking)}
+                    <div class="d-flex mb-2 justify-content-start">
+                      <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                        {#if isThinking(m)}
                           <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{m.content}</div>
-                        {/if}
-                      {:else if m.content && m.content.trim()}
-                        <div class="markdown-wrap">
-                          <div class="markdown-body">
-                            {@html renderMarkdown(m.content)}
+                        {:else if m.content && m.content.trim()}
+                          <div class="markdown-wrap">
+                            <div class="markdown-body">
+                              {@html renderMarkdown(m.content)}
+                            </div>
                           </div>
-                        </div>
-                      {/if}
+                        {/if}
+                      </div>
                     </div>
-                  </div>
+                  {/if}
                 {/if}
               {/if}
             {/if}
@@ -1081,6 +1139,19 @@
         {/if}
         </div>
       </div>
+      <!-- Global execution status footer -->
+      {#if latestExecInfo() || stateStr === 'busy'}
+        <div class="status-footer small text-body-secondary d-flex align-items-center gap-2 mt-3 pt-2 pb-1">
+          <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
+          {#if latestExecInfo() && latestExecInfo().summary}
+            <i class={toolIconClass(latestExecInfo().tool)}></i>
+            <span>Executing: {latestExecInfo().summary}</span>
+          {:else}
+            <span>Working…</span>
+          {/if}
+        </div>
+      {/if}
+
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
           <textarea
@@ -1159,6 +1230,7 @@
     /* Ensure dropdown menus overlay adjacent buttons and are not clipped */
     :global(.dropdown-menu) { z-index: 5000; }
     :global(.card) { overflow: visible; }
+    /* Status footer spacing (no border by request) */
     /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
