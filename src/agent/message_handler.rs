@@ -561,11 +561,9 @@ impl MessageHandler {
                 });
             }
 
-            // Auto-finalize publish/sleep
+            // Auto-finalize ONLY for sleep (terminal action). Publish is not auto-finalized.
             if final_msg.is_none() {
-                if segments_all.iter().any(|s| s.get("type").and_then(|v| v.as_str()) == Some("tool_result") && s.get("tool").and_then(|v| v.as_str()) == Some("publish")) {
-                    final_msg = Some(("final".to_string(), "Publish completed.".to_string()));
-                } else if segments_all.iter().any(|s| s.get("type").and_then(|v| v.as_str()) == Some("tool_result") && s.get("tool").and_then(|v| v.as_str()) == Some("sleep")) {
+                if segments_all.iter().any(|s| s.get("type").and_then(|v| v.as_str()) == Some("tool_result") && s.get("tool").and_then(|v| v.as_str()) == Some("sleep")) {
                     final_msg = Some(("final".to_string(), "Agent is going to sleep.".to_string()));
                 }
             }
@@ -721,10 +719,14 @@ Termination & duplication rules:
 - After a successful create/write that satisfies the user's request, emit a 'final' immediately and stop; do not keep iterating.
 - If a tool returns an error like "file already exists" for create, do not retry the same action/path. Decide (write vs new name) and state the decision in 'final'.
 - If multiple files are needed, include all text_editor tool calls in the same step if possible, then produce one 'final' summarizing the created paths.
+ - Sleep is terminal: after issuing the sleep tool and receiving its result, emit a 'final' stating the agent will sleep, then stop.
+ - Sleep is terminal: after issuing the sleep tool and receiving its result, emit a 'final' stating the agent will sleep, then stop.
 
 Publishing rules:
 - Publish only if the user asked to view/share/open the created content or the task explicitly requires a public URL. Otherwise, confirm creation and provide the relative path (e.g., content/foo.html) in 'final'.
 - When you do publish, include the absolute published URL(s) only in 'final' (never in analysis/commentary).
+ - Publish is not terminal by itself; after publishing, you should still produce a normal 'final' message summarizing results.
+ - Publish is not terminal by itself; after publishing, you should still produce a normal 'final' message summarizing results.
 
 Constraints:
 - Tool call content must be valid JSON per schema. No extra prose.
