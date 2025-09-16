@@ -512,10 +512,6 @@ impl MessageHandler {
                         super::api::MessageRole::Agent,
                         sanitized,
                         Some(meta),
-                        None,
-                        None,
-                        None,
-                        None,
                         Some(content_json),
                     )
                     .await?;

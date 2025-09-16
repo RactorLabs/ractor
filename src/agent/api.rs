@@ -41,14 +41,6 @@ struct CreateMessageRequestStructured {
     content: String,
     metadata: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")] 
-    author_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] 
-    recipient: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] 
-    channel: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] 
-    content_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] 
     content_json: Option<serde_json::Value>,
 }
 
@@ -296,10 +288,6 @@ impl RaworcClient {
         role: MessageRole,
         content: String,
         metadata: Option<serde_json::Value>,
-        author_name: Option<String>,
-        recipient: Option<String>,
-        channel: Option<String>,
-        content_type: Option<String>,
         content_json: Option<serde_json::Value>,
     ) -> Result<Message> {
         let url = format!(
@@ -307,16 +295,7 @@ impl RaworcClient {
             self.config.api_url, self.config.agent_name
         );
 
-        let request = CreateMessageRequestStructured {
-            role,
-            content,
-            metadata,
-            author_name,
-            recipient,
-            channel,
-            content_type,
-            content_json,
-        };
+        let request = CreateMessageRequestStructured { role, content, metadata, content_json };
 
         let response = self
             .client
