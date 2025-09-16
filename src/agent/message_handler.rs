@@ -440,9 +440,56 @@ impl MessageHandler {
             }
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
-            let parsed = enc
+            let parsed = match enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
-                .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    // Fallback: if the model produced an unknown role (e.g., "bash"),
+                    // treat the entire completion as a plain assistant final message to avoid hard failure.
+                    let err_msg = format!("{}", e);
+                    tracing::warn!(target: "gpt", request_id = %request_id, error = %err_msg, "HARMONY_PARSE_FAILED_FALLBACK");
+                    let sanitized = self.guardrails.validate_output(&completion)?;
+                    // Create a single-step final message and return.
+                    let mut tm = serde_json::json!({
+                        "prompt_tokens": tokens.len(),
+                        "prompt_bytes": prompt.len(),
+                    });
+                    let max_ctx: usize = std::env::var("RAWORC_MAX_CONTEXT_TOKENS").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(8192);
+                    let reserve: usize = std::env::var("RAWORC_COMPLETION_MARGIN").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1024);
+                    tm["budget"] = serde_json::json!({ "max_tokens": max_ctx, "completion_margin": reserve });
+                    let meta = serde_json::json!({
+                        "type": "model_response_step",
+                        "model": "gpt-oss",
+                        "step": step,
+                        "has_final": true,
+                        "in_progress": false,
+                        "token_metrics": tm,
+                        "fallback": true,
+                        "fallback_reason": err_msg,
+                    });
+                    let segments = vec![serde_json::json!({
+                        "type": "final",
+                        "channel": "final",
+                        "text": sanitized,
+                    })];
+                    let content_json = serde_json::json!({ "harmony": { "request_id": request_id, "segments": segments } });
+                    let _ = self
+                        .api_client
+                        .send_message_structured(
+                            super::api::MessageRole::Agent,
+                            sanitized,
+                            Some(meta),
+                            None,
+                            None,
+                            Some("final".to_string()),
+                            None,
+                            Some(content_json),
+                        )
+                        .await;
+                    return Ok(());
+                }
+            };
             tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
             // First pass: commentary + tool_call only (no execution)
