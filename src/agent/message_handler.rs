@@ -374,9 +374,8 @@ impl MessageHandler {
             gp.insert("stop".to_string(), serde_json::json!(["<|end|>", "<|call|>", "<|return|>"]));
             if let Some(n) = max_new_env { gp.insert("max_new_tokens".to_string(), serde_json::json!(n)); }
             let gen_params = serde_json::Value::Object(gp);
-            // Full Harmony logs are enabled by default now.
-            // Disable by setting RAWORC_LOG_HARMONY to a falsey value (0,false,no,off),
-            // or by writing such a value into /agent/secrets/log_harmony (or /agent/logs/log_harmony).
+            // Harmony logs are enabled by default for debugging. Disable by setting RAWORC_LOG_HARMONY to a falsey value (0,false,no,off).
+            // You can also toggle via /agent/secrets/log_harmony or /agent/logs/log_harmony files.
             let log_env = std::env::var("RAWORC_LOG_HARMONY").unwrap_or_else(|_| "true".to_string()).to_lowercase();
             let mut log_full = !matches!(log_env.as_str(), "0" | "false" | "no" | "off");
             // Optional file overrides: if explicitly falsey, turn off
@@ -440,16 +439,54 @@ impl MessageHandler {
             }
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
+
+            // Heuristic helpers for fallback path
+            fn strip_harmony_tokens(input: &str) -> String {
+                let mut out = String::with_capacity(input.len());
+                let mut i = 0;
+                let b = input.as_bytes();
+                while i < b.len() {
+                    if b[i] == b'<' && i + 1 < b.len() && b[i + 1] == b'|' {
+                        // skip until next '>'
+                        i += 2; // skip "<|"
+                        while i < b.len() && b[i] != b'>' {
+                            i += 1;
+                        }
+                        if i < b.len() && b[i] == b'>' {
+                            i += 1; // skip '>'
+                        }
+                        continue;
+                    }
+                    out.push(b[i] as char);
+                    i += 1;
+                }
+                out
+            }
+
+            fn extract_final_from_raw(input: &str) -> Option<String> {
+                let tag = "<|channel|>final";
+                if let Some(pos) = input.find(tag) {
+                    let rest = &input[pos + tag.len()..];
+                    let end = rest.find("<|").unwrap_or(rest.len());
+                    let seg = rest[..end].trim();
+                    if !seg.is_empty() {
+                        return Some(seg.to_string());
+                    }
+                }
+                None
+            }
+
             let parsed = match enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
             {
                 Ok(p) => p,
                 Err(e) => {
                     // Fallback: if the model produced an unknown role (e.g., "bash"),
-                    // treat the entire completion as a plain assistant final message to avoid hard failure.
+                    // try to extract only the final user-visible content. As a last resort, strip control tokens.
                     let err_msg = format!("{}", e);
                     tracing::warn!(target: "gpt", request_id = %request_id, error = %err_msg, "HARMONY_PARSE_FAILED_FALLBACK");
-                    let sanitized = self.guardrails.validate_output(&completion)?;
+                    let candidate = extract_final_from_raw(&completion).unwrap_or_else(|| strip_harmony_tokens(&completion));
+                    let sanitized = self.guardrails.validate_output(&candidate)?;
                     // Create a single-step final message and return.
                     let mut tm = serde_json::json!({
                         "prompt_tokens": tokens.len(),
