@@ -1,7 +1,9 @@
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import torch
+import threading
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -36,15 +38,68 @@ class ModelHolder:
         self.model_id = None
         self.model = None
         self.tok = None
+        self.loading = False
+        self.last_error: Optional[str] = None
+        self._lock = threading.Lock()
 
     def load(self, model_id: str):
+        # Map friendly ids like 'gpt-oss:120b' to HF repo ids
+        if model_id.startswith('gpt-oss:'):
+            size = model_id.split(':', 1)[1].lower()
+            mapping = {
+                '120b': 'openai/gpt-oss-120b',
+                '20b': 'openai/gpt-oss-20b',
+            }
+            model_id = mapping.get(size, 'openai/gpt-oss-120b')
         if self.model_id == model_id and self.model is not None:
             return
+        # Actual blocking load
         self.tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        self.model = AutoModelForCausalLM.from_pretrained(model_id)
+        # Prefer BF16 to avoid unnecessary quantization warnings if kernels are missing
+        dtype = torch.bfloat16 if torch.cuda.is_available() else None
+        kwargs = {"torch_dtype": dtype} if dtype is not None else {}
+        self.model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
         device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model.to(device)
         self.model_id = model_id
+        self.last_error = None
+
+    def ensure_loaded_async(self, model_id: str):
+        """Kick off a background load if needed."""
+        with self._lock:
+            target = model_id
+            if target.startswith('gpt-oss:'):
+                size = target.split(':', 1)[1].lower()
+                mapping = {
+                    '120b': 'openai/gpt-oss-120b',
+                    '20b': 'openai/gpt-oss-20b',
+                }
+                target = mapping.get(size, 'openai/gpt-oss-120b')
+            if (self.model is not None and self.model_id == target) or self.loading:
+                return
+            self.loading = True
+
+        def _worker():
+            try:
+                self.load(model_id)
+            except Exception as e:
+                self.last_error = str(e)
+            finally:
+                with self._lock:
+                    self.loading = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def ready_for(self, model_id: str) -> bool:
+        target = model_id
+        if target.startswith('gpt-oss:'):
+            size = target.split(':', 1)[1].lower()
+            mapping = {
+                '120b': 'openai/gpt-oss-120b',
+                '20b': 'openai/gpt-oss-20b',
+            }
+            target = mapping.get(size, 'openai/gpt-oss-120b')
+        return self.model is not None and self.model_id == target
 
 
 holder = ModelHolder()
@@ -58,7 +113,15 @@ def health():
 @app.post("/generate", response_model=GenerateResponse)
 def generate(req: GenerateRequest):
     model_id = req.model or _default_model()
-    holder.load(model_id)
+    # Return quickly with 202 while model is loading
+    if not holder.ready_for(model_id):
+        holder.ensure_loaded_async(model_id)
+        if not holder.ready_for(model_id):
+            return JSONResponse(status_code=202, content={
+                "status": "loading",
+                "model": model_id,
+                "error": holder.last_error,
+            })
 
     if req.seed is not None:
         torch.manual_seed(req.seed)

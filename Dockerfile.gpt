@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
       uvicorn[standard]==0.30.6 \
       transformers \
       accelerate \
+      triton==3.4.0 \
       sentencepiece \
       einops
 

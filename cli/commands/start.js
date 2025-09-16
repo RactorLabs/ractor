@@ -341,7 +341,6 @@ module.exports = (program) => {
                 '-v','raworc_gpt_logs:/app/logs',
                 '-e',`RAWORC_GPT_MODEL=${options.gptModel || process.env.RAWORC_GPT_MODEL || 'gpt-oss:120b'}`,
                 '-e','HF_HOME=/app/data/hf',
-                '-e','TRANSFORMERS_CACHE=/app/data/hf',
                 '-e','HUGGINGFACE_HUB_CACHE=/app/data/hf',
                 ...gpuFlags,
                 ...cpuFlag,
