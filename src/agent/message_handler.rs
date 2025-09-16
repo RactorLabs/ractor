@@ -439,137 +439,17 @@ impl MessageHandler {
             }
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
-
-            // Heuristic helpers for fallback path
-            fn strip_harmony_tokens(input: &str) -> String {
-                let mut out = String::with_capacity(input.len());
-                let mut i = 0;
-                let b = input.as_bytes();
-                while i < b.len() {
-                    if b[i] == b'<' && i + 1 < b.len() && b[i + 1] == b'|' {
-                        // skip until next '>'
-                        i += 2; // skip "<|"
-                        while i < b.len() && b[i] != b'>' {
-                            i += 1;
-                        }
-                        if i < b.len() && b[i] == b'>' {
-                            i += 1; // skip '>'
-                        }
-                        continue;
-                    }
-                    out.push(b[i] as char);
-                    i += 1;
-                }
-                out
-            }
-
-            fn extract_final_from_raw(input: &str) -> Option<String> {
-                let tag = "<|channel|>final";
-                if let Some(pos) = input.find(tag) {
-                    let rest = &input[pos + tag.len()..];
-                    let end = rest.find("<|").unwrap_or(rest.len());
-                    let seg = rest[..end].trim();
-                    if !seg.is_empty() {
-                        return Some(seg.to_string());
-                    }
-                }
-                None
-            }
-
-            fn strip_transcript_meta(input: &str) -> String {
-                let mut out = String::new();
-                let mut skipping_block = false;
-                let mut brace_depth: i32 = 0;
-                for line in input.lines() {
-                    let trimmed = line.trim();
-                    let lower = trimmed.to_lowercase();
-                    // Start skipping on headings like "Args" or "Result"
-                    if !skipping_block
-                        && (lower == "args"
-                            || lower.starts_with("args ")
-                            || lower == "result"
-                            || lower.starts_with("result "))
-                    {
-                        skipping_block = true;
-                        brace_depth = 0;
-                        continue;
-                    }
-                    if skipping_block {
-                        for ch in line.chars() {
-                            if ch == '{' {
-                                brace_depth += 1;
-                            } else if ch == '}' {
-                                brace_depth -= 1;
-                            }
-                        }
-                        // Stop skipping when JSON likely ended and a blank line delimiter appears
-                        if brace_depth <= 0 && trimmed.is_empty() {
-                            skipping_block = false;
-                        }
-                        continue;
-                    }
-                    // Drop thought headings like "analysis" / "commentary" lines
-                    if lower.starts_with("analysis") || lower.starts_with("commentary") {
-                        continue;
-                    }
-                    out.push_str(line);
-                    out.push('\n');
-                }
-                out.trim().to_string()
-            }
-
             let parsed = match enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
             {
                 Ok(p) => p,
                 Err(e) => {
-                    // Fallback: if the model produced an unknown role (e.g., "bash"),
-                    // try to extract only the final user-visible content. As a last resort, strip control tokens.
-                    let err_msg = format!("{}", e);
-                    tracing::warn!(target: "gpt", request_id = %request_id, error = %err_msg, "HARMONY_PARSE_FAILED_FALLBACK");
-                    let candidate = extract_final_from_raw(&completion)
-                        .unwrap_or_else(|| strip_harmony_tokens(&completion));
-                    let cleaned = strip_transcript_meta(&candidate);
-                    let final_text = if cleaned.trim().is_empty() { "Done.".to_string() } else { cleaned };
-                    let sanitized = self.guardrails.validate_output(&final_text)?;
-                    // Create a single-step final message and return.
-                    let mut tm = serde_json::json!({
-                        "prompt_tokens": tokens.len(),
-                        "prompt_bytes": prompt.len(),
-                    });
-                    let max_ctx: usize = std::env::var("RAWORC_MAX_CONTEXT_TOKENS").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(8192);
-                    let reserve: usize = std::env::var("RAWORC_COMPLETION_MARGIN").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1024);
-                    tm["budget"] = serde_json::json!({ "max_tokens": max_ctx, "completion_margin": reserve });
-                    let meta = serde_json::json!({
-                        "type": "model_response_step",
-                        "model": "gpt-oss",
-                        "step": step,
-                        "has_final": true,
-                        "in_progress": false,
-                        "token_metrics": tm,
-                        "fallback": true,
-                        "fallback_reason": err_msg,
-                    });
-                    let segments = vec![serde_json::json!({
-                        "type": "final",
-                        "channel": "final",
-                        "text": sanitized,
-                    })];
-                    let content_json = serde_json::json!({ "harmony": { "request_id": request_id, "segments": segments } });
-                    let _ = self
-                        .api_client
-                        .send_message_structured(
-                            super::api::MessageRole::Agent,
-                            sanitized,
-                            Some(meta),
-                            None,
-                            None,
-                            Some("final".to_string()),
-                            None,
-                            Some(content_json),
-                        )
-                        .await;
-                    return Ok(());
+                    // Clean fix: rely on normalization to avoid malformed roles; if it still fails,
+                    // return a clear model error upward without trying to inject raw transcripts.
+                    return Err(super::error::HostError::Model(format!(
+                        "Harmony parse failed: {}",
+                        e
+                    )));
                 }
             };
             tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
