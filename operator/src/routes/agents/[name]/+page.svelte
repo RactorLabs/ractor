@@ -364,6 +364,51 @@
     } catch (_) { return false; }
   }
 
+  // Composite visibility considering thinking toggle
+  function isVisibleComposite(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || segs.length === 0) return false;
+      for (const s of segs) {
+        const t = segType(s);
+        if (t === 'tool_call' || t === 'tool_result') return true;
+        if (t === 'final') {
+          const txt = segText(s);
+          if (String(txt || '').trim()) return true;
+        }
+        if (showThinking) {
+          const ch = segChannel(s).toLowerCase();
+          if (t === 'commentary' || ch === 'analysis' || ch === 'commentary') {
+            const txt = segText(s);
+            if (String(txt || '').trim()) return true;
+          }
+        }
+      }
+      return false;
+    } catch (_) { return true; }
+  }
+
+  // Message-level visibility considering composite segments and thinking toggle
+  function isVisibleMessage(m) {
+    try {
+      if (!m) return false;
+      if (hasComposite(m)) return isVisibleComposite(m);
+      // Non-composite tool call/result are always visible
+      if (isToolExec(m) || isToolResult(m)) return true;
+      // Hide pure thinking when toggle is off
+      if (isThinking(m) && !showThinking) return false;
+      // Show if there is actual text content
+      const c = String(m?.content || '').trim();
+      return c.length > 0;
+    } catch (_) { return true; }
+  }
+
+  // Derived visible messages list used by UI to avoid rendering empty wrappers
+  // Recompute when messages or showThinking changes
+  $: visibleMessages = Array.isArray(messages) ? messages.filter((mm) => { const _t = showThinking; return isVisibleMessage(mm); }) : [];
+
+  
+
   // Build a human-friendly one-line summary for a tool call
   function segToolTitle(s) {
     try {
@@ -929,30 +974,25 @@
     </div>
 
     <!-- Minimize/Maximize (expand/collapse) tool details row -->
-    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      <div class="small text-body me-2">
-        {#if contextUsage}
-          {#if (contextUsage.used_tokens / Math.max(1, contextUsage.max_tokens)) < 0.6}
-            <span class="badge rounded-pill bg-success-subtle border text-success">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
-          {:else if (contextUsage.used_tokens / Math.max(1, contextUsage.max_tokens)) < 0.85}
-            <span class="badge rounded-pill bg-warning-subtle border text-warning">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
-          {:else}
-            <span class="badge rounded-pill bg-danger-subtle border text-danger">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
-          {/if}
-        {:else}
-          <span class="text-body-secondary">Context: …</span>
-        {/if}
-      </div>
+    <div class="d-flex align-items-center flex-nowrap gap-2 mb-2">
+      <!-- Left group: Context + Compact -->
       <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
-        <div class="form-check form-switch ms-1" title="Toggle display of thinking (analysis/commentary)">
-          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-          <label class="form-check-label small" for="toggle-thinking">Show Thinking</label>
-        </div>
-        <!-- Removed Show Context toggle; message-level metrics are not shown in UI -->
+        <!-- Compact button: icon-only on mobile, icon+label on sm+ -->
         <button
-          class="btn btn-outline-danger btn-sm ms-1"
+          class="btn btn-outline-secondary btn-sm px-2 d-inline-flex d-sm-none align-items-center"
+          on:click={compactNow}
+          aria-label="Compact conversation"
+          title="Compact conversation (create a summary baseline)"
+          disabled={agent && agent.metadata && agent.metadata.compact_in_progress === true}
+        >
+          {#if agent && agent.metadata && agent.metadata.compact_in_progress === true}
+            <i class="fas fa-circle-notch fa-spin"></i>
+          {:else}
+            <i class="fas fa-compress"></i>
+          {/if}
+        </button>
+        <button
+          class="btn btn-outline-secondary btn-sm d-none d-sm-inline-flex align-items-center"
           on:click={compactNow}
           aria-label="Compact conversation"
           title="Compact conversation (create a summary baseline)"
@@ -964,6 +1004,24 @@
             <i class="fas fa-compress me-1"></i><span>Compact</span>
           {/if}
         </button>
+        <div class="small text-body">
+          {#if contextUsage}
+            <span class="badge rounded-pill bg-transparent border text-body text-opacity-75">
+              <span class="d-none d-sm-inline">Context: </span>{contextUsage.used_tokens} / {contextUsage.max_tokens}
+            </span>
+          {:else}
+            <span class="text-body-secondary"><span class="d-none d-sm-inline">Context: </span>…</span>
+          {/if}
+        </div>
+      </div>
+      <!-- Right group: Show thinking + expand/collapse -->
+      <div class="d-flex align-items-center gap-2 ms-auto">
+        <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
+          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">Show Thinking</label>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
+        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
       </div>
     </div>
 
@@ -980,8 +1038,8 @@
     {:else}
       <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
         <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
-        {#if messages && messages.length}
-          {#each messages as m, i}
+        {#if visibleMessages && visibleMessages.length}
+          {#each visibleMessages as m, i}
             {#if m.role === 'user'}
               <div class="d-flex mb-2 justify-content-end">
                 <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
@@ -1005,9 +1063,9 @@
                           <!-- Combined Tool box: call + result -->
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
-                                {segToolTitle(s)}
+                              <summary class="fw-500 fs-16px text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-12px py-1 px-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary fs-12px">{segToolTitle(s)}</span>
                               </summary>
                               <div class="small text-body">
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
@@ -1034,9 +1092,9 @@
                           <!-- Tool call without an immediate paired result -->
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
-                                {segToolTitle(s)}
+                              <summary class="fw-500 fs-16px text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-12px py-1 px-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary fs-12px">{segToolTitle(s)}</span>
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s) || 'tool', args: segArgs(s) ?? null }, null, 2)}</code></pre>
                             </details>
@@ -1047,9 +1105,9 @@
                           <!-- Orphan tool result (no preceding call in segments) -->
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
-                              <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
-                                Result
+                              <summary class="fw-500 fs-16px text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-12px py-1 px-2">{toolLabel(segTool(s))}</span>
+                                <span class="text-body-secondary fs-12px">Result</span>
                               </summary>
                               {#if isLargeOutputStr(normalizeOutput(segOutput(s)))}
                                 {#key keyForSeg(m, j, 'orphan')}
@@ -1083,10 +1141,10 @@
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
-                    <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
-                      <span class="badge text-bg-primary me-2">Tool Call</span>
-                      <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
-                      {argsPreview(m)}
+                    <summary class="fw-500 fs-16px text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
+                      <span class="badge text-bg-primary me-2 fs-12px py-1 px-2">Tool Call</span>
+                      <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-12px py-1 px-2">{toolLabel(toolType(m))}</span>
+                      <span class="text-body-secondary fs-12px">{argsPreview(m)}</span>
                     </summary>
                     <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: (toolArgs(m) ?? { text: m.content }) }, null, 2)}</code></pre>
                   </details>
@@ -1097,10 +1155,10 @@
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-1 justify-content-start">
                     <details class="mt-0">
-                      <summary class="small fw-500 text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
-                        <span class="badge text-bg-success me-2">Tool Result</span>
-                        <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
-                        {argsPreview(m)}
+                      <summary class="fw-500 fs-16px text-body text-opacity-75 d-flex align-items-center gap-2" style="cursor: pointer;">
+                        <span class="badge text-bg-success me-2 fs-12px py-1 px-2">Tool Result</span>
+                        <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-12px py-1 px-2">{toolLabel(toolType(m))}</span>
+                        <span class="text-body-secondary fs-12px">{argsPreview(m)}</span>
                       </summary>
                       {#if isLargeOutputStr(normalizeOutput(m.content))}
                         {#key `legacy:${m.id || i}`}
