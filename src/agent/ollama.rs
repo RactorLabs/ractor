@@ -12,7 +12,7 @@ pub struct OllamaClient {
     thinking_budget: Option<u32>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct ChatRequestMessage<'a> {
     role: &'a str,
     content: &'a str,
@@ -30,20 +30,20 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     Function,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ToolFunction {
     pub name: String,
     pub description: String,
     pub parameters: serde_json::Value,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ToolDef {
     #[serde(rename = "type")]
     pub typ: ToolType,
@@ -378,122 +378,106 @@ impl OllamaClient {
         // For tool calling, disable thinking as it may cause parsing issues
         let include_thinking = tools.is_empty(); // Only include thinking when no tools are present
         
-        let req = ChatRequest {
-            model: &model,
-            messages: chat_messages,
-            stream: false,
-            tools: if tools.is_empty() { None } else { Some(tools) },
-            reasoning: self.reasoning_effort.as_ref().map(|effort| Reasoning { effort: effort.clone() }),
-            thinking: if include_thinking { 
-                Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget })
-            } else { 
-                None 
-            },
-            options: None, // Context length now set via CLI environment variables
-        };
-
-        // Log request to file
-        self.log_ollama_request(&req).await;
-
+        // Retry loop for parse errors from tool calling
+        const PARSE_RETRIES: usize = 10;
         let url = format!("{}/api/chat", self.base_url);
-        let resp = self
-            .client
-            .post(&url)
-            .json(&req)
-            .send()
-            .await
-            .map_err(|e| HostError::Request(e))?;
+        let format_hint = "Format notice: previous reply had invalid tool-calling format. If you call a tool, return valid JSON in tool_calls with function.name and function.arguments as an object. No code fences or extra text.";
 
-        if !resp.status().is_success() {
-            let status = resp.status();
-            let text = resp
+        for attempt in 0..PARSE_RETRIES {
+            // Append a small hint on retries to nudge correct formatting
+            let mut attempt_messages = chat_messages.clone();
+            if attempt > 0 {
+                attempt_messages.push(ChatRequestMessage {
+                    role: "system",
+                    content: format_hint,
+                    name: None,
+                    tool_call_id: None,
+                });
+            }
+
+            let req = ChatRequest {
+                model: &model,
+                messages: attempt_messages,
+                stream: false,
+                tools: if tools.is_empty() { None } else { Some(tools.clone()) },
+                reasoning: self
+                    .reasoning_effort
+                    .as_ref()
+                    .map(|effort| Reasoning { effort: effort.clone() }),
+                thinking: if include_thinking {
+                    Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget })
+                } else {
+                    None
+                },
+                options: None,
+            };
+
+            // Log request to file
+            self.log_ollama_request(&req).await;
+
+            let resp = self
+                .client
+                .post(&url)
+                .json(&req)
+                .send()
+                .await
+                .map_err(|e| HostError::Request(e))?;
+
+            if !resp.status().is_success() {
+                let status = resp.status();
+                let text = resp
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "<failed to read response>".to_string());
+                return Err(HostError::Model(format!(
+                    "Ollama chat error ({}): {}",
+                    status, text
+                )));
+            }
+
+            let response_text = resp
                 .text()
                 .await
-                .unwrap_or_else(|_| "<failed to read response>".to_string());
-            return Err(HostError::Model(format!(
-                "Ollama chat error ({}): {}",
-                status, text
-            )));
-        }
+                .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
 
-        // Debug: Get raw response text first
-        let response_text = resp
-            .text()
-            .await
-            .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
+            // Log response to file
+            self.log_ollama_response(&response_text).await;
 
-        // Log response to file
-        self.log_ollama_response(&response_text).await;
-        
-        // Additional debug: Check if this is a tool calling error
-        if response_text.contains("error parsing tool call") {
-            tracing::error!("=== OLLAMA TOOL CALL PARSING ERROR ===");
-            tracing::error!("Full error response: {}", response_text);
-            tracing::error!("This suggests malformed JSON in tool call arguments");
-            tracing::error!("Will attempt to extract and sanitize tool calls manually");
-            tracing::error!("=== END ERROR DEBUG ===");
-            
-            // Try to extract tool calls manually from the error
-            if let Some(tool_calls) = self.extract_failed_tool_calls(&response_text) {
-                tracing::info!("Successfully extracted {} tool calls from error response", tool_calls.len());
-                return Ok(ModelResponse {
-                    content: "".to_string(),
-                    thinking: None,
+            // Treat non-JSON or explicit tool parsing error as a parse failure to retry
+            if let Ok(parsed) = serde_json::from_str::<ChatResponse>(&response_text) {
+                tracing::info!(
+                    "Ollama response: content_len={}, tool_calls={}",
+                    parsed.message.content.len(),
+                    parsed
+                        .message
+                        .tool_calls
+                        .as_ref()
+                        .map_or(0, |tc| tc.len())
+                );
+
+                // Build structured response for caller (no harmony parsing)
+                let model_resp = ModelResponse {
+                    content: parsed.message.content.clone(),
+                    thinking: parsed.message.thinking.clone(),
                     commentary: None,
-                    tool_calls: Some(tool_calls),
-                });
+                    tool_calls: parsed.message.tool_calls.clone(),
+                };
+                return Ok(model_resp);
+            } else {
+                // If the body contains a known tool-call parse error, retry silently with hint
+                if response_text.contains("error parsing tool call") {
+                    tracing::warn!("Retrying due to tool call parse error (attempt {}/{})", attempt + 1, PARSE_RETRIES);
+                    continue;
+                }
+                // Otherwise, retry on generic parse failure
+                tracing::warn!("Retrying due to unparseable response (attempt {}/{})", attempt + 1, PARSE_RETRIES);
+                continue;
             }
         }
 
-        let parsed: ChatResponse = serde_json::from_str(&response_text).map_err(|e| {
-            HostError::Model(format!(
-                "Failed to parse Ollama response: {} | Raw: {}",
-                e, response_text
-            ))
-        })?;
-
-        // Minimal logging for Docker logs
-        tracing::info!(
-            "Ollama response: content_len={}, tool_calls={}", 
-            parsed.message.content.len(),
-            parsed.message.tool_calls.as_ref().map_or(0, |tc| tc.len())
-        );
-
-        // Handle structured tool calls first (GPT-OSS native format)
-        // Check for harmony format channels in content
-        let (final_content, analysis_thinking, commentary_text, commentary_tools) =
-            self.parse_harmony_channels(&parsed.message.content);
-        
-        // Use harmony-parsed content if available, otherwise use original
-        let response_content = if !final_content.is_empty() {
-            final_content
-        } else {
-            parsed.message.content.clone()
-        };
-        
-        let response_thinking = if let Some(harmony_thinking) = analysis_thinking {
-            Some(harmony_thinking)
-        } else {
-            parsed.message.thinking.clone()
-        };
-        
-        let response_tool_calls = if let Some(harmony_tools) = commentary_tools {
-            Some(harmony_tools)
-        } else {
-            parsed.message.tool_calls.clone()
-        };
-        
-        // Build structured response for caller
-        let model_resp = ModelResponse {
-            content: response_content,
-            thinking: response_thinking,
-            commentary: commentary_text,
-            tool_calls: response_tool_calls,
-        };
-
-        // Tool calls logged in minimal response info above
-
-        Ok(model_resp)
+        Err(HostError::Model(
+            "Failed to obtain valid model response after 10 parse retries".to_string(),
+        ))
     }
 
     async fn execute_tool_call(&self, tool_call: &ToolCall, registry: &ToolRegistry) -> ToolResult {
@@ -517,129 +501,7 @@ impl OllamaClient {
         }
     }
 
-    fn extract_failed_tool_calls(&self, error_response: &str) -> Option<Vec<ToolCall>> {
-        // Try to extract tool calls from Ollama error responses
-        // Look for patterns like: "error parsing tool call: raw='{"command":"..."}'
-        
-        if let Some(start) = error_response.find("raw='") {
-            let start_idx = start + 5; // Length of "raw='"
-            if let Some(end_idx) = error_response[start_idx..].find("', err=") {
-                let raw_content = &error_response[start_idx..start_idx + end_idx];
-                tracing::info!("Extracted raw tool call content: {}", raw_content);
-                
-                // Try to parse as JSON and fix common issues
-                let sanitized = self.sanitize_tool_call_json(raw_content);
-                
-                if let Ok(args) = serde_json::from_str::<serde_json::Value>(&sanitized) {
-                    // Create a tool call - we need to infer the tool name from context
-                    let tool_name = self.infer_tool_name_from_args(&args);
-                    
-                    let tool_call = ToolCall {
-                        id: generate_tool_call_id(),
-                        function: ToolCallFunction {
-                            name: tool_name,
-                            arguments: args,
-                        },
-                    };
-                    
-                    return Some(vec![tool_call]);
-                }
-            }
-        }
-        
-        None
-    }
-    
-    fn sanitize_tool_call_json(&self, raw_json: &str) -> String {
-        // Fix common JSON issues in GPT-OSS tool calls
-        let mut sanitized = raw_json.to_string();
-        
-        // Fix escaped quotes and newlines
-        sanitized = sanitized.replace("\\\"", "\"");
-        sanitized = sanitized.replace("\\n", "\n");
-        sanitized = sanitized.replace("\\t", "\t");
-        
-        // Fix unescaped quotes in string values
-        // This is more complex - for now, just log and return as-is
-        tracing::info!("Sanitized JSON: {}", sanitized);
-        
-        sanitized
-    }
-    
-    fn infer_tool_name_from_args(&self, args: &serde_json::Value) -> String {
-        // Infer tool name from arguments structure
-        if args.get("command").is_some() {
-            "bash".to_string()
-        } else if args.get("action").is_some() || args.get("path").is_some() {
-            "text_editor".to_string()
-        } else {
-            "bash".to_string() // Default fallback
-        }
-    }
-    
-    fn parse_harmony_channels(
-        &self,
-        content: &str,
-    ) -> (String, Option<String>, Option<String>, Option<Vec<ToolCall>>) {
-        // Parse harmony format channels from content
-        // Format: <|start|>assistant<|channel|>{channel}<|message|>{content}<|end|>
-        
-        let mut final_content = String::new();
-        let mut analysis_content = None;
-        let mut commentary_tools = None;
-        let mut commentary_text: Option<String> = None;
-        
-        // Look for channel patterns
-        for line in content.lines() {
-            if line.contains("<|channel|>final<|message|>") {
-                if let Some(msg_start) = line.find("<|message|>") {
-                    let start_idx = msg_start + 11; // Length of "<|message|>"
-                    if let Some(end_idx) = line.find("<|end|>") {
-                        final_content = line[start_idx..end_idx].to_string();
-                    } else {
-                        final_content = line[start_idx..].to_string();
-                    }
-                }
-            } else if line.contains("<|channel|>analysis<|message|>") {
-                if let Some(msg_start) = line.find("<|message|>") {
-                    let start_idx = msg_start + 11;
-                    if let Some(end_idx) = line.find("<|end|>") {
-                        analysis_content = Some(line[start_idx..end_idx].to_string());
-                    } else {
-                        analysis_content = Some(line[start_idx..].to_string());
-                    }
-                }
-            } else if line.contains("<|channel|>commentary<|message|>") {
-                if let Some(msg_start) = line.find("<|message|>") {
-                    let start_idx = msg_start + 11;
-                    let ctext = if let Some(end_idx) = line.find("<|end|>") {
-                        &line[start_idx..end_idx]
-                    } else {
-                        &line[start_idx..]
-                    };
-                    
-                    // Try to parse tool calls from commentary
-                    commentary_tools = self.parse_commentary_tool_calls(ctext);
-                    // Also preserve the commentary text itself for context continuity
-                    if !ctext.trim().is_empty() {
-                        commentary_text = Some(ctext.to_string());
-                    }
-                }
-            }
-        }
-        
-        (final_content, analysis_content, commentary_text, commentary_tools)
-    }
-    
-    fn parse_commentary_tool_calls(&self, commentary: &str) -> Option<Vec<ToolCall>> {
-        // Try to parse tool calls from commentary channel
-        // Commentary might contain function call descriptions
-        
-        // For now, return None - this would need more sophisticated parsing
-        // based on the actual harmony format structure
-        tracing::info!("Commentary channel content: {}", commentary);
-        None
-    }
+    // All harmony/error-salvage parsing removed; rely on native tool_calls only and retry on parse errors.
     
     async fn log_ollama_request(&self, req: &ChatRequest<'_>) {
         if let Ok(req_json) = serde_json::to_string_pretty(req) {

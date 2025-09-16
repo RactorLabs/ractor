@@ -5,7 +5,6 @@ use super::guardrails::Guardrails;
 use super::ollama::{ChatMessage, ModelResponse, OllamaClient};
 use super::tool_registry::{ContainerExecMapper, ToolRegistry};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -516,110 +515,6 @@ impl MessageHandler {
 
                     continue;
                 }
-            } else if let Some((tool_name, args)) =
-                parse_assistant_functions_text(&model_resp.content)
-            {
-                // Fallback: parse assistant<|channel|>functions.* style
-                info!(
-                    "Assistant functions text tool call: {} with args: {:?}",
-                    tool_name, args
-                );
-
-                // Store assistant commentary (pre-tool text) as a regular agent message
-                // and also include it in the conversation for continuity.
-                let commentary_text = model_resp
-                    .commentary
-                    .as_ref()
-                    .map(|s| s.as_str())
-                    .unwrap_or_else(|| model_resp.content.as_str());
-                if !commentary_text.trim().is_empty() {
-                    let sanitized = self.guardrails.validate_output(commentary_text)?;
-                    let mut meta = serde_json::json!({
-                        "type": "assistant_commentary",
-                        "model": "gpt-oss"
-                    });
-                    if let Some(obj) = meta.as_object_mut() {
-                        if let Some(thinking) = &model_resp.thinking {
-                            obj.insert(
-                                "thinking".to_string(),
-                                serde_json::Value::String(thinking.clone()),
-                            );
-                        }
-                        if let Some(secs) = thinking_secs {
-                            obj.insert("thinking_seconds".to_string(), serde_json::json!(secs));
-                        }
-                    }
-                    // Persist for UI
-                    self.api_client.send_message(sanitized.clone(), Some(meta)).await?;
-                    // Add to conversation for next model turn
-                    conversation.push(ChatMessage {
-                        role: "assistant".to_string(),
-                        content: sanitized,
-                        name: None,
-                        tool_call_id: None,
-                    });
-                }
-
-                // Notify user
-                let tool_description = match tool_name.as_str() {
-                    "bash" => {
-                        if let Some(cmd) = args
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                        {
-                            cmd.to_string()
-                        } else {
-                            "bash command".to_string()
-                        }
-                    }
-                    "text_editor" => {
-                        let action = args
-                            .get("action")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("edit");
-                        let path = args
-                            .get("path")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown");
-                        format!("{} {}", action, path)
-                    }
-                    _ => format!("Executing {} tool", tool_name),
-                };
-                self.send_tool_message(&tool_description, &tool_name, Some(&args))
-                    .await?;
-
-                // Execute tool through registry
-                let tool_result = match self.tool_registry.execute_tool(&tool_name, &args).await {
-                    Ok(result) => result,
-                    Err(e) => format!("[error] {}", e),
-                };
-
-                // Send tool result message to database for UI display
-                let mut result_metadata = serde_json::json!({
-                    "type": "tool_result",
-                    "tool_type": &tool_name
-                });
-                if let Some(obj) = result_metadata.as_object_mut() {
-                    obj.insert("args".to_string(), args.clone());
-                }
-                // Truncate large tool results for message display
-                let display_result = self.truncate_tool_result(&tool_result);
-                if let Err(e) = self.api_client
-                    .send_message(display_result, Some(result_metadata))
-                    .await
-                {
-                    warn!("Failed to send tool result message: {}", e);
-                }
-
-                // Add tool result to conversation and continue
-                conversation.push(ChatMessage {
-                    role: "tool".to_string(),
-                    content: tool_result,
-                    name: Some(tool_name.clone()),
-                    tool_call_id: None,
-                });
-                continue;
             } else {
                 // Treat as final answer
                 let sanitized = self.guardrails.validate_output(&model_resp.content)?;
@@ -1010,47 +905,6 @@ You have complete freedom to execute commands, install packages, and create solu
             char_count
         )
     }
-}
-
-// Parse structured tool calls from GPT-OSS model response
-#[derive(Debug, Deserialize)]
-struct StructuredToolCall {
-    function: StructuredToolFunction,
-}
-
-#[derive(Debug, Deserialize)]
-struct StructuredToolFunction {
-    name: String,
-    arguments: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct ToolCallsResponse {
-    tool_calls: Vec<StructuredToolCall>,
-}
-
-fn parse_structured_tool_calls(_s: &str) -> Option<Vec<StructuredToolCall>> {
-    None
-}
-
-// Parse text that looks like: "assistant<|channel|>functions.bash" followed by a JSON args block
-fn parse_assistant_functions_text(s: &str) -> Option<(String, serde_json::Value)> {
-    let lower = s.to_lowercase();
-    let tool = if lower.contains("assistant<|channel|>functions.bash") {
-        "bash"
-    } else if lower.contains("assistant<|channel|>functions.text_editor") {
-        "text_editor"
-    } else {
-        return None;
-    };
-    let start = s.rfind('{')?;
-    let end = s.rfind('}')?;
-    if end <= start {
-        return None;
-    }
-    let json_str = &s[start..=end];
-    let args: serde_json::Value = serde_json::from_str(json_str).ok()?;
-    Some((tool.to_string(), args))
 }
 
 // Strict user tool JSON: only accepts a top-level {"tool":"bash|text_editor","input":{...}}
