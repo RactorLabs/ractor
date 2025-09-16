@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import torch
 import threading
+import time
+import uuid
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 try:
@@ -213,6 +215,7 @@ def generate(req: GenerateRequest):
 
     # Attempt 1: minimal generation
     model.eval()
+    t0 = time.perf_counter()
     try:
         with torch.inference_mode():
             out = model.generate(
@@ -245,6 +248,7 @@ def generate(req: GenerateRequest):
                 "error": f"generation failed: {e2}",
                 "hint": "If this persists, try reducing max_new_tokens or verify GPU memory",
             })
+    gen_ms = (time.perf_counter() - t0) * 1000.0
 
     # Decode only newly generated tokens and preserve special tokens
     try:
@@ -259,7 +263,30 @@ def generate(req: GenerateRequest):
 
     # Do not trim or normalize the generated text on the server side.
 
-    return GenerateResponse(text=text, usage=None)
+    # Compute token usage
+    prompt_tokens = int(inputs["input_ids"].shape[1])
+    total_tokens = int(out.shape[1])
+    completion_tokens = max(0, total_tokens - prompt_tokens)
+
+    # Log concise generation summary to stdout (captured by container logs)
+    rid = req.request_id or str(uuid.uuid4())
+    try:
+        print(
+            f"GEN req_id={rid} model={holder.model_id} prompt_tokens={prompt_tokens} completion_tokens={completion_tokens} total_tokens={prompt_tokens + completion_tokens} gen_ms={gen_ms:.1f}",
+            flush=True,
+        )
+    except Exception:
+        pass
+
+    return GenerateResponse(
+        text=text,
+        usage={
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+            "gen_ms": int(gen_ms),
+        },
+    )
 
 
 def _default_model() -> str:
