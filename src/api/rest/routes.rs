@@ -89,12 +89,17 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::messages::get_message_count),
         )
         .route(
-            "/agents/{name}/messages",
-            delete(handlers::messages::clear_messages),
-        )
-        .route(
             "/agents/{name}/messages/{id}",
             put(handlers::messages::update_message),
+        )
+        // Context endpoints
+        .route(
+            "/agents/{name}/context",
+            get(handlers::messages::get_context_usage),
+        )
+        .route(
+            "/agents/{name}/compact",
+            post(handlers::messages::request_compact),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

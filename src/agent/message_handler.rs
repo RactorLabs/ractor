@@ -284,6 +284,14 @@ impl MessageHandler {
         // Validate input with guardrails
         self.guardrails.validate_input(&message.content)?;
 
+        let is_compact_request = message
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("type"))
+            .and_then(|v| v.as_str())
+            .map(|s| s == "compact_request")
+            .unwrap_or(false);
+
         // Pure Harmony: do not execute user-specified JSON tool calls directly
 
         // Harmony-driven loop
@@ -294,6 +302,20 @@ impl MessageHandler {
         let mut tool_messages: Vec<HMessage> = Vec::new();
         let mut step: u32 = 0;
         loop {
+            // If compaction is in progress and this is not a compact_request, skip processing
+            if !is_compact_request {
+                if let Ok(agent) = self.api_client.get_agent().await {
+                    if agent
+                        .metadata
+                        .get("compact_in_progress")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
+                        tracing::info!("Compaction active — skipping normal message processing");
+                        return Ok(());
+                    }
+                }
+            }
             step += 1;
             // Build full message vector to allow token accounting by parts
             let msgs_full = self
@@ -604,6 +626,18 @@ impl MessageHandler {
 
             // If final was present and no more tools to run, finish
             if channel_for_row.is_some() && tool_messages.is_empty() {
+                // If this was a compact request, clear compact_in_progress flag
+                if is_compact_request {
+                    if let Ok(agent) = self.api_client.get_agent().await {
+                        let mut meta = agent.metadata.clone();
+                        let make_obj = !meta.is_object();
+                        if make_obj { meta = serde_json::json!({}); }
+                        let obj = meta.as_object_mut().expect("metadata object");
+                        obj.insert("compact_in_progress".to_string(), serde_json::json!(false));
+                        obj.insert("compact_last_at".to_string(), serde_json::json!(chrono::Utc::now().to_rfc3339()));
+                        let _ = self.api_client.update_agent_metadata(meta).await;
+                    }
+                }
                 return Ok(());
             }
 
@@ -699,6 +733,17 @@ Constraints:
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(40);
         let history = self.api_client.get_messages(Some(hist_limit), None).await?;
+        // Align with baseline: filter out messages before metadata.compact_from
+        let mut since_ts: Option<chrono::DateTime<chrono::Utc>> = None;
+        if let Ok(agent) = self.api_client.get_agent().await {
+            if let Some(obj) = agent.metadata.as_object() {
+                if let Some(ts) = obj.get("compact_from").and_then(|v| v.as_str()) {
+                    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts) {
+                        since_ts = Some(dt.with_timezone(&chrono::Utc));
+                    }
+                }
+            }
+        }
 
         // Reconstruct conversation using Harmony composite segments when available.
         // - For prior agent turns: include only the final text (as assistant, channel "final")
@@ -716,7 +761,14 @@ Constraints:
         let mut req_order: VecDeque<String> = VecDeque::new();
         let mut turns_by_req: HashMap<String, Turn> = HashMap::new();
 
-        for m in history.iter().filter(|m| m.id != current.id) {
+        for m in history.iter().filter(|m| m.id != current.id).filter(|m| {
+            if let Some(since) = since_ts {
+                if let Ok(mt) = chrono::DateTime::parse_from_rfc3339(&m.created_at) {
+                    return mt.with_timezone(&chrono::Utc) >= since;
+                }
+            }
+            true
+        }) {
             match m.role {
                 MessageRole::User => {
                     msgs.push(HMessage::from_role_and_content(

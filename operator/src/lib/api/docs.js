@@ -300,7 +300,7 @@ export function getApiDocs(base) {
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages?limit=20 -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","role":"user","author_name":null,"recipient":null,"channel":null,"content":"hello","content_type":null,"content_json":null,"metadata":{},"created_at":"2025-01-01T12:00:00Z"}]` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent. User posts are plain text; agents may include Harmony composite fields.', params: [
+      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent. User posts are plain text; agents may include Harmony composite fields. Returns 409 if compaction is in progress; returns 400 if context is full.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'role', type: "'user'|'agent'|'system'", required: false, desc: "Message role (default 'user')" },
         { in: 'body', name: 'content', type: 'string', required: true, desc: 'Message text content' },
@@ -325,9 +325,13 @@ export function getApiDocs(base) {
         { in: 'body', name: 'content_type', type: 'string|null', required: false, desc: 'Optional content type (clear with null)' },
         { in: 'body', name: 'content_json', type: 'object|null', required: false, desc: 'Structured content; for Harmony, include { harmony: { request_id, segments } } (clear with null)' }
       ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name>/messages/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"content":"All set.","metadata":{"in_progress":false},"content_json":{"harmony":{"request_id":"<id>:2","segments":[{"type":"final","channel":"final","text":"All set."}]}}}'`, responses: [{ status: 200, body: `{"id":"uuid","agent_name":"demo","role":"agent","author_name":null,"recipient":null,"channel":"final","content":"All set.","content_type":null,"content_json":{...},"metadata":{},"created_at":"2025-01-01T12:00:00Z"}` }] },
-      { method: 'DELETE', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
+      { method: 'GET', path: '/api/v0/agents/{name}/context', auth: 'bearer', desc: 'Get current context usage for an agent. Uses Harmony encoding to measure prompt tokens after the current baseline.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s -X DELETE ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"deleted": 25, "agent_name": "demo"}` }] }
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/context -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"agent_name":"demo","max_tokens":100000,"used_tokens":53210,"remaining_tokens":468, "computed_at":"2025-01-01T12:00:00Z"}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/compact', auth: 'bearer', desc: 'Request compaction of conversation. Creates a new baseline (metadata.compact_from) and posts a compact instruction message. No messages are deleted.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/compact -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"status":"ok","compact_from":"2025-01-01T12:00:00Z","message_id":"uuid"}` }] },
+      { method: 'NOTE', path: 'Context limits', auth: 'public', desc: 'Server enforces a single context cap (default 100k tokens via RAWORC_CONTEXT_MAX_TOKENS). When context is full, POST /messages returns 400 requesting compaction. Compacting does not delete messages.', params: [], example: `# Default cap\nRAWORC_CONTEXT_MAX_TOKENS=100000` }
     ]
   }
   ];

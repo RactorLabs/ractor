@@ -72,13 +72,12 @@
   let input = '';
   let sending = false;
   let pollHandle = null;
+  let contextUsage = null; // { used_tokens, max_tokens, remaining_tokens }
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
 
   // UI: Show/hide model thinking text (analysis/commentary)
   let showThinking = false; // default off
-  // UI: Show/hide context/token metrics
-  let showContextMetrics = false; // default off
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -208,11 +207,17 @@
     }
   }
 
+  async function fetchContext() {
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context`);
+    if (res.ok) contextUsage = res.data;
+  }
+
   function startPolling() {
     stopPolling();
     pollHandle = setInterval(async () => {
       await fetchMessages();
       await fetchAgent();
+      await fetchContext();
     }, 2000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
@@ -475,6 +480,24 @@
     e?.preventDefault?.();
     const content = (input || '').trim();
     if (!content || sending) return;
+    try {
+      await fetchAgent();
+      if (agent && agent.metadata && agent.metadata.compact_in_progress === true) {
+        throw new Error('Compaction in progress — please wait for summary before sending more messages.');
+      }
+    } catch (err) {
+      error = err.message || String(err);
+      return;
+    }
+    try {
+      await fetchContext();
+      if (contextUsage && contextUsage.remaining_tokens <= 0) {
+        throw new Error('Context is full — please compact before sending more messages.');
+      }
+    } catch (err) {
+      error = err.message || String(err);
+      return;
+    }
     sending = true;
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/messages`, {
@@ -492,9 +515,31 @@
       scrollToBottom();
       // Let polling pick up the agent's response
     } catch (e) {
-      error = e.message || String(e);
+      const msg = e.message || String(e);
+      if (/Context is full/i.test(msg)) {
+        error = '';
+        try { await compactNow(); await fetchContext(); } catch (_) {}
+        return;
+      }
+      error = msg;
     } finally {
       sending = false;
+    }
+  }
+
+  async function compactNow() {
+    try {
+      if (agent && agent.metadata && agent.metadata.compact_in_progress === true) {
+        throw new Error('Compaction is already in progress.');
+      }
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/compact`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
+      // Optimistically set local state so the button disables immediately
+      try { if (agent && agent.metadata) { agent = { ...agent, metadata: { ...agent.metadata, compact_in_progress: true } }; } } catch(_) {}
+      await fetchMessages();
+      await fetchContext();
+    } catch (e) {
+      error = e.message || String(e);
     }
   }
 
@@ -823,7 +868,17 @@
     <!-- Minimize/Maximize (expand/collapse) tool details row -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
       <div class="small text-body me-2">
-        Total messages: {Array.isArray(messages) ? messages.length : 0}
+        {#if contextUsage}
+          {#if (contextUsage.used_tokens / Math.max(1, contextUsage.max_tokens)) < 0.6}
+            <span class="badge rounded-pill bg-success-subtle border text-success">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
+          {:else if (contextUsage.used_tokens / Math.max(1, contextUsage.max_tokens)) < 0.85}
+            <span class="badge rounded-pill bg-warning-subtle border text-warning">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
+          {:else}
+            <span class="badge rounded-pill bg-danger-subtle border text-danger">Context: {contextUsage.used_tokens} / {contextUsage.max_tokens}</span>
+          {/if}
+        {:else}
+          <span class="text-body-secondary">Context: …</span>
+        {/if}
       </div>
       <div class="d-flex align-items-center gap-2">
         <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
@@ -832,10 +887,20 @@
           <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
           <label class="form-check-label small" for="toggle-thinking">Show Thinking</label>
         </div>
-        <div class="form-check form-switch ms-1" title="Toggle display of context/token metrics">
-          <input class="form-check-input" type="checkbox" id="toggle-context" bind:checked={showContextMetrics} />
-          <label class="form-check-label small" for="toggle-context">Show Context</label>
-        </div>
+        <!-- Removed Show Context toggle; message-level metrics are not shown in UI -->
+        <button
+          class="btn btn-outline-danger btn-sm ms-1"
+          on:click={compactNow}
+          aria-label="Compact conversation"
+          title="Compact conversation (create a summary baseline)"
+          disabled={agent && agent.metadata && agent.metadata.compact_in_progress === true}
+        >
+          {#if agent && agent.metadata && agent.metadata.compact_in_progress === true}
+            <i class="fas fa-circle-notch fa-spin me-1"></i><span>Compacting…</span>
+          {:else}
+            <i class="fas fa-compress me-1"></i><span>Compact</span>
+          {/if}
+        </button>
       </div>
     </div>
 
@@ -866,26 +931,7 @@
                 <!-- Harmony composite rendering: show commentary, tool calls/results, and final in one message -->
                 <div class={"d-flex justify-content-start " + (hasToolSegments(m) ? 'mb-3' : 'mb-2')}>
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                    {#if showContextMetrics && tmOf(m)}
-                      <div class="small text-body text-opacity-50 mb-1">
-                        {#if tmParts(m)}
-                          Context: {tmOf(m).prompt_tokens || '?'}
-                          {#if tmBudget(m)}
-                            / {tmBudget(m).max_tokens || '?'} tokens
-                            <span class="text-body-secondary">(reserve {tmBudget(m).completion_margin || 0})</span>
-                          {:else}
-                            tokens
-                          {/if}
-                          <span class="text-body-secondary">(sys/dev {tmParts(m).system_dev || 0}, hist {tmParts(m).history || 0}, tools {tmParts(m).tools || 0}, user {tmParts(m).user || 0})</span>
-                        {:else}
-                          Context: {tmOf(m).prompt_tokens || '?'}
-                          {#if tmBudget(m)} / {tmBudget(m).max_tokens || '?'} tokens{/if}
-                        {/if}
-                        {#if tmServer(m)}
-                          <span class="ms-2">• completion {tmServer(m).completion_tokens ?? '?'} tokens</span>
-                        {/if}
-                      </div>
-                    {/if}
+                    <!-- Message-level context metrics hidden by design -->
                     {#each segmentsOf(m) as s, j}
                       {#if segType(s) === 'commentary' || segChannel(s).toLowerCase() === 'analysis' || segChannel(s).toLowerCase() === 'commentary'}
                         {#if showThinking}

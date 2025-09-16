@@ -549,4 +549,26 @@ impl RaworcClient {
             }
         }
     }
+
+    /// Update agent metadata (merge responsibility is on caller; this replaces metadata field)
+    pub async fn update_agent_metadata(&self, metadata: serde_json::Value) -> Result<()> {
+        let url = format!(
+            "{}/api/v0/agents/{}",
+            self.config.api_url, self.config.agent_name
+        );
+        let body = serde_json::json!({ "metadata": metadata });
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| HostError::Api(format!("Failed to call update agent: {}", e)))?;
+        if response.status().is_success() { Ok(()) } else {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_else(|_| "<no body>".to_string());
+            Err(HostError::Api(format!("Update agent failed ({}): {}", status, text)))
+        }
+    }
 }
