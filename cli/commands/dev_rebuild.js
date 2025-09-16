@@ -14,7 +14,7 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Rebuild Raworc components via ./scripts/rebuild.sh')
-    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway. Flags are passed through.')
+    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway, gpt. Flags are passed through.')
     .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, gpt\n' +
       '\nExamples:\n' +
       '  $ raworc rebuild                    # rebuild all components (script default)\n' +
@@ -31,7 +31,7 @@ module.exports = (program) => {
         const allowed = new Set(['api','controller','agent','operator','content','gateway','gpt']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
-          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);
+          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway, gpt`);
           process.exit(1);
         }
         await runScript(scriptPath, args);

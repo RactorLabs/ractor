@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api agent controller operator content gateway)
+BUILDABLE_SET=(api agent controller operator content gateway gpt)
 
 process_args() {
   local input=("$@")
