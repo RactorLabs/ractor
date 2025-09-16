@@ -40,67 +40,110 @@ impl GptClient {
         s = s.replace("<|assistant<|channel|>", "<|assistant|><|channel|>");
         s = s.replace("<|assistant<|message|>", "<|assistant|><|message|>");
 
-        // Helper to map a tool-ish role into a proper assistant+recipient pair
-        let mut map_role_token = |role: &str| -> Option<String> {
-            // Recognized non-tool roles that should remain untouched
-            match role {
-                "assistant" | "user" | "system" | "developer" | "tool" => return None,
-                _ => {}
-            }
-            // Normalize various tool name spellings
-            let mut name = role.trim();
-            if let Some(rest) = name.strip_prefix("functions.") {
-                name = rest;
-            }
-            if let Some(rest) = name.strip_prefix("tool.") {
-                name = rest;
-            }
-            // Map aliases
-            let mapped = match name {
-                "container.exec" => "bash",
-                other => other,
-            };
-            Some(format!(
-                "<|assistant|><|recipient|>functions.{}",
-                mapped
-            ))
-        };
+        // Valid tags that should not be rewritten when seen inside <|...|>
+        const VALID_SIMPLE_TAGS: &[&str] = &[
+            "assistant",
+            "user",
+            "system",
+            "developer",
+            "tool",
+            "channel",
+            "recipient",
+            "message",
+        ];
 
-        // Replace obvious wrong role headers for common tools and their function.* variants
-        let names = ["bash", "text_editor", "publish", "sleep", "container.exec"];
-        for name in names.iter() {
-            // Standalone wrong role tags like <|bash|>
-            let wrong = format!("<|{}|>", name);
-            if let Some(fix) = map_role_token(name) {
-                s = s.replace(&wrong, &fix);
-            }
-            // Mis-nested after assistant: <|assistant|><|bash|>
-            let wrong = format!("<|assistant|><|{}|>", name);
-            if let Some(fix_only_recipient) = map_role_token(name) {
-                // This already includes <|assistant|>, so keep only recipient part
-                let fix_rec = fix_only_recipient.replace("<|assistant|>", "");
-                s = s.replace(&wrong, &format!("<|assistant|>{}", fix_rec));
-            }
-            // Bad recipient values like <|recipient|>bash → prefix functions.
-            let wrong = format!("<|recipient|>{}", name);
-            let mapped = match *name {
-                "container.exec" => "bash",
-                other => other,
-            };
-            let fix = format!("<|recipient|>functions.{}", mapped);
-            s = s.replace(&wrong, &fix);
-
-            // Wrong role using functions.* as role: <|functions.bash|>
-            let wrong = format!("<|functions.{}|>", name);
-            if let Some(fix2) = map_role_token(&format!("functions.{}", name)) {
-                s = s.replace(&wrong, &fix2);
+        // Map alias names to canonical tool function names
+        fn map_alias(name: &str) -> String {
+            let n = name.trim();
+            let n = n.strip_prefix("functions.").unwrap_or(n);
+            let n = n.strip_prefix("tools.").unwrap_or(n);
+            let n = n.strip_prefix("tool.").unwrap_or(n);
+            match n {
+                "container.exec" => "bash".to_string(),
+                other => other.to_string(),
             }
         }
 
+        // 1) Fix patterns like <|assistant|><|bash|> to <|assistant|><|recipient|>functions.bash
+        let mut fixed = String::with_capacity(s.len() + 32);
+        let mut i = 0usize;
+        let bytes = s.as_bytes();
+        while i < bytes.len() {
+            if bytes[i..].starts_with(b"<|assistant|><|") {
+                let start = i + "<|assistant|><|".len();
+                if let Some(end_rel) = s[start..].find("|>") {
+                    let end = start + end_rel;
+                    let token = &s[start..end];
+                    if !VALID_SIMPLE_TAGS.contains(&token) {
+                        let mapped = map_alias(token);
+                        fixed.push_str("<|assistant|><|recipient|>functions.");
+                        fixed.push_str(&mapped);
+                        i = end + 2; // skip |>
+                        continue;
+                    }
+                }
+            }
+            fixed.push(bytes[i] as char);
+            i += 1;
+        }
+        s = fixed;
+
+        // 2) Fix standalone wrong role tags like <|bash|> → <|assistant|><|recipient|>functions.bash
+        let mut out = String::with_capacity(s.len() + 32);
+        let mut i2 = 0usize;
+        let b2 = s.as_bytes();
+        while i2 < b2.len() {
+            if b2[i2..].starts_with(b"<|") {
+                let start = i2 + 2; // after <|
+                if let Some(end_rel) = s[start..].find("|>") {
+                    let end = start + end_rel;
+                    let token = &s[start..end];
+                    if !VALID_SIMPLE_TAGS.contains(&token) {
+                        let mapped = map_alias(token);
+                        out.push_str("<|assistant|><|recipient|>functions.");
+                        out.push_str(&mapped);
+                        i2 = end + 2;
+                        continue;
+                    }
+                }
+            }
+            out.push(b2[i2] as char);
+            i2 += 1;
+        }
+        s = out;
+
+        // 3) Fix bad recipient payloads like <|recipient|>bash → <|recipient|>functions.bash
+        let mut out3 = String::with_capacity(s.len() + 16);
+        let mut j = 0usize;
+        let bj = s.as_bytes();
+        while j < bj.len() {
+            if bj[j..].starts_with(b"<|recipient|>") {
+                out3.push_str("<|recipient|>");
+                j += "<|recipient|>".len();
+                let start = j;
+                while j < bj.len() {
+                    let c = bj[j] as char;
+                    if c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-' {
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                let token = &s[start..j];
+                if !token.is_empty() {
+                    let mapped = map_alias(token);
+                    out3.push_str("functions.");
+                    out3.push_str(&mapped);
+                    continue;
+                }
+            }
+            out3.push(bj[j] as char);
+            j += 1;
+        }
+        s = out3;
+
         s
     }
-
-    
 
     pub async fn generate(
         &self,
@@ -140,5 +183,38 @@ impl GptClient {
             .map_err(|e| HostError::Model(format!("Invalid JSON from GPT server: {}", e)))?;
         v.text = Self::normalize_completion(&v.text);
         Ok(v)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GptClient;
+
+    #[test]
+    fn normalizes_bash_role_tag() {
+        let s = "<|bash|> do things";
+        let out = GptClient::normalize_completion(s);
+        assert!(out.contains("<|assistant|><|recipient|>functions.bash"));
+    }
+
+    #[test]
+    fn normalizes_assistant_then_bash_tag() {
+        let s = "<|assistant|><|bash|> {\"command\":\"echo hi\"}";
+        let out = GptClient::normalize_completion(s);
+        assert!(out.contains("<|assistant|><|recipient|>functions.bash"));
+    }
+
+    #[test]
+    fn normalizes_recipient_bash_value() {
+        let s = "<|assistant|><|recipient|>bash<|message|>run";
+        let out = GptClient::normalize_completion(s);
+        assert!(out.contains("<|recipient|>functions.bash"));
+    }
+
+    #[test]
+    fn maps_container_exec_to_bash() {
+        let s = "<|assistant|><|recipient|>container.exec<|message|>run";
+        let out = GptClient::normalize_completion(s);
+        assert!(out.contains("<|recipient|>functions.bash"));
     }
 }
