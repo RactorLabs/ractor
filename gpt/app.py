@@ -207,24 +207,44 @@ def generate(req: GenerateRequest):
 
     inputs = tok(req.prompt, return_tensors="pt")
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    # Provide attention_mask explicitly for decoder-only models
+    if "attention_mask" not in inputs:
+        inputs["attention_mask"] = torch.ones_like(inputs["input_ids"]).to(model.device)
 
-    gen_kwargs = {
-        "max_new_tokens": req.max_new_tokens or 512,
-        "temperature": req.temperature if req.temperature is not None else 0.7,
-        "top_p": req.top_p if req.top_p is not None else 0.95,
-        "do_sample": True if req.do_sample is None else req.do_sample,
-    }
-    if req.top_k is not None:
-        gen_kwargs["top_k"] = req.top_k
-    if req.repetition_penalty is not None:
-        gen_kwargs["repetition_penalty"] = req.repetition_penalty
-    if req.eos_token_id is not None:
-        gen_kwargs["eos_token_id"] = req.eos_token_id
-    if req.pad_token_id is not None:
-        gen_kwargs["pad_token_id"] = req.pad_token_id
-
-    with torch.no_grad():
-        out = model.generate(**inputs, **gen_kwargs)
+    # Attempt 1: minimal generation
+    model.eval()
+    try:
+        with torch.inference_mode():
+            out = model.generate(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
+                max_new_tokens=(req.max_new_tokens or 128),
+            )
+    except Exception as e1:
+        # Attempt 2: safe deterministic generation with eos/pad fallbacks
+        gen_kwargs = {
+            "max_new_tokens": (req.max_new_tokens or 128),
+            "do_sample": False,
+        }
+        if tok.eos_token_id is not None:
+            gen_kwargs["eos_token_id"] = tok.eos_token_id
+        if tok.pad_token_id is not None:
+            gen_kwargs["pad_token_id"] = tok.pad_token_id
+        elif tok.eos_token_id is not None:
+            gen_kwargs["pad_token_id"] = tok.eos_token_id
+        try:
+            with torch.inference_mode():
+                out = model.generate(
+                    input_ids=inputs["input_ids"],
+                    attention_mask=inputs["attention_mask"],
+                    **gen_kwargs,
+                )
+        except Exception as e2:
+            return JSONResponse(status_code=503, content={
+                "status": "error",
+                "error": f"generation failed: {e2}",
+                "hint": "If this persists, try reducing max_new_tokens or verify GPU memory",
+            })
 
     text = tok.decode(out[0], skip_special_tokens=True)
 
