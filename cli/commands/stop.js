@@ -26,7 +26,7 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove Raworc component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, agents (all agent containers). If omitted, stops all Raworc components.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, gpt, agents (all agent containers). If omitted, stops all Raworc components.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only Raworc component containers.\n' +
@@ -41,10 +41,10 @@ module.exports = (program) => {
       try {
         // Default to stopping all Raworc components when none specified
         if (!components || components.length === 0) {
-          components = ['gateway','controller','operator','content','api'];
+          components = ['gateway','controller','operator','content','api','gpt'];
         }
         // Validate component names (only Raworc components)
-        const allowed = new Set(['api','controller','operator','content','gateway','agents']);
+        const allowed = new Set(['api','controller','operator','content','gateway','gpt','agents']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
           console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, content, gateway, agents`);
@@ -56,9 +56,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { api: 'raworc_api', controller: 'raworc_controller', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const map = { api: 'raworc_api', controller: 'raworc_controller', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway', gpt: 'raworc_gpt' };
         const includeAgents = components.includes('agents');
-        const order = ['gateway','controller','operator','content','api'];
+        const order = ['gateway','controller','operator','content','api','gpt'];
         const toStop = components.filter(c => c !== 'agents');
         const ordered = order.filter((c) => toStop.includes(c));
 
