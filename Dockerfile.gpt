@@ -1,4 +1,5 @@
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+ARG CUDA_BASE=nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM ${CUDA_BASE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 

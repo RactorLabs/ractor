@@ -197,6 +197,11 @@ for component in "${COMPONENTS[@]}"; do
     build_cmd="$build_cmd --no-cache"
   fi
 
+  # Optional: pass CUDA_BASE for GPT image retagging
+  if [ "$component" = "gpt" ] && [ -n "${CUDA_BASE:-}" ]; then
+    build_cmd="$build_cmd --build-arg CUDA_BASE=${CUDA_BASE}"
+  fi
+
   build_cmd="$build_cmd ."
 
   if eval "$build_cmd"; then
