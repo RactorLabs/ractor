@@ -244,12 +244,24 @@
 
   // Helper: detect a tool execution message
   function isToolExec(m) {
-    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_execution' && meta.tool_type); } catch (_) { return false; }
+    try {
+      const meta = metaOf(m);
+      if (meta && meta.type === 'tool_execution' && meta.tool_type) return true;
+      // Harmony-native: recipient like "functions.<tool>" implies a tool call request
+      const rec = String(m?.recipient || '').toLowerCase();
+      if (rec.startsWith('functions.')) return true;
+      return false;
+    } catch (_) { return false; }
   }
 
   // Helper: detect a tool result message
   function isToolResult(m) {
-    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_result' && meta.tool_type); } catch (_) { return false; }
+    try {
+      const meta = metaOf(m);
+      if (meta && meta.type === 'tool_result' && meta.tool_type) return true;
+      // Harmony-native: messages from role 'tool' would appear as results; API role is 'agent', so rely on metadata for now
+      return false;
+    } catch (_) { return false; }
   }
 
   // Helper: for Text Editor description like "write /path/file" => { action, path }
@@ -321,6 +333,22 @@
       const short = json.length > 80 ? json.slice(0, 77) + '…' : json;
       return `(${short})`;
     } catch (_) { return ''; }
+  }
+
+  // Harmony thinking/commentary detection
+  function isThinking(m) {
+    try {
+      const meta = metaOf(m);
+      if (meta && meta.type === 'assistant_commentary') return true;
+      const ch = String(m?.channel || '').toLowerCase();
+      return ch === 'analysis' || ch === 'commentary';
+    } catch (_) { return false; }
+  }
+
+  function channelBadge(m) {
+    const ch = String(m?.channel || '').trim();
+    if (!ch) return '';
+    return ch;
   }
 
   async function sendMessage(e) {
@@ -711,6 +739,8 @@
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                      <span class="badge text-bg-secondary me-2">tool</span>
+                      {#if m.recipient}<span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{m.recipient}</span>{/if}
                       {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
                     </summary>
                     <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
@@ -723,6 +753,7 @@
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                        <span class="badge text-bg-success me-2">result</span>
                         {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
                       </summary>
                       <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
@@ -731,12 +762,13 @@
                 {:else}
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                      {#if metaOf(m)?.thinking}
+                      {#if isThinking(m)}
                         <details class="mt-1 mb-2">
                           <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            Thought {#if metaOf(m)?.thinking_seconds}for {fmtSeconds(metaOf(m)?.thinking_seconds)}{/if}
+                            <span class="badge text-bg-warning-subtle border me-2">thinking</span>
+                            {#if channelBadge(m)}<span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{channelBadge(m)}</span>{/if}
                           </summary>
-                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                          <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{m.content}</div>
                         </details>
                       {/if}
                       {#if m.content && m.content.trim()}
@@ -815,6 +847,12 @@
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
     :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
+    /* Subtle badge variant for thinking */
+    :global(.text-bg-warning-subtle) {
+      color: #8a6d3b;
+      background-color: rgba(255, 193, 7, 0.15);
+      border: 1px solid rgba(255, 193, 7, 0.35);
+    }
     /* Make the Published dropdown caret arrow a bit bigger */
     :global(.published-toggle.dropdown-toggle::after) {
       border-top-width: 0.5em;

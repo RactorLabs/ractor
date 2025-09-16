@@ -22,7 +22,12 @@ pub struct Message {
     pub id: String,
     pub agent_name: String, // Changed from agent_id in v0.4.0
     pub role: MessageRole,
+    pub author_name: Option<String>,
+    pub recipient: Option<String>,
+    pub channel: Option<String>,
     pub content: String,
+    pub content_type: Option<String>,
+    pub content_json: Option<serde_json::Value>,
     pub metadata: Option<serde_json::Value>,
     pub created_at: String,
 }
@@ -32,6 +37,11 @@ pub struct CreateMessageRequest {
     pub role: MessageRole,
     pub content: String,
     pub metadata: Option<serde_json::Value>,
+    pub author_name: Option<String>,
+    pub recipient: Option<String>,
+    pub channel: Option<String>,
+    pub content_type: Option<String>,
+    pub content_json: Option<serde_json::Value>,
 }
 
 // Import constants from shared models
@@ -233,6 +243,11 @@ impl RaworcClient {
             role: MessageRole::Agent,
             content,
             metadata,
+            author_name: None,
+            recipient: None,
+            channel: None,
+            content_type: None,
+            content_json: None,
         };
 
         debug!("Sending message to: {}", url);
