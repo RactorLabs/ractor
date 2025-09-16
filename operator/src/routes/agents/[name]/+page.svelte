@@ -227,7 +227,33 @@
     const k = String(t || '').toLowerCase();
     if (k === 'bash') return 'Bash';
     if (k === 'text_editor') return 'Text Editor';
+    if (k === 'publish') return 'Publish';
+    if (k === 'sleep') return 'Sleep';
     return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
+  }
+
+  // Extract tool type from metadata or Harmony recipient
+  function toolType(m) {
+    try {
+      const meta = metaOf(m);
+      if (meta && meta.tool_type) return String(meta.tool_type);
+      const rec = String(m?.recipient || '');
+      if (rec.startsWith('functions.')) return rec.split('.', 2)[1] || '';
+    } catch(_) {}
+    return '';
+  }
+
+  // Extract tool args from metadata or content_json
+  function toolArgs(m) {
+    try {
+      const meta = metaOf(m);
+      if (meta && meta.args && typeof meta.args === 'object') return meta.args;
+      if (m && m.content_json && typeof m.content_json === 'object') {
+        if (m.content_json.args) return m.content_json.args;
+        return m.content_json;
+      }
+    } catch(_) {}
+    return null;
   }
 
   // Normalize metadata to an object (handles string-serialized JSON)
@@ -314,8 +340,8 @@
   // Helper: compact args preview for tool summaries
   function argsPreview(m) {
     try {
-      const t = String(m?.metadata?.tool_type || '').toLowerCase();
-      const a = m?.metadata?.args;
+      const t = String(toolType(m) || '').toLowerCase();
+      const a = toolArgs(m);
       if (!a || typeof a !== 'object') return '';
       if (t === 'bash') {
         const cmd = a.command || a.cmd || '';
@@ -739,11 +765,11 @@
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                      <span class="badge text-bg-secondary me-2">tool</span>
-                      {#if m.recipient}<span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{m.recipient}</span>{/if}
-                      {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
+                      <span class="badge text-bg-primary me-2">Tool Call</span>
+                      <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
+                      {argsPreview(m)}
                     </summary>
-                    <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
+                    <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: (toolArgs(m) ?? { text: m.content }) }, null, 2)}</code></pre>
                   </details>
                 </div>
               {:else}
@@ -753,10 +779,11 @@
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        <span class="badge text-bg-success me-2">result</span>
-                        {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
+                        <span class="badge text-bg-success me-2">Tool Result</span>
+                        <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(toolType(m))}</span>
+                        {argsPreview(m)}
                       </summary>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
+                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: toolType(m) || 'tool', args: toolArgs(m) ?? null, output: m.content }, null, 2)}</code></pre>
                     </details>
                   </div>
                 {:else}
@@ -765,7 +792,7 @@
                       {#if isThinking(m)}
                         <details class="mt-1 mb-2">
                           <summary class="small text-body text-opacity-75" style="cursor: pointer;">
-                            <span class="badge text-bg-warning-subtle border me-2">thinking</span>
+                            <span class="badge text-bg-warning-subtle border me-2">Assistant Thinking</span>
                             {#if channelBadge(m)}<span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{channelBadge(m)}</span>{/if}
                           </summary>
                           <div class="small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{m.content}</div>

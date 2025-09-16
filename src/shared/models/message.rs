@@ -198,7 +198,7 @@ impl AgentMessage {
                    content, content_type, content_json, metadata, created_at
             FROM agent_messages
             WHERE agent_name = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
             "#,
         )
@@ -239,7 +239,7 @@ impl AgentMessage {
             sql.push_str(&format!(" AND created_at > ${param_count}"));
         }
 
-        sql.push_str(" ORDER BY created_at ASC");
+        sql.push_str(" ORDER BY created_at ASC, id ASC");
         param_count += 1;
         sql.push_str(&format!(" LIMIT ${param_count}"));
         param_count += 1;

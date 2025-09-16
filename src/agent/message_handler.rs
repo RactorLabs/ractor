@@ -305,20 +305,34 @@ impl MessageHandler {
                 super::error::HostError::Model(format!("Failed to decode prompt: {}", e))
             })?;
 
-            // Log full Harmony-rendered request (prompt + params)
+            // Prepare logging context and generation params
             let request_id = format!("{}:{}", message.id, step + 1);
             let gen_params = serde_json::json!({
                 "max_new_tokens": 1024,
                 "stop": ["<|end|>", "<|call|>", "<|return|>"]
             });
-            tracing::info!(
-                target: "gpt",
-                request_id = %request_id,
-                params = %gen_params.to_string(),
-                prompt_len = prompt.len(),
-                "HARMONY_MODEL_REQUEST\n{}",
-                prompt
-            );
+            let log_body = std::env::var("RAWORC_LOG_HARMONY")
+                .unwrap_or_else(|_| "".to_string())
+                .to_lowercase();
+            let log_full = matches!(log_body.as_str(), "1" | "true" | "yes" | "on");
+            if log_full {
+                tracing::info!(
+                    target: "gpt",
+                    request_id = %request_id,
+                    params = %gen_params.to_string(),
+                    prompt_len = prompt.len(),
+                    "HARMONY_MODEL_REQUEST\n{}",
+                    prompt
+                );
+            } else {
+                tracing::debug!(
+                    target: "gpt",
+                    request_id = %request_id,
+                    params = %gen_params.to_string(),
+                    prompt_len = prompt.len(),
+                    "HARMONY_MODEL_REQUEST"
+                );
+            }
 
             let completion = self
                 .gpt_client
@@ -329,20 +343,29 @@ impl MessageHandler {
                 .await
                 .map_err(|e| super::error::HostError::Model(format!("GPT server failed: {}", e)))?;
 
-            // Log full model response text
-            tracing::info!(
-                target: "gpt",
-                request_id = %request_id,
-                response_len = completion.len(),
-                "HARMONY_MODEL_RESPONSE\n{}",
-                completion
-            );
+            // Log model response text (full only if enabled)
+            if log_full {
+                tracing::info!(
+                    target: "gpt",
+                    request_id = %request_id,
+                    response_len = completion.len(),
+                    "HARMONY_MODEL_RESPONSE\n{}",
+                    completion
+                );
+            } else {
+                tracing::debug!(
+                    target: "gpt",
+                    request_id = %request_id,
+                    response_len = completion.len(),
+                    "HARMONY_MODEL_RESPONSE"
+                );
+            }
 
             let completion_tokens = enc.tokenizer().encode_with_special_tokens(&completion);
             let parsed = enc
                 .parse_messages_from_completion_tokens(completion_tokens, Some(HRole::Assistant))
                 .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
-            tracing::info!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
+            tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
             let mut made_tool_call = false;
             for m in parsed.iter() {
@@ -438,9 +461,8 @@ impl MessageHandler {
             }
 
             if !made_tool_call {
-                return Err(super::error::HostError::Model(
-                    "Harmony completion had no actionable assistant content".to_string(),
-                ));
+                tracing::warn!("Harmony completion had no actionable assistant content");
+                return Ok(());
             }
 
             info!("Harmony loop step {} completed; continuing", step + 1);
