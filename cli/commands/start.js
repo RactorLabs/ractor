@@ -105,7 +105,7 @@ module.exports = (program) => {
     // API options
     .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--api-jwt-secret <secret>', 'API JWT_SECRET')
-    .option('--api-rust-log <level>', 'API RUST_LOG', 'info')
+    .option('--api-rust-log <level>', 'API RUST_LOG', 'debug')
     .option('--api-raworc-host <host>', 'API RAWORC_HOST')
     .option('--api-raworc-port <port>', 'API RAWORC_PORT')
     .option('--api-api-port <port>', 'Host port for API (maps to 9000)', '9000')
@@ -113,7 +113,7 @@ module.exports = (program) => {
     // Controller options
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
-    .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
+    .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'debug')
     .option('--controller-gpt-url <url>', 'Controller RAWORC_GPT_URL (overrides default)')
     .option('--controller-gpt-model <model>', 'Controller RAWORC_GPT_MODEL')
     .addHelpText('after', '\n' +
@@ -377,7 +377,7 @@ module.exports = (program) => {
                 '-v', 'raworc_api_data:/app/logs',
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
-                '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
+                '-e',`RUST_LOG=${options.apiRustLog || 'debug'}`,
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
                 ...(options.apiRaworcHost ? ['-e', `RAWORC_HOST=${options.apiRaworcHost}`] : []),
@@ -427,7 +427,7 @@ module.exports = (program) => {
               const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
-              const controllerRustLog = options.controllerRustLog || 'info';
+              const controllerRustLog = options.controllerRustLog || 'debug';
               const args = ['run','-d',
                 '--name','raworc_controller',
                 '--network','raworc_network',

@@ -1134,6 +1134,12 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_AGENT_DIR=/agent"),
         ];
 
+        // Enable verbose logging inside agent containers by default; allow override via controller env
+        let agent_rust_log = std::env::var("AGENT_RUST_LOG")
+            .or_else(|_| std::env::var("RAWORC_AGENT_RUST_LOG"))
+            .unwrap_or_else(|_| "debug".to_string());
+        env.push(format!("RUST_LOG={}", agent_rust_log));
+
         // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
         let host_url = std::env::var("RAWORC_HOST_URL")
@@ -1148,7 +1154,7 @@ echo 'Agent directories created (code, secrets, logs, content)'
             )
         })?;
         env.push(format!("RAWORC_GPT_URL={}", gpt_url));
-        // Removed Ollama-specific timeout env
+        // Timeout env adjusted for current model runtime
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1318,6 +1324,12 @@ echo 'Agent directories created (code, secrets, logs, content)'
             format!("RAWORC_PRINCIPAL={}", principal),
             format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
         ];
+
+        // Enable verbose logging inside agent containers by default; allow override via controller env
+        let agent_rust_log = std::env::var("AGENT_RUST_LOG")
+            .or_else(|_| std::env::var("RAWORC_AGENT_RUST_LOG"))
+            .unwrap_or_else(|_| "debug".to_string());
+        env.push(format!("RUST_LOG={}", agent_rust_log));
 
         // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());

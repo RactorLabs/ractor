@@ -22,7 +22,7 @@ class GenerateRequest(BaseModel):
     prompt: str
     model: Optional[str] = None
     # Generation params (subset; server ignores unknowns, mirrors internal schema)
-    max_new_tokens: Optional[int] = 512
+    max_new_tokens: Optional[int] = None
     temperature: Optional[float] = 0.7
     top_p: Optional[float] = 0.95
     top_k: Optional[int] = None
@@ -197,11 +197,14 @@ def generate(req: GenerateRequest):
     model.eval()
     t0 = time.perf_counter()
     try:
+        gen_kwargs: Dict[str, Any] = {}
+        if req.max_new_tokens is not None:
+            gen_kwargs["max_new_tokens"] = req.max_new_tokens
         with torch.inference_mode():
             out = model.generate(
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                max_new_tokens=(req.max_new_tokens or 128),
+                **gen_kwargs,
             )
     except Exception as e:
         return JSONResponse(status_code=503, content={

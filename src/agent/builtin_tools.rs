@@ -76,8 +76,8 @@ impl Tool for TextEditorTool {
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["view", "create", "str_replace", "insert"],
-                    "description": "The editing action to perform"
+                    "enum": ["view", "create", "write", "str_replace", "insert"],
+                    "description": "Editing action. Use 'create' for new files; use 'write' to overwrite with full content."
                 },
                 "path": {
                     "type": "string",
@@ -85,7 +85,7 @@ impl Tool for TextEditorTool {
                 },
                 "content": {
                     "type": "string",
-                    "description": "Content for create/insert operations"
+                    "description": "Content for create/write operations"
                 },
                 "target": {
                     "type": "string",
@@ -126,6 +126,9 @@ impl Tool for TextEditorTool {
                     }
                     TextEditAction::Create { path, .. } => {
                         format!("Result for tool 'text_editor' (create {} )", path)
+                    }
+                    TextEditAction::Write { path, .. } => {
+                        format!("Result for tool 'text_editor' (write {} )", path)
                     }
                     TextEditAction::StrReplace { path, .. } => {
                         format!("Result for tool 'text_editor' (str_replace {} )", path)
@@ -232,6 +235,10 @@ fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> 
             {
                 obj.insert("path".to_string(), p);
             }
+        }
+        // Accept overwrite: true to map to 'write'
+        if obj.get("overwrite").and_then(|v| v.as_bool()) == Some(true) {
+            obj.insert("action".to_string(), serde_json::json!("write"));
         }
     }
     let action: TextEditAction = serde_json::from_value(v)?;

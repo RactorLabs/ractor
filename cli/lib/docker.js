@@ -191,7 +191,7 @@ class DockerManager {
           '-v', 'raworc_api_data:/app/logs',
           '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
           '-e', 'JWT_SECRET=development-secret-key',
-          '-e', 'RUST_LOG=info',
+          '-e', 'RUST_LOG=debug',
           this.images.api
         ]);
         break;
@@ -212,7 +212,7 @@ class DockerManager {
           '-e', 'AGENT_CPU_LIMIT=0.5',
           '-e', 'AGENT_MEMORY_LIMIT=536870912',
           '-e', 'AGENT_DISK_LIMIT=1073741824',
-          '-e', 'RUST_LOG=info',
+          '-e', 'RUST_LOG=debug',
           this.images.controller
         ]);
         break;

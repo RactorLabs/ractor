@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-// Removed Ollama interop; Harmony parsing is handled on the Rust side.
+// Harmony parsing is handled on the Rust side.
 
 /// Core trait that all tools must implement
 #[async_trait]

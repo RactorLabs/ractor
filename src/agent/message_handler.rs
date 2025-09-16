@@ -292,7 +292,9 @@ impl MessageHandler {
         })?;
 
         let mut tool_messages: Vec<HMessage> = Vec::new();
-        for step in 0..10 {
+        let mut step: u32 = 0;
+        loop {
+            step += 1;
             let convo = self
                 .build_harmony_conversation(&enc, message, &tool_messages)
                 .await?;
@@ -306,15 +308,33 @@ impl MessageHandler {
             })?;
 
             // Prepare logging context and generation params
-            let request_id = format!("{}:{}", message.id, step + 1);
-            let gen_params = serde_json::json!({
-                "max_new_tokens": 1024,
-                "stop": ["<|end|>", "<|call|>", "<|return|>"]
-            });
-            let log_body = std::env::var("RAWORC_LOG_HARMONY")
-                .unwrap_or_else(|_| "".to_string())
-                .to_lowercase();
-            let log_full = matches!(log_body.as_str(), "1" | "true" | "yes" | "on");
+            let request_id = format!("{}:{}", message.id, step);
+            // Optional max_new_tokens via env; if unset, omit (server uses its own default)
+            let max_new_env: Option<u32> = std::env::var("RAWORC_MAX_NEW_TOKENS")
+                .ok()
+                .and_then(|s| s.parse::<u32>().ok());
+            let mut gp = serde_json::Map::new();
+            gp.insert("stop".to_string(), serde_json::json!(["<|end|>", "<|call|>", "<|return|>"]));
+            if let Some(n) = max_new_env { gp.insert("max_new_tokens".to_string(), serde_json::json!(n)); }
+            let gen_params = serde_json::Value::Object(gp);
+            // Full Harmony logs are enabled by default now.
+            // Disable by setting RAWORC_LOG_HARMONY to a falsey value (0,false,no,off),
+            // or by writing such a value into /agent/secrets/log_harmony (or /agent/logs/log_harmony).
+            let log_env = std::env::var("RAWORC_LOG_HARMONY").unwrap_or_else(|_| "true".to_string()).to_lowercase();
+            let mut log_full = !matches!(log_env.as_str(), "0" | "false" | "no" | "off");
+            // Optional file overrides: if explicitly falsey, turn off
+            for p in [
+                "/agent/secrets/log_harmony",
+                "/agent/logs/log_harmony",
+            ] {
+                if let Ok(s) = std::fs::read_to_string(p) {
+                    let t = s.trim().to_lowercase();
+                    if matches!(t.as_str(), "0" | "false" | "no" | "off") {
+                        log_full = false;
+                        break;
+                    }
+                }
+            }
             if log_full {
                 tracing::info!(
                     target: "gpt",
@@ -367,77 +387,51 @@ impl MessageHandler {
                 .map_err(|e| super::error::HostError::Model(format!("Harmony parse failed: {}", e)))?;
             tracing::debug!(target: "gpt", request_id = %request_id, parsed_count = parsed.len(), "HARMONY_PARSE_OK");
 
-            let mut made_tool_call = false;
+            // Aggregate Harmony segments in original order for a single composite DB row
+            let mut segments: Vec<serde_json::Value> = Vec::new();
+            let mut final_msg: Option<(String, String)> = None; // (channel, text)
+
             for m in parsed.iter() {
-                if m.author.role != HRole::Assistant {
-                    continue;
-                }
+                if m.author.role != HRole::Assistant { continue; }
 
-                // commentary/analysis
-                if let Some(ch) = m.channel.as_deref() {
-                    if ch == "analysis" || ch == "commentary" {
-                        if let Some(text) = Self::first_text(&m.content) {
-                            let sanitized = self.guardrails.validate_output(text)?;
-                            let meta = serde_json::json!({ "type": "assistant_commentary", "model": "gpt-oss" });
-                            let _ = self
-                                .api_client
-                                .send_message_structured(
-                                    super::api::MessageRole::Agent,
-                                    sanitized,
-                                    Some(meta),
-                                    None,
-                                    None,
-                                    Some(ch.to_string()),
-                                    None,
-                                    None,
-                                )
-                                .await;
-                        }
-                        continue;
-                    }
-                }
-
-                // Tool call
+                // Tool call encountered
                 if let Some(recipient) = m.recipient.as_deref() {
                     if let Some(tool_name) = recipient.strip_prefix("functions.") {
                         let args_text = Self::first_text(&m.content).unwrap_or("");
-                        let args_json: serde_json::Value = serde_json::from_str(args_text)
-                            .unwrap_or_else(|_| serde_json::json!({}));
+                        let args_json: serde_json::Value = serde_json::from_str(args_text).unwrap_or_else(|_| serde_json::json!({}));
 
-                        let desc = self.describe_tool_call(tool_name, &args_json);
-                        self.send_tool_message(&desc, tool_name, Some(&args_json))
-                            .await?;
+                        // Add tool_call segment in-order
+                        segments.push(serde_json::json!({
+                            "type": "tool_call",
+                            "tool": tool_name,
+                            "args": args_json.clone(),
+                        }));
 
-                        let result =
-                            match self.tool_registry.execute_tool(tool_name, &args_json).await {
-                                Ok(r) => r,
-                                Err(e) => format!("[error] {}", e),
-                            };
+                        // Execute tool immediately and add tool_result segment
+                        let result = match self.tool_registry.execute_tool(tool_name, &args_json).await {
+                            Ok(r) => r,
+                            Err(e) => format!("[error] {}", e),
+                        };
 
-                        let display = self.truncate_tool_result(&result);
-                        let mut meta =
-                            serde_json::json!({ "type": "tool_result", "tool_type": tool_name });
-                        if let Some(obj) = meta.as_object_mut() {
-                            obj.insert("args".to_string(), args_json.clone());
+                        segments.push(serde_json::json!({
+                            "type": "tool_result",
+                            "tool": tool_name,
+                            "args": args_json.clone(),
+                            "output": result,
+                        }));
+
+                        // For idempotent management tools, finalize the turn after success
+                        if final_msg.is_none() {
+                            if tool_name == "publish" {
+                                let text = "Publish completed.".to_string();
+                                final_msg = Some(("final".to_string(), text));
+                            } else if tool_name == "sleep" {
+                                let text = "Agent is going to sleep.".to_string();
+                                final_msg = Some(("final".to_string(), text));
+                            }
                         }
-                        let content_json = serde_json::json!({
-                            "args": args_json,
-                            "output": result
-                        });
-                        let _ = self
-                            .api_client
-                            .send_message_structured(
-                                super::api::MessageRole::Agent,
-                                display,
-                                Some(meta),
-                                None,
-                                None,
-                                None,
-                                None,
-                                Some(content_json),
-                            )
-                            .await;
 
+                        // Feed Harmony for the next step
                         tool_messages.push(HMessage {
                             author: HAuthor::new(HRole::Tool, tool_name.to_string()),
                             recipient: None,
@@ -445,65 +439,94 @@ impl MessageHandler {
                             channel: None,
                             content_type: None,
                         });
-
-                        made_tool_call = true;
                         continue;
                     }
                 }
 
-                // Final answer
-                if let Some(text) = Self::first_text(&m.content) {
-                    let sanitized = self.guardrails.validate_output(text)?;
-                    let meta = serde_json::json!({ "type": "model_response", "model": "gpt-oss" });
-                    self.api_client.send_message(sanitized, Some(meta)).await?;
-                    return Ok(());
+                // Commentary/analysis channel
+                if let Some(ch) = m.channel.as_deref() {
+                    if ch == "analysis" || ch == "commentary" {
+                        if let Some(text) = Self::first_text(&m.content) {
+                            let sanitized = self.guardrails.validate_output(text)?;
+                            segments.push(serde_json::json!({
+                                "type": "commentary",
+                                "channel": ch,
+                                "text": sanitized,
+                            }));
+                            continue;
+                        }
+                    }
+                }
+
+                // Potential final text (first non-tool/non-commentary assistant text)
+                if final_msg.is_none() {
+                    if let Some(text) = Self::first_text(&m.content) {
+                        let ch = m.channel.clone().unwrap_or_else(|| "final".to_string());
+                        final_msg = Some((ch, text.to_string()));
+                    }
                 }
             }
 
-            if !made_tool_call {
-                tracing::warn!("Harmony completion had no actionable assistant content");
+            // Tools and commentary were already aggregated in-order during parsing loop
+
+            // 3) Post this loop step as its own message (per-step composite)
+            // Add final segment if present so the step captures it
+            let mut content_str = String::new();
+            let mut channel_for_row: Option<String> = None;
+            if let Some((ch, text)) = final_msg {
+                let sanitized = self.guardrails.validate_output(&text)?;
+                segments.push(serde_json::json!({
+                    "type": "final",
+                    "channel": ch,
+                    "text": sanitized,
+                }));
+                content_str = sanitized;
+                channel_for_row = Some(ch);
+            }
+
+            if !segments.is_empty() {
+                let meta = serde_json::json!({
+                    "type": "model_response_step",
+                    "model": "gpt-oss",
+                    "step": step,
+                    "has_final": channel_for_row.is_some(),
+                });
+                let content_json = serde_json::json!({
+                    "harmony": {
+                        "request_id": request_id,
+                        "segments": segments,
+                    }
+                });
+                self
+                    .api_client
+                    .send_message_structured(
+                        super::api::MessageRole::Agent,
+                        content_str,
+                        Some(meta),
+                        None,
+                        None,
+                        channel_for_row.clone(),
+                        None,
+                        Some(content_json),
+                    )
+                    .await?;
+            }
+
+            // Stop if final was present in this step
+            if channel_for_row.is_some() {
                 return Ok(());
             }
 
-            info!("Harmony loop step {} completed; continuing", step + 1);
+            // If we executed tools but no final yet, continue the loop for next step
+            if !tool_messages.is_empty() {
+                info!("Harmony loop step {} completed; continuing", step);
+                continue;
+            }
+
+            // Otherwise nothing actionable
+            tracing::warn!("Harmony completion had no actionable assistant content");
+            return Ok(());
         }
-
-        Err(super::error::HostError::Model(
-            "Harmony step cap reached".to_string(),
-        ))
-    }
-
-    async fn finalize_with_fallback(&self, original: &str) -> Result<()> {
-        let fallback_response = format!(
-            "I'm experiencing technical difficulties with AI processing. Your request was: \"{}\". Please try again later.",
-            original
-        );
-        let sanitized = self.guardrails.validate_output(&fallback_response)?;
-        self.api_client
-            .send_message(
-                sanitized,
-                Some(serde_json::json!({
-                    "type": "fallback_response",
-                    "model": "gpt-oss"
-                })),
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn finalize_with_note(&self, note: &str) -> Result<()> {
-        let msg = format!("Tool loop terminated: {}", note);
-        let sanitized = self.guardrails.validate_output(&msg)?;
-        self.api_client
-            .send_message(
-                sanitized,
-                Some(serde_json::json!({
-                    "type": "tool_loop_stop",
-                    "model": "gpt-oss"
-                })),
-            )
-            .await?;
-        Ok(())
     }
 
     #[allow(dead_code)]
@@ -522,8 +545,9 @@ impl MessageHandler {
             .with_conversation_start_date(chrono::Utc::now().to_rfc3339())
             .with_required_channels(["analysis", "commentary", "final"]);
 
-        // Developer tools + guidance
+        // Developer tools + guidance: combine legacy 0.7.7 prompt with the newer Harmony guidance
         let mut dev = DeveloperContent::new().with_function_tools(self.collect_function_tools().await?);
+        let legacy_prompt = self.build_legacy_system_prompt().await;
         let tool_guidance = r#"
 Use function tools to act.
 Channels:
@@ -534,53 +558,43 @@ Tools:
 - Use functions.bash for shell commands (args: {"command": "..."}).
 - Use functions.text_editor for file edits (actions: view/create/str_replace/insert).
 
+File editing guidance:
+- When creating a new file, prefer a single create call with the full content in one go.
+- Avoid issuing many incremental insert/replace calls to build a new file; write the complete HTML content in the create call.
+- Use relative paths only (no leading '/'); paths are rooted at /agent.
+- Only use insert/str_replace for targeted updates to existing files.
+- Do not call view before create when creating a brand new file unless verifying it already exists.
+
 Constraints:
 - Tool call content must be valid JSON per schema. No extra prose.
 - Prefer concise, accurate results in 'final' after tools complete.
 "#;
-        let merged_instructions = if let Ok(text) = tokio::fs::read_to_string("/agent/code/instructions.md").await {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() { format!("{}\n\n{}", trimmed, tool_guidance) } else { tool_guidance.to_string() }
-        } else { tool_guidance.to_string() };
-        dev = dev.with_instructions(merged_instructions);
+        let combined_instructions = format!("{}\n\n{}", legacy_prompt, tool_guidance);
+        dev = dev.with_instructions(combined_instructions);
 
         let mut msgs: Vec<HMessage> = Vec::new();
         msgs.push(HMessage::from_role_and_content(HRole::System, system));
         msgs.push(HMessage::from_role_and_content(HRole::Developer, dev));
 
-        let history = self.api_client.get_messages(None, None).await?;
+        // Use a bounded history window to keep prompt size manageable (override via RAWORC_HISTORY_LIMIT)
+        let hist_limit: u32 = std::env::var("RAWORC_HISTORY_LIMIT")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(40);
+        let history = self.api_client.get_messages(Some(hist_limit), None).await?;
         for m in history.iter().filter(|m| m.id != current.id) {
             match m.role {
-                MessageRole::User => msgs.push(HMessage::from_role_and_content(
-                    HRole::User,
-                    m.content.clone(),
-                )),
+                MessageRole::User => msgs.push(HMessage::from_role_and_content(HRole::User, m.content.clone())),
                 MessageRole::Agent => {
-                    if let Some(meta) = &m.metadata {
-                        if meta.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
-                            let tool_nm = meta
-                                .get("tool_type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("tool");
-                            msgs.push(HMessage {
-                                author: HAuthor::new(HRole::Tool, tool_nm.to_string()),
-                                recipient: None,
-                                content: vec![HContent::from(m.content.clone())],
-                                channel: None,
-                                content_type: None,
-                            });
-                        } else {
-                            msgs.push(HMessage::from_role_and_content(
-                                HRole::Assistant,
-                                m.content.clone(),
-                            ));
-                        }
-                    } else {
-                        msgs.push(HMessage::from_role_and_content(
-                            HRole::Assistant,
-                            m.content.clone(),
-                        ));
-                    }
+                    // Prefer treating prior agent messages as final-channel assistant messages
+                    // This avoids leaking prior analysis/commentary and keeps history concise.
+                    msgs.push(HMessage {
+                        author: HAuthor::new(HRole::Assistant, "assistant".to_string()),
+                        recipient: None,
+                        content: vec![HContent::from(m.content.clone())],
+                        channel: Some("final".to_string()),
+                        content_type: None,
+                    });
                 }
                 MessageRole::System => {}
             }
@@ -594,71 +608,7 @@ Constraints:
         Ok(HConversation::from_messages(msgs))
     }
 
-    async fn send_tool_message(
-        &self,
-        description: &str,
-        tool_name: &str,
-        args: Option<&serde_json::Value>,
-    ) -> Result<()> {
-        // Log tool execution notification to Docker logs
-        println!("TOOL_EXECUTION: {}: {}", tool_name, description);
-
-        // Compose metadata and structured fields
-        let mut meta = serde_json::json!({
-            "type": "tool_execution",
-            "tool_type": tool_name
-        });
-        let mut content_json: Option<serde_json::Value> = None;
-        if let Some(a) = args {
-            if let Some(obj) = meta.as_object_mut() {
-                obj.insert("args".to_string(), a.clone());
-            }
-            content_json = Some(a.clone());
-        }
-
-        // Post structured message: recipient indicates Harmony tool call, args in content_json
-        self.api_client
-            .send_message_structured(
-                super::api::MessageRole::Agent,
-                description.to_string(),
-                Some(meta),
-                None,
-                Some(format!("functions.{}", tool_name)),
-                None,
-                None,
-                content_json,
-            )
-            .await?;
-
-        Ok(())
-    }
-
-    fn truncate_tool_result(&self, tool_result: &str) -> String {
-        const MAX_DISPLAY_LENGTH: usize = 8192; // 8KB limit for message display
-        const TRUNCATION_PREVIEW: usize = 1024; // Show first 1KB, then summary
-
-        if tool_result.len() <= MAX_DISPLAY_LENGTH {
-            return tool_result.to_string();
-        }
-
-        // Count lines and estimate content for summary
-        let lines: Vec<&str> = tool_result.lines().collect();
-        let line_count = lines.len();
-        let char_count = tool_result.len();
-
-        // Take first portion and add summary
-        let preview = tool_result
-            .chars()
-            .take(TRUNCATION_PREVIEW)
-            .collect::<String>();
-
-        format!(
-            "{}\n\n[OUTPUT TRUNCATED - {} total lines, {} total characters]\n[Use more specific commands like 'ls /agent/code' (no -R) to avoid large outputs]\n[Full output available in agent logs]",
-            preview,
-            line_count,
-            char_count
-        )
-    }
+    
 }
 
 // Legacy helpers removed; Harmony loop directly parses function calls via enc.parse_messages_from_completion_tokens
@@ -731,5 +681,192 @@ impl MessageHandler {
             }
             other => format!("Executing {} tool", other),
         }
+    }
+
+    // Legacy 0.7.7 system prompt text used as Developer instructions for Harmony
+    async fn build_legacy_system_prompt(&self) -> String {
+        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+        let base_url_env = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "http://localhost".to_string());
+        let base_url = base_url_env.trim_end_matches('/').to_string();
+
+        let (agent_name_ctx, is_published_ctx, published_at_ctx) = match self.api_client.get_agent().await {
+            Ok(agent) => {
+                let nm = agent.name.clone();
+                let ip = agent.is_published;
+                let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
+                (nm, ip, pa)
+            }
+            Err(_) => ("unknown".to_string(), false, String::new()),
+        };
+
+        let current_time_utc = chrono::Utc::now().to_rfc3339();
+        let operator_url = format!("{}", base_url);
+        let api_url = format!("{}/api", base_url);
+        let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
+
+        let mut prompt = String::from(format!(
+            r#"SYSTEM CONTEXT
+
+You are running as an Agent in the {host_name} system.
+
+- System Name: {host_name}
+- Base URL: {base_url}
+- Current Time (UTC): {current_time_utc}
+- Operator URL: {operator_url}
+- API URL: {api_url}
+- Your Agent Name: {agent_name}
+- Published Content URL: {published_url}
+- Published: {published_flag}
+ - Published At: {published_at}
+
+Platform endpoints:
+- Content Server: {base_url}/content — public gateway that serves published agent content at a stable URL (path prefix /content).
+- API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
+
+About content and publishing:
+- Your working content lives under /agent/content/.
+- There is no live preview server. When the user wants to view content, publish it.
+- Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
+- Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
+- The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
+
+Important behavior:
+- Do NOT ask the user to start an HTTP server for /agent/content.
+- Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
+- When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
+  - Example: {published_url}/index.html or {published_url}/dashboard/report.html
+- Use absolute URLs that include protocol and host. Do NOT use relative URLs.
+- Outside of an explicit publish action, include Published URLs only if the user asks for them or asks about publish status.
+- Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
+- IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
+
+"#,
+            host_name = host_name,
+            base_url = base_url,
+            operator_url = operator_url,
+            api_url = api_url,
+            agent_name = agent_name_ctx,
+            published_url = published_url,
+            published_flag = if is_published_ctx { "true" } else { "false" },
+            published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
+            current_time_utc = current_time_utc,
+        ));
+
+        prompt.push_str(
+            r#"You are a highly capable AI agent with full access to bash commands and text editing capabilities. You operate in an isolated container environment where you can execute commands, install packages, and create any type of content to help users accomplish their goals.
+
+## Core Capabilities
+
+You are an AI agent with unrestricted access to:
+- **Bash shell**: Execute any command using semicolons to chain operations efficiently
+- **Text editor**: Create, modify, and view files with precision
+- **Package management**: Install pip, npm, apt packages, or any other tools needed
+- **Internet access**: Use curl to fetch websites, APIs, and download files
+- **Development**: Code in any language, run scripts, build applications
+- **System administration**: Full control within your container environment
+
+## Directory Structure (/agent/)
+
+```
+├── code/        - All development files, scripts, source code, data
+├── content/     - HTML files and web assets for user display
+├── logs/        - Automatic command logs (read-only)
+└── secrets/     - Environment-like secrets mounted by the platform
+```
+
+Rules:
+- Keep all long-lived code and data under /agent/code
+- Put public-facing HTML/JS/CSS under /agent/content (then publish)
+- Never expose secrets; they are available as text files under /agent/secrets if needed
+
+## Tooling
+
+You have two primary function tools:
+- functions.bash { command: string }
+- functions.text_editor { action: "view"|"create"|"write"|"str_replace"|"insert", path: string, ... }
+
+Guidance for text editing:
+- For new files, prefer a single create with the full content
+- For overwriting existing files, use write with the full content
+- Use insert/str_replace only for targeted edits
+- Use relative paths (no leading '/') rooted at /agent
+
+## Command Execution Philosophy
+
+**Chain commands efficiently**: Use semicolons (;) and logical operators (&&, ||) to execute multiple operations in one shot:
+- `cd project && npm install && npm start`
+- `python3 -m venv venv; source venv/bin/activate; pip install requests pandas; python script.py`
+- `curl -o data.json https://api.example.com/data && python process.py`
+
+**Install whatever you need**: Don't ask for permission to install packages:
+- `pip install yfinance matplotlib pandas seaborn`
+- `npm install -g typescript webpack`
+- `sudo apt-get update && sudo apt-get install -y postgresql-client`
+
+**Fetch data freely**: Use curl, wget, or any tool to get external data:
+- `curl -s https://api.github.com/user/repos | jq .`
+- `wget https://example.com/dataset.csv`
+
+## Command Efficiency Guidelines
+
+**NEVER use `ls -R`** - Always run smaller, targeted ls commands and expand from there:
+- ❌ WRONG: `ls -R /agent/code`
+- ✅ CORRECT: `ls /agent/code` then explore specific subdirectories
+- ✅ CORRECT: `ls /agent/code/project1`
+- ✅ CORRECT: `find /agent/code -name "*.py" -maxdepth 2`
+
+**Use specific commands** instead of broad ones to avoid large outputs:
+- `ls /agent/code/*.py`
+- `head -20 file.log`
+- `du -sh /agent/code/*`
+- `grep -l "pattern" /agent/code/*`
+
+**When exploring directory structures**: Build understanding incrementally:
+- Start with `ls /agent/code/`
+- Then drill down: `ls /agent/code/project1/`
+- Use `tree -L 2 /agent/code` if needed (limit depth)
+- Use `find` with specific patterns
+
+**For debugging**: Use targeted commands that give useful info without overwhelming output.
+
+## Best Practices
+
+**Be proactive**: Install tools or packages as needed
+**Chain operations**: Combine commands with `;` or `&&`
+**Use Python venv when appropriate**
+**Create visual outputs** in `/agent/content/` and publish
+**Save work** under `/agent/code/`
+**Document as you go**
+
+## Examples
+
+Install and analyze stock data:
+```bash
+python3 -m venv venv; source venv/bin/activate; pip install yfinance pandas matplotlib; python -c "import yfinance as yf; data = yf.download('AAPL', period='1y'); print(data.head())"
+```
+
+Fetch API data and process:
+```bash
+curl -s https://jsonplaceholder.typicode.com/posts | jq '.[0:5]' > sample_data.json && python process_data.py
+```
+
+Build a web dashboard:
+```bash
+mkdir -p content/dashboard; echo '<html>...' > content/dashboard/index.html
+```
+
+You have complete freedom to execute commands, install packages, and create solutions. Focus on being efficient and getting things done quickly.
+"#,
+        );
+
+        let instructions_path = std::path::Path::new("/agent/code/instructions.md");
+        if instructions_path.exists() {
+            if let Ok(instructions) = tokio::fs::read_to_string(instructions_path).await {
+                prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
+                prompt.push_str(instructions.trim());
+            }
+        }
+
+        prompt
     }
 }

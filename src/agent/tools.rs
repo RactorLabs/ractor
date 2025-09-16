@@ -21,6 +21,10 @@ pub enum TextEditAction {
         path: String,
         content: String,
     },
+    Write {
+        path: String,
+        content: String,
+    },
     StrReplace {
         path: String,
         target: String,
@@ -175,6 +179,20 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
         TextEditAction::Create { path, content } => {
             info!(tool = "text_edit", action = "create", %path, len = content.len(), "tool start");
             let full = normalize_path(&path)?;
+            // Do not overwrite existing files on create; encourage the model to use 'write'
+            if full.exists() {
+                let msg = format!("create failed: file already exists: {}", full.display());
+                let _ = save_text_editor_log(
+                    "create",
+                    &path,
+                    false,
+                    serde_json::json!({"length":content.len()}),
+                    &msg,
+                    start_time,
+                )
+                .await;
+                anyhow::bail!(msg);
+            }
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent).await?;
             }
@@ -191,6 +209,27 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
             )
             .await;
             info!(tool = "text_edit", action = "create", %path, bytes = content.len(), "tool end");
+            Ok(msg)
+        }
+        TextEditAction::Write { path, content } => {
+            info!(tool = "text_edit", action = "write", %path, len = content.len(), "tool start");
+            let full = normalize_path(&path)?;
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).await?;
+            }
+            let mut f = fs::File::create(&full).await?; // truncates if exists
+            f.write_all(content.as_bytes()).await?;
+            let msg = format!("wrote: {} ({} bytes)", full.display(), content.len());
+            let _ = save_text_editor_log(
+                "write",
+                &path,
+                true,
+                serde_json::json!({"length":content.len()}),
+                &msg,
+                start_time,
+            )
+            .await;
+            info!(tool = "text_edit", action = "write", %path, bytes = content.len(), "tool end");
             Ok(msg)
         }
         TextEditAction::StrReplace {
