@@ -279,17 +279,22 @@ export function getApiDocs(base) {
     title: 'Agent Messages',
     description: 'Send and retrieve messages for a given agent (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent.', params: [
+      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent. Returns Harmony-enhanced fields when available.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages?limit=20 -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `[{"id":1,"agent_name":"demo","role":"user","content":"hello","metadata":{},"created_at":"2025-01-01T12:00:00Z"}]` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent.', params: [
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages?limit=20 -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","role":"user","author_name":null,"recipient":null,"channel":null,"content":"hello","content_type":null,"content_json":null,"metadata":{},"created_at":"2025-01-01T12:00:00Z"}]` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent. Supports Harmony fields (optional).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'role', type: "'user'|'agent'|'system'", required: false, desc: "Message role (default 'user')" },
         { in: 'body', name: 'content', type: 'string', required: true, desc: 'Message text content' },
-        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"content":"hello"}'`, responses: [{ status: 200, body: `{"id":42,"agent_name":"demo","role":"user","content":"hello","metadata":{},"created_at":"2025-01-01T12:00:00Z"}` }] },
+        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
+        { in: 'body', name: 'author_name', type: 'string|null', required: false, desc: 'Optional author name (Harmony Author.name)' },
+        { in: 'body', name: 'recipient', type: 'string|null', required: false, desc: 'Optional recipient (e.g., functions.bash for tool call)' },
+        { in: 'body', name: 'channel', type: 'string|null', required: false, desc: "Optional channel (e.g., 'analysis','commentary','final')" },
+        { in: 'body', name: 'content_type', type: 'string|null', required: false, desc: 'Optional content type from Harmony' },
+        { in: 'body', name: 'content_json', type: 'object|null', required: false, desc: 'Optional structured content (e.g., tool args/output)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"content":"hello","channel":"final"}'`, responses: [{ status: 200, body: `{"id":"uuid","agent_name":"demo","role":"user","author_name":null,"recipient":null,"channel":"final","content":"hello","content_type":null,"content_json":null,"metadata":{},"created_at":"2025-01-01T12:00:00Z"}` }] },
       { method: 'GET', path: '/api/v0/agents/{name}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages/count -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] },
