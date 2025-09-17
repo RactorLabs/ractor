@@ -11,6 +11,11 @@
   $: docs = (getApiDocs($page?.data?.hostUrl) || [])
     .map((sec) => ({ ...sec, endpoints: (sec.endpoints || []).filter((ep) => !ep.adminOnly) }))
     .filter((sec) => (sec.endpoints || []).length > 0);
+  // Move Published Agents section to the end (after Agent Responses)
+  $: docs = [
+    ...docs.filter((s) => s.id !== 'published'),
+    ...docs.filter((s) => s.id === 'published')
+  ];
   
 
   setPageTitle('API Documentation');
