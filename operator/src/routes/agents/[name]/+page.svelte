@@ -69,6 +69,8 @@
   // Chat rendering derived from Responses
   let chat = [];
   let responsesCount = 0;
+  // Toggle display of thinking (analysis/commentary) text; default off, not persisted
+  let showThinking = false;
   let loading = true;
   let error = null;
   let input = '';
@@ -726,6 +728,12 @@
     <!-- Toolbar -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
       <div class="small text-body me-2">Total responses: {responsesCount}</div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
+          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">Show Thinking</label>
+        </div>
+      </div>
     </div>
 
     {#if error}
@@ -757,7 +765,9 @@
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     {#each segmentsOf(m) as s, j}
                       {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
-                        <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {#if showThinking}
+                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {/if}
                       {:else if segType(s) === 'tool_call'}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
@@ -837,7 +847,9 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if metaOf(m)?.thinking}
-                        <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                        {#if showThinking}
+                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                        {/if}
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div class="markdown-wrap">
