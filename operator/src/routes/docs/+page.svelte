@@ -471,10 +471,6 @@
           <a class="list-group-item list-group-item-action" href={'#' + section.id}>{section.title}</a>
         {/each}
       </div>
-      <div class="card-body small text-body text-opacity-75">
-        <div>Interactive views are available after login.</div>
-        <div class="mt-2"><a href="/login" class="text-decoration-none">Go to Login</a></div>
-      </div>
     </Card>
   </div>
       </div>
