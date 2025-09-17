@@ -237,7 +237,7 @@
     <Card class="mb-3">
       <div class="card-header fw-bold">Response Object</div>
       <div class="card-body p-3 p-sm-4 small">
-        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/agents/{name}/responses</span> endpoints.</div>
+        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/agents/&#123;name&#125;/responses</span> endpoints.</div>
         <div class="table-responsive">
           <table class="table table-sm table-bordered mb-2">
             <thead>
