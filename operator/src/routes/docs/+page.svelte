@@ -79,6 +79,7 @@
     <div class="col-12 col-xxl-10">
       <div class="row">
   <div class="col-xl-9">
+    {#if false}
     <Card class="mb-3">
       <div class="card-body p-4">
         <div class="text-center mb-2">
@@ -90,6 +91,7 @@
         </div>
       </div>
     </Card>
+    {/if}
 
     
 
@@ -440,6 +442,138 @@
         <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_result', tool: 'bash', output: '[exit_code:0]\nREADME.md\nsrc/' }, null, 2)}</code></pre>
         <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ type: 'final', channel: 'final', text: 'All set! Here are the results…' }, null, 2)}</code></pre>
         <div class="mt-2 small text-body text-opacity-75">Notes: Tool outputs may be truncated for size; the UI pairs each <span class="font-monospace">tool_call</span> with the next <span class="font-monospace">tool_result</span> having the same <span class="font-monospace">tool</span>.</div>
+      </div>
+    </Card>
+
+    <Card class="mb-3">
+      <div class="card-header fw-bold">Common Response Schemas</div>
+      <div class="card-body p-3 p-sm-4 small">
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Version</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">version</td><td>string</td><td>Semantic version of server</td></tr>
+                <tr><td class="font-monospace">api</td><td>string</td><td>API namespace (e.g., <span class="font-monospace">v0</span>)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Auth Profile</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">user</td><td>string</td><td>Principal name</td></tr>
+                <tr><td class="font-monospace">type</td><td>string</td><td><span class="font-monospace">Admin</span> or <span class="font-monospace">User</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Token Response</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">token</td><td>string</td><td>JWT token</td></tr>
+                <tr><td class="font-monospace">token_type</td><td>string</td><td>Always <span class="font-monospace">Bearer</span></td></tr>
+                <tr><td class="font-monospace">expires_at</td><td>string (RFC3339)</td><td>Expiry timestamp</td></tr>
+                <tr><td class="font-monospace">user</td><td>string</td><td>Principal name associated with token</td></tr>
+                <tr><td class="font-monospace">role</td><td>string</td><td><span class="font-monospace">admin</span> or <span class="font-monospace">user</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Operator Object</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">user</td><td>string</td><td>Operator username</td></tr>
+                <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
+                <tr><td class="font-monospace">active</td><td>boolean</td><td>Account active flag</td></tr>
+                <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
+                <tr><td class="font-monospace">updated_at</td><td>string (RFC3339)</td><td>Last update timestamp</td></tr>
+                <tr><td class="font-monospace">last_login_at</td><td>string|null (RFC3339)</td><td>Last login timestamp, if any</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent Object</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">name</td><td>string</td><td>Agent name (primary key)</td></tr>
+                <tr><td class="font-monospace">created_by</td><td>string</td><td>Owner username</td></tr>
+                <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|slept</span></td></tr>
+                <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
+                <tr><td class="font-monospace">parent_agent_name</td><td>string|null</td><td>Parent agent name if remixed</td></tr>
+                <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
+                <tr><td class="font-monospace">last_activity_at</td><td>string|null (RFC3339)</td><td>Last activity timestamp</td></tr>
+                <tr><td class="font-monospace">metadata</td><td>object</td><td>Arbitrary JSON metadata</td></tr>
+                <tr><td class="font-monospace">tags</td><td>string[]</td><td>Array of alphanumeric tags</td></tr>
+                <tr><td class="font-monospace">is_published</td><td>boolean</td><td>Published state</td></tr>
+                <tr><td class="font-monospace">published_at</td><td>string|null (RFC3339)</td><td>When published</td></tr>
+                <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>
+                <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, secrets: boolean, content: boolean &#125;</span></td></tr>
+                <tr><td class="font-monospace">idle_timeout_seconds</td><td>int</td><td>Idle timeout</td></tr>
+                <tr><td class="font-monospace">busy_timeout_seconds</td><td>int</td><td>Busy timeout</td></tr>
+                <tr><td class="font-monospace">idle_from</td><td>string|null (RFC3339)</td><td>When idle started</td></tr>
+                <tr><td class="font-monospace">busy_from</td><td>string|null (RFC3339)</td><td>When busy started</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Count Object</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">count</td><td>int</td><td>Count value</td></tr>
+                <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent identifier the count pertains to</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent Busy/Idle Response</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">success</td><td>boolean</td><td>Always <span class="font-monospace">true</span> on success</td></tr>
+                <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">busy</span> or <span class="font-monospace">idle</span></td></tr>
+                <tr><td class="font-monospace">timeout_status</td><td>string</td><td><span class="font-monospace">paused</span> (busy) or <span class="font-monospace">active</span> (idle)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent State Update Response</div>
+          <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2">
+              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td class="font-monospace">success</td><td>boolean</td><td>Always <span class="font-monospace">true</span> on success</td></tr>
+                <tr><td class="font-monospace">state</td><td>string</td><td>New state string</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </Card>
   </div>
