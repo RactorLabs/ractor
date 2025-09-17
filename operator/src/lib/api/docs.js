@@ -110,6 +110,7 @@ export function getApiDocs(base) {
         method: 'POST',
         path: '/api/v0/operators/{name}/login',
         auth: 'public',
+        adminOnly: true,
         desc: 'Login with operator name and password. Returns JWT token and user info.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
