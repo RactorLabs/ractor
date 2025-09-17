@@ -723,16 +723,9 @@
       </div>
     </div>
 
-    <!-- Minimize/Maximize (expand/collapse) tool details row -->
+    <!-- Toolbar -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
       <div class="small text-body me-2">Total responses: {responsesCount}</div>
-      <div class="d-flex align-items-center gap-2">
-        <div class="form-check form-switch" title="Toggle display of tool details and analysis">
-          <input class="form-check-input" type="checkbox" id="toggle-details" checked={showDetails} on:change={(e) => { try { showDetails = !!e?.currentTarget?.checked; } catch(_){} }} />
-          <label class="form-check-label small d-none d-sm-inline" for="toggle-details">Show Details</label>
-        </div>
-        <!-- Expand/Collapse buttons removed; Show Details covers tool visibility. -->
-      </div>
     </div>
 
     {#if error}
