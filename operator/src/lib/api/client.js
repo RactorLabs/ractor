@@ -8,12 +8,22 @@ function ensureApiPath(path) {
 
 // opts: { noAutoLogout?: boolean }
 export async function apiFetch(path, options = {}, opts = {}) {
-  const url = ensureApiPath(path);
+  let url = ensureApiPath(path);
   const token = getToken();
 
   const headers = new Headers(options.headers || {});
   headers.set('Content-Type', 'application/json');
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  // Reduce chances of stale GETs by disabling cache on client requests
+  const method = String(options.method || 'GET').toUpperCase();
+  if (!opts?.allowCache && method === 'GET') {
+    try {
+      headers.set('Cache-Control', 'no-cache, no-store, max-age=0, must-revalidate');
+      headers.set('Pragma', 'no-cache');
+    } catch (_) {}
+    const sep = url.includes('?') ? '&' : '?';
+    url = `${url}${sep}_=${Date.now()}`;
+  }
 
   const res = await fetch(url, { ...options, headers });
   let data = null;
