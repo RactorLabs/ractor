@@ -429,6 +429,17 @@ impl OllamaClient {
                     .text()
                     .await
                     .unwrap_or_else(|_| "<failed to read response>".to_string());
+
+                // If the server reports a tool-call parse error, retry this turn with a formatting hint
+                if text.contains("error parsing tool call") && attempt + 1 < PARSE_RETRIES {
+                    tracing::warn!(
+                        "Retrying due to server-side tool call parse error (attempt {}/{})",
+                        attempt + 1,
+                        PARSE_RETRIES
+                    );
+                    continue;
+                }
+
                 return Err(HostError::Model(format!(
                     "Ollama chat error ({}): {}",
                     status, text
