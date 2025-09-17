@@ -217,6 +217,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
+        { in: 'body', name: 'tags', type: 'string[]', required: false, desc: 'Array of tags; each tag must be alphanumeric (A-Za-z0-9), no spaces/symbols (default: [])' },
         { in: 'body', name: 'secrets', type: 'object<string,string>', required: false, desc: 'Key/value secrets map (default: empty)' },
         { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
@@ -231,6 +232,7 @@ export function getApiDocs(base) {
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Update description' },
+        { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: 'Replace tags array; each tag must be alphanumeric (A-Za-z0-9), no spaces/symbols' },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
         { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
       ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":900,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
@@ -275,27 +277,29 @@ export function getApiDocs(base) {
     ]
   },
   {
-    id: 'messages',
-    title: 'Agent Messages',
-    description: 'Send and retrieve messages for a given agent (protected).',
+    id: 'responses',
+    title: 'Agent Responses',
+    description: 'Composite input→output exchanges with live items (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'List messages for agent.', params: [
+      { method: 'GET', path: '/api/v0/agents/{name}/responses', auth: 'bearer', desc: 'List responses for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
-        { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max messages (0..1000, default 100)' },
+        { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max responses (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages?limit=20 -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `[{"id":1,"agent_name":"demo","role":"user","content":"hello","metadata":{},"created_at":"2025-01-01T12:00:00Z"}]` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Create a message for agent.', params: [
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses?limit=20 -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","status":"completed","input":{"text":"hi"},"output":{"text":"hello","items":[]},"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/responses', auth: 'bearer', desc: 'Create a response (user input).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
-        { in: 'body', name: 'role', type: "'user'|'agent'|'system'", required: false, desc: "Message role (default 'user')" },
-        { in: 'body', name: 'content', type: 'string', required: true, desc: 'Message text content' },
-        { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"content":"hello"}'`, responses: [{ status: 200, body: `{"id":42,"agent_name":"demo","role":"user","content":"hello","metadata":{},"created_at":"2025-01-01T12:00:00Z"}` }] },
-      { method: 'GET', path: '/api/v0/agents/{name}/messages/count', auth: 'bearer', desc: 'Get message count for agent.', params: [
+        { in: 'body', name: 'input', type: 'object', required: true, desc: 'User input; shape: { text: string }' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/responses -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"text":"hello"}}'`, responses: [{ status: 200, body: `{"id":"uuid","status":"pending",...}` }] },
+      { method: 'PUT', path: '/api/v0/agents/{name}/responses/{id}', auth: 'bearer', desc: 'Update a response (agent-only typical). Used to append output.items and mark status.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Response id' },
+        { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'", required: false, desc: 'Status update' },
+        { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update; replaces existing input JSON' },
+        { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; shape: { text?: string, items?: [] }' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name>/responses/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","text":"done"}]}}'`, responses: [{ status: 200, body: `{"id":"uuid","status":"completed",...}` }] },
+      { method: 'GET', path: '/api/v0/agents/{name}/responses/count', auth: 'bearer', desc: 'Get response count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/messages/count -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] },
-      { method: 'DELETE', path: '/api/v0/agents/{name}/messages', auth: 'bearer', desc: 'Clear messages for agent.', params: [
-        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s -X DELETE ${BASE}/api/v0/agents/<name>/messages -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"deleted": 25, "agent_name": "demo"}` }] }
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses/count -H "Authorization: Bearer <token>"`, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] }
     ]
   }
   ];
