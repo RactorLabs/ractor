@@ -748,30 +748,28 @@
       </div>
     {:else}
       <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
-        <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
+        <div class="widget-chat" style="min-height: 100%;">
         {#if chat && chat.length}
-          {#each chat as m, i}
+          {#each chat as m}
             {#if m.role === 'user'}
-              <div class="d-flex mb-3 justify-content-end">
-                <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
-                  {m.content}
+              <div class="widget-chat-item reply">
+                <div class="widget-chat-content">
+                  <div class="widget-chat-message last" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">{m.content}</div>
                 </div>
               </div>
             {:else}
-              <!-- Agent side -->
               {#if hasComposite(m)}
-                <!-- Composite rendering: thinking, tool calls/results, final in one message -->
-                <div class="d-flex mb-3 justify-content-start">
-                  <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                <div class="widget-chat-item">
+                  <div class="widget-chat-content">
                     {#each segmentsOf(m) as s, j}
                       {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
                         {#if showThinking}
-                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                          <div class="widget-chat-message small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{segText(s)}</div>
                         {/if}
                       {:else if segType(s) === 'tool_call'}
-                        <!-- Combine tool call + immediate tool result if next segment matches -->
-                        {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
-                          <div class="d-flex mb-1 justify-content-start">
+                        <div class="widget-chat-message">
+                          <!-- Pair with immediate tool result if present -->
+                          {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
@@ -784,10 +782,7 @@
                                 <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
                               </div>
                             </details>
-                          </div>
-                        {:else}
-                          <!-- Unpaired tool call -->
-                          <div class="d-flex mb-1 justify-content-start">
+                          {:else}
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
@@ -795,12 +790,11 @@
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
                             </details>
-                          </div>
-                        {/if}
+                          {/if}
+                        </div>
                       {:else if segType(s) === 'tool_result'}
-                        <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
-                          <div class="d-flex mb-1 justify-content-start">
+                          <div class="widget-chat-message">
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2">{toolLabel(segTool(s))}</span>
@@ -812,7 +806,7 @@
                         {/if}
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
-                          <div class="markdown-wrap mb-2">
+                          <div class="widget-chat-message" style="max-width: 80%; word-break: break-word;">
                             <div class="markdown-body">{@html renderMarkdown(segText(s))}</div>
                           </div>
                         {/if}
@@ -821,45 +815,49 @@
                   </div>
                 </div>
               {:else}
-              {#if isToolExec(m)}
-                <!-- Compact single-line summary that toggles details for ALL tool requests -->
-                <div class="d-flex mb-2 justify-content-start">
-                  <details class="mt-0">
-                    <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                      {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
-                    </summary>
-                    <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
-                  </details>
-                </div>
-              {:else}
-                <!-- Tool response card or regular agent message -->
-                {#if isToolResult(m)}
-                  <!-- Compact single-line summary that toggles details for ALL tool responses -->
-                  <div class="d-flex mb-2 justify-content-start">
-                    <details class="mt-0">
-                      <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
-                      </summary>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
-                    </details>
+                <!-- Legacy tool or plain agent message -->
+                {#if isToolExec(m)}
+                  <div class="widget-chat-item">
+                    <div class="widget-chat-content">
+                      <div class="widget-chat-message">
+                        <details class="mt-0">
+                          <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                            {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
+                          </summary>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
+                        </details>
+                      </div>
+                    </div>
+                  </div>
+                {:else if isToolResult(m)}
+                  <div class="widget-chat-item">
+                    <div class="widget-chat-content">
+                      <div class="widget-chat-message">
+                        <details class="mt-0">
+                          <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
+                            {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
+                          </summary>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
+                        </details>
+                      </div>
+                    </div>
                   </div>
                 {:else}
-                  <div class="d-flex mb-3 justify-content-start">
-                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                  <div class="widget-chat-item">
+                    <div class="widget-chat-content">
                       {#if metaOf(m)?.thinking}
                         {#if showThinking}
-                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
+                          <div class="widget-chat-message small fst-italic text-body text-opacity-50" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
                         {/if}
                       {/if}
                       {#if m.content && m.content.trim()}
-                        <div class="markdown-wrap">
+                        <div class="widget-chat-message" style="max-width: 80%; word-break: break-word;">
                           <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                         </div>
                       {/if}
                     </div>
                   </div>
                 {/if}
-              {/if}
               {/if}
             {/if}
           {/each}
