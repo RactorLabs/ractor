@@ -781,7 +781,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-6 px-1 py-0">{toolLabel(segTool(s))}</span>
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-1 py-0" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
                               </summary>
                               <div class="small text-body">
@@ -797,7 +797,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-6 px-1 py-0">{toolLabel(segTool(s))}</span>
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-1 py-0" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
@@ -810,7 +810,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0">
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 fs-6 px-1 py-0">{toolLabel(segTool(s))}</span>
+                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-1 py-0" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
