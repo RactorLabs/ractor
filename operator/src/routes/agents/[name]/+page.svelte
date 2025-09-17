@@ -68,7 +68,6 @@
   let stateStr = '';
   // Chat rendering derived from Responses
   let chat = [];
-  let responsesCount = 0;
   // Toggle display of thinking (analysis/commentary) text; default off, not persisted
   let showThinking = false;
   let loading = true;
@@ -193,7 +192,6 @@
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.responses || []);
-      responsesCount = Array.isArray(list) ? list.length : 0;
       // Only auto-stick if near bottom before refresh
       let shouldStick = true;
       try {
@@ -727,7 +725,6 @@
 
     <!-- Toolbar -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      <div class="small text-body me-2">Total responses: {responsesCount}</div>
       <div class="d-flex align-items-center gap-2">
         <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
           <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />

@@ -105,12 +105,12 @@ impl ToolRegistry {
 
     /// Execute a tool with the given arguments
     pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<String> {
-        // No special stripping of non-standard formats; use tool name as-is
+        // Allow simple aliasing/normalization of incoming tool names
         let clean_name = name;
         tracing::info!("Executing tool: '{}'", clean_name);
-        
-        // Map parameters if it's an alias
-        let (canonical_name, mapped_args) = {
+
+        // Map parameters if it's an alias (exact alias match)
+        let (mut canonical_name, mapped_args) = {
             let aliases = self.aliases.read().await;
             if let Some(canonical_name) = aliases.get(clean_name) {
                 let mappers = self.mappers.read().await;
@@ -125,7 +125,7 @@ impl ToolRegistry {
             }
         };
 
-        // Execute the tool
+        // Execute the tool (strict name or configured alias only)
         let tools = self.tools.read().await;
         if let Some(tool) = tools.get(&canonical_name) {
             tool.execute(&mapped_args).await

@@ -117,12 +117,16 @@ impl ResponseHandler {
 
         if let Err(e) = self.api_client.update_agent_to_busy().await { warn!("Failed to set busy: {}", e); }
         for r in &pending {
-            if let Err(e) = self.process_response(r).await {
-                error!("Failed to process response {}: {}", r.id, e);
-                let _ = self.api_client.update_response(&r.id, Some("failed".to_string()), Some(format!("Error: {}", e)), None).await;
+            match self.process_response(r).await {
+                Ok(_) => {
+                    let mut processed = self.processed_response_ids.lock().await;
+                    processed.insert(r.id.clone());
+                }
+                Err(e) => {
+                    warn!("Deferring response {} due to error: {}", r.id, e);
+                    // Do not mark as processed; leave status as-is to retry on next poll
+                }
             }
-            let mut processed = self.processed_response_ids.lock().await;
-            processed.insert(r.id.clone());
         }
         if let Err(e) = self.api_client.update_agent_to_idle().await { warn!("Failed to set idle: {}", e); }
         Ok(pending.len())
@@ -142,6 +146,7 @@ impl ResponseHandler {
         let mut conversation = convo;
         // Track whether we have already appended any segments to avoid duplicating commentary
         let mut items_sent: usize = 0;
+        let mut call_attempts: u32 = 0;
         loop {
             // Call model (with simple retry/backoff inside ollama client)
             let model_resp: ModelResponse = match self
@@ -151,18 +156,19 @@ impl ResponseHandler {
             {
                 Ok(r) => r,
                 Err(e) => {
-                    warn!("Ollama API failed: {}", e);
-                    // Mark the response as failed with the error message in output.text
-                    let _ = self
-                        .api_client
-                        .update_response(
-                            &response.id,
-                            Some("failed".to_string()),
-                            Some(format!("Error: {}", e)),
-                            None,
-                        )
-                        .await?;
-                    return Ok(());
+                    call_attempts += 1;
+                    warn!("Ollama API call failed (attempt {}): {}", call_attempts, e);
+                    if call_attempts < 5 {
+                        // brief backoff then retry without marking failed
+                        tokio::time::sleep(std::time::Duration::from_millis(300 * (1 << (call_attempts - 1)))).await;
+                        continue;
+                    } else {
+                        // bubble error to defer processing; do not mark failed here
+                        return Err(super::error::HostError::Model(format!(
+                            "Ollama call failed after retries: {}",
+                            e
+                        )));
+                    }
                 }
             };
 
@@ -178,6 +184,14 @@ impl ResponseHandler {
                     let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
                     items_sent += segs.len();
 
+                    // If tool unknown, nudge model to correct and retry without executing
+                    let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
+                    if !tool_known {
+                        let dev_note = format!("Developer note: Invalid tool name '{}'. Use valid function names 'bash' or 'text_editor' in tool_calls without prefixes.", tool_name);
+                        conversation.push(ChatMessage { role: "system".to_string(), content: dev_note, name: None, tool_call_id: None });
+                        continue;
+                    }
+
                     // Execute tool
                     let (tool_result, tool_error): (String, Option<String>) = match self
                         .tool_registry
@@ -191,19 +205,7 @@ impl ResponseHandler {
                     let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":tool_result});
                     let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result])).await;
                     items_sent += 1;
-                    // If the tool reported an error (commonly from API calls), mark the response as failed with message
-                    if let Some(err_msg) = tool_error {
-                        let _ = self
-                            .api_client
-                            .update_response(
-                                &response.id,
-                                Some("failed".to_string()),
-                                Some(format!("Error: {}", err_msg)),
-                                None,
-                            )
-                            .await;
-                        return Ok(());
-                    }
+                    // If the tool reported an error, let the model handle next step; do not mark failed
                     // Add tool result to conversation
                     conversation.push(ChatMessage { role:"tool".to_string(), content: tool_result, name: Some(tool_name.clone()), tool_call_id: None });
                     continue;
