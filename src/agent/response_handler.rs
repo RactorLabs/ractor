@@ -177,21 +177,21 @@ impl ResponseHandler {
                 if let Some(tc) = tool_calls.first() {
                     let tool_name = &tc.function.name;
                     let args = &tc.function.arguments;
-                    // Append thinking + tool_call
-                    let mut segs = Vec::new();
-                    if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
-                    segs.push(serde_json::json!({"type":"tool_call","tool":tool_name,"args":args}));
-                    // Send only the new segments, server appends
-                    let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
-                    items_sent += segs.len();
 
-                    // If tool unknown, nudge model to correct and retry without executing
+                    // If tool is unknown, do not append any items; instead, nudge model and retry
                     let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
                     if !tool_known {
                         let dev_note = format!("Developer note: Invalid tool name '{}'. Use valid function names 'bash' or 'text_editor' in tool_calls without prefixes.", tool_name);
                         conversation.push(ChatMessage { role: "system".to_string(), content: dev_note, name: None, tool_call_id: None });
                         continue;
                     }
+
+                    // Append thinking + tool_call only for valid tools
+                    let mut segs = Vec::new();
+                    if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
+                    segs.push(serde_json::json!({"type":"tool_call","tool":tool_name,"args":args}));
+                    let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
+                    items_sent += segs.len();
 
                     // Execute tool
                     let (tool_result, tool_error): (String, Option<String>) = match self
