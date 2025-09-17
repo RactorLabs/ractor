@@ -17,6 +17,8 @@ pub struct AgentResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateResponseRequest {
     pub input: serde_json::Value, // { text: string }
+    #[serde(default)]
+    pub background: Option<bool>, // default true; when false, API blocks until terminal
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

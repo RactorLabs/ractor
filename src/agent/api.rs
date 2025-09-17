@@ -95,7 +95,7 @@ impl RaworcClient {
             "{}/api/v0/agents/{}/responses",
             self.config.api_url, self.config.agent_name
         );
-        let req = CreateResponseRequest { input: serde_json::json!({ "text": input_text }) };
+        let req = CreateResponseRequest { input: serde_json::json!({ "text": input_text }), background: None };
         let response = self
             .client
             .post(&url)
@@ -380,6 +380,8 @@ pub struct ResponseView {
 #[derive(Debug, Serialize)]
 pub struct CreateResponseRequest {
     pub input: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]

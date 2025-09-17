@@ -63,9 +63,56 @@ pub async fn create_response(
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
     }
 
-    let created = AgentResponse::create(&state.db, &agent_name, created_by, req)
+    let created = AgentResponse::create(&state.db, &agent_name, created_by, req.clone())
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create response: {}", e)))?;
+
+    // If background flag is false, block until terminal state or timeout
+    let background = req.background.unwrap_or(true);
+    if !background {
+        use tokio::time::{sleep, Duration, Instant};
+
+        let start = Instant::now();
+        let timeout = Duration::from_secs(15 * 60); // 15 minutes
+        let poll_interval = Duration::from_millis(500);
+
+        loop {
+            // Check timeout first
+            if start.elapsed() >= timeout {
+                return Err(ApiError::Timeout("Timed out waiting for response to complete".to_string()));
+            }
+
+            // Reload current response
+            match AgentResponse::find_by_id(&state.db, &created.id).await {
+                Ok(Some(cur)) => {
+                    let status_lc = cur.status.to_lowercase();
+                    if status_lc == "completed" || status_lc == "failed" {
+                        return Ok(Json(ResponseView {
+                            id: cur.id,
+                            agent_name: cur.agent_name,
+                            status: cur.status,
+                            input: cur.input,
+                            output: cur.output,
+                            created_at: cur.created_at.to_rfc3339(),
+                            updated_at: cur.updated_at.to_rfc3339(),
+                        }));
+                    }
+                }
+                Ok(None) => {
+                    // Response disappeared; treat as not found
+                    return Err(ApiError::NotFound("Response not found".to_string()));
+                }
+                Err(e) => {
+                    return Err(ApiError::Internal(anyhow::anyhow!(format!(
+                        "Failed to fetch response: {}",
+                        e
+                    ))));
+                }
+            }
+
+            sleep(poll_interval).await;
+        }
+    }
 
     Ok(Json(ResponseView {
         id: created.id,

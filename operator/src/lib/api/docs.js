@@ -365,10 +365,11 @@ export function getApiDocs(base) {
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max responses (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'ResponseObject', array: true }, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","status":"completed","input":{"text":"hi"},"output":{"text":"hello","items":[]},"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/responses', auth: 'bearer', desc: 'Create a response (user input).', params: [
+      { method: 'POST', path: '/api/v0/agents/{name}/responses', auth: 'bearer', desc: 'Create a response (user input). Optional blocking when background=false.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
-        { in: 'body', name: 'input', type: 'object', required: true, desc: 'User input; shape: { text: string }' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/responses -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"text":"hello"}}'`, resp: { schema: 'ResponseObject' }, responses: [{ status: 200, body: `{"id":"uuid","status":"pending",...}` }] },
+        { in: 'body', name: 'input', type: 'object', required: true, desc: 'User input; shape: { text: string }' },
+        { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Default true. If false, API waits up to 15m for terminal status (completed|failed).' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/responses -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"text":"hello"},"background":false}'`, resp: { schema: 'ResponseObject' }, responses: [{ status: 200, body: `{"id":"uuid","status":"completed",...}` }] },
       { method: 'PUT', path: '/api/v0/agents/{name}/responses/{id}', auth: 'bearer', desc: 'Update a response (agent-only typical). Used to append output.items and mark status.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'path', name: 'id', type: 'string', required: true, desc: 'Response id' },
