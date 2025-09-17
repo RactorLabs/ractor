@@ -94,9 +94,9 @@
 
           {#if token}
             <div class="mt-3">
-              <label class="form-label">Token</label>
+              <label class="form-label" for="token-output">Token</label>
               <div class="input-group">
-                <input class="form-control" readonly value={token} />
+                <input id="token-output" class="form-control" readonly value={token} />
                 <button class="btn btn-outline-secondary" on:click={copyToken}>Copy</button>
               </div>
               {#if copyStatus}
