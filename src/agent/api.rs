@@ -124,256 +124,123 @@ impl RaworcClient {
         }
     }
 
-    /// Get messages for the current agent
-    pub async fn get_messages(
-        &self,
-        limit: Option<u32>,
-        offset: Option<u32>,
-    ) -> Result<Vec<Message>> {
-        let mut url = format!(
-            "{}/api/v0/agents/{}/messages",
+
+    /// Create a new response (user input)
+    pub async fn create_response(&self, input_text: &str) -> Result<ResponseView> {
+        let url = format!(
+            "{}/api/v0/agents/{}/responses",
             self.config.api_url, self.config.agent_name
         );
-
-        let mut params = vec![];
-        if let Some(limit) = limit {
-            params.push(format!("limit={}", limit));
-        }
-        if let Some(offset) = offset {
-            params.push(format!("offset={}", offset));
-        }
-
-        if !params.is_empty() {
-            url.push_str("?");
-            url.push_str(&params.join("&"));
-        }
-
-        debug!("Fetching messages from: {}", url);
-
+        let req = CreateResponseRequest { input: serde_json::json!({ "text": input_text }) };
         let response = self
             .client
-            .get(&url)
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&req)
             .send()
             .await?;
-
         match response.status() {
-            StatusCode::OK => {
-                let messages = response.json::<Vec<Message>>().await?;
-                debug!("Fetched {} messages", messages.len());
-                Ok(messages)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
-            ))),
+            StatusCode::OK | StatusCode::CREATED => Ok(response.json::<ResponseView>().await?),
+            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
             status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "API error ({}): {}",
-                    status, error_text
-                )))
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to create response ({}): {}", status, error_text)))
             }
         }
     }
 
-    /// Get total message count for the current agent
-    pub async fn get_message_count(&self) -> Result<u64> {
-        let url = format!(
-            "{}/api/v0/agents/{}/messages/count",
-            self.config.api_url, self.config.agent_name
-        );
-
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK => {
-                let v = response
-                    .json::<serde_json::Value>()
-                    .await
-                    .map_err(|e| HostError::Api(format!("Failed to parse count: {}", e)))?;
-                let count = v
-                    .get("count")
-                    .and_then(|c| c.as_u64())
-                    .ok_or_else(|| HostError::Api("Missing count field".to_string()))?;
-                Ok(count)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "API error ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
-
-    /// Send a message as the Agent
-    pub async fn send_message(
+    /// Update an existing response with output/status
+    pub async fn update_response(
         &self,
-        content: String,
-        metadata: Option<serde_json::Value>,
-    ) -> Result<Message> {
+        id: &str,
+        status: Option<String>,
+        output_text: Option<String>,
+        items: Option<Vec<serde_json::Value>>,
+    ) -> Result<ResponseView> {
         let url = format!(
-            "{}/api/v0/agents/{}/messages",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/agents/{}/responses/{}",
+            self.config.api_url, self.config.agent_name, id
         );
-
-        let request = CreateMessageRequest {
-            role: MessageRole::Agent,
-            content,
-            metadata,
+        let mut output = serde_json::Map::new();
+        if let Some(t) = output_text { output.insert("text".to_string(), serde_json::json!(t)); }
+        if let Some(list) = items { output.insert("items".to_string(), serde_json::Value::Array(list)); }
+        let req = UpdateResponseRequest {
+            status,
+            input: None,
+            output: Some(serde_json::Value::Object(output)),
         };
-
-        debug!("Sending message to: {}", url);
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&request)
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::CREATED => {
-                let message = response.json::<Message>().await?;
-                info!("Message sent successfully: {}", message.id);
-                Ok(message)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to send message ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
-
-    /// Send a structured message (with optional content_json and fields)
-    pub async fn send_message_structured(
-        &self,
-        role: MessageRole,
-        content: String,
-        metadata: Option<serde_json::Value>,
-        content_json: Option<serde_json::Value>,
-    ) -> Result<Message> {
-        let url = format!(
-            "{}/api/v0/agents/{}/messages",
-            self.config.api_url, self.config.agent_name
-        );
-
-        let request = CreateMessageRequestStructured { role, content, metadata, content_json };
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&request)
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::CREATED => {
-                let message = response.json::<Message>().await?;
-                info!("Message sent successfully: {}", message.id);
-                Ok(message)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to send structured message ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
-
-    /// Update an existing message by id (PUT)
-    pub async fn update_message(
-        &self,
-        message_id: &str,
-        content: Option<String>,
-        metadata: Option<serde_json::Value>,
-        content_json: Option<serde_json::Value>,
-    ) -> Result<Message> {
-        let url = format!(
-            "{}/api/v0/agents/{}/messages/{}",
-            self.config.api_url, self.config.agent_name, message_id
-        );
-        let mut body = serde_json::Map::new();
-        if let Some(c) = content { body.insert("content".to_string(), serde_json::json!(c)); }
-        if let Some(m) = metadata { body.insert("metadata".to_string(), m); }
-        if let Some(cj) = content_json { body.insert("content_json".to_string(), cj); }
-
         let response = self
             .client
             .put(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&serde_json::Value::Object(body))
+            .json(&req)
             .send()
             .await?;
+        match response.status() {
+            StatusCode::OK => Ok(response.json::<ResponseView>().await?),
+            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Response not found".to_string())),
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to update response ({}): {}", status, error_text)))
+            }
+        }
+    }
 
+    /// List responses for current agent
+    pub async fn get_responses(
+        &self,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Vec<ResponseView>> {
+        let mut url = format!(
+            "{}/api/v0/agents/{}/responses",
+            self.config.api_url, self.config.agent_name
+        );
+        let mut sep = '?';
+        if let Some(l) = limit { url.push_str(&format!("{}limit={}", sep, l)); sep = '&'; }
+        if let Some(o) = offset { url.push_str(&format!("{}offset={}", sep, o)); }
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK => Ok(response.json::<Vec<ResponseView>>().await.map_err(|e| HostError::Api(e.to_string()))?),
+            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
+            status => {
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to fetch responses ({}): {}", status, error_text)))
+            }
+        }
+    }
+
+    /// Get response count for current agent
+    pub async fn get_response_count(&self) -> Result<u64> {
+        let url = format!(
+            "{}/api/v0/agents/{}/responses/count",
+            self.config.api_url, self.config.agent_name
+        );
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
         match response.status() {
             StatusCode::OK => {
-                let message = response.json::<Message>().await?;
-                Ok(message)
+                let v = response.json::<serde_json::Value>().await.map_err(|e| HostError::Api(e.to_string()))?;
+                let count = v.get("count").and_then(|c| c.as_i64()).unwrap_or(0) as u64;
+                Ok(count)
             }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Message not found".to_string())),
+            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
             status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to update message ({}): {}",
-                    status, error_text
-                )))
+                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!("Failed to get response count ({}): {}", status, error_text)))
             }
         }
     }
@@ -534,4 +401,29 @@ impl RaworcClient {
             }
         }
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResponseView {
+    pub id: String,
+    pub agent_name: String,
+    pub status: String,
+    pub input: serde_json::Value,
+    pub output: serde_json::Value,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateResponseRequest {
+    pub input: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct UpdateResponseRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<serde_json::Value>,
 }

@@ -3,14 +3,16 @@ use thiserror::Error;
 
 pub mod agent;
 pub mod constants;
-pub mod message;
+// message module removed in favor of response
+pub mod response;
 pub mod state_helpers;
 
 pub use agent::{
     Agent, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest, RestoreAgentRequest,
     UpdateAgentRequest, UpdateAgentStateRequest,
 };
-pub use message::{AgentMessage, CreateMessageRequest, ListMessagesQuery, MessageResponse};
+// legacy message exports removed
+pub use response::{AgentResponse, CreateResponseRequest, UpdateResponseRequest, ResponseView};
 
 // Database errors
 #[derive(Error, Debug)]

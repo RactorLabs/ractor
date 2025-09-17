@@ -1,3 +1,3 @@
 pub mod agents;
-pub mod messages;
+pub mod responses;
 pub mod operators;

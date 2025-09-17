@@ -75,26 +75,23 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::agents::unpublish_agent),
         )
         .route("/agents/{name}", delete(handlers::agents::delete_agent))
-        // Message endpoints
+        // Message endpoints removed in favor of Responses
+        // Response endpoints (composite model)
         .route(
-            "/agents/{name}/messages",
-            get(handlers::messages::list_messages),
+            "/agents/{name}/responses",
+            get(handlers::responses::list_responses),
         )
         .route(
-            "/agents/{name}/messages",
-            post(handlers::messages::create_message),
+            "/agents/{name}/responses",
+            post(handlers::responses::create_response),
         )
         .route(
-            "/agents/{name}/messages/{id}",
-            put(handlers::messages::update_message),
+            "/agents/{name}/responses/{id}",
+            put(handlers::responses::update_response),
         )
         .route(
-            "/agents/{name}/messages/count",
-            get(handlers::messages::get_message_count),
-        )
-        .route(
-            "/agents/{name}/messages",
-            delete(handlers::messages::clear_messages),
+            "/agents/{name}/responses/count",
+            get(handlers::responses::get_response_count),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

@@ -187,9 +187,9 @@
   }
 
   async function fetchMessages() {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/messages?limit=200`);
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses?limit=200`);
     if (res.ok) {
-      const list = Array.isArray(res.data) ? res.data : (res.data?.messages || []);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.responses || []);
       // Only auto-stick if near bottom before refresh
       let shouldStick = true;
       try {
@@ -199,7 +199,25 @@
           shouldStick = delta < 80;
         }
       } catch (_) {}
-      messages = list;
+      // Transform responses into synthetic messages to reuse rendering
+      const transformed = [];
+      for (const r of list) {
+        const inputText = r?.input?.text || '';
+        if (inputText && inputText.trim()) {
+          transformed.push({ role: 'user', content: inputText, id: r.id + ':in' });
+        }
+        const items = (r && r.output && Array.isArray(r.output.items)) ? r.output.items : [];
+        const contentText = (r && r.output && typeof r.output.text === 'string') ? r.output.text : '';
+        const meta = { type: 'composite_step', in_progress: String(r?.status || '').toLowerCase() === 'processing' };
+        transformed.push({
+          role: 'agent',
+          id: r.id + ':out',
+          content: contentText,
+          metadata: meta,
+          content_json: { composite: { segments: items } },
+        });
+      }
+      messages = transformed;
       await tick();
       if (shouldStick) scrollToBottom();
     }
@@ -396,9 +414,9 @@
     if (!content || sending) return;
     sending = true;
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/messages`, {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses`, {
         method: 'POST',
-        body: JSON.stringify({ role: 'user', content })
+        body: JSON.stringify({ input: { text: content } })
       });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       input = '';

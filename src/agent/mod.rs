@@ -4,7 +4,7 @@ mod builtin_tools;
 mod config;
 mod error;
 mod guardrails;
-mod message_handler;
+mod response_handler;
 mod ollama;
 mod tool_registry;
 mod tools;
@@ -144,8 +144,8 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         info!("Set working directory to /agent");
     }
 
-    // Initialize message handler
-    let message_handler = message_handler::MessageHandler::new(
+    // Initialize response handler
+    let message_handler = response_handler::ResponseHandler::new(
         api_client.clone(),
         ollama_client.clone(),
         guardrails.clone(),
@@ -183,27 +183,14 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         info!("Agent set to idle - timeout started");
     }
 
-    info!("Starting message polling loop...");
+    info!("Starting response polling loop...");
 
     // Main polling loop with comprehensive error handling
     loop {
         match message_handler.poll_and_process().await {
-            Ok(count) => {
-                if count > 0 {
-                    info!("Processed {} messages", count);
-                }
-            }
+            Ok(count) => { if count > 0 { info!("Processed {} responses", count); } }
             Err(e) => {
-                error!("Error processing messages: {}", e);
-
-                // Send error as message to user instead of crashing
-                let error_message = format!("Agent encountered an error: {}", e);
-                if let Err(send_err) = api_client.send_message(error_message, None).await {
-                    error!("Failed to send error message to user: {}", send_err);
-                } else {
-                    info!("Sent error message to user, continuing operation");
-                }
-
+                error!("Error processing responses: {}", e);
                 // Continue polling - agent should never die silently
             }
         }

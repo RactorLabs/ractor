@@ -96,6 +96,22 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     INDEX idx_agent_messages_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Agent Responses (new composite model)
+CREATE TABLE IF NOT EXISTS agent_responses (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    agent_name VARCHAR(64) NOT NULL,
+    created_by VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed')),
+    input JSON NOT NULL,
+    output JSON NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_responses_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
+    INDEX idx_agent_responses_agent_name (agent_name),
+    INDEX idx_agent_responses_created_by (created_by),
+    INDEX idx_agent_responses_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Agent Tasks
 CREATE TABLE IF NOT EXISTS agent_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
