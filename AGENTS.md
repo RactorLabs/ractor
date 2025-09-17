@@ -71,6 +71,8 @@ Note on commit message formatting:
   - `POST /agents/{name}/sleep` schedules container stop and sets state to `slept`.
   - `POST /agents/{name}/wake` restarts container and transitions via `init`.
 - Responses: `GET/POST /agents/{name}/responses` for user↔agent exchanges, stored in `agent_responses`.
+  - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
+  - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the response reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
 
 ## Operator UI
 - Primary routes live under `/agents` (list, create, details/chat). Legacy `/app/*` routes have been removed.

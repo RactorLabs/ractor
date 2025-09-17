@@ -408,7 +408,7 @@
   async function sendMessage(e) {
     e?.preventDefault?.();
     const content = (input || '').trim();
-    if (!content || sending) return;
+    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Agent is busy'; } return; }
     sending = true;
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses`, {
@@ -922,7 +922,7 @@
             }}
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
-          <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim()}>
+          <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim() || stateStr === 'busy'}>
             <i class="fas fa-paper-plane"></i>
           </button>
         </div>

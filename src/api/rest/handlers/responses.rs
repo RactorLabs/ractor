@@ -46,6 +46,11 @@ pub async fn create_response(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
+    // Block new responses when agent is busy
+    if agent.state == crate::shared::models::constants::AGENT_STATE_BUSY {
+        return Err(ApiError::Conflict("Agent is busy".to_string()));
+    }
+
     // Resolve creator
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
