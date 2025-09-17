@@ -80,22 +80,6 @@ CREATE TABLE IF NOT EXISTS agents (
     INDEX idx_agents_busy_from (busy_from, state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Agent Messages
-CREATE TABLE IF NOT EXISTS agent_messages (
-    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    agent_name VARCHAR(64) NOT NULL,
-    created_by VARCHAR(255) NOT NULL,
-    role VARCHAR(50) NOT NULL CHECK (role IN ('user', 'agent', 'system')),
-    content TEXT NOT NULL,
-    content_json JSON NULL,
-    metadata JSON DEFAULT ('{}'),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_messages_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
-    INDEX idx_agent_messages_agent_name (agent_name),
-    INDEX idx_agent_messages_created_by (created_by),
-    INDEX idx_agent_messages_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- Agent Responses (new composite model)
 CREATE TABLE IF NOT EXISTS agent_responses (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),

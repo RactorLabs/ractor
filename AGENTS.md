@@ -70,7 +70,7 @@ Note on commit message formatting:
 - Sleep/Wake actions:
   - `POST /agents/{name}/sleep` schedules container stop and sets state to `slept`.
   - `POST /agents/{name}/wake` restarts container and transitions via `init`.
-- Messages: `GET/POST /agents/{name}/messages` for user<->agent chat, stored in `agent_messages`.
+- Responses: `GET/POST /agents/{name}/responses` for user↔agent exchanges, stored in `agent_responses`.
 
 ## Operator UI
 - Primary routes live under `/agents` (list, create, details/chat). Legacy `/app/*` routes have been removed.

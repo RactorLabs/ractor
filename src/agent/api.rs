@@ -5,46 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-// Import constants from shared module
-#[path = "../shared/models/constants.rs"]
-pub mod constants;
-pub use constants::*;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum MessageRole {
-    User,
-    Agent,
-    System,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    pub id: String,
-    pub agent_name: String, // Changed from agent_id in v0.4.0
-    pub role: MessageRole,
-    pub content: String,
-    pub metadata: Option<serde_json::Value>,
-    pub created_at: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct CreateMessageRequest {
-    pub role: MessageRole,
-    pub content: String,
-    pub metadata: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize)]
-struct CreateMessageRequestStructured {
-    role: MessageRole,
-    content: String,
-    metadata: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")] 
-    content_json: Option<serde_json::Value>,
-}
-
-// Import constants from shared models
+// (Removed legacy message types and constants import; API now uses Responses.)
 
 
 #[derive(Debug, Clone, Deserialize)]
@@ -81,6 +42,9 @@ impl RaworcClient {
 
         Self { client, config }
     }
+
+    // Expose agent name for prompts/logging
+    pub fn agent_name(&self) -> &str { &self.config.agent_name }
 
     /// Get agent information
     pub async fn get_agent(&self) -> Result<Agent> {

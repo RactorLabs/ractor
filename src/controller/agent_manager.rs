@@ -300,7 +300,7 @@ impl AgentManager {
         let agent_name = task.agent_name.clone();
 
         // Parse the payload to get agent creation parameters
-        let mut secrets = task
+        let secrets = task
             .payload
             .get("secrets")
             .and_then(|v| v.as_object())
@@ -480,25 +480,24 @@ impl AgentManager {
         if let Some(prompt) = prompt_to_send {
             info!("Sending prompt to agent {}: {}", agent_name, prompt);
 
-            // Create message record in database
-            let message_id = uuid::Uuid::new_v4().to_string();
+            // Create response record in database (pending)
+            let response_id = uuid::Uuid::new_v4().to_string();
+            let input_json = serde_json::json!({ "text": prompt });
+            let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
-                VALUES (?, ?, ?, ?, 'user', NOW())
+                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&message_id)
+            .bind(&response_id)
             .bind(&agent_name)
             .bind(&principal)
-            .bind(&prompt)
+            .bind(&input_json)
+            .bind(&output_json)
             .execute(&self.pool)
             .await?;
-
-            info!(
-                "Prompt message {} created for agent {}",
-                message_id, agent_name
-            );
+            info!("Prompt response {} created for agent {}", response_id, agent_name);
         }
 
         // Set agent state to INIT after container creation only if it hasn't changed yet.
@@ -650,25 +649,24 @@ impl AgentManager {
             // Get the principal name from the task
             let principal = task.created_by;
 
-            // Create message record in database
-            let message_id = uuid::Uuid::new_v4().to_string();
+            // Create response record in database for woken agent
+            let response_id = uuid::Uuid::new_v4().to_string();
+            let input_json = serde_json::json!({ "text": prompt });
+            let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO agent_messages (id, agent_name, created_by, content, role, created_at)
-                VALUES (?, ?, ?, ?, 'user', NOW())
+                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&message_id)
+            .bind(&response_id)
             .bind(&agent_name)
             .bind(&principal)
-            .bind(prompt)
+            .bind(&input_json)
+            .bind(&output_json)
             .execute(&self.pool)
             .await?;
-
-            info!(
-                "Prompt message {} created for woken agent {}",
-                message_id, agent_name
-            );
+            info!("Prompt response {} created for woken agent {}", response_id, agent_name);
         }
 
         Ok(())

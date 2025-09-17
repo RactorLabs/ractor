@@ -140,7 +140,41 @@ impl AgentResponse {
 
         if let Some(s) = req.status { resp.status = s; }
         if let Some(i) = req.input { resp.input = i; }
-        if let Some(o) = req.output { resp.output = o; }
+        if let Some(o) = req.output {
+            // Merge output with append semantics for items
+            use serde_json::{Map, Value};
+            let mut merged = match resp.output {
+                Value::Object(map) => map,
+                _ => Map::new(),
+            };
+
+            // Merge text (replace if provided)
+            if let Some(t) = o.get("text") {
+                merged.insert("text".to_string(), t.clone());
+            }
+
+            // Append items if provided
+            if let Some(new_items_val) = o.get("items") {
+                let mut items: Vec<Value> = merged
+                    .get("items")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_else(Vec::new);
+                if let Some(to_append) = new_items_val.as_array() {
+                    items.extend(to_append.iter().cloned());
+                }
+                merged.insert("items".to_string(), Value::Array(items));
+            }
+
+            // Carry over any other fields provided in output
+            for (k, v) in o.as_object().unwrap_or(&Map::new()) {
+                if k != "text" && k != "items" {
+                    merged.insert(k.clone(), v.clone());
+                }
+            }
+
+            resp.output = serde_json::Value::Object(merged);
+        }
 
         let now = Utc::now();
         sqlx::query(

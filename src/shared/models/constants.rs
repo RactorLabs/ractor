@@ -4,7 +4,4 @@ pub const AGENT_STATE_IDLE: &str = "idle";
 pub const AGENT_STATE_BUSY: &str = "busy";
 pub const AGENT_STATE_SLEPT: &str = "slept";
 
-// Message role constants
-pub const MESSAGE_ROLE_USER: &str = "user";
-pub const MESSAGE_ROLE_AGENT: &str = "agent";
-pub const MESSAGE_ROLE_SYSTEM: &str = "system";
+// Message role constants removed; responses represent full exchanges

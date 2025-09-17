@@ -5,10 +5,6 @@ const AGENT_STATE_BUSY = 'busy';
 const AGENT_STATE_SLEPT = 'slept';
 const AGENT_STATE_DELETED = 'deleted';
 
-// Message role constants
-const MESSAGE_ROLE_USER = 'user';
-const MESSAGE_ROLE_AGENT = 'agent';
-const MESSAGE_ROLE_SYSTEM = 'system';
 
 module.exports = {
   // Agent states
@@ -18,8 +14,5 @@ module.exports = {
   AGENT_STATE_SLEPT,
   AGENT_STATE_DELETED,
 
-  // Message roles
-  MESSAGE_ROLE_USER,
-  MESSAGE_ROLE_AGENT,
-  MESSAGE_ROLE_SYSTEM
+  // No message roles; responses represent full exchanges
 };

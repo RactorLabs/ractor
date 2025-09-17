@@ -7,7 +7,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Raw
 - Interactive UI (authenticated):
   - Login page (Operator authentication)
   - Agents list and details
-  - Agent chat-style messaging (send + poll)
+  - Agent chat-style responses (send + poll)
   - Agent state/actions (wake, sleep, idle, busy, remix, publish)
   - Basic profile/settings for the logged-in operator
 
@@ -22,7 +22,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Raw
     - Auth: `GET /api/v0/auth`, `POST /api/v0/auth/token`
     - Operators: CRUD + password update
     - Agents: CRUD + state transitions + publish lifecycle
-    - Messages: list/create/count/clear
+    - Responses: list/create/count
 - CLI 0.4.4 (tag) for flows and payload shapes:
   - `cli/lib/api.js` shows: base URL, Bearer token header, endpoint prefixing (`/api/v0`), and typical request/response handling.
 
@@ -43,7 +43,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Raw
     - `/login` (operator login)
   - Authenticated (guarded layout)
     - `/app/agents` (list)
-    - `/app/agents/[name]` (details + chat/messages)
+    - `/app/agents/[name]` (details + chat/responses)
     - `/app/profile` (basic account info)
     - `/app/settings` (basic settings)
 - UI conventions: follow existing Operator template components, SCSS, and page layout options in `appOptions`.
@@ -55,7 +55,7 @@ Deliverables:
   - Auth (public + protected)
   - Operators
   - Agents
-  - Messages
+  - Responses
   - Published (public catalog)
 - Implementation details:
   - Source-of-truth: a typed JSON/TS structure (`src/lib/api/docs.ts` or `static/api-docs.json`) describing each endpoint: method, path, path params, query params, body schema (concise), success/err examples.
@@ -81,11 +81,10 @@ Deliverables:
   - Actions: open details, wake/sleep/idle/busy, publish/unpublish, delete
 - `/app/agents/[name]` page: basic info panel + messaging panel
   - Info: agent metadata and quick actions (wake/sleep/etc.)
-  - Messages (chat):
-    - List: `GET /api/v0/agents/{name}/messages`
-    - Send: `POST /api/v0/agents/{name}/messages`
-    - Poll: periodic `GET /api/v0/agents/{name}/messages/count` to detect changes and refresh list
-    - Clear: `DELETE /api/v0/agents/{name}/messages`
+  - Responses (chat):
+    - List: `GET /api/v0/agents/{name}/responses`
+    - Send: `POST /api/v0/agents/{name}/responses`
+    - Poll: periodic `GET /api/v0/agents/{name}/responses/count` to detect changes and refresh list
 - UX: use template components for layout, forms, and toasts; loading states; error banners.
 
 ## Phase 4 — Operators & Profile
@@ -109,7 +108,7 @@ Deliverables:
 3) Auth-guarded `/app` layout
 4) API client wrapper with token attachment
 5) Agents list page
-6) Agent details + messages (send/poll/clear)
+6) Agent details + responses (send/poll)
 7) Profile page and logout
 8) Operator admin pages (optional by role)
 9) Polish: errors, toasts, pagination, filters
@@ -140,10 +139,9 @@ Deliverables:
 - [ ] POST /api/v0/agents/{name}/publish (docs)
 - [ ] POST /api/v0/agents/{name}/unpublish (docs)
 - [ ] DELETE /api/v0/agents/{name} (docs)
-- [ ] GET  /api/v0/agents/{name}/messages (docs + chat UI)
-- [ ] POST /api/v0/agents/{name}/messages (docs + chat UI)
-- [ ] GET  /api/v0/agents/{name}/messages/count (docs + polling)
-- [ ] DELETE /api/v0/agents/{name}/messages (docs + clear)
+- [ ] GET  /api/v0/agents/{name}/responses (docs + chat UI)
+- [ ] POST /api/v0/agents/{name}/responses (docs + chat UI)
+- [ ] GET  /api/v0/agents/{name}/responses/count (docs + polling)
 
 ## Notes
 - Initial implementation will avoid adding new backend endpoints; only consume existing APIs.

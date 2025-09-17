@@ -779,7 +779,7 @@ impl Agent {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
-        // Hard delete agent row; cascades will remove messages; tasks may persist per FK changes
+        // Hard delete agent row; cascades will remove responses; tasks may persist per FK changes
         let result = sqlx::query(r#"DELETE FROM agents WHERE name = ?"#)
             .bind(name)
             .execute(pool)

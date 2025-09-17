@@ -2,7 +2,7 @@ use anyhow::Result;
 use bollard::{
     container::{Config, CreateContainerOptions, LogsOptions, RemoveContainerOptions},
     exec::{CreateExecOptions, StartExecResults},
-    models::{HostConfig, Mount, MountTypeEnum, PortBinding},
+    models::{HostConfig, Mount, MountTypeEnum},
     Docker,
 };
 use futures::StreamExt;

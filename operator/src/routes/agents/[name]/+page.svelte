@@ -66,7 +66,9 @@
 
   let agent = null;
   let stateStr = '';
-  let messages = [];
+  // Chat rendering derived from Responses
+  let chat = [];
+  let responsesCount = 0;
   let loading = true;
   let error = null;
   let input = '';
@@ -74,8 +76,8 @@
   let pollHandle = null;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
-  // Show/hide thinking (analysis/commentary) text; default off, not persisted
-  let showThinking = false;
+  // Show/hide details (analysis + tool calls/results); default off, not persisted
+  let showDetails = false;
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -186,10 +188,11 @@
     // No content frame to compute; panel shows status only.
   }
 
-  async function fetchMessages() {
+  async function fetchResponses() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.responses || []);
+      responsesCount = Array.isArray(list) ? list.length : 0;
       // Only auto-stick if near bottom before refresh
       let shouldStick = true;
       try {
@@ -199,7 +202,7 @@
           shouldStick = delta < 80;
         }
       } catch (_) {}
-      // Transform responses into synthetic messages to reuse rendering
+      // Transform responses into synthetic chat bubbles to reuse rendering
       const transformed = [];
       for (const r of list) {
         const inputText = r?.input?.text || '';
@@ -217,7 +220,7 @@
           content_json: { composite: { segments: items } },
         });
       }
-      messages = transformed;
+      chat = transformed;
       await tick();
       if (shouldStick) scrollToBottom();
     }
@@ -226,7 +229,7 @@
   function startPolling() {
     stopPolling();
     pollHandle = setInterval(async () => {
-      await fetchMessages();
+      await fetchResponses();
       await fetchAgent();
     }, 2000);
   }
@@ -297,15 +300,89 @@
       return false;
     } catch (_) { return false; }
   }
+  // Get the most recent unpaired tool_call with args
+  function latestPendingToolCall(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || !segs.length) return null;
+      for (let j = segs.length - 1; j >= 0; j--) {
+        const s = segs[j];
+        if (segType(s) === 'tool_call') {
+          const next = segs[j + 1];
+          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) {
+            return { tool: segTool(s), args: segArgs(s) || {} };
+          }
+        }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
+  function truncate(s, max = 80) {
+    try {
+      const str = String(s || '').trim();
+      if (!str) return '';
+      return str.length > max ? str.slice(0, max - 1) + '…' : str;
+    } catch (_) { return ''; }
+  }
+  function summarizePendingCall(call) {
+    if (!call) return null;
+    const tool = String(call.tool || '').toLowerCase();
+    const args = call.args || {};
+    let cmd = '';
+    let text = '';
+    if (tool === 'bash') {
+      cmd = truncate(args.command || args.cmd || '', 100);
+      if (typeof args.text === 'string') text = truncate(args.text, 120);
+    } else if (tool === 'text_editor') {
+      const action = args.action || 'edit';
+      const path = args.path || '';
+      cmd = truncate(`${action}${path ? ' ' + path : ''}`, 100);
+      if (typeof args.text === 'string') text = truncate(args.text, 120);
+    } else {
+      cmd = truncate(args.command || args.cmd || args.action || '', 100);
+      if (typeof args.text === 'string') text = truncate(args.text, 120);
+    }
+    return { tool: call.tool, cmd, text };
+  }
+  function currentPendingSummary() {
+    try {
+      if (!Array.isArray(chat)) return null;
+      for (let i = chat.length - 1; i >= 0; i--) {
+        const m = chat[i];
+        if (m && m.role === 'agent' && hasComposite(m) && isInProgress(m)) {
+          const call = latestPendingToolCall(m);
+          if (call) return summarizePendingCall(call);
+        }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
+  $: pendingSummary = currentPendingSummary();
+  // Get the most recent unpaired tool_call tool name, if any
+  function pendingToolName(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || !segs.length) return null;
+      for (let j = segs.length - 1; j >= 0; j--) {
+        const s = segs[j];
+        if (segType(s) === 'tool_call') {
+          const next = segs[j + 1];
+          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) return segTool(s);
+        }
+      }
+      return null;
+    } catch (_) { return null; }
+  }
   function currentBusyStatus() {
     if (stateStr !== 'busy') return null;
-    // Scan latest agent messages for in-progress composite
-    if (Array.isArray(messages)) {
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const m = messages[i];
+    // Scan latest agent response bubbles for in-progress composite
+    if (Array.isArray(chat)) {
+      for (let i = chat.length - 1; i >= 0; i--) {
+        const m = chat[i];
         if (m && m.role === 'agent' && hasComposite(m)) {
           if (isInProgress(m)) {
-            if (hasPendingToolCall(m)) return 'Executing tool...';
+            const t = pendingToolName(m);
+            if (t) return `Running ${toolLabel(t)}...`;
             return 'Thinking...';
           }
         }
@@ -369,20 +446,7 @@
   }
 
   // Expand/Collapse all tool details helpers
-  function expandAllTools() {
-    try {
-      if (typeof document === 'undefined') return;
-      const list = document.querySelectorAll('#chat-body details');
-      list.forEach((el) => { try { el.open = true; } catch (_) {} });
-    } catch (_) {}
-  }
-  function collapseAllTools() {
-    try {
-      if (typeof document === 'undefined') return;
-      const list = document.querySelectorAll('#chat-body details');
-      list.forEach((el) => { try { el.open = false; } catch (_) {} });
-    } catch (_) {}
-  }
+  // Expand/Collapse controls removed; Show Details toggle controls visibility.
 
   // Helper: compact args preview for tool summaries
   function argsPreview(m) {
@@ -424,7 +488,7 @@
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
       // Optimistic add
-      messages = [...messages, { role: 'user', content }];
+      chat = [...chat, { role: 'user', content }];
       await tick();
       scrollToBottom();
       // Let polling pick up the agent's response
@@ -550,7 +614,7 @@
     $appOptions.appContentFullHeight = true;
     try {
       await fetchAgent();
-      await fetchMessages();
+      await fetchResponses();
       await tick();
       scrollToBottom();
       loading = false;
@@ -759,16 +823,13 @@
 
     <!-- Minimize/Maximize (expand/collapse) tool details row -->
     <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      <div class="small text-body me-2">
-        Total messages <span class="d-none d-sm-inline">(includes tool calls)</span>: {Array.isArray(messages) ? messages.length : 0}
-      </div>
+      <div class="small text-body me-2">Total responses: {responsesCount}</div>
       <div class="d-flex align-items-center gap-2">
-        <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
-          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">Show Thinking</label>
+        <div class="form-check form-switch" title="Toggle display of tool details and analysis">
+          <input class="form-check-input" type="checkbox" id="toggle-details" bind:checked={showDetails} />
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-details">Show Details</label>
         </div>
-        <button class="btn btn-outline-secondary btn-sm" on:click={expandAllTools} aria-label="Expand all tool details" title="Expand all"><i class="fas fa-angle-double-down"></i></button>
-        <button class="btn btn-outline-secondary btn-sm" on:click={collapseAllTools} aria-label="Collapse all tool details" title="Collapse all"><i class="fas fa-angle-double-up"></i></button>
+        <!-- Expand/Collapse buttons removed; Show Details covers tool visibility. -->
       </div>
     </div>
 
@@ -785,8 +846,8 @@
     {:else}
       <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
         <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
-        {#if messages && messages.length}
-          {#each messages as m, i}
+        {#if chat && chat.length}
+          {#each chat as m, i}
             {#if m.role === 'user'}
               <div class="d-flex mb-3 justify-content-end">
                 <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
@@ -800,9 +861,9 @@
                 <div class="d-flex mb-3 justify-content-start">
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     {#each segmentsOf(m) as s, j}
-                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary') && showThinking}
+                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary') && showDetails}
                         <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
-                      {:else if segType(s) === 'tool_call'}
+                      {:else if segType(s) === 'tool_call' && showDetails}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">
@@ -831,7 +892,7 @@
                             </details>
                           </div>
                         {/if}
-                      {:else if segType(s) === 'tool_result'}
+                      {:else if segType(s) === 'tool_result' && showDetails}
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-1 justify-content-start">
@@ -855,7 +916,7 @@
                   </div>
                 </div>
               {:else}
-              {#if isToolExec(m)}
+              {#if isToolExec(m) && showDetails}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
@@ -867,7 +928,7 @@
                 </div>
               {:else}
                 <!-- Tool response card or regular agent message -->
-                {#if isToolResult(m)}
+                {#if isToolResult(m) && showDetails}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
@@ -881,7 +942,7 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if metaOf(m)?.thinking}
-                        {#if showThinking}
+                        {#if showDetails}
                           <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
                         {/if}
                       {/if}
@@ -898,13 +959,29 @@
             {/if}
           {/each}
         {/if}
-        </div>
-      </div>
-      <div class="status-footer small text-body-secondary d-flex align-items-center gap-2 mt-2 pt-2 pb-1">
-        {#if stateStr === 'busy'}
-          <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
-          <span>{currentBusyStatus()}</span>
+        {#if !showDetails && pendingSummary}
+          <div class="d-flex mb-1 justify-content-start">
+            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
+              <span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{toolLabel(pendingSummary.tool)}</span>
+              {#if pendingSummary.cmd}
+                <span class="font-monospace">{pendingSummary.cmd}</span>
+              {/if}
+              {#if pendingSummary.text}
+                <span class="text-body-secondary">—</span>
+                <span class="font-monospace">{pendingSummary.text}</span>
+              {/if}
+            </div>
+          </div>
         {/if}
+        {#if stateStr === 'busy'}
+          <div class="d-flex mb-2 justify-content-start">
+            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span>{currentBusyStatus()}</span>
+            </div>
+          </div>
+        {/if}
+        </div>
       </div>
 
       <form class="pt-2" on:submit|preventDefault={sendMessage}>

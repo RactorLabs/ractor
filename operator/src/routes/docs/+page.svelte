@@ -97,6 +97,87 @@
       </div>
     </Card>
 
+    <Card class="mb-3">
+      <div class="card-header fw-bold">Response Object</div>
+      <div class="card-body p-3 p-sm-4 small">
+        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/agents/{name}/responses</span> endpoints.</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-2">
+            <thead>
+              <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
+              <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent name</td></tr>
+              <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span></td></tr>
+              <tr><td class="font-monospace">input</td><td>object</td><td>User input JSON (typically <span class="font-monospace">{ text: string }</span>)</td></tr>
+              <tr><td class="font-monospace">output</td><td>object</td><td>Agent output JSON with fields below</td></tr>
+              <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp (UTC)</td></tr>
+              <tr><td class="font-monospace">updated_at</td><td>string (RFC3339)</td><td>Last update timestamp (UTC)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="fw-500 small text-body text-opacity-75 mb-1">output fields</div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-2">
+            <thead>
+              <tr><th>Name</th><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="font-monospace">text</td><td>string</td><td>Final assistant message (may be empty while processing)</td></tr>
+              <tr><td class="font-monospace">items</td><td>array</td><td>Ordered list of structured items (see “Items Structure”)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="mb-0">
+          <li>GET list is ordered by <span class="font-monospace">created_at</span> ascending.</li>
+          <li>Update semantics: <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
+          <li>Typical <span class="font-monospace">input</span> is <span class="font-monospace">{ text: string }</span>, but arbitrary JSON is allowed.</li>
+        </ul>
+      </div>
+    </Card>
+
+    <Card class="mb-3">
+      <div class="card-header fw-bold">Items Structure (output.items)</div>
+      <div class="card-body p-3 p-sm-4 small">
+        <div class="mb-2">The <span class="font-monospace">output.items</span> array captures step-by-step progress, tool usage, and final output. Items are appended in order.</div>
+        <div class="fw-500 small text-body text-opacity-75 mb-1">Item types</div>
+        <div class="table-responsive mb-2">
+          <table class="table table-sm table-bordered">
+            <thead><tr><th>type</th><th>Shape</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="font-monospace">commentary</td>
+                <td class="font-monospace">{ type, channel: 'analysis', text }</td>
+                <td>Internal thinking/analysis. Hidden in UI unless details are shown.</td>
+              </tr>
+              <tr>
+                <td class="font-monospace">tool_call</td>
+                <td class="font-monospace">{ type, tool, args }</td>
+                <td>Declares a tool invocation with arguments.</td>
+              </tr>
+              <tr>
+                <td class="font-monospace">tool_result</td>
+                <td class="font-monospace">{ type, tool, output }</td>
+                <td>Result of the preceding matching <span class="font-monospace">tool_call</span>.</td>
+              </tr>
+              <tr>
+                <td class="font-monospace">final</td>
+                <td class="font-monospace">{ type, channel: 'final', text }</td>
+                <td>Final assistant answer (mirrors <span class="font-monospace">output.text</span>).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="fw-500 small text-body text-opacity-75 mb-1">Examples</div>
+        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'commentary', channel: 'analysis', text: 'Thinking about the approach…' }, null, 2)}</code></pre>
+        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_call', tool: 'bash', args: { command: 'ls -la', cwd: '/agent/code' } }, null, 2)}</code></pre>
+        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_result', tool: 'bash', output: '[exit_code:0]\nREADME.md\nsrc/' }, null, 2)}</code></pre>
+        <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ type: 'final', channel: 'final', text: 'All set! Here are the results…' }, null, 2)}</code></pre>
+        <div class="mt-2 small text-body text-opacity-75">Notes: Tool outputs may be truncated for size; the UI pairs each <span class="font-monospace">tool_call</span> with the next <span class="font-monospace">tool_result</span> having the same <span class="font-monospace">tool</span>.</div>
+      </div>
+    </Card>
+
     {#each getApiDocs($page?.data?.hostUrl) as section}
       <Card id={section.id} class="mb-3">
         <div class="card-header">
