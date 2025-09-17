@@ -852,7 +852,14 @@
             {/if}
           {/each}
         {/if}
-        <!-- Busy label and preview removed; always show full details above. -->
+        {#if stateStr === 'busy'}
+          <div class="d-flex mb-2 justify-content-start">
+            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span>Working...</span>
+            </div>
+          </div>
+        {/if}
         </div>
       </div>
 
