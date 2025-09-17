@@ -71,6 +71,7 @@
   // Toggle display of thinking (analysis/commentary) text; persisted via localStorage
   let showThinking = false;
   const SHOW_THINKING_KEY = 'raworc.showThinking';
+  let thinkingPrefLoaded = false;
   onMount(() => {
     try {
       if (browser) {
@@ -78,8 +79,11 @@
         if (v !== null) showThinking = v === '1' || v === 'true';
       }
     } catch (_) {}
+    thinkingPrefLoaded = true;
   });
-  $: (() => { try { if (browser) localStorage.setItem(SHOW_THINKING_KEY, showThinking ? '1' : '0'); } catch (_) {} })();
+  $: if (browser && thinkingPrefLoaded) {
+    try { localStorage.setItem(SHOW_THINKING_KEY, showThinking ? '1' : '0'); } catch (_) {}
+  }
   let loading = true;
   let error = null;
   let input = '';
