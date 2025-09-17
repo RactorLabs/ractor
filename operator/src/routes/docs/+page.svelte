@@ -111,7 +111,7 @@
               <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
               <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent name</td></tr>
               <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span></td></tr>
-              <tr><td class="font-monospace">input</td><td>object</td><td>User input JSON (typically <span class="font-monospace">{ text: string }</span>)</td></tr>
+              <tr><td class="font-monospace">input</td><td>object</td><td>User input JSON (typically <span class="font-monospace">&#123; text: string &#125;</span>)</td></tr>
               <tr><td class="font-monospace">output</td><td>object</td><td>Agent output JSON with fields below</td></tr>
               <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp (UTC)</td></tr>
               <tr><td class="font-monospace">updated_at</td><td>string (RFC3339)</td><td>Last update timestamp (UTC)</td></tr>
@@ -133,7 +133,7 @@
         <ul class="mb-0">
           <li>GET list is ordered by <span class="font-monospace">created_at</span> ascending.</li>
           <li>Update semantics: <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
-          <li>Typical <span class="font-monospace">input</span> is <span class="font-monospace">{ text: string }</span>, but arbitrary JSON is allowed.</li>
+          <li>Typical <span class="font-monospace">input</span> is <span class="font-monospace">&#123; text: string &#125;</span>, but arbitrary JSON is allowed.</li>
         </ul>
       </div>
     </Card>
@@ -149,22 +149,22 @@
             <tbody>
               <tr>
                 <td class="font-monospace">commentary</td>
-                <td class="font-monospace">{ type, channel: 'analysis', text }</td>
+                <td class="font-monospace">&#123; type, channel: 'analysis', text &#125;</td>
                 <td>Internal thinking/analysis. Hidden in UI unless details are shown.</td>
               </tr>
               <tr>
                 <td class="font-monospace">tool_call</td>
-                <td class="font-monospace">{ type, tool, args }</td>
+                <td class="font-monospace">&#123; type, tool, args &#125;</td>
                 <td>Declares a tool invocation with arguments.</td>
               </tr>
               <tr>
                 <td class="font-monospace">tool_result</td>
-                <td class="font-monospace">{ type, tool, output }</td>
+                <td class="font-monospace">&#123; type, tool, output &#125;</td>
                 <td>Result of the preceding matching <span class="font-monospace">tool_call</span>.</td>
               </tr>
               <tr>
                 <td class="font-monospace">final</td>
-                <td class="font-monospace">{ type, channel: 'final', text }</td>
+                <td class="font-monospace">&#123; type, channel: 'final', text &#125;</td>
                 <td>Final assistant answer (mirrors <span class="font-monospace">output.text</span>).</td>
               </tr>
             </tbody>
@@ -259,7 +259,7 @@
                 <tr><td class="font-monospace">is_published</td><td>boolean</td><td>Published state</td></tr>
                 <tr><td class="font-monospace">published_at</td><td>string|null (RFC3339)</td><td>When published</td></tr>
                 <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>
-                <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">{ code: boolean, secrets: boolean, content: boolean }</span></td></tr>
+                <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, secrets: boolean, content: boolean &#125;</span></td></tr>
                 <tr><td class="font-monospace">idle_timeout_seconds</td><td>int</td><td>Idle timeout</td></tr>
                 <tr><td class="font-monospace">busy_timeout_seconds</td><td>int</td><td>Busy timeout</td></tr>
                 <tr><td class="font-monospace">idle_from</td><td>string|null (RFC3339)</td><td>When idle started</td></tr>
