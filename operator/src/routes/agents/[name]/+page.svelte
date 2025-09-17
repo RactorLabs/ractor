@@ -68,8 +68,18 @@
   let stateStr = '';
   // Chat rendering derived from Responses
   let chat = [];
-  // Toggle display of thinking (analysis/commentary) text; default off, not persisted
+  // Toggle display of thinking (analysis/commentary) text; persisted via localStorage
   let showThinking = false;
+  const SHOW_THINKING_KEY = 'raworc.showThinking';
+  onMount(() => {
+    try {
+      if (browser) {
+        const v = localStorage.getItem(SHOW_THINKING_KEY);
+        if (v !== null) showThinking = v === '1' || v === 'true';
+      }
+    } catch (_) {}
+  });
+  $: (() => { try { if (browser) localStorage.setItem(SHOW_THINKING_KEY, showThinking ? '1' : '0'); } catch (_) {} })();
   let loading = true;
   let error = null;
   let input = '';
