@@ -415,32 +415,17 @@ impl MessageHandler {
                         });
                     }
 
-                    // Send tool execution notification to user
-                    let tool_description = match tool_name.as_str() {
-                        "bash" => {
-                            if let Some(cmd) = args
-                                .get("command")
-                                .and_then(|v| v.as_str())
-                                .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-                            {
-                                cmd.to_string()
-                            } else {
-                                "bash command".to_string()
-                            }
+                    // Record thinking/commentary for this tool-call turn (shown via toggle in UI)
+                    if let Some(thinking) = &model_resp.thinking {
+                        if !thinking.trim().is_empty() {
+                            composite_segments.push(serde_json::json!({
+                                "type": "commentary",
+                                "channel": "analysis",
+                                "text": thinking,
+                                "seconds": thinking_secs,
+                            }));
                         }
-                        "text_editor" => {
-                            let action = args
-                                .get("action")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("edit");
-                            let path = args
-                                .get("path")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("unknown");
-                            format!("{} {}", action, path)
-                        }
-                        _ => format!("Executing {} tool", tool_name),
-                    };
+                    }
 
                     // Record tool call in composite segments
                     composite_segments.push(serde_json::json!({
