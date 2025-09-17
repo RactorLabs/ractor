@@ -68,21 +68,38 @@
   let stateStr = '';
   // Chat rendering derived from Responses
   let chat = [];
-  // Toggle display of thinking (analysis/commentary) text; persisted via localStorage
+  // Toggle display of thinking (analysis/commentary) text; persisted via cookie
   let showThinking = false;
-  const SHOW_THINKING_KEY = 'raworc.showThinking';
+  const SHOW_THINKING_COOKIE = 'raworc_showThinking';
   let thinkingPrefLoaded = false;
+  function getCookie(name) {
+    try {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return decodeURIComponent(parts.pop().split(';').shift());
+    } catch (_) {}
+    return null;
+  }
+  function setCookie(name, value, days) {
+    try {
+      const d = new Date();
+      d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+      const expires = `; expires=${d.toUTCString()}`;
+      const secure = (typeof location !== 'undefined' && location.protocol === 'https:') ? '; Secure' : '';
+      document.cookie = `${name}=${encodeURIComponent(value || '')}${expires}; path=/; SameSite=Lax${secure}`;
+    } catch (_) {}
+  }
   onMount(() => {
     try {
       if (browser) {
-        const v = localStorage.getItem(SHOW_THINKING_KEY);
+        const v = getCookie(SHOW_THINKING_COOKIE);
         if (v !== null) showThinking = v === '1' || v === 'true';
       }
     } catch (_) {}
     thinkingPrefLoaded = true;
   });
   $: if (browser && thinkingPrefLoaded) {
-    try { localStorage.setItem(SHOW_THINKING_KEY, showThinking ? '1' : '0'); } catch (_) {}
+    setCookie(SHOW_THINKING_COOKIE, showThinking ? '1' : '0', 365);
   }
   let loading = true;
   let error = null;
