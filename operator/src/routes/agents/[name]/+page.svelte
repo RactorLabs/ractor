@@ -261,6 +261,42 @@
     } catch (_) { return ''; }
   }
 
+  // In-progress helpers
+  function isInProgress(m) {
+    try { const meta = metaOf(m); return !!(meta && meta.in_progress === true); } catch (_) { return false; }
+  }
+  function hasPendingToolCall(m) {
+    try {
+      const segs = segmentsOf(m);
+      if (!Array.isArray(segs) || !segs.length) return false;
+      for (let j = segs.length - 1; j >= 0; j--) {
+        const s = segs[j];
+        if (segType(s) === 'tool_call') {
+          const next = segs[j + 1];
+          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) return true;
+        }
+      }
+      return false;
+    } catch (_) { return false; }
+  }
+  function currentBusyStatus() {
+    if (stateStr !== 'busy') return null;
+    // Scan latest agent messages for in-progress composite
+    if (Array.isArray(messages)) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m && m.role === 'agent' && hasComposite(m)) {
+          if (isInProgress(m)) {
+            if (hasPendingToolCall(m)) return 'Executing tool...';
+            return 'Thinking...';
+          }
+        }
+      }
+    }
+    // Default busy indicator
+    return 'Working...';
+  }
+
   // Normalize metadata to an object (handles string-serialized JSON)
   function metaOf(m) {
     try {
@@ -846,6 +882,13 @@
         {/if}
         </div>
       </div>
+      <div class="status-footer small text-body-secondary d-flex align-items-center gap-2 mt-2 pt-2 pb-1">
+        {#if stateStr === 'busy'}
+          <span class="spinner-border spinner-border-sm text-body-secondary" role="status" aria-hidden="true"></span>
+          <span>{currentBusyStatus()}</span>
+        {/if}
+      </div>
+
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group">
           <textarea
