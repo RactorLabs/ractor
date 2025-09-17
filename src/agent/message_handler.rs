@@ -415,10 +415,11 @@ impl MessageHandler {
                         });
                     }
 
-                    // Record thinking/commentary for this tool-call turn (shown via toggle in UI)
+                    // Build per-turn segments
+                    let mut turn_segments: Vec<serde_json::Value> = Vec::new();
                     if let Some(thinking) = &model_resp.thinking {
                         if !thinking.trim().is_empty() {
-                            composite_segments.push(serde_json::json!({
+                            turn_segments.push(serde_json::json!({
                                 "type": "commentary",
                                 "channel": "analysis",
                                 "text": thinking,
@@ -426,13 +427,30 @@ impl MessageHandler {
                             }));
                         }
                     }
-
-                    // Record tool call in composite segments
-                    composite_segments.push(serde_json::json!({
+                    turn_segments.push(serde_json::json!({
                         "type": "tool_call",
                         "tool": tool_name,
                         "args": args,
                     }));
+
+                    // Create a DB message for this turn (in-progress)
+                    let meta = serde_json::json!({
+                        "type": "composite_step",
+                        "model": "gpt-oss",
+                        "in_progress": true,
+                    });
+                    let content_json = serde_json::json!({
+                        "composite": { "segments": turn_segments }
+                    });
+                    let created = self
+                        .api_client
+                        .send_message_structured(
+                            super::api::MessageRole::Agent,
+                            String::new(),
+                            Some(meta),
+                            Some(content_json),
+                        )
+                        .await?;
 
                     // Execute tool through registry
                     let tool_result = match self.tool_registry.execute_tool(tool_name, args).await {
@@ -443,12 +461,43 @@ impl MessageHandler {
                     // Log tool result
                     info!("Tool result: {} ({} bytes)", tool_name, tool_result.len());
 
-                    // Record tool result in composite segments
-                    composite_segments.push(serde_json::json!({
+                    // Append tool result and finalize this turn by updating the same message
+                    // Build updated segments array
+                    let mut segs: Vec<serde_json::Value> = Vec::new();
+                    if let Some(thinking) = &model_resp.thinking {
+                        if !thinking.trim().is_empty() {
+                            segs.push(serde_json::json!({
+                                "type": "commentary",
+                                "channel": "analysis",
+                                "text": thinking,
+                                "seconds": thinking_secs,
+                            }));
+                        }
+                    }
+                    segs.push(serde_json::json!({
+                        "type": "tool_call",
+                        "tool": tool_name,
+                        "args": args,
+                    }));
+                    segs.push(serde_json::json!({
                         "type": "tool_result",
                         "tool": tool_name,
                         "output": tool_result,
                     }));
+                    let updated_segments = serde_json::json!({
+                        "composite": { "segments": segs }
+                    });
+
+                    let mut final_meta = serde_json::json!({
+                        "type": "composite_step",
+                        "model": "gpt-oss",
+                        "in_progress": false,
+                    });
+                    // Update message content_json and metadata; leave content empty
+                    let _ = self
+                        .api_client
+                        .update_message(&created.id, None, Some(final_meta), Some(updated_segments))
+                        .await;
 
                     // Add tool result to conversation following Ollama cookbook
                     conversation.push(ChatMessage {
@@ -463,11 +512,11 @@ impl MessageHandler {
             } else {
                 // Final assistant answer — send a single composite message for this step
                 let sanitized = self.guardrails.validate_output(&model_resp.content)?;
-
-                // Optional thinking/analysis as commentary segment (shown when toggle enabled)
+                // Build final-only step (optionally includes thinking)
+                let mut segs: Vec<serde_json::Value> = Vec::new();
                 if let Some(thinking) = &model_resp.thinking {
                     if !thinking.trim().is_empty() {
-                        composite_segments.push(serde_json::json!({
+                        segs.push(serde_json::json!({
                             "type": "commentary",
                             "channel": "analysis",
                             "text": thinking,
@@ -475,21 +524,19 @@ impl MessageHandler {
                         }));
                     }
                 }
-
-                composite_segments.push(serde_json::json!({
+                segs.push(serde_json::json!({
                     "type": "final",
                     "channel": "final",
                     "text": sanitized,
                 }));
 
                 let meta = serde_json::json!({
-                    "type": "model_response_step",
+                    "type": "composite_step",
                     "model": "gpt-oss",
+                    "in_progress": false,
                 });
                 let content_json = serde_json::json!({
-                    "composite": {
-                        "segments": composite_segments
-                    }
+                    "composite": { "segments": segs }
                 });
                 self
                     .api_client

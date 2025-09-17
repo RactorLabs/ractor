@@ -331,6 +331,53 @@ impl RaworcClient {
         }
     }
 
+    /// Update an existing message by id (PUT)
+    pub async fn update_message(
+        &self,
+        message_id: &str,
+        content: Option<String>,
+        metadata: Option<serde_json::Value>,
+        content_json: Option<serde_json::Value>,
+    ) -> Result<Message> {
+        let url = format!(
+            "{}/api/v0/agents/{}/messages/{}",
+            self.config.api_url, self.config.agent_name, message_id
+        );
+        let mut body = serde_json::Map::new();
+        if let Some(c) = content { body.insert("content".to_string(), serde_json::json!(c)); }
+        if let Some(m) = metadata { body.insert("metadata".to_string(), m); }
+        if let Some(cj) = content_json { body.insert("content_json".to_string(), cj); }
+
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&serde_json::Value::Object(body))
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let message = response.json::<Message>().await?;
+                Ok(message)
+            }
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api("Message not found".to_string())),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to update message ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
     
 
     /// Update agent to busy (clears idle_from)

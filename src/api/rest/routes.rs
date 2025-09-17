@@ -85,6 +85,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::messages::create_message),
         )
         .route(
+            "/agents/{name}/messages/{id}",
+            put(handlers::messages::update_message),
+        )
+        .route(
             "/agents/{name}/messages/count",
             get(handlers::messages::get_message_count),
         )
@@ -113,4 +117,3 @@ async fn version() -> axum::Json<serde_json::Value> {
         "api": "v0"
     }))
 }
-

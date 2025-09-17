@@ -116,7 +116,55 @@ where
     deserializer.deserialize_str(StrictRoleVisitor)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateMessageRequest {
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub content_json: Option<serde_json::Value>,
+}
+
 impl AgentMessage {
+    pub async fn find_by_id(
+        pool: &sqlx::MySqlPool,
+        id: &str,
+    ) -> Result<Option<AgentMessage>, sqlx::Error> {
+        sqlx::query_as::<_, AgentMessage>(
+            r#"SELECT id, agent_name, created_by, role, content, content_json, metadata, created_at
+               FROM agent_messages WHERE id = ?"#,
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn update_by_id(
+        pool: &sqlx::MySqlPool,
+        id: &str,
+        req: UpdateMessageRequest,
+    ) -> Result<AgentMessage, sqlx::Error> {
+        // Load existing
+        let existing = Self::find_by_id(pool, id).await?;
+        let mut msg = existing.ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+        if let Some(c) = req.content { msg.content = c; }
+        if let Some(m) = req.metadata { msg.metadata = m; }
+        if let Some(cj) = req.content_json { msg.content_json = Some(cj); }
+
+        sqlx::query(
+            r#"UPDATE agent_messages SET content=?, content_json=?, metadata=? WHERE id = ?"#,
+        )
+        .bind(&msg.content)
+        .bind(&msg.content_json)
+        .bind(&msg.metadata)
+        .bind(&msg.id)
+        .execute(pool)
+        .await?;
+
+        Ok(msg)
+    }
     pub async fn create(
         pool: &sqlx::MySqlPool,
         agent_name: &str,
