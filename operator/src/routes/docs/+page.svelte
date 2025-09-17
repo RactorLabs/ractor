@@ -6,7 +6,7 @@
   import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.7.9 (v0)';
+  const API_VERSION = '0.9.0 (v0)';
   const schemas = getCommonSchemas();
   $: docs = (getApiDocs($page?.data?.hostUrl) || [])
     .map((sec) => ({ ...sec, endpoints: (sec.endpoints || []).filter((ep) => !ep.adminOnly) }))
