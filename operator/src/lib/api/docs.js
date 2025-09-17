@@ -154,6 +154,7 @@ export function getApiDocs(base) {
         path: '/api/v0/auth/token',
         auth: 'bearer',
         desc: 'Create a new token for a principal (admin-only).',
+        adminOnly: true,
         params: [
           { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or admin id)' },
           { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" },
@@ -258,24 +259,24 @@ export function getApiDocs(base) {
     title: 'Operators',
     description: 'Operator management endpoints (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/operators', auth: 'bearer', desc: 'List operators.', params: [], example: `curl -s ${BASE}/api/v0/operators -H "Authorization: Bearer <token>"`, resp: { schema: 'Operator', array: true }, responses: [{ status: 200, body: `[{"user":"admin","description":null,"active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","last_login_at":"2025-01-01T12:00:00Z"}]` }] },
-      { method: 'POST', path: '/api/v0/operators', auth: 'bearer', desc: 'Create operator.', params: [
+      { method: 'GET', path: '/api/v0/operators', auth: 'bearer', desc: 'List operators.', adminOnly: true, params: [], example: `curl -s ${BASE}/api/v0/operators -H "Authorization: Bearer <token>"`, resp: { schema: 'Operator', array: true }, responses: [{ status: 200, body: `[{"user":"admin","description":null,"active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","last_login_at":"2025-01-01T12:00:00Z"}]` }] },
+      { method: 'POST', path: '/api/v0/operators', auth: 'bearer', desc: 'Create operator.', adminOnly: true, params: [
         { in: 'body', name: 'user', type: 'string', required: true, desc: 'Operator username' },
         { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Password' },
         { in: 'body', name: 'description', type: 'string', required: false, desc: 'Optional description' }
       ], example: `curl -s -X POST ${BASE}/api/v0/operators -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"user":"alice","pass":"<password>","description":"Team operator"}'`, resp: { schema: 'Operator' }, responses: [{ status: 200, body: `{"user":"alice","description":"Team operator","active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","last_login_at":null}` }] },
-      { method: 'GET', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Get operator.', params: [
+      { method: 'GET', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Get operator.', adminOnly: true, params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' }
       ], example: `curl -s ${BASE}/api/v0/operators/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Operator' }, responses: [{ status: 200, body: `{"user":"alice","description":"Team operator","active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-02T10:00:00Z","last_login_at":null}` }] },
-      { method: 'PUT', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Update operator.', params: [
+      { method: 'PUT', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Update operator.', adminOnly: true, params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
         { in: 'body', name: 'description', type: 'string', required: false, desc: 'Optional description' },
         { in: 'body', name: 'active', type: 'boolean|null', required: false, desc: 'Set active status; must be boolean or null' }
       ], example: `curl -s -X PUT ${BASE}/api/v0/operators/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated desc","active":true}'`, resp: { schema: 'Operator' }, responses: [{ status: 200, body: `{"user":"alice","description":"Updated desc","active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-02T12:00:00Z","last_login_at":null}` }] },
-      { method: 'DELETE', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Delete operator.', params: [
+      { method: 'DELETE', path: '/api/v0/operators/{name}', auth: 'bearer', desc: 'Delete operator.', adminOnly: true, params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' }
       ], example: `curl -s -X DELETE ${BASE}/api/v0/operators/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Empty' }, responses: [{ status: 200 }] },
-      { method: 'PUT', path: '/api/v0/operators/{name}/password', auth: 'bearer', desc: 'Update operator password.', params: [
+      { method: 'PUT', path: '/api/v0/operators/{name}/password', auth: 'bearer', desc: 'Update operator password.', adminOnly: true, params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
         { in: 'body', name: 'current_password', type: 'string', required: true, desc: 'Current password' },
         { in: 'body', name: 'new_password', type: 'string', required: true, desc: 'New password' }

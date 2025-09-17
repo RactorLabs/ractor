@@ -8,6 +8,9 @@
   // Hard-coded docs version; update during version bumps
   const API_VERSION = '0.7.9 (v0)';
   const schemas = getCommonSchemas();
+  $: docs = (getApiDocs($page?.data?.hostUrl) || [])
+    .map((sec) => ({ ...sec, endpoints: (sec.endpoints || []).filter((ep) => !ep.adminOnly) }))
+    .filter((sec) => (sec.endpoints || []).length > 0);
   
 
   setPageTitle('API Documentation');
@@ -316,7 +319,7 @@
       </div>
     </Card>
 
-    {#each getApiDocs($page?.data?.hostUrl) as section}
+    {#each docs as section}
       <Card id={section.id} class="mb-3">
         <div class="card-header">
           <div class="fw-bold">{section.title}</div>
@@ -457,7 +460,7 @@
     <Card>
       <div class="card-header fw-bold">Sections</div>
       <div class="list-group list-group-flush">
-        {#each getApiDocs($page?.data?.hostUrl) as section}
+        {#each docs as section}
           <a class="list-group-item list-group-item-action" href={'#' + section.id}>{section.title}</a>
         {/each}
       </div>

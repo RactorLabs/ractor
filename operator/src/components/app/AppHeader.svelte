@@ -92,6 +92,14 @@
                   <div class="fw-500 fs-10px text-inverse">DOCS</div>
                 </a>
               </div>
+              {#if isAdmin}
+                <div class="col-4">
+                  <a href="/docs/admin" aria-label="Admin APIs" class="dropdown-item text-decoration-none p-3 bg-none">
+                    <div><i class="bi bi-shield-lock h2 opacity-5 d-block my-1"></i></div>
+                    <div class="fw-500 fs-10px text-inverse">ADMIN APIs</div>
+                  </a>
+                </div>
+              {/if}
             </div>
           </div>
         </div>
