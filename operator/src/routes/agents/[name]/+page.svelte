@@ -819,7 +819,7 @@
                         {/if}
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
-                          <div class="markdown-wrap mb-2">
+                          <div class="markdown-wrap mt-1 mb-2">
                             <div class="markdown-body">{@html renderMarkdown(segText(s))}</div>
                           </div>
                         {/if}
@@ -859,7 +859,7 @@
                         {/if}
                       {/if}
                       {#if m.content && m.content.trim()}
-                        <div class="markdown-wrap">
+                        <div class="markdown-wrap mt-1">
                           <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                         </div>
                       {/if}
