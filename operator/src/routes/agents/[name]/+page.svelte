@@ -299,7 +299,7 @@
       if (!Array.isArray(chat)) return null;
       for (let i = chat.length - 1; i >= 0; i--) {
         const m = chat[i];
-        if (m && m.role === 'agent' && hasComposite(m) && isInProgress(m)) return m;
+        if (m && m.role === 'agent' && isInProgress(m)) return m;
       }
       return null;
     } catch (_) { return null; }

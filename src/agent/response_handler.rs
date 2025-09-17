@@ -152,7 +152,16 @@ impl ResponseHandler {
                 Ok(r) => r,
                 Err(e) => {
                     warn!("Ollama API failed: {}", e);
-                    let _ = self.api_client.update_response(&response.id, Some("failed".to_string()), Some("I'm experiencing technical difficulties.".to_string()), None).await?;
+                    // Mark the response as failed with the error message in output.text
+                    let _ = self
+                        .api_client
+                        .update_response(
+                            &response.id,
+                            Some("failed".to_string()),
+                            Some(format!("Error: {}", e)),
+                            None,
+                        )
+                        .await?;
                     return Ok(());
                 }
             };
@@ -170,11 +179,31 @@ impl ResponseHandler {
                     items_sent += segs.len();
 
                     // Execute tool
-                    let tool_result = match self.tool_registry.execute_tool(tool_name, args).await { Ok(r)=>r, Err(e)=>format!("[error] {}", e)};
+                    let (tool_result, tool_error): (String, Option<String>) = match self
+                        .tool_registry
+                        .execute_tool(tool_name, args)
+                        .await
+                    {
+                        Ok(r) => (r, None),
+                        Err(e) => (format!("[error] {}", e), Some(e.to_string())),
+                    };
                     // Append only the tool_result (avoid duplicating prior items)
                     let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":tool_result});
                     let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result])).await;
                     items_sent += 1;
+                    // If the tool reported an error (commonly from API calls), mark the response as failed with message
+                    if let Some(err_msg) = tool_error {
+                        let _ = self
+                            .api_client
+                            .update_response(
+                                &response.id,
+                                Some("failed".to_string()),
+                                Some(format!("Error: {}", err_msg)),
+                                None,
+                            )
+                            .await;
+                        return Ok(());
+                    }
                     // Add tool result to conversation
                     conversation.push(ChatMessage { role:"tool".to_string(), content: tool_result, name: Some(tool_name.clone()), tool_call_id: None });
                     continue;
