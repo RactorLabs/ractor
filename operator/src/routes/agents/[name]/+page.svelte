@@ -76,8 +76,7 @@
   let pollHandle = null;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
-  // Show/hide details (analysis + tool calls/results); default off, not persisted
-  let showDetails = false;
+  // Always show details (analysis + tool calls/results)
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -293,54 +292,7 @@
       return str.length > max ? str.slice(0, max - 1) + '…' : str;
     } catch (_) { return ''; }
   }
-  // Latest in-progress response and last segment summary
-  function latestInProgressMessage() {
-    try {
-      if (!Array.isArray(chat)) return null;
-      for (let i = chat.length - 1; i >= 0; i--) {
-        const m = chat[i];
-        if (m && m.role === 'agent' && isInProgress(m)) return m;
-      }
-      return null;
-    } catch (_) { return null; }
-  }
-  function lastSegment(m) {
-    try {
-      const segs = segmentsOf(m);
-      if (!Array.isArray(segs) || !segs.length) return null;
-      return segs[segs.length - 1];
-    } catch (_) { return null; }
-  }
-  function summarizeSegment(seg) {
-    if (!seg) return null;
-    const tool = segTool(seg);
-    const t = String(tool || '').toLowerCase();
-    const type = segType(seg);
-    let cmd = '';
-    let text = '';
-    if (type === 'tool_call') {
-      const a = segArgs(seg) || {};
-      if (t === 'bash') {
-        cmd = truncate(a.command || a.cmd || '', 100);
-        if (typeof a.text === 'string') text = truncate(a.text, 120);
-      } else if (t === 'text_editor') {
-        const action = a.action || 'edit';
-        const path = a.path || '';
-        cmd = truncate(`${action}${path ? ' ' + path : ''}`, 100);
-        if (typeof a.text === 'string') text = truncate(a.text, 120);
-      } else {
-        cmd = truncate(a.command || a.cmd || a.action || JSON.stringify(a) || '', 100);
-      }
-    } else if (type === 'tool_result') {
-      const out = segOutput(seg);
-      if (typeof out === 'string') text = truncate(out, 120);
-      else cmd = truncate(JSON.stringify(out), 100);
-    }
-    return { tool, cmd, text };
-  }
-  $: inProgressMsg = latestInProgressMessage();
-  $: inProgressLastSeg = inProgressMsg ? lastSegment(inProgressMsg) : null;
-  $: inProgressSummary = inProgressLastSeg ? summarizeSegment(inProgressLastSeg) : null;
+  // In-progress preview and label removed; always render full details in the feed.
 
   // Normalize metadata to an object (handles string-serialized JSON)
   function metaOf(m) {
@@ -776,7 +728,7 @@
       <div class="small text-body me-2">Total responses: {responsesCount}</div>
       <div class="d-flex align-items-center gap-2">
         <div class="form-check form-switch" title="Toggle display of tool details and analysis">
-          <input class="form-check-input" type="checkbox" id="toggle-details" bind:checked={showDetails} />
+          <input class="form-check-input" type="checkbox" id="toggle-details" checked={showDetails} on:change={(e) => { try { showDetails = !!e?.currentTarget?.checked; } catch(_){} }} />
           <label class="form-check-label small d-none d-sm-inline" for="toggle-details">Show Details</label>
         </div>
         <!-- Expand/Collapse buttons removed; Show Details covers tool visibility. -->
@@ -811,9 +763,9 @@
                 <div class="d-flex mb-3 justify-content-start">
                   <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     {#each segmentsOf(m) as s, j}
-                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary') && showDetails}
+                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
                         <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
-                      {:else if segType(s) === 'tool_call' && showDetails}
+                      {:else if segType(s) === 'tool_call'}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">
@@ -842,7 +794,7 @@
                             </details>
                           </div>
                         {/if}
-                      {:else if segType(s) === 'tool_result' && showDetails}
+                      {:else if segType(s) === 'tool_result'}
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-1 justify-content-start">
@@ -866,7 +818,7 @@
                   </div>
                 </div>
               {:else}
-              {#if isToolExec(m) && showDetails}
+              {#if isToolExec(m)}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
@@ -878,7 +830,7 @@
                 </div>
               {:else}
                 <!-- Tool response card or regular agent message -->
-                {#if isToolResult(m) && showDetails}
+                {#if isToolResult(m)}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
@@ -892,9 +844,7 @@
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if metaOf(m)?.thinking}
-                        {#if showDetails}
-                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
-                        {/if}
+                        <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
                       {/if}
                       {#if m.content && m.content.trim()}
                         <div class="markdown-wrap">
@@ -909,28 +859,7 @@
             {/if}
           {/each}
         {/if}
-        {#if !showDetails && inProgressSummary}
-          <div class="d-flex mb-1 justify-content-start">
-            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
-              <span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{toolLabel(inProgressSummary.tool)}</span>
-              {#if inProgressSummary.cmd}
-                <span class="font-monospace">{inProgressSummary.cmd}</span>
-              {/if}
-              {#if inProgressSummary.text}
-                <span class="text-body-secondary">—</span>
-                <span class="font-monospace">{inProgressSummary.text}</span>
-              {/if}
-            </div>
-          </div>
-        {/if}
-        {#if inProgressMsg}
-          <div class="d-flex mb-2 justify-content-start">
-            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
-              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span>Working...</span>
-            </div>
-          </div>
-        {/if}
+        <!-- Busy label and preview removed; always show full details above. -->
         </div>
       </div>
 
