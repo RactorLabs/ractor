@@ -286,37 +286,6 @@
   function isInProgress(m) {
     try { const meta = metaOf(m); return !!(meta && meta.in_progress === true); } catch (_) { return false; }
   }
-  function hasPendingToolCall(m) {
-    try {
-      const segs = segmentsOf(m);
-      if (!Array.isArray(segs) || !segs.length) return false;
-      for (let j = segs.length - 1; j >= 0; j--) {
-        const s = segs[j];
-        if (segType(s) === 'tool_call') {
-          const next = segs[j + 1];
-          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) return true;
-        }
-      }
-      return false;
-    } catch (_) { return false; }
-  }
-  // Get the most recent unpaired tool_call with args
-  function latestPendingToolCall(m) {
-    try {
-      const segs = segmentsOf(m);
-      if (!Array.isArray(segs) || !segs.length) return null;
-      for (let j = segs.length - 1; j >= 0; j--) {
-        const s = segs[j];
-        if (segType(s) === 'tool_call') {
-          const next = segs[j + 1];
-          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) {
-            return { tool: segTool(s), args: segArgs(s) || {} };
-          }
-        }
-      }
-      return null;
-    } catch (_) { return null; }
-  }
   function truncate(s, max = 80) {
     try {
       const str = String(s || '').trim();
@@ -324,73 +293,54 @@
       return str.length > max ? str.slice(0, max - 1) + '…' : str;
     } catch (_) { return ''; }
   }
-  function summarizePendingCall(call) {
-    if (!call) return null;
-    const tool = String(call.tool || '').toLowerCase();
-    const args = call.args || {};
-    let cmd = '';
-    let text = '';
-    if (tool === 'bash') {
-      cmd = truncate(args.command || args.cmd || '', 100);
-      if (typeof args.text === 'string') text = truncate(args.text, 120);
-    } else if (tool === 'text_editor') {
-      const action = args.action || 'edit';
-      const path = args.path || '';
-      cmd = truncate(`${action}${path ? ' ' + path : ''}`, 100);
-      if (typeof args.text === 'string') text = truncate(args.text, 120);
-    } else {
-      cmd = truncate(args.command || args.cmd || args.action || '', 100);
-      if (typeof args.text === 'string') text = truncate(args.text, 120);
-    }
-    return { tool: call.tool, cmd, text };
-  }
-  function currentPendingSummary() {
+  // Latest in-progress response and last segment summary
+  function latestInProgressMessage() {
     try {
       if (!Array.isArray(chat)) return null;
       for (let i = chat.length - 1; i >= 0; i--) {
         const m = chat[i];
-        if (m && m.role === 'agent' && hasComposite(m) && isInProgress(m)) {
-          const call = latestPendingToolCall(m);
-          if (call) return summarizePendingCall(call);
-        }
+        if (m && m.role === 'agent' && hasComposite(m) && isInProgress(m)) return m;
       }
       return null;
     } catch (_) { return null; }
   }
-  $: pendingSummary = currentPendingSummary();
-  // Get the most recent unpaired tool_call tool name, if any
-  function pendingToolName(m) {
+  function lastSegment(m) {
     try {
       const segs = segmentsOf(m);
       if (!Array.isArray(segs) || !segs.length) return null;
-      for (let j = segs.length - 1; j >= 0; j--) {
-        const s = segs[j];
-        if (segType(s) === 'tool_call') {
-          const next = segs[j + 1];
-          if (!(next && segType(next) === 'tool_result' && segTool(next) === segTool(s))) return segTool(s);
-        }
-      }
-      return null;
+      return segs[segs.length - 1];
     } catch (_) { return null; }
   }
-  function currentBusyStatus() {
-    if (stateStr !== 'busy') return null;
-    // Scan latest agent response bubbles for in-progress composite
-    if (Array.isArray(chat)) {
-      for (let i = chat.length - 1; i >= 0; i--) {
-        const m = chat[i];
-        if (m && m.role === 'agent' && hasComposite(m)) {
-          if (isInProgress(m)) {
-            const t = pendingToolName(m);
-            if (t) return `Running ${toolLabel(t)}...`;
-            return 'Thinking...';
-          }
-        }
+  function summarizeSegment(seg) {
+    if (!seg) return null;
+    const tool = segTool(seg);
+    const t = String(tool || '').toLowerCase();
+    const type = segType(seg);
+    let cmd = '';
+    let text = '';
+    if (type === 'tool_call') {
+      const a = segArgs(seg) || {};
+      if (t === 'bash') {
+        cmd = truncate(a.command || a.cmd || '', 100);
+        if (typeof a.text === 'string') text = truncate(a.text, 120);
+      } else if (t === 'text_editor') {
+        const action = a.action || 'edit';
+        const path = a.path || '';
+        cmd = truncate(`${action}${path ? ' ' + path : ''}`, 100);
+        if (typeof a.text === 'string') text = truncate(a.text, 120);
+      } else {
+        cmd = truncate(a.command || a.cmd || a.action || JSON.stringify(a) || '', 100);
       }
+    } else if (type === 'tool_result') {
+      const out = segOutput(seg);
+      if (typeof out === 'string') text = truncate(out, 120);
+      else cmd = truncate(JSON.stringify(out), 100);
     }
-    // Default busy indicator
-    return 'Working...';
+    return { tool, cmd, text };
   }
+  $: inProgressMsg = latestInProgressMessage();
+  $: inProgressLastSeg = inProgressMsg ? lastSegment(inProgressMsg) : null;
+  $: inProgressSummary = inProgressLastSeg ? summarizeSegment(inProgressLastSeg) : null;
 
   // Normalize metadata to an object (handles string-serialized JSON)
   function metaOf(m) {
@@ -959,25 +909,25 @@
             {/if}
           {/each}
         {/if}
-        {#if !showDetails && pendingSummary}
+        {#if !showDetails && inProgressSummary}
           <div class="d-flex mb-1 justify-content-start">
             <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
-              <span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{toolLabel(pendingSummary.tool)}</span>
-              {#if pendingSummary.cmd}
-                <span class="font-monospace">{pendingSummary.cmd}</span>
+              <span class="badge rounded-pill bg-transparent border text-body text-opacity-75">{toolLabel(inProgressSummary.tool)}</span>
+              {#if inProgressSummary.cmd}
+                <span class="font-monospace">{inProgressSummary.cmd}</span>
               {/if}
-              {#if pendingSummary.text}
+              {#if inProgressSummary.text}
                 <span class="text-body-secondary">—</span>
-                <span class="font-monospace">{pendingSummary.text}</span>
+                <span class="font-monospace">{inProgressSummary.text}</span>
               {/if}
             </div>
           </div>
         {/if}
-        {#if stateStr === 'busy'}
+        {#if inProgressMsg}
           <div class="d-flex mb-2 justify-content-start">
             <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
               <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span>{currentBusyStatus()}</span>
+              <span>Working...</span>
             </div>
           </div>
         {/if}
