@@ -158,15 +158,16 @@ impl ResponseHandler {
                 Err(e) => {
                     call_attempts += 1;
                     warn!("Ollama API call failed (attempt {}): {}", call_attempts, e);
-                    if call_attempts < 5 {
-                        // brief backoff then retry without marking failed
-                        tokio::time::sleep(std::time::Duration::from_millis(300 * (1 << (call_attempts - 1)))).await;
+                    if call_attempts < 10 {
+                        // light linear backoff then retry without marking failed
+                        let delay_ms = 250 * call_attempts; // 250ms, 500ms, ...
+                        tokio::time::sleep(std::time::Duration::from_millis(delay_ms as u64)).await;
                         continue;
                     } else {
                         // bubble error to defer processing; do not mark failed here
                         return Err(super::error::HostError::Model(format!(
-                            "Ollama call failed after retries: {}",
-                            e
+                            "Ollama call failed after {} retries: {}",
+                            call_attempts, e
                         )));
                     }
                 }
