@@ -276,6 +276,7 @@ impl AgentManager {
             "wake_agent" => self.handle_wake_agent(task.clone()).await,
             "publish_agent" => self.handle_publish_agent(task.clone()).await,
             "unpublish_agent" => self.handle_unpublish_agent(task.clone()).await,
+            "create_response" => self.handle_create_response(task.clone()).await,
             _ => {
                 warn!("Unknown task type: {}", task.task_type);
                 Err(anyhow::anyhow!("Unknown task type"))
@@ -668,6 +669,79 @@ impl AgentManager {
             .await?;
             info!("Prompt response {} created for woken agent {}", response_id, agent_name);
         }
+
+        Ok(())
+    }
+
+    pub async fn handle_create_response(&self, task: AgentTask) -> Result<()> {
+        let agent_name = task.agent_name.clone();
+        let principal = task.created_by.clone();
+
+        info!("Handling create_response for agent {}", agent_name);
+
+        // Parse payload
+        let response_id = task
+            .payload
+            .get("response_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing response_id in payload"))?;
+        let input = task
+            .payload
+            .get("input")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({"text":""}));
+        let wake_if_slept = task
+            .payload
+            .get("wake_if_slept")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        // Inspect agent state
+        let state_opt: Option<(String,)> = sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
+            .bind(&agent_name)
+            .fetch_optional(&self.pool)
+            .await?;
+        let state = state_opt.map(|t| t.0).unwrap_or_default();
+
+        // Wake if needed
+        if wake_if_slept && state == "slept" {
+            info!("Agent {} slept; waking prior to inserting response", agent_name);
+            let wake_token = self
+                .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
+            self.docker_manager
+                .wake_container_with_tokens(
+                    &agent_name,
+                    wake_token,
+                    principal.clone(),
+                    "User".to_string(),
+                    task.created_at,
+                )
+                .await?;
+            sqlx::query(
+                r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
+            )
+            .bind(&agent_name)
+            .execute(&self.pool)
+            .await?;
+        }
+
+        // Insert response row
+        let output_json = serde_json::json!({ "text": "", "items": [] });
+        sqlx::query(
+            r#"
+            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
+            "#,
+        )
+        .bind(&response_id)
+        .bind(&agent_name)
+        .bind(&principal)
+        .bind(&input)
+        .bind(&output_json)
+        .execute(&self.pool)
+        .await?;
+        info!("Inserted response {} for agent {}", response_id, agent_name);
 
         Ok(())
     }

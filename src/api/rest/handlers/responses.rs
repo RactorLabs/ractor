@@ -41,6 +41,8 @@ pub async fn create_response(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateResponseRequest>,
 ) -> ApiResult<Json<ResponseView>> {
+    use tokio::time::{sleep, Duration, Instant};
+
     let agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
@@ -57,54 +59,16 @@ pub async fn create_response(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // If agent is sleeping, wake via Controller before creating the response.
-    // This ensures the agent's RAWORC_TASK_CREATED_AT precedes the response timestamp
-    // so the agent will pick it up on wake.
-    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
-        // Only the owner may wake their own agent (match wake_agent semantics)
-        if agent.created_by != *created_by {
-            return Err(ApiError::Forbidden(
-                "You can only wake your own agents.".to_string(),
-            ));
-        }
-
-        // Update agent state to INIT and bump activity timestamp if currently slept
-        let result = sqlx::query(
-            r#"
-            UPDATE agents 
-            SET state = 'init', last_activity_at = CURRENT_TIMESTAMP
-            WHERE name = ? AND state = 'slept'
-            "#,
-        )
-        .bind(&agent_name)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake agent: {}", e)))?;
-
-        if result.rows_affected() == 0 {
-            return Err(ApiError::NotFound("Agent not found".to_string()));
-        }
-
-        // Create wake task for Controller with a small prompt
-        let wake_payload = serde_json::json!({ "prompt": "Incoming chat message" });
-        sqlx::query(
-            r#"
-            INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-            VALUES (?, 'wake_agent', ?, ?, 'pending')
-            "#,
-        )
-        .bind(&agent_name)
-        .bind(created_by)
-        .bind(&wake_payload)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed to create wake task: {:?}", e);
-            ApiError::Internal(anyhow::anyhow!("Failed to create wake task: {}", e))
-        })?;
+    // If agent is sleeping, only owner can implicitly wake via this path
+    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT
+        && agent.created_by != *created_by
+    {
+        return Err(ApiError::Forbidden(
+            "You can only wake your own agents.".to_string(),
+        ));
     }
 
-    // If agent is idle, mark busy
+    // If agent is idle, mark busy to signal work enqueued
     if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE {
         sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)
             .bind(crate::shared::models::constants::AGENT_STATE_BUSY)
@@ -115,15 +79,32 @@ pub async fn create_response(
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
     }
 
-    let created = AgentResponse::create(&state.db, &agent_name, created_by, req.clone())
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create response: {}", e)))?;
+    // Generate response id that Controller will use when inserting the DB row
+    let response_id = uuid::Uuid::new_v4().to_string();
+
+    // Enqueue Controller task to wake (if needed) and create the response row
+    let payload = serde_json::json!({
+        "response_id": response_id,
+        "input": req.input,
+        "wake_if_slept": true,
+        "background": req.background.unwrap_or(true)
+    });
+    sqlx::query(
+        r#"
+        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
+        VALUES (?, 'create_response', ?, ?, 'pending')
+        "#,
+    )
+    .bind(&agent_name)
+    .bind(created_by)
+    .bind(payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create response task: {}", e)))?;
 
     // If background flag is false, block until terminal state or timeout
     let background = req.background.unwrap_or(true);
     if !background {
-        use tokio::time::{sleep, Duration, Instant};
-
         let start = Instant::now();
         let timeout = Duration::from_secs(15 * 60); // 15 minutes
         let poll_interval = Duration::from_millis(500);
@@ -131,11 +112,13 @@ pub async fn create_response(
         loop {
             // Check timeout first
             if start.elapsed() >= timeout {
-                return Err(ApiError::Timeout("Timed out waiting for response to complete".to_string()));
+                return Err(ApiError::Timeout(
+                    "Timed out waiting for response to complete".to_string(),
+                ));
             }
 
-            // Reload current response
-            match AgentResponse::find_by_id(&state.db, &created.id).await {
+            // Reload current response by the preassigned id
+            match AgentResponse::find_by_id(&state.db, &response_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
                     if status_lc == "completed" || status_lc == "failed" {
@@ -151,14 +134,13 @@ pub async fn create_response(
                     }
                 }
                 Ok(None) => {
-                    // Response disappeared; treat as not found
-                    return Err(ApiError::NotFound("Response not found".to_string()));
+                    // Not inserted yet; keep waiting
                 }
                 Err(e) => {
-                    return Err(ApiError::Internal(anyhow::anyhow!(format!(
+                    return Err(ApiError::Internal(anyhow::anyhow!(
                         "Failed to fetch response: {}",
                         e
-                    ))));
+                    )));
                 }
             }
 
@@ -166,14 +148,16 @@ pub async fn create_response(
         }
     }
 
+    // Non-blocking request: return a stub ResponseView acknowledging enqueued work
+    let now = chrono::Utc::now().to_rfc3339();
     Ok(Json(ResponseView {
-        id: created.id,
-        agent_name: created.agent_name,
-        status: created.status,
-        input: created.input,
-        output: created.output,
-        created_at: created.created_at.to_rfc3339(),
-        updated_at: created.updated_at.to_rfc3339(),
+        id: response_id,
+        agent_name: agent_name,
+        status: "pending".to_string(),
+        input: req.input,
+        output: serde_json::json!({ "text": "", "items": [] }),
+        created_at: now.clone(),
+        updated_at: now,
     }))
 }
 
