@@ -122,7 +122,16 @@
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
         <div class="fw-bold">Create Agent</div>
-        <div class="ms-auto small text-body text-opacity-75">Defaults prefilled — adjust as needed</div>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
+          <button class="btn btn-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Create agent">
+            {#if loading}
+              <span class="spinner-border spinner-border-sm me-2"></span>Creating…
+            {:else}
+              <i class="bi bi-plus me-1"></i>Create Agent
+            {/if}
+          </button>
+        </div>
       </div>
       <div class="card-body">
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
