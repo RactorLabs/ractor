@@ -140,23 +140,7 @@
               <label class="form-label" for="description">Description (optional)</label>
               <input id="description" class="form-control" bind:value={description} placeholder="Short description of this agent" />
             </div>
-            <!-- Timeouts moved to a new line below name -->
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
-              <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
-              <div class="form-text">Sleep after idle (default 300).</div>
-            </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
-              <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
-              <div class="form-text">Sleep after busy too long (default 900).</div>
-            </div>
-
-            <div class="col-12">
-              <label class="form-label" for="tags">Tags (comma-separated)</label>
-              <input id="tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
-              <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
-            </div>
+            
 
             <div class="col-12">
               <label class="form-label" for="prompt">Starting Prompt (optional)</label>
@@ -189,6 +173,24 @@
                 {/each}
                 <div class="col-12"><button class="btn btn-outline-secondary btn-sm" on:click|preventDefault={addSecretRow}>+ Add secret</button></div>
               </div>
+            </div>
+
+            <!-- Move Timeouts and Tags after Secrets, before Metadata -->
+            <div class="col-12 col-md-3">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
+              <div class="form-text">Sleep after idle (default 300).</div>
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
+              <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
+              <div class="form-text">Sleep after busy too long (default 900).</div>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label" for="tags">Tags (comma-separated)</label>
+              <input id="tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
+              <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
             </div>
 
             <!-- Metadata moved to the bottom of the form -->
