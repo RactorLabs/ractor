@@ -151,6 +151,7 @@ impl ResponseHandler {
         // Track whether we have already appended any segments to avoid duplicating commentary
         let mut items_sent: usize = 0;
         let mut call_attempts: u32 = 0;
+        let mut spill_retry_attempts: u32 = 0;
         loop {
             // Call model (with simple retry/backoff inside ollama client)
             let model_resp: ModelResponse = match self
@@ -235,6 +236,33 @@ impl ResponseHandler {
                     conversation.push(ChatMessage { role:"tool".to_string(), content: tool_content_str, name: Some(tool_name.clone()), tool_call_id: None });
                     continue;
                 }
+            }
+
+            // If no tool call was parsed but the assistant content looks like raw JSON
+            // not wrapped in backticks, treat it as a spillover (failed tool parsing).
+            // Log as invalid tool and retry with a brief system nudge.
+            let content_trimmed = model_resp.content.trim();
+            let looks_like_spillover_json = content_trimmed.starts_with('{') && !content_trimmed.starts_with("```");
+            if looks_like_spillover_json {
+                spill_retry_attempts += 1;
+                let dev_note = "Developer note: Received raw JSON in assistant content without backticks. Treating as a failed tool-call parse. Please emit a proper tool_call with function name and arguments. Always wrap code/JSON in backticks and never wrap URLs.";
+                let items = vec![
+                    serde_json::json!({"type":"tool_call_invalid","tool":"(spillover)", "args": null, "raw": model_resp.content }),
+                    serde_json::json!({"type":"note","level":"warning","text": dev_note}),
+                ];
+                let _ = self
+                    .api_client
+                    .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                    .await;
+
+                // Nudge the model; do not add the spillover JSON into conversation history
+                conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
+
+                // Limit spillover retries to avoid infinite loops
+                if spill_retry_attempts < 5 {
+                    continue;
+                }
+                // If exceeded retries, fall through to finalize the text as-is
             }
 
             // Final answer
@@ -337,6 +365,7 @@ You are running as an Agent in the {host_name} system.
 - The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
 
 ### Important Behavior
+- IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
 - When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
