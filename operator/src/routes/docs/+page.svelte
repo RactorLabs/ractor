@@ -6,7 +6,7 @@
   import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.9.3 (v0)';
+  const API_VERSION = '0.9.4 (v0)';
   const schemas = getCommonSchemas();
   // Compute docs once reactively and order Published section last
   $: docs = (() => {
@@ -278,6 +278,7 @@
       <div class="card-header fw-bold">Items Structure (output.items)</div>
       <div class="card-body p-3 p-sm-4 small">
         <div class="mb-2">The <span class="font-monospace">output.items</span> array captures step-by-step progress, tool usage, and final output. Items are appended in order.</div>
+        <div class="mb-2 small text-body text-opacity-75">The <span class="font-monospace">tool_result.output</span> value may be plain text or structured JSON. The UI renders JSON objects/arrays directly and falls back to strings for text outputs.</div>
         <div class="fw-500 small text-body text-opacity-75 mb-1">Item types</div>
         <div class="table-responsive mb-2">
           <table class="table table-sm table-bordered">

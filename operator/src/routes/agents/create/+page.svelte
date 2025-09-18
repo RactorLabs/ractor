@@ -158,18 +158,20 @@
               <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
             </div>
 
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="instructions">Instructions (Markdown)</label>
-              <textarea id="instructions" class="form-control font-monospace" rows="6" bind:value={instructions}></textarea>
-            </div>
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="setup">Setup Script (bash)</label>
-              <textarea id="setup" class="form-control font-monospace" rows="6" bind:value={setup}></textarea>
+            <div class="col-12">
+              <label class="form-label" for="prompt">Starting Prompt (optional)</label>
+              <textarea id="prompt" class="form-control" rows="3" bind:value={prompt}></textarea>
             </div>
 
-            <div class="col-12">
-              <label class="form-label" for="prompt">Initial Prompt (optional)</label>
-              <textarea id="prompt" class="form-control" rows="3" bind:value={prompt}></textarea>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="instructions">Starting System Instruction (Markdown)</label>
+              <textarea id="instructions" class="form-control font-monospace" rows="6" bind:value={instructions}></textarea>
+              <div class="form-text">You can change these later by directly asking the agent to update its instructions.</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="setup">Starting Setup Script (bash)</label>
+              <textarea id="setup" class="form-control font-monospace" rows="6" bind:value={setup}></textarea>
+              <div class="form-text">You can modify this later by asking the agent to update its setup.sh.</div>
             </div>
 
             <div class="col-12">

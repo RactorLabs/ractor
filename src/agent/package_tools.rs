@@ -40,13 +40,13 @@ impl Tool for PythonPackageTool {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
         let action = args.get("action").and_then(|v| v.as_str()).unwrap_or("check");
         let packages = args.get("packages").and_then(|v| v.as_array());
         let upgrade = args.get("upgrade").and_then(|v| v.as_bool()).unwrap_or(false);
 
         if packages.is_none() {
-            return Ok("[python_package error] No packages specified".to_string());
+            return Ok(serde_json::json!({"status":"error","tool":"python_package","error":"No packages specified"}));
         }
 
         let packages: Vec<String> = packages.unwrap()
@@ -56,19 +56,19 @@ impl Tool for PythonPackageTool {
             .collect();
 
         if packages.is_empty() {
-            return Ok("[python_package error] No valid packages specified".to_string());
+            return Ok(serde_json::json!({"status":"error","tool":"python_package","error":"No valid packages specified"}));
         }
 
         match action {
             "check" => check_packages(&packages).await,
             "install" => install_packages(&packages, upgrade).await,
             "check_and_install" => check_and_install_packages(&packages, upgrade).await,
-            _ => Ok("[python_package error] Invalid action".to_string()),
+            _ => Ok(serde_json::json!({"status":"error","tool":"python_package","error":"Invalid action"})),
         }
     }
 }
 
-async fn check_packages(packages: &[String]) -> Result<String> {
+async fn check_packages(packages: &[String]) -> Result<serde_json::Value> {
     let mut results = Vec::new();
     
     for package in packages {
@@ -80,21 +80,21 @@ async fn check_packages(packages: &[String]) -> Result<String> {
         }
     }
     
-    Ok(format!("[python_package check]\n{}", results.join("\n")))
+    Ok(serde_json::json!({"status":"ok","tool":"python_package","action":"check","output": results.join("\n")}))
 }
 
-async fn install_packages(packages: &[String], upgrade: bool) -> Result<String> {
+async fn install_packages(packages: &[String], upgrade: bool) -> Result<serde_json::Value> {
     let upgrade_flag = if upgrade { " --upgrade" } else { "" };
     let packages_str = packages.join(" ");
     let cmd = format!("pip install{} {}", upgrade_flag, packages_str);
     
     match run_bash(&cmd).await {
-        Ok(output) => Ok(format!("[python_package install]\n{}", output)),
-        Err(e) => Ok(format!("[python_package install error] {}", e)),
+        Ok(output) => Ok(serde_json::json!({"status":"ok","tool":"python_package","action":"install","output": output})),
+        Err(e) => Ok(serde_json::json!({"status":"error","tool":"python_package","action":"install","error": e.to_string()})),
     }
 }
 
-async fn check_and_install_packages(packages: &[String], upgrade: bool) -> Result<String> {
+async fn check_and_install_packages(packages: &[String], upgrade: bool) -> Result<serde_json::Value> {
     // First check which packages are missing
     let mut missing_packages = Vec::new();
     let mut available_packages = Vec::new();
@@ -132,7 +132,7 @@ async fn check_and_install_packages(packages: &[String], upgrade: bool) -> Resul
         result.push("All packages are already available.".to_string());
     }
     
-    Ok(format!("[python_package check_and_install]\n{}", result.join("\n")))
+    Ok(serde_json::json!({"status":"ok","tool":"python_package","action":"check_and_install","output": result.join("\n")}))
 }
 
 #[cfg(test)]

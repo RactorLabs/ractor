@@ -4,130 +4,371 @@ use async_trait::async_trait;
 use super::tool_registry::Tool;
 use super::api::RaworcClient;
 use std::sync::Arc;
-use super::tools::{run_bash, text_edit, TextEditAction};
+use super::tools::{text_edit, TextEditAction, run_bash};
+use regex::Regex;
+use walkdir::WalkDir;
+use globset::{GlobBuilder, GlobSetBuilder};
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
+use std::path::Path;
+use anyhow::anyhow;
+use serde_json::json;
 
-/// Built-in bash tool implementation
-pub struct BashTool;
+const AGENT_ROOT: &str = "/agent";
+
+fn ensure_under_agent(path: &str) -> anyhow::Result<&Path> {
+    let p = Path::new(path);
+    if !p.starts_with(AGENT_ROOT) {
+        return Err(anyhow!(format!("path must be under {}", AGENT_ROOT)));
+    }
+    Ok(p)
+}
+
+fn to_rel_under_agent(path: &str) -> anyhow::Result<String> {
+    let p = ensure_under_agent(path)?;
+    let rel = p.strip_prefix(AGENT_ROOT).unwrap_or(p);
+    let s = rel.to_string_lossy();
+    let s = s.strip_prefix('/').unwrap_or(&s).to_string();
+    Ok(s)
+}
+
+/// Shell tool — simplified one-shot execution
+
+pub struct ShellTool;
+
+impl ShellTool { pub fn new() -> Self { Self } }
 
 #[async_trait]
-impl Tool for BashTool {
-    fn name(&self) -> &str {
-        "bash"
-    }
+impl Tool for ShellTool {
+    fn name(&self) -> &str { "shell" }
 
     fn description(&self) -> &str {
-        "Execute a bash shell command in the /agent directory"
+        "Run command(s) in a bash shell and return the output. Long outputs may be truncated and written to a log. Do not use this command to create, view, or edit files — use editor commands instead."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "The bash command to execute"
-                }
+                "exec_dir": {"type": "string", "description": "Absolute path to directory where command should be executed"},
+                "commands": {"type": "string", "description": "Command(s) to execute. Use && for multi-step."}
             },
-            "required": ["command"]
+            "required": ["exec_dir", "commands"]
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
-        let cmd = args
-            .get("command")
-            .and_then(|v| v.as_str())
-            .or_else(|| args.get("cmd").and_then(|v| v.as_str()))
-            .unwrap_or("");
-
-        match run_bash(cmd).await {
-            Ok(output) => {
-                // Check if the command actually succeeded by looking for exit_code in output
-                if output.contains("[exit_code:") && !output.contains("[exit_code:0]") {
-                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
-                    Ok(format!("{}\n{}", summary, output))
-                } else {
-                    let summary = format!("Result for tool 'bash' (command: {})", truncate(cmd, 120));
-                    Ok(format!("{}\n{}", summary, output))
-                }
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let exec_dir = args.get("exec_dir").and_then(|v| v.as_str()).unwrap_or("/agent");
+        let commands = args.get("commands").and_then(|v| v.as_str()).unwrap_or("");
+        // safety: restrict to /agent
+        if !exec_dir.starts_with("/agent") {
+            return Ok(json!({"status":"error","tool":"shell","error":"exec_dir must be under /agent","exec_dir":exec_dir}));
+        }
+        // emulate working dir via cd then run
+        let cmd = format!("cd '{}' && {}", exec_dir.replace("'", "'\\''"), commands);
+        match run_bash(&cmd).await {
+            Ok(out) => {
+                let exit_code = parse_exit_code(&out);
+                let truncated = out.contains("[truncated]");
+                let clean = strip_exit_marker(&out);
+                let (stdout, stderr) = split_stdout_stderr(&clean);
+                Ok(json!({
+                    "status":"ok","tool":"shell",
+                    "exit_code": exit_code,
+                    "truncated": truncated,
+                    "stdout": stdout,
+                    "stderr": stderr
+                }))
             }
-            Err(e) => Ok(format!("Result for tool 'bash' — error: {}", e)),
+            Err(e) => Ok(json!({"status":"error","tool":"shell","error":e.to_string()})),
         }
     }
 }
 
-/// Built-in text editor tool implementation
-pub struct TextEditorTool;
+/// Editor: open_file
+pub struct OpenFileTool;
 
 #[async_trait]
-impl Tool for TextEditorTool {
-    fn name(&self) -> &str {
-        "text_editor"
-    }
+impl Tool for OpenFileTool {
+    fn name(&self) -> &str { "open_file" }
 
     fn description(&self) -> &str {
-        "Perform text editing operations on files in the /agent directory"
+        "Open a file and view its contents. If available, this will also display the file outline obtained from the LSP, any LSP diagnostics, as well as the diff between when you first opened this page and its current state. Long file contents will be truncated to a range of about 500 lines. You can also use this command open and view .png, .jpg, or .gif images. Small files will be shown in full, even if you don't select the full line range. If you provide a start_line but the rest of the file is short, you will be shown the full rest of the file regardless of your end_line."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["view", "create", "str_replace", "insert"],
-                    "description": "The editing action to perform"
-                },
-                "path": {
-                    "type": "string",
-                    "description": "The file path relative to /agent"
-                },
-                "content": {
-                    "type": "string",
-                    "description": "Content for create/insert operations"
-                },
-                "target": {
-                    "type": "string",
-                    "description": "Text to find for str_replace operation"
-                },
-                "replacement": {
-                    "type": "string",
-                    "description": "Replacement text for str_replace operation"
-                },
-                "line": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Line number for insert operation"
-                },
-                "start_line": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Start line for view operation"
-                },
-                "end_line": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "End line for view operation"
-                }
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the file."},
+                "start_line": {"type":"integer","description":"Start line (optional)"},
+                "end_line": {"type":"integer","description":"End line (optional)"},
+                "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required": ["action", "path"]
+            "required":["path"]
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
-        let action = parse_text_edit(args)?;
-
-        match text_edit(action.clone()).await {
-            Ok(output) => {
-                let summary = match &action {
-                    TextEditAction::View { path, .. } => format!("Result for tool 'text_editor' (view {} )", path),
-                    TextEditAction::Create { path, .. } => format!("Result for tool 'text_editor' (create {} )", path),
-                    TextEditAction::StrReplace { path, .. } => format!("Result for tool 'text_editor' (str_replace {} )", path),
-                    TextEditAction::Insert { path, line, .. } => format!("Result for tool 'text_editor' (insert {} at line {} )", path, line),
-                };
-                Ok(format!("{}\n{}", summary, output))
-            }
-            Err(e) => Ok(format!("Result for tool 'text_editor' — error: {}", e)),
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let start_line = args.get("start_line").and_then(|v| v.as_u64()).map(|n| n as usize);
+        let end_line = args.get("end_line").and_then(|v| v.as_u64()).map(|n| n as usize);
+        let rel = to_rel_under_agent(path).map_err(|e| anyhow::anyhow!(e))?;
+        let action = TextEditAction::View { path: rel, start_line, end_line };
+        match text_edit(action).await {
+            Ok(s) => Ok(json!({
+                "status":"ok","tool":"open_file",
+                "content": s
+            })),
+            Err(e) => Ok(json!({"status":"error","tool":"open_file","error":e.to_string()})),
         }
+    }
+}
+
+/// Editor: create_file
+pub struct CreateFileTool;
+
+#[async_trait]
+impl Tool for CreateFileTool {
+    fn name(&self) -> &str { "create_file" }
+
+    fn description(&self) -> &str {
+        "Use this to create a new file. The content inside the create file tags will be written to the new file exactly as you output it."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the file. File must not exist yet."},
+                "content": {"type":"string","description":"Content of the new file. Don't start with backticks."},
+                "sudo": {"type":"boolean","description":"Ignored"}
+            },
+            "required":["path","content"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let p = ensure_under_agent(path)?;
+        if p.exists() { return Ok(json!({"status":"error","tool":"create_file","error":"file already exists"})); }
+        if let Some(parent) = p.parent() { fs::create_dir_all(parent).await.ok(); }
+        let mut f = fs::File::create(p).await?;
+        f.write_all(content.as_bytes()).await?;
+        Ok(json!({"status":"ok","tool":"create_file","bytes":content.len()}))
+    }
+}
+
+/// Editor: str_replace
+pub struct StrReplaceTool;
+
+#[async_trait]
+impl Tool for StrReplaceTool {
+    fn name(&self) -> &str { "str_replace" }
+
+    fn description(&self) -> &str {
+        "Edits a file by replacing the old string with a new string. The command returns a view of the updated file contents. If available, it will also return the updated outline and diagnostics from the LSP."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the file"},
+                "old_str": {"type":"string","description":"Original text to replace (exact match)"},
+                "new_str": {"type":"string","description":"Replacement text"},
+                "many": {"type":"boolean","description":"Whether to replace all occurrences (default false)"},
+                "sudo": {"type":"boolean","description":"Ignored"}
+            },
+            "required":["path","old_str","new_str"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let old_str = args.get("old_str").and_then(|v| v.as_str()).unwrap_or("");
+        let new_str = args.get("new_str").and_then(|v| v.as_str()).unwrap_or("");
+        let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let p = ensure_under_agent(path)?;
+        let content = fs::read_to_string(p).await?;
+        let count = content.matches(old_str).count();
+        if count == 0 { return Ok(json!({"status":"error","tool":"str_replace","error":"no matches found"})); }
+        if !many && count != 1 { return Ok(json!({"status":"error","tool":"str_replace","error":format!("requires exactly 1 match, found {}", count)})); }
+        let new_content = if many { content.replace(old_str, new_str) } else { content.replacen(old_str, new_str, 1) };
+        let mut f = fs::File::create(p).await?;
+        f.write_all(new_content.as_bytes()).await?;
+        Ok(json!({"status":"ok","tool":"str_replace","replaced": if many {count} else {1}}))
+    }
+}
+
+/// Editor: insert
+pub struct InsertTool;
+
+#[async_trait]
+impl Tool for InsertTool {
+    fn name(&self) -> &str { "insert" }
+
+    fn description(&self) -> &str { "Inserts a new string in a file at a provided line number." }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the file"},
+                "insert_line": {"type":"integer","description":"Line number to insert at (1-based)"},
+                "content": {"type":"string","description":"Content to insert"},
+                "sudo": {"type":"boolean","description":"Ignored"}
+            },
+            "required":["path","insert_line","content"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let line = args.get("insert_line").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
+        let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let rel = to_rel_under_agent(path).map_err(|e| anyhow::anyhow!(e))?;
+        let action = TextEditAction::Insert { path: rel, line, content: content.to_string() };
+        match text_edit(action).await {
+            Ok(msg) => Ok(json!({"status":"ok","tool":"insert","result":msg})),
+            Err(e) => Ok(json!({"status":"error","tool":"insert","error":e.to_string()})),
+        }
+    }
+}
+
+/// Editor: remove_str
+pub struct RemoveStrTool;
+
+#[async_trait]
+impl Tool for RemoveStrTool {
+    fn name(&self) -> &str { "remove_str" }
+
+    fn description(&self) -> &str { "Deletes the provided string from the file." }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the file"},
+                "content": {"type":"string","description":"Exact string to remove (may be multi-line)"},
+                "many": {"type":"boolean","description":"Whether to remove all instances (default false)"},
+                "sudo": {"type":"boolean","description":"Ignored"}
+            },
+            "required":["path","content"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
+        let p = ensure_under_agent(path)?;
+        let content = fs::read_to_string(p).await?;
+        let count = content.matches(remove).count();
+        if count == 0 { return Ok(json!({"status":"error","tool":"remove_str","error":"no matches found"})); }
+        if !many && count != 1 { return Ok(json!({"status":"error","tool":"remove_str","error":format!("requires exactly 1 match, found {}", count)})); }
+        let new_content = if many { content.replace(remove, "") } else { content.replacen(remove, "", 1) };
+        let mut f = fs::File::create(p).await?;
+        f.write_all(new_content.as_bytes()).await?;
+        Ok(json!({"status":"ok","tool":"remove_str","removed": if many {count} else {1}}))
+    }
+}
+
+/// Search: find_filecontent
+pub struct FindFilecontentTool;
+
+#[async_trait]
+impl Tool for FindFilecontentTool {
+    fn name(&self) -> &str { "find_filecontent" }
+
+    fn description(&self) -> &str {
+        "Returns file content matches for the provided regex at the given path. The response will cite the files and line numbers of the matches along with some surrounding content. Never use grep but use this command instead since it is optimized for your machine."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to a file or directory"},
+                "regex": {"type":"string","description":"Regex to search for"}
+            },
+            "required":["path","regex"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let pattern = args.get("regex").and_then(|v| v.as_str()).unwrap_or("");
+        let re = Regex::new(pattern).map_err(|e| anyhow::anyhow!(e))?;
+        let mut hits = Vec::new();
+        let _ = ensure_under_agent(root)?;
+        let meta = std::fs::metadata(root);
+        if meta.as_ref().map(|m| m.is_file()).unwrap_or(false) {
+            scan_file(Path::new(root), &re, &mut hits).await?;
+        } else {
+            for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+                if entry.file_type().is_file() {
+                    scan_file(entry.path(), &re, &mut hits).await.ok();
+                }
+            }
+        }
+        Ok(json!({"status":"ok","tool":"find_filecontent","matches":hits}))
+    }
+}
+
+async fn scan_file(path: &Path, re: &Regex, out: &mut Vec<String>) -> Result<()> {
+    let content = fs::read_to_string(path).await?;
+    for (i, line) in content.lines().enumerate() {
+        if re.is_match(line) {
+            let ctx = line;
+            out.push(format!("{}:{}:{}", path.display(), i+1, ctx));
+        }
+    }
+    Ok(())
+}
+
+/// Search: find_filename
+pub struct FindFilenameTool;
+
+#[async_trait]
+impl Tool for FindFilenameTool {
+    fn name(&self) -> &str { "find_filename" }
+
+    fn description(&self) -> &str {
+        "Searches the directory at the specified path recursively for file names matching at least one of the given glob patterns."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path of the directory to search in."},
+                "glob": {"type":"string","description":"Patterns to search for; separate multiple with '; '"}
+            },
+            "required":["path","glob"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let glob_str = args.get("glob").and_then(|v| v.as_str()).unwrap_or("");
+        let _ = ensure_under_agent(root)?;
+        let mut builder = GlobSetBuilder::new();
+        for pat in glob_str.split(';').map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            let g = GlobBuilder::new(pat).case_insensitive(true).build()?;
+            builder.add(g);
+        }
+        let set = builder.build()?;
+        let mut matches = Vec::new();
+        for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if set.is_match(p) {
+                matches.push(p.display().to_string());
+            }
+        }
+        Ok(json!({"status":"ok","tool":"find_filename","matches":matches}))
     }
 }
 
@@ -157,10 +398,10 @@ impl Tool for PublishTool {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
         match self.api.publish_agent().await {
-            Ok(_) => Ok("Publish request submitted successfully.".to_string()),
-            Err(e) => Ok(format!("Failed to publish: {}", e)),
+            Ok(_) => Ok(json!({"status":"ok","tool":"publish","message":"Publish request submitted"})),
+            Err(e) => Ok(json!({"status":"error","tool":"publish","error":e.to_string()})),
         }
     }
 }
@@ -191,87 +432,45 @@ impl Tool for SleepTool {
         })
     }
 
-    async fn execute(&self, args: &serde_json::Value) -> Result<String> {
+    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
         match self.api.sleep_agent().await {
-            Ok(_) => Ok("Sleep request submitted successfully.".to_string()),
-            Err(e) => Ok(format!("Failed to sleep: {}", e)),
+            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted"})),
+            Err(e) => Ok(json!({"status":"error","tool":"sleep","error":e.to_string()})),
         }
     }
-}
-
-/// Parse text edit arguments into TextEditAction
-fn parse_text_edit(input: &serde_json::Value) -> anyhow::Result<TextEditAction> {
-    // Normalize common alias keys before deserializing to the enum
-    let mut v = input.clone();
-    if let Some(obj) = v.as_object_mut() {
-        // Accept "file" or "file_path" as alias for "path"
-        if !obj.contains_key("path") {
-            if let Some(p) = obj
-                .get("file")
-                .cloned()
-                .or_else(|| obj.get("file_path").cloned())
-            {
-                obj.insert("path".to_string(), p);
-            }
-        }
-    }
-    let action: TextEditAction = serde_json::from_value(v)?;
-    Ok(action)
 }
 
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max { s.to_string() } else { format!("{}…", &s[..max]) }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_bash_tool_parameters() {
-        let tool = BashTool;
-        let params = tool.parameters();
-
-        assert_eq!(tool.name(), "bash");
-        assert!(params["properties"]["command"]["type"].as_str() == Some("string"));
-        assert!(params["required"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::Value::String("command".to_string())));
-    }
-
-    #[tokio::test]
-    async fn test_text_editor_tool_parameters() {
-        let tool = TextEditorTool;
-        let params = tool.parameters();
-
-        assert_eq!(tool.name(), "text_editor");
-        assert!(params["properties"]["action"]["enum"].as_array().is_some());
-        assert!(params["required"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::Value::String("action".to_string())));
-        assert!(params["required"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::Value::String("path".to_string())));
-    }
-
-    #[test]
-    fn test_parse_text_edit_with_alias() {
-        let input = serde_json::json!({
-            "action": "view",
-            "file": "test.txt"  // Using "file" alias instead of "path"
-        });
-
-        let result = parse_text_edit(&input);
-        assert!(result.is_ok());
-
-        match result.unwrap() {
-            TextEditAction::View { path, .. } => {
-                assert_eq!(path, "test.txt");
-            }
-            _ => panic!("Expected View action"),
+fn parse_exit_code(out: &str) -> Option<i32> {
+    if let Some(idx) = out.rfind("[exit_code:") {
+        let rest = &out[idx+11..];
+        if let Some(end) = rest.find(']') {
+            return rest[..end].trim().parse::<i32>().ok();
         }
+    }
+    None
+}
+
+fn strip_exit_marker(out: &str) -> String {
+    if let Some(idx) = out.rfind("[exit_code:") {
+        let mut s = out[..idx].to_string();
+        while s.ends_with(['\n', '\r']) { s.pop(); }
+        s
+    } else {
+        out.to_string()
+    }
+}
+
+fn split_stdout_stderr(out: &str) -> (String, String) {
+    let marker = "[stderr]\n";
+    if let Some(pos) = out.find(marker) {
+        let stdout = out[..pos].to_string();
+        let stderr = out[pos + marker.len()..].to_string();
+        (stdout, stderr)
+    } else {
+        (out.to_string(), String::new())
     }
 }

@@ -303,6 +303,18 @@ impl OllamaClient {
                 let mut tool_results = Vec::new();
                 
                 for tool_call in tool_calls {
+                    // Insert a compact assistant message to record the tool call in history/logs
+                    let call_json = serde_json::json!({
+                        "tool_call": { "tool": tool_call.function.name, "args": tool_call.function.arguments }
+                    })
+                    .to_string();
+                    messages.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: call_json,
+                        name: None,
+                        tool_call_id: Some(tool_call.id.clone()),
+                    });
+
                     let result = self.execute_tool_call(tool_call, registry).await;
                     tool_results.push(result);
                 }
@@ -503,7 +515,8 @@ impl OllamaClient {
         match result {
             Ok(output) => {
                 tracing::info!("Tool call {} completed successfully", tool_call.id);
-                ToolResult::new(tool_call.id.clone(), output)
+                let content_str = output.as_str().map(|s| s.to_string()).unwrap_or_else(|| output.to_string());
+                ToolResult::new(tool_call.id.clone(), content_str)
             }
             Err(e) => {
                 tracing::error!("Tool call {} failed: {}", tool_call.id, e);

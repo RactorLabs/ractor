@@ -293,7 +293,19 @@
   function segText(s) { return String(s?.text || ''); }
   function segTool(s) { return String(s?.tool || ''); }
   function segArgs(s) { try { return (s && typeof s.args === 'object') ? s.args : null; } catch(_) { return null; } }
-  function segOutput(s) { return s?.output; }
+  function segOutput(s) {
+    try {
+      const o = s?.output;
+      if (typeof o === 'string') {
+        const t = o.trim();
+        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
+          try { return JSON.parse(t); } catch (_) { /* fallthrough */ }
+        }
+        return o; // plain text string
+      }
+      return o; // object/array/null
+    } catch (_) { return s?.output; }
+  }
   function segToolTitle(s) {
     try {
       const t = segTool(s).toLowerCase();

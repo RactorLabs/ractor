@@ -22,7 +22,8 @@ pub trait Tool: Send + Sync {
     fn parameters(&self) -> serde_json::Value;
 
     /// Execute the tool with given arguments
-    async fn execute(&self, args: &serde_json::Value) -> Result<String>;
+    /// Return structured JSON when possible; use strings only for plain text outputs
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value>;
 }
 
 /// Maps parameters from one tool format to another (for aliases)
@@ -104,7 +105,7 @@ impl ToolRegistry {
     }
 
     /// Execute a tool with the given arguments
-    pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<String> {
+    pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<serde_json::Value> {
         // Allow simple aliasing/normalization of incoming tool names
         let clean_name = name;
         tracing::info!("Executing tool: '{}'", clean_name);
@@ -240,7 +241,7 @@ impl ParameterMapper for ConfigParameterMapper {
     }
 }
 
-/// Parameter mapper specifically for container.exec -> bash
+/// Parameter mapper specifically for container.exec -> shell
 pub struct ContainerExecMapper;
 
 impl ParameterMapper for ContainerExecMapper {
@@ -260,8 +261,12 @@ impl ParameterMapper for ContainerExecMapper {
             String::new()
         };
 
+        // Optional working directory mapping
+        let exec_dir = args.get("workdir").and_then(|v| v.as_str()).unwrap_or("/agent");
+
         serde_json::json!({
-            "command": command
+            "exec_dir": exec_dir,
+            "commands": command
         })
     }
 }
@@ -294,8 +299,8 @@ mod tests {
             })
         }
 
-        async fn execute(&self, _args: &serde_json::Value) -> Result<String> {
-            Ok("test result".to_string())
+        async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
+            Ok(serde_json::json!({"status":"ok","tool":"test_tool","message":"test result"}))
         }
     }
 
