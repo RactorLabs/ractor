@@ -72,6 +72,10 @@
   let showThinking = false;
   const SHOW_THINKING_COOKIE = 'raworc_showThinking';
   let thinkingPrefLoaded = false;
+  // Toggle display of tool calls/results; persisted via cookie
+  let showTools = true;
+  const SHOW_TOOLS_COOKIE = 'raworc_showTools';
+  let toolsPrefLoaded = false;
   function getCookie(name) {
     try {
       const value = `; ${document.cookie}`;
@@ -94,12 +98,18 @@
       if (browser) {
         const v = getCookie(SHOW_THINKING_COOKIE);
         if (v !== null) showThinking = v === '1' || v === 'true';
+        const t = getCookie(SHOW_TOOLS_COOKIE);
+        if (t !== null) showTools = t === '1' || t === 'true';
       }
     } catch (_) {}
     thinkingPrefLoaded = true;
+    toolsPrefLoaded = true;
   });
   $: if (browser && thinkingPrefLoaded) {
     setCookie(SHOW_THINKING_COOKIE, showThinking ? '1' : '0', 365);
+  }
+  $: if (browser && toolsPrefLoaded) {
+    setCookie(SHOW_TOOLS_COOKIE, showTools ? '1' : '0', 365);
   }
   let loading = true;
   let error = null;
@@ -108,7 +118,7 @@
   let pollHandle = null;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
-  // Always show details (analysis + tool calls/results)
+  // Details (analysis + tool calls/results) visibility controlled via toggles
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
@@ -771,7 +781,11 @@
       <div class="d-flex align-items-center gap-2">
         <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
           <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">Show Thinking</label>
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">🧠</label>
+        </div>
+        <div class="form-check form-switch" title="Toggle display of tool calls/results">
+          <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
+          <label class="form-check-label small d-none d-sm-inline" for="toggle-tools">🛠️</label>
         </div>
       </div>
     </div>
@@ -809,6 +823,7 @@
                           <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
                         {/if}
                       {:else if segType(s) === 'tool_call'}
+                        {#if showTools}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">
@@ -837,7 +852,9 @@
                             </details>
                           </div>
                         {/if}
+                        {/if}
                       {:else if segType(s) === 'tool_result'}
+                        {#if showTools}
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-1 justify-content-start">
@@ -850,6 +867,7 @@
                             </details>
                           </div>
                         {/if}
+                        {/if}
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
                           <div class="markdown-wrap mt-1 mb-2">
@@ -861,7 +879,7 @@
                   </div>
                 </div>
               {:else}
-              {#if isToolExec(m)}
+              {#if isToolExec(m) && showTools}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
                   <details class="mt-0">
@@ -873,7 +891,7 @@
                 </div>
               {:else}
                 <!-- Tool response card or regular agent message -->
-                {#if isToolResult(m)}
+                {#if isToolResult(m) && showTools}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0">
