@@ -57,6 +57,53 @@ pub async fn create_response(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
+    // If agent is sleeping, wake via Controller before creating the response.
+    // This ensures the agent's RAWORC_TASK_CREATED_AT precedes the response timestamp
+    // so the agent will pick it up on wake.
+    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
+        // Only the owner may wake their own agent (match wake_agent semantics)
+        if agent.created_by != *created_by {
+            return Err(ApiError::Forbidden(
+                "You can only wake your own agents.".to_string(),
+            ));
+        }
+
+        // Update agent state to INIT and bump activity timestamp if currently slept
+        let result = sqlx::query(
+            r#"
+            UPDATE agents 
+            SET state = 'init', last_activity_at = CURRENT_TIMESTAMP
+            WHERE name = ? AND state = 'slept'
+            "#,
+        )
+        .bind(&agent_name)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake agent: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(ApiError::NotFound("Agent not found".to_string()));
+        }
+
+        // Create wake task for Controller with a small prompt
+        let wake_payload = serde_json::json!({ "prompt": "Incoming chat message" });
+        sqlx::query(
+            r#"
+            INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
+            VALUES (?, 'wake_agent', ?, ?, 'pending')
+            "#,
+        )
+        .bind(&agent_name)
+        .bind(created_by)
+        .bind(&wake_payload)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to create wake task: {:?}", e);
+            ApiError::Internal(anyhow::anyhow!("Failed to create wake task: {}", e))
+        })?;
+    }
+
     // If agent is idle, mark busy
     if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE {
         sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)

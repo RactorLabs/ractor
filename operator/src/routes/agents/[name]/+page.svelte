@@ -433,21 +433,6 @@
     if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Agent is busy'; } return; }
     sending = true;
     try {
-      // If the agent is sleeping, wake it first so RAWORC_TASK_CREATED_AT
-      // is set before we create the response (ensures the agent picks it up)
-      if (isSlept()) {
-        const wakeBody = { prompt: 'Incoming chat message' };
-        const wake = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, {
-          method: 'POST',
-          body: JSON.stringify(wakeBody)
-        });
-        if (!wake.ok) throw new Error(wake?.data?.message || wake?.data?.error || `Wake failed (HTTP ${wake.status})`);
-        // Reflect new state locally
-        agent = wake.data || { ...(agent || {}), state: 'init' };
-        // Small delay to ensure task creation timestamp is earlier than the response
-        try { await new Promise((r) => setTimeout(r, 100)); } catch (_) {}
-      }
-
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses`, {
         method: 'POST',
         body: JSON.stringify({ input: { text: content } })
