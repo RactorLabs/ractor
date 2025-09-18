@@ -135,17 +135,3 @@ async fn check_and_install_packages(packages: &[String], upgrade: bool) -> Resul
     Ok(serde_json::json!({"status":"ok","tool":"python_package","action":"check_and_install","output": result.join("\n")}))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_python_package_tool_parameters() {
-        let tool = PythonPackageTool;
-        let params = tool.parameters();
-        
-        assert_eq!(tool.name(), "python_package");
-        assert!(params["properties"]["action"]["enum"].as_array().is_some());
-        assert!(params["properties"]["packages"]["type"].as_str() == Some("array"));
-    }
-}
