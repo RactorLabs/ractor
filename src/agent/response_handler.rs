@@ -346,6 +346,7 @@ You are running as an Agent in the {host_name} system.
 - Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
 - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 - Never share a link to any content (the Published Content URL or any file beneath it) without publishing first. Every time you plan to share a content link, first perform a publish action, then include the full Published URL.
+ - Immediately publish after any change under /agent/content/ (create, edit, move, or delete) to refresh the public snapshot before you reference or share any of those paths.
 
 ## Identity
 
