@@ -65,6 +65,11 @@ impl ResponseHandler {
                     let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
+                    // Planner tools
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerCreateTool)).await;
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerAddTool)).await;
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerRemoveTool)).await;
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerCompleteTool)).await;
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -391,6 +396,7 @@ You are running as an Agent in the {host_name} system.
 ### Important Behavior
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
+- For multi-step tasks, create and use a plan: If you judge the request involves multiple steps, create a plan with `planner_create` (include an initial set of tasks). As you progress, keep the plan updated using `planner_add`, `planner_remove`, and `planner_complete`. Before marking a task complete, double-check work products; if in doubt, verify by checking the relevant files exist (e.g., via `planner_complete.verify_paths`, `open_file`, or `find_filename`).
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
 - When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
@@ -550,6 +556,39 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - glob (required): Patterns to search for in filenames; separate multiple patterns with `; `.
 
 ### Tool Result Schema
+
+### Planner Tools
+
+- Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
+- Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
+
+#### Tool: planner_create
+- Create a new plan file in `/agent/logs` with an optional title and initial tasks.
+- Parameters:
+  - title (optional): Plan title.
+  - tasks (optional): Array of task descriptions.
+- Returns: `{{ "path": string, "tasks": number }}` within the standard envelope.
+
+#### Tool: planner_add
+- Add a task to an existing plan file.
+- Parameters:
+  - path (required): Plan file path under `/agent/logs`.
+  - task (required): Task description.
+
+#### Tool: planner_remove
+- Remove a task by ID (preferred) or by exact title.
+- Parameters:
+  - path (required): Plan file path under `/agent/logs`.
+  - task_id (optional): Numeric ID.
+  - task (optional): Exact task title.
+
+#### Tool: planner_complete
+- Mark a task complete. Optionally verify files exist before completion.
+- Parameters:
+  - path (required): Plan file path under `/agent/logs`.
+  - task_id (required): Numeric ID.
+  - verify_paths (optional): Array of absolute file paths under `/agent` to check for existence.
+  - force (optional): Complete even if verification fails.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"

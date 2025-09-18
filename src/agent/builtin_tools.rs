@@ -13,6 +13,8 @@ use tokio::io::AsyncWriteExt;
 use std::path::Path;
 use anyhow::anyhow;
 use serde_json::json;
+use chrono::Utc;
+use rand::Rng;
 
 const AGENT_ROOT: &str = "/agent";
 
@@ -472,5 +474,222 @@ fn split_stdout_stderr(out: &str) -> (String, String) {
         (stdout, stderr)
     } else {
         (out.to_string(), String::new())
+    }
+}
+
+// ------------------------------
+// Planner tools
+// ------------------------------
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct PlanTask {
+    id: u32,
+    title: String,
+    status: String, // "pending" | "completed"
+    created_at: String,
+    completed_at: Option<String>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct PlanFile {
+    plan_id: String,
+    title: String,
+    created_at: String,
+    tasks: Vec<PlanTask>,
+}
+
+fn next_task_id(tasks: &[PlanTask]) -> u32 { tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1 }
+
+async fn write_plan(path: &Path, plan: &PlanFile) -> anyhow::Result<()> {
+    if let Some(parent) = path.parent() { fs::create_dir_all(parent).await.ok(); }
+    let data = serde_json::to_string_pretty(plan)?;
+    let mut f = fs::File::create(path).await?;
+    f.write_all(data.as_bytes()).await?;
+    Ok(())
+}
+
+async fn read_plan(path: &Path) -> anyhow::Result<PlanFile> {
+    let s = fs::read_to_string(path).await?;
+    let plan: PlanFile = serde_json::from_str(&s)?;
+    Ok(plan)
+}
+
+fn ensure_logs_dir(p: &str) -> anyhow::Result<&Path> {
+    let path = ensure_under_agent(p)?;
+    // additionally enforce under /agent/logs
+    if !path.starts_with("/agent/logs") {
+        return Err(anyhow!("planner path must be under /agent/logs"));
+    }
+    Ok(path)
+}
+
+pub struct PlannerCreateTool;
+
+#[async_trait]
+impl Tool for PlannerCreateTool {
+    fn name(&self) -> &str { "planner_create" }
+
+    fn description(&self) -> &str {
+        "Create a new plan file in /agent/logs with optional title and initial tasks."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "title": {"type":"string","description":"Plan title (optional)"},
+                "tasks": {"type":"array","items":{"type":"string"},"description":"Initial task list (optional)"}
+            }
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let title = args.get("title").and_then(|v| v.as_str()).unwrap_or("Work Plan").to_string();
+        let initial_tasks: Vec<String> = args.get("tasks")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect())
+            .unwrap_or_else(|| vec![]);
+
+        // Generate unique plan path under /agent/logs
+        let ts = Utc::now();
+        let suffix: u32 = rand::thread_rng().gen_range(10000..99999);
+        let filename = format!("plan_{}_{:05}.json", ts.format("%Y%m%d_%H%M%S"), suffix);
+        let full_path = format!("/agent/logs/{}", filename);
+        let path = Path::new(&full_path);
+
+        let mut tasks = Vec::new();
+        for t in initial_tasks {
+            tasks.push(PlanTask{ id: next_task_id(&tasks), title: t, status: "pending".to_string(), created_at: Utc::now().to_rfc3339(), completed_at: None });
+        }
+
+        let plan = PlanFile {
+            plan_id: filename.clone(),
+            title,
+            created_at: ts.to_rfc3339(),
+            tasks,
+        };
+        write_plan(path, &plan).await?;
+
+        Ok(json!({"status":"ok","tool":"planner_create","path": full_path, "tasks": plan.tasks.len()}))
+    }
+}
+
+pub struct PlannerAddTool;
+
+#[async_trait]
+impl Tool for PlannerAddTool {
+    fn name(&self) -> &str { "planner_add" }
+    fn description(&self) -> &str { "Add a new task to an existing plan file." }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the plan file under /agent/logs"},
+                "task": {"type":"string","description":"Task description"}
+            },
+            "required":["path","task"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let task = args.get("task").and_then(|v| v.as_str()).unwrap_or("");
+        let path = ensure_logs_dir(path_str)?;
+        let mut plan = read_plan(path).await?;
+        let id = next_task_id(&plan.tasks);
+        plan.tasks.push(PlanTask{ id, title: task.to_string(), status: "pending".to_string(), created_at: Utc::now().to_rfc3339(), completed_at: None });
+        write_plan(path, &plan).await?;
+        Ok(json!({"status":"ok","tool":"planner_add","task_id": id}))
+    }
+}
+
+pub struct PlannerRemoveTool;
+
+#[async_trait]
+impl Tool for PlannerRemoveTool {
+    fn name(&self) -> &str { "planner_remove" }
+    fn description(&self) -> &str { "Remove a task from a plan file by id or exact title match." }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the plan file under /agent/logs"},
+                "task_id": {"type":"integer","description":"Task ID to remove (preferred)"},
+                "task": {"type":"string","description":"Exact task title to remove"}
+            },
+            "required":["path"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let path = ensure_logs_dir(path_str)?;
+        let mut plan = read_plan(path).await?;
+        let tid = args.get("task_id").and_then(|v| v.as_u64()).map(|n| n as u32);
+        let title = args.get("task").and_then(|v| v.as_str());
+
+        let before = plan.tasks.len();
+        if let Some(id) = tid {
+            plan.tasks.retain(|t| t.id != id);
+        } else if let Some(ttl) = title {
+            plan.tasks.retain(|t| t.title != ttl);
+        } else {
+            return Ok(json!({"status":"error","tool":"planner_remove","error":"Provide task_id or task"}));
+        }
+        let removed = before.saturating_sub(plan.tasks.len());
+        write_plan(path, &plan).await?;
+        Ok(json!({"status":"ok","tool":"planner_remove","removed": removed}))
+    }
+}
+
+pub struct PlannerCompleteTool;
+
+#[async_trait]
+impl Tool for PlannerCompleteTool {
+    fn name(&self) -> &str { "planner_complete" }
+    fn description(&self) -> &str { "Mark a task as completed. Optionally verify file(s) exist before completing." }
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "path": {"type":"string","description":"Absolute path to the plan file under /agent/logs"},
+                "task_id": {"type":"integer","description":"Task ID to complete"},
+                "verify_paths": {"type":"array","items":{"type":"string"},"description":"Optional list of files expected to exist when done"},
+                "force": {"type":"boolean","description":"Complete even if verification fails (default false)"}
+            },
+            "required":["path","task_id"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let path_str = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let path = ensure_logs_dir(path_str)?;
+        let mut plan = read_plan(path).await?;
+        let tid = args.get("task_id").and_then(|v| v.as_u64()).map(|n| n as u32).ok_or_else(|| anyhow!("task_id required"))?;
+        let verify: Vec<String> = args.get("verify_paths").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str()).map(|s| s.to_string()).collect()).unwrap_or_default();
+        let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        // verify files if provided
+        let mut missing: Vec<String> = Vec::new();
+        for p in verify.iter() {
+            if ensure_under_agent(p).is_err() { missing.push(p.clone()); continue; }
+            if !Path::new(p).exists() { missing.push(p.clone()); }
+        }
+        if !missing.is_empty() && !force {
+            return Ok(json!({"status":"error","tool":"planner_complete","error":"verification failed","missing":missing}));
+        }
+
+        let mut updated = false;
+        for t in plan.tasks.iter_mut() {
+            if t.id == tid {
+                t.status = "completed".to_string();
+                t.completed_at = Some(Utc::now().to_rfc3339());
+                updated = true;
+                break;
+            }
+        }
+        if !updated { return Ok(json!({"status":"error","tool":"planner_complete","error":"task not found"})); }
+        write_plan(path, &plan).await?;
+        Ok(json!({"status":"ok","tool":"planner_complete","task_id": tid, "verified_missing": missing}))
     }
 }
