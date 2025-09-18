@@ -152,6 +152,7 @@ impl ResponseHandler {
         let mut items_sent: usize = 0;
         let mut call_attempts: u32 = 0;
         let mut spill_retry_attempts: u32 = 0;
+        let mut empty_retry_attempts: u32 = 0;
         loop {
             // Call model (with simple retry/backoff inside ollama client)
             let model_resp: ModelResponse = match self
@@ -267,6 +268,27 @@ impl ResponseHandler {
                 // If exceeded retries, fall through to finalize the text as-is
             }
 
+            // If there is neither a tool call nor final text (thinking-only), treat as parse failure and retry
+            let no_tool_calls = model_resp.tool_calls.as_ref().map_or(true, |v| v.is_empty());
+            let has_no_final_text = model_resp.content.trim().is_empty();
+            if no_tool_calls && has_no_final_text {
+                empty_retry_attempts += 1;
+                let dev_note = "Developer note: Model returned only thinking without a tool_call or final text. Treating as a parse failure. Please emit either a proper tool_call or a clear final assistant message. Remember: wrap code/JSON in backticks, never wrap URLs.";
+                let items = vec![
+                    serde_json::json!({"type":"tool_call_invalid","tool":"(empty)", "args": null }),
+                    serde_json::json!({"type":"note","level":"warning","text": dev_note}),
+                ];
+                let _ = self
+                    .api_client
+                    .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                    .await;
+
+                conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
+
+                if empty_retry_attempts < 5 { continue; }
+                // If exceeded retries, fall through to finalize with an explicit fallback note
+            }
+
             // Final answer
             let sanitized = self.guardrails.validate_output(&model_resp.content)?;
             let mut segs = Vec::new();
@@ -368,6 +390,7 @@ You are running as an Agent in the {host_name} system.
 
 ### Important Behavior
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
+- Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
 - When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
