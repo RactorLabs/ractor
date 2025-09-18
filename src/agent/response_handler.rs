@@ -242,7 +242,9 @@ impl ResponseHandler {
             // not wrapped in backticks, treat it as a spillover (failed tool parsing).
             // Log as invalid tool and retry with a brief system nudge.
             let content_trimmed = model_resp.content.trim();
-            let looks_like_spillover_json = content_trimmed.starts_with('{') && !content_trimmed.starts_with("```");
+            let looks_like_spillover_json =
+                (content_trimmed.starts_with('{') || content_trimmed.starts_with('['))
+                && !content_trimmed.starts_with("```");
             if looks_like_spillover_json {
                 spill_retry_attempts += 1;
                 let dev_note = "Developer note: Received raw JSON in assistant content without backticks. Treating as a failed tool-call parse. Please emit a proper tool_call with function name and arguments. Always wrap code/JSON in backticks and never wrap URLs.";
