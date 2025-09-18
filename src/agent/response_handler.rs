@@ -65,11 +65,12 @@ impl ResponseHandler {
                     let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
-                    // Planner tools
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerCreateTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerAddTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerRemoveTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerCompleteTool)).await;
+                    // Planner tools (exact names only; no backward compatibility)
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerCreatePlanTool)).await;
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerAddTaskTool)).await;
+                    let complete_tool = Box::new(super::builtin_tools::PlannerCompleteTaskTool::new(api_client_clone.clone()));
+                    registry.register_tool(complete_tool).await;
+                    registry.register_tool(Box::new(super::builtin_tools::PlannerClearPlanTool)).await;
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -194,7 +195,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'shell', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish', 'sleep'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'shell', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish', 'sleep', 'planner_create_plan', 'planner_add_task', 'planner_complete_task', 'planner_clear_plan'.",
                             tool_name
                         );
                         let items = vec![
@@ -244,10 +245,64 @@ impl ResponseHandler {
                 }
             }
 
+            // Attempt to salvage a tool_call JSON embedded in assistant content
+            let content_trimmed = model_resp.content.trim();
+            if content_trimmed.starts_with('{') && !content_trimmed.starts_with("```") {
+                if let Ok(root) = serde_json::from_str::<serde_json::Value>(content_trimmed) {
+                    if let Some(tc) = root.get("tool_call") {
+                        let tool_name = tc.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = tc.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                        let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
+                        if !tool_known {
+                            // Unknown tool even after salvage: warn and retry as invalid
+                        let dev_note = format!(
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'shell', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish', 'sleep', 'planner_create_plan', 'planner_add_task', 'planner_complete_task', 'planner_clear_plan'.",
+                            tool_name
+                        );
+                            let items = vec![
+                                serde_json::json!({"type":"tool_call_invalid","tool":tool_name, "args": args}),
+                                serde_json::json!({"type":"note","level":"warning","text": dev_note}),
+                            ];
+                            let _ = self
+                                .api_client
+                                .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                                .await;
+                            conversation.push(ChatMessage { role: "system".to_string(), content: dev_note, name: None, tool_call_id: None });
+                            spill_retry_attempts += 1;
+                            if spill_retry_attempts < 10 { continue; }
+                        } else {
+                            // Treat as a valid tool call and execute
+                            let mut segs = Vec::new();
+                            if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
+                            let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
+                            segs.push(seg_tool_call.clone());
+                            let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
+                            items_sent += segs.len();
+                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
+                            conversation.push(ChatMessage { role: "assistant".to_string(), content: call_summary, name: None, tool_call_id: None });
+
+                            let output_value: serde_json::Value = match self
+                                .tool_registry
+                                .execute_tool(tool_name, &args)
+                                .await
+                            {
+                                Ok(v) => v,
+                                Err(e) => serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()}),
+                            };
+                            let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
+                            let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
+                            items_sent += 1;
+                            let tool_content_str = if let Some(s) = output_value.as_str() { s.to_string() } else { output_value.to_string() };
+                            conversation.push(ChatMessage { role:"tool".to_string(), content: tool_content_str, name: Some(tool_name.to_string()), tool_call_id: None });
+                            continue;
+                        }
+                    }
+                }
+            }
+
             // If no tool call was parsed but the assistant content looks like raw JSON
             // not wrapped in backticks, treat it as a spillover (failed tool parsing).
             // Log as invalid tool and retry with a brief system nudge.
-            let content_trimmed = model_resp.content.trim();
             let looks_like_spillover_json =
                 (content_trimmed.starts_with('{') || content_trimmed.starts_with('['))
                 && !content_trimmed.starts_with("```");
@@ -267,7 +322,7 @@ impl ResponseHandler {
                 conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
 
                 // Limit spillover retries to avoid infinite loops
-                if spill_retry_attempts < 5 {
+                if spill_retry_attempts < 10 {
                     continue;
                 }
                 // If exceeded retries, fall through to finalize the text as-is
@@ -290,8 +345,39 @@ impl ResponseHandler {
 
                 conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
 
-                if empty_retry_attempts < 5 { continue; }
+                if empty_retry_attempts < 10 { continue; }
                 // If exceeded retries, fall through to finalize with an explicit fallback note
+            }
+
+            // Enforce plan progression: if an active plan exists, do not allow a final answer until completed and cleared
+            if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await {
+                if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
+                    if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
+                        if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
+                            if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
+                                let completed = plan.get("completed_at").and_then(|v| v.as_str()).is_some();
+                                if !completed {
+                                    let tasks = plan.get("tasks").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                    let mut pending: Vec<String> = Vec::new();
+                                    for t in tasks.iter() {
+                                        let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                                        let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                                        let ttl = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                                        if status != "completed" { pending.push(format!("#{} {}", id, ttl)); }
+                                    }
+                                    let guidance = if pending.is_empty() {
+                                        "Active plan detected with no pending tasks. Call 'planner_clear_plan' to finish and then proceed.".to_string()
+                                    } else {
+                                        format!("Active plan detected. Do not send a final message. Continue following the plan: {}. After each step, update the plan (complete/add). When all tasks are done, call 'planner_clear_plan'.", pending.join("; "))
+                                    };
+                                    conversation.push(ChatMessage { role: "system".to_string(), content: guidance, name: None, tool_call_id: None });
+                                    // loop again to get tool_call(s) instead of final
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // Final answer
@@ -397,6 +483,7 @@ You are running as an Agent in the {host_name} system.
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
 - For multi-step tasks, create and use a plan: If you judge the request involves multiple steps, create a plan with `planner_create` (include an initial set of tasks). As you progress, keep the plan updated using `planner_add`, `planner_remove`, and `planner_complete`. Before marking a task complete, double-check work products; if in doubt, verify by checking the relevant files exist (e.g., via `planner_complete.verify_paths`, `open_file`, or `find_filename`).
+- After completing each step, immediately update the plan: mark that step complete and, if needed, add the next step. Always keep the plan in sync with reality.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
 - When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
@@ -561,34 +648,37 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 
 - Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
 - Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
+- After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `planner_clear_plan` to finalize and remove it from the prompt.
+- When a plan is active, you must follow it strictly: complete each task, update the plan after every step, and finally call `planner_clear_plan`. Do not send a final assistant message while a plan is active.
+- Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
+- Do not add duplicate tasks: Before calling `planner_add_task`, check the active plan. If the requested task is already present (exact same title), do not add it again. Instead, acknowledge it is already in the plan and proceed with execution or completion of that task.
 
-#### Tool: planner_create
-- Create a new plan file in `/agent/logs` with an optional title and initial tasks.
+#### Tool: planner_create_plan
+- Creates a plan. Generates a plan file under `/agent/logs` and sets it as the active plan.
 - Parameters:
   - title (optional): Plan title.
   - tasks (optional): Array of task descriptions.
 - Returns: `{{ "path": string, "tasks": number }}` within the standard envelope.
 
-#### Tool: planner_add
-- Add a task to an existing plan file.
+#### Tool: planner_add_task
+- Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.
 - Parameters:
-  - path (required): Plan file path under `/agent/logs`.
   - task (required): Task description.
 
-#### Tool: planner_remove
-- Remove a task by ID (preferred) or by exact title.
+#### Tool: planner_complete_task
+- Completes one task in the active plan. For publish tasks, you must verify a published URL under `/content/{agent_name}/` returns HTTP 200.
 - Parameters:
-  - path (required): Plan file path under `/agent/logs`.
-  - task_id (optional): Numeric ID.
-  - task (optional): Exact task title.
-
-#### Tool: planner_complete
-- Mark a task complete. Optionally verify files exist before completion.
-- Parameters:
-  - path (required): Plan file path under `/agent/logs`.
   - task_id (required): Numeric ID.
   - verify_paths (optional): Array of absolute file paths under `/agent` to check for existence.
+  - verify_url (optional, required for publish tasks): Full published URL to verify (must start with `{base_url}/content/{agent_name}/...`). If omitted for publish tasks, defaults to `{base_url}/content/{agent_name}/index.html`.
   - force (optional): Complete even if verification fails.
+
+#### Tool: planner_clear_plan
+- Removes the plan marker and marks the plan complete so it no longer appears in the system prompt.
+- Parameters: none
+  - Fails if there are any open (non-completed) tasks. Complete all tasks first.
+  
+Guideline: `planner_clear_plan` should almost always be the last tool in a multi-step workflow once all tasks are finished.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"
@@ -688,6 +778,37 @@ You have complete freedom to execute commands, install packages, and create solu
             }
         } else {
             info!("No instructions file found at {}", instructions_path.display());
+        }
+
+        // Auto-insert current plan details (after user's custom instructions), if any
+        if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await {
+            if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
+                if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
+                    if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
+                        if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
+                            let completed = plan.get("completed_at").and_then(|v| v.as_str()).is_some();
+                            if !completed {
+                                let title = plan.get("title").and_then(|v| v.as_str()).unwrap_or("Work Plan");
+                                let tasks = plan.get("tasks").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                let mut lines = String::new();
+                                let mut next_hint: Option<String> = None;
+                                for t in tasks.iter() {
+                                    let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+                                    let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                                    let ttl = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                                    let check = if status == "completed" { "x" } else { " " };
+                                    if status != "completed" && next_hint.is_none() { next_hint = Some(format!("#{} {}", id, ttl)); }
+                                    lines.push_str(&format!("- [{}] (#{}) {}\n", check, id, ttl));
+                                }
+                                let next = next_hint.unwrap_or_else(|| "All tasks completed".to_string());
+                                prompt.push_str("\n\n### Current Plan (auto-inserted)\n");
+                                prompt.push_str(&format!("- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n", title, plan_path, lines, next));
+                                prompt.push_str("\nGuidance: Update this plan after each step by marking tasks completed and adding new tasks as needed. When all tasks are done, call 'planner_clear_plan' to clear the plan so it no longer appears here.\n");
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         prompt
