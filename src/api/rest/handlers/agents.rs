@@ -451,8 +451,9 @@ pub async fn compact_agent_context(
         "(No prior conversation to compact.)".to_string()
     } else {
         // Call Ollama to summarize the transcript
-        let base_url = std::env::var("OLLAMA_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
-        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        // Prefer the same variable name used by controller/agent; default to Docker network hostname
+        let base_url = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:120b".to_string());
         let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
         let system_prompt = "You are a helpful assistant that compresses conversation history into a concise context for future messages.\n- Keep key goals, decisions, constraints, URLs, files, and paths.\n- Remove chit‑chat and redundant steps.\n- Prefer bullet points.\n- Target 150–250 words.";
         let user_content = format!("Please summarize the following conversation so it can be used as compact context for future turns.\n\n{}", transcript);
@@ -851,31 +852,7 @@ pub async fn sleep_agent(
 
     tracing::info!("Created suspend task for agent {}", name);
 
-    // Insert a history marker indicating sleep has been scheduled
-    let marker_note = if let Some(n) = note.as_ref() {
-        format!("Scheduled in {} seconds — {}", delay_seconds, n)
-    } else {
-        format!("Scheduled in {} seconds", delay_seconds)
-    };
-    if let Ok(created) = resp_model::AgentResponse::create(
-        &state.db,
-        &agent.name,
-        created_by,
-        resp_model::CreateResponseRequest { input: serde_json::json!({}) , background: None },
-    ).await {
-        let _ = resp_model::AgentResponse::update_by_id(
-            &state.db,
-            &created.id,
-            resp_model::UpdateResponseRequest {
-                status: Some("completed".to_string()),
-                input: None,
-                output: Some(serde_json::json!({
-                    "text": "",
-                    "items": [ { "type": "slept", "note": marker_note, "runtime_seconds": 0, "delay_seconds": delay_seconds } ]
-                })),
-            },
-        ).await;
-    }
+    // Do not insert a pre-sleep marker; the controller will add a single 'slept' marker when sleep completes
 
     // Fetch agent (state remains as-is until controller executes sleep)
     let updated_agent = Agent::find_by_name(&state.db, &name)
