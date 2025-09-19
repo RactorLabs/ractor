@@ -1059,7 +1059,11 @@
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
           <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim() || stateStr === 'busy'}>
-            <i class="fas fa-paper-plane"></i>
+            {#if sending}
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            {:else}
+              <i class="fas fa-paper-plane"></i>
+            {/if}
           </button>
         </div>
       </form>
