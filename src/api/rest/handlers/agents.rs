@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::query;
+use sqlx::Row;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 
@@ -15,6 +16,8 @@ use crate::shared::models::{
     Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
     RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
 };
+// Use fully-qualified names for response records to avoid name conflict with local AgentResponse
+use crate::shared::models::response as resp_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
@@ -44,6 +47,7 @@ pub struct AgentResponse {
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
+    pub context_cutoff_at: Option<String>,
     // Removed: id, container_id, persistent_volume_id
 }
 
@@ -80,6 +84,7 @@ impl AgentResponse {
             busy_timeout_seconds: agent.busy_timeout_seconds,
             idle_from: agent.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: agent.busy_from.map(|dt| dt.to_rfc3339()),
+            context_cutoff_at: agent.context_cutoff_at.map(|dt| dt.to_rfc3339()),
         })
     }
 }
@@ -176,6 +181,199 @@ pub async fn get_agent(
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
     Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentContextUsageResponse {
+    pub agent: String,
+    pub soft_limit_tokens: i64,
+    pub used_tokens_estimated: i64,
+    pub used_percent: f64,
+    pub basis: String,
+    pub cutoff_at: Option<String>,
+    pub measured_at: String,
+    pub total_messages_considered: u32,
+}
+
+fn soft_limit_tokens() -> i64 {
+    std::env::var("CONTEXT_SOFT_LIMIT_TOKENS")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(100_000)
+}
+
+fn avg_chars_per_token() -> f64 {
+    std::env::var("AVG_CHARS_PER_TOKEN")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(4.0)
+}
+
+async fn estimate_history_tokens_since(
+    pool: &sqlx::MySqlPool,
+    agent_name: &str,
+    cutoff: Option<DateTime<Utc>>,
+) -> Result<(i64, u32), ApiError> {
+    let rows = if let Some(cut) = cutoff {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+        )
+        .bind(agent_name)
+        .bind(cut)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#,
+        )
+        .bind(agent_name)
+        .fetch_all(pool)
+        .await
+    }
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let mut total_chars: i64 = 0;
+    let mut msg_count: u32 = 0;
+    for row in rows {
+        let input: serde_json::Value = row.try_get("input").unwrap_or(serde_json::json!({}));
+        let output: serde_json::Value = row.try_get("output").unwrap_or(serde_json::json!({}));
+
+        if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
+            total_chars += user_text.len() as i64;
+            msg_count += 1;
+        }
+        if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
+            total_chars += assistant_text.len() as i64;
+            msg_count += 1;
+        }
+        // Optionally include tool_result output sizes as part of history context approx
+        if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+            for it in items {
+                if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                    if let Some(out) = it.get("output") {
+                        if let Some(s) = out.as_str() {
+                            total_chars += s.len() as i64;
+                        } else {
+                            // Rough size of JSON when not a string
+                            total_chars += out.to_string().len() as i64;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let est_tokens = ((total_chars as f64) / avg_chars_per_token()).ceil() as i64;
+    Ok((est_tokens, msg_count))
+}
+
+pub async fn get_agent_context(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<AgentContextUsageResponse>> {
+    // Reuse GET permission
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent context".to_string()))?;
+    }
+
+    // Get username
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let cutoff = agent.context_cutoff_at;
+
+    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, cutoff).await?;
+    let limit = soft_limit_tokens();
+    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+
+    let resp = AgentContextUsageResponse {
+        agent: agent.name,
+        soft_limit_tokens: limit,
+        used_tokens_estimated: used,
+        used_percent,
+        basis: "estimated_from_history_chars".to_string(),
+        cutoff_at: cutoff.map(|dt| dt.to_rfc3339()),
+        measured_at: Utc::now().to_rfc3339(),
+        total_messages_considered: considered,
+    };
+
+    Ok(Json(resp))
+}
+
+pub async fn clear_agent_context(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<AgentContextUsageResponse>> {
+    // Require update permission
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to clear context".to_string()))?;
+    }
+
+    // Ownership
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    // Confirm access to the agent
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+
+    // Set the cutoff now
+    crate::shared::models::Agent::clear_context_cutoff(&state.db, &agent.name)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
+
+    // Record a history marker indicating context was cleared
+    if let Ok(created) = resp_model::AgentResponse::create(
+        &state.db,
+        &agent.name,
+        username,
+        resp_model::CreateResponseRequest { input: serde_json::json!({}), background: None },
+    ).await {
+        let cutoff_now = Utc::now().to_rfc3339();
+        let _ = resp_model::AgentResponse::update_by_id(
+            &state.db,
+            &created.id,
+            resp_model::UpdateResponseRequest {
+                status: Some("completed".to_string()),
+                input: None,
+                output: Some(serde_json::json!({
+                    "text": "",
+                    "items": [ { "type": "context_cleared", "cutoff_at": cutoff_now } ]
+                })),
+            },
+        ).await;
+    }
+
+    // Return fresh measurement (should be near zero immediately after clear)
+    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now()))
+        .await?;
+    let limit = soft_limit_tokens();
+    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+    let resp = AgentContextUsageResponse {
+        agent: agent.name,
+        soft_limit_tokens: limit,
+        used_tokens_estimated: used,
+        used_percent,
+        basis: "estimated_from_history_chars".to_string(),
+        cutoff_at: Some(Utc::now().to_rfc3339()),
+        measured_at: Utc::now().to_rfc3339(),
+        total_messages_considered: considered,
+    };
+    Ok(Json(resp))
 }
 
 pub async fn create_agent(
@@ -470,7 +668,7 @@ pub async fn sleep_agent(
         .as_ref()
         .and_then(|r| r.note.clone())
         .and_then(|s| { let t = s.trim().to_string(); if t.is_empty() { None } else { Some(t) } });
-    let payload = if let Some(n) = note {
+    let payload = if let Some(ref n) = note {
         serde_json::json!({ "delay_seconds": delay_seconds, "note": n })
     } else {
         serde_json::json!({ "delay_seconds": delay_seconds })
@@ -492,6 +690,32 @@ pub async fn sleep_agent(
     })?;
 
     tracing::info!("Created suspend task for agent {}", name);
+
+    // Insert a history marker indicating sleep has been scheduled
+    let marker_note = if let Some(n) = note.as_ref() {
+        format!("Scheduled in {} seconds — {}", delay_seconds, n)
+    } else {
+        format!("Scheduled in {} seconds", delay_seconds)
+    };
+    if let Ok(created) = resp_model::AgentResponse::create(
+        &state.db,
+        &agent.name,
+        created_by,
+        resp_model::CreateResponseRequest { input: serde_json::json!({}) , background: None },
+    ).await {
+        let _ = resp_model::AgentResponse::update_by_id(
+            &state.db,
+            &created.id,
+            resp_model::UpdateResponseRequest {
+                status: Some("completed".to_string()),
+                input: None,
+                output: Some(serde_json::json!({
+                    "text": "",
+                    "items": [ { "type": "slept", "note": marker_note, "runtime_seconds": 0, "delay_seconds": delay_seconds } ]
+                })),
+            },
+        ).await;
+    }
 
     // Fetch agent (state remains as-is until controller executes sleep)
     let updated_agent = Agent::find_by_name(&state.db, &name)
@@ -597,6 +821,27 @@ pub async fn wake_agent(
     })?;
 
     tracing::info!("Created resume task for agent {}", agent.name);
+
+    // Insert a history marker indicating wake request
+    if let Ok(created) = resp_model::AgentResponse::create(
+        &state.db,
+        &agent.name,
+        username,
+        resp_model::CreateResponseRequest { input: serde_json::json!({}) , background: None },
+    ).await {
+        let _ = resp_model::AgentResponse::update_by_id(
+            &state.db,
+            &created.id,
+            resp_model::UpdateResponseRequest {
+                status: Some("completed".to_string()),
+                input: None,
+                output: Some(serde_json::json!({
+                    "text": "",
+                    "items": [ { "type": "woke", "note": "Wake requested" } ]
+                })),
+            },
+        ).await;
+    }
 
     // Fetch updated agent
     let updated_agent = Agent::find_by_name(&state.db, &agent.name)

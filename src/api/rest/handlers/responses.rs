@@ -1,5 +1,7 @@
 use axum::{extract::{Extension, Path, Query, State}, Json};
 use std::sync::Arc;
+use sqlx::Row;
+use chrono::{DateTime, Utc};
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -47,6 +49,17 @@ pub async fn create_response(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+
+    // Soft limit guard: block when history usage since cutoff meets/exceeds limit
+    let limit_tokens = soft_limit_tokens();
+    let cutoff = agent.context_cutoff_at;
+    let used_tokens = estimate_history_tokens_since(&state.db, &agent_name, cutoff).await?;
+    if used_tokens >= limit_tokens {
+        return Err(ApiError::Conflict(format!(
+            "Context is full ({} / {} tokens). Clear context via POST /api/v0/agents/{}/context/clear and try again.",
+            used_tokens, limit_tokens, agent_name
+        )));
+    }
 
     // Block new responses when agent is busy
     if agent.state == crate::shared::models::constants::AGENT_STATE_BUSY {
@@ -159,6 +172,75 @@ pub async fn create_response(
         created_at: now.clone(),
         updated_at: now,
     }))
+}
+
+fn soft_limit_tokens() -> i64 {
+    std::env::var("CONTEXT_SOFT_LIMIT_TOKENS")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(100_000)
+}
+
+fn avg_chars_per_token() -> f64 {
+    std::env::var("AVG_CHARS_PER_TOKEN")
+        .ok()
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| *v > 0.0)
+        .unwrap_or(4.0)
+}
+
+async fn estimate_history_tokens_since(
+    pool: &sqlx::MySqlPool,
+    agent_name: &str,
+    cutoff: Option<DateTime<Utc>>,
+) -> Result<i64, ApiError> {
+    let rows = if let Some(cut) = cutoff {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+        )
+        .bind(agent_name)
+        .bind(cut)
+        .fetch_all(pool)
+        .await
+    } else {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#,
+        )
+        .bind(agent_name)
+        .fetch_all(pool)
+        .await
+    }
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let mut total_chars: i64 = 0;
+    for row in rows {
+        let input: serde_json::Value = row.try_get("input").unwrap_or(serde_json::json!({}));
+        let output: serde_json::Value = row.try_get("output").unwrap_or(serde_json::json!({}));
+
+        if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
+            total_chars += user_text.len() as i64;
+        }
+        if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
+            total_chars += assistant_text.len() as i64;
+        }
+        if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+            for it in items {
+                if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                    if let Some(out) = it.get("output") {
+                        if let Some(s) = out.as_str() {
+                            total_chars += s.len() as i64;
+                        } else {
+                            total_chars += out.to_string().len() as i64;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let est_tokens = ((total_chars as f64) / avg_chars_per_token()).ceil() as i64;
+    Ok(est_tokens)
 }
 
 pub async fn update_response(
