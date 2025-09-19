@@ -146,12 +146,15 @@ impl ResponseHandler {
         let input_text = response.input.get("text").and_then(|v| v.as_str()).unwrap_or("");
         self.guardrails.validate_input(input_text)?;
 
-        // Build conversation from prior responses
+        // Build conversation from prior responses, respecting optional context cutoff
         let all = self.api_client.get_responses(None, None).await?;
-        let convo = self.prepare_conversation_from_responses(&all, response);
-
-        // Build system prompt
-        let system_prompt = self.build_system_prompt().await;
+        let agent_info = self.api_client.get_agent().await?;
+        let cutoff = agent_info
+            .context_cutoff_at
+            .as_deref()
+            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+            .map(|dt| dt.with_timezone(&Utc));
+        let convo = self.prepare_conversation_from_responses(&all, response, cutoff);
 
         let mut conversation = convo;
         // Track whether we have already appended any segments to avoid duplicating commentary
@@ -160,10 +163,13 @@ impl ResponseHandler {
         let mut spill_retry_attempts: u32 = 0;
         let mut empty_retry_attempts: u32 = 0;
         loop {
+            // Rebuild system prompt each iteration so newly created plan/publish state
+            // appears immediately in the prompt during the same processing cycle.
+            let system_prompt = self.build_system_prompt().await;
             // Call model (with simple retry/backoff inside ollama client)
             let model_resp: ModelResponse = match self
                 .ollama_client
-                .complete_with_registry(conversation.clone(), Some(system_prompt.clone()), Some(&*self.tool_registry))
+                .complete_with_registry(conversation.clone(), Some(system_prompt), Some(&*self.tool_registry))
                 .await
             {
                 Ok(r) => r,
@@ -195,7 +201,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'shell', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish', 'sleep', 'planner_create_plan', 'planner_add_task', 'planner_complete_task', 'planner_clear_plan'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                         let items = vec![
@@ -238,7 +244,7 @@ impl ResponseHandler {
                     let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
                     items_sent += 1;
                     // Special case: after successful sleep, proactively inform the user and finalize
-                    if tool_name == "sleep" {
+                    if tool_name == "sleep_agent" {
                         let delay = output_value
                             .get("delay_seconds")
                             .and_then(|v| v.as_u64())
@@ -267,7 +273,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'shell', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish', 'sleep', 'planner_create_plan', 'planner_add_task', 'planner_complete_task', 'planner_clear_plan'.",
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                             let items = vec![
@@ -303,7 +309,7 @@ impl ResponseHandler {
                             let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
                             let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
                             items_sent += 1;
-                            if tool_name == "sleep" {
+                            if tool_name == "sleep_agent" {
                                 let delay = output_value
                                     .get("delay_seconds")
                                     .and_then(|v| v.as_u64())
@@ -387,9 +393,9 @@ impl ResponseHandler {
                                         if status != "completed" { pending.push(format!("#{} {}", id, ttl)); }
                                     }
                                     let guidance = if pending.is_empty() {
-                                        "Active plan detected with no pending tasks. Call 'planner_clear_plan' to finish and then proceed.".to_string()
+                                        "Active plan detected with no pending tasks. Call 'clear_plan' to finish and then proceed.".to_string()
                                     } else {
-                                        format!("Active plan detected. Do not send a final message. Continue following the plan: {}. After each step, update the plan (complete/add). When all tasks are done, call 'planner_clear_plan'.", pending.join("; "))
+                                        format!("Active plan detected. Do not send a final message. Continue following the plan: {}. After each step, update the plan (complete/add). When all tasks are done, call 'clear_plan'.", pending.join("; "))
                                     };
                                     conversation.push(ChatMessage { role: "system".to_string(), content: guidance, name: None, tool_call_id: None });
                                     // loop again to get tool_call(s) instead of final
@@ -414,10 +420,15 @@ impl ResponseHandler {
         }
     }
 
-    fn prepare_conversation_from_responses(&self, responses: &[ResponseView], current: &ResponseView) -> Vec<ChatMessage> {
+    fn prepare_conversation_from_responses(&self, responses: &[ResponseView], current: &ResponseView, since: Option<DateTime<Utc>>) -> Vec<ChatMessage> {
         let mut convo = Vec::new();
         for r in responses.iter() {
             if r.id == current.id { continue; }
+            if let Some(since_dt) = since {
+                if let Ok(created_dt) = DateTime::parse_from_rfc3339(&r.created_at) {
+                    if created_dt.with_timezone(&Utc) < since_dt { continue; }
+                }
+            }
             if let Some(text) = r.input.get("text").and_then(|v| v.as_str()) { if !text.is_empty() { convo.push(ChatMessage { role:"user".to_string(), content:text.to_string(), name:None, tool_call_id:None }); } }
             if let Some(items) = r.output.get("items").and_then(|v| v.as_array()) {
                 for it in items {
@@ -669,24 +680,24 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 
 - Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
 - Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
-- After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `planner_clear_plan` to finalize and remove it from the prompt.
-- When a plan is active, you must follow it strictly: complete each task, update the plan after every step, and finally call `planner_clear_plan`. Do not send a final assistant message while a plan is active.
+- After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `clear_plan` to finalize and remove it from the prompt.
+- When a plan is active, you must follow it strictly: complete each task, update the plan after every step, and finally call `clear_plan`. Do not send a final assistant message while a plan is active.
 - Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
- - Do not add duplicate tasks: Before calling `planner_add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
+ - Do not add duplicate tasks: Before calling `add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
 
-#### Tool: planner_create_plan
+#### Tool: create_plan
 - Creates a plan. Generates a plan file under `/agent/logs` and sets it as the active plan.
 - Parameters:
   - title (optional): Plan title.
   - tasks (optional): Array of task descriptions.
 - Returns: `{{ "path": string, "tasks": number }}` within the standard envelope.
 
-#### Tool: planner_add_task
+#### Tool: add_task
 - Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.
 - Parameters:
   - task (required): Task description.
 
-#### Tool: planner_complete_task
+#### Tool: complete_task
 - Completes one task in the active plan. For publish tasks, you must verify a published URL under `/content/{agent_name}/` returns HTTP 200.
 - Parameters:
   - task_id (required): Numeric ID.
@@ -694,12 +705,12 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - verify_url (optional, required for publish tasks): Full published URL to verify (must start with `{base_url}/content/{agent_name}/...`). If omitted for publish tasks, defaults to `{base_url}/content/{agent_name}/index.html`.
   - force (optional): Complete even if verification fails.
 
-#### Tool: planner_clear_plan
+#### Tool: clear_plan
 - Removes the plan marker and marks the plan complete so it no longer appears in the system prompt.
 - Parameters: none
   - Fails if there are any open (non-completed) tasks. Complete all tasks first.
   
-Guideline: `planner_clear_plan` should almost always be the last tool in a multi-step workflow once all tasks are finished.
+Guideline: `clear_plan` should almost always be the last tool in a multi-step workflow once all tasks are finished.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"
@@ -711,10 +722,10 @@ Guideline: `planner_clear_plan` should almost always be the last tool in a multi
 Examples:
 ```json
 // Assistant message (tool_call)
-{{"tool_call":{{"tool":"shell","args":{{"exec_dir":"/agent","commands":"echo hi"}}}}}}
+{{"tool_call":{{"tool":"run_bash","args":{{"exec_dir":"/agent","commands":"echo hi"}}}}}}
 
 // Tool message (tool_result)
-{{"status":"ok","tool":"shell","exit_code":null,"truncated":false,"stdout":"hi\n","stderr":""}}
+{{"status":"ok","tool":"run_bash","exit_code":null,"truncated":false,"stdout":"hi\n","stderr":""}}
 
 // Assistant message (tool_call)
 {{"tool_call":{{"tool":"open_file","args":{{"path":"/agent/code/app.py","start_line":1,"end_line":3}}}}}}
@@ -824,7 +835,7 @@ You have complete freedom to execute commands, install packages, and create solu
                                 let next = next_hint.unwrap_or_else(|| "All tasks completed".to_string());
                                 prompt.push_str("\n\n### Current Plan (auto-inserted)\n");
                                 prompt.push_str(&format!("- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n", title, plan_path, lines, next));
-                                prompt.push_str("\nGuidance: Update this plan after each step by marking tasks completed and adding new tasks as needed. When all tasks are done, call 'planner_clear_plan' to clear the plan so it no longer appears here.\n");
+                                prompt.push_str("\nGuidance: Update this plan after each step by marking tasks completed and adding new tasks as needed. When all tasks are done, call 'clear_plan' to clear the plan so it no longer appears here.\n");
                             }
                         }
                     }

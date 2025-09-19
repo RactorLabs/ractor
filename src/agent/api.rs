@@ -25,6 +25,7 @@ pub struct Agent {
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
+    pub context_cutoff_at: Option<String>,
     // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
 
