@@ -600,12 +600,16 @@ impl AgentManager {
             info!("Delaying sleep for agent {} by {} seconds", agent_name, delay_secs);
             sleep(Duration::from_secs(delay_secs)).await;
         }
-        // Capture prior state for reason classification
-        let prior_state_opt: Option<(String,)> = sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
-            .bind(&agent_name)
-            .fetch_optional(&self.pool)
-            .await?;
-        let prior_state = prior_state_opt.map(|t| t.0).unwrap_or_default();
+        // Capture prior state and created_at for runtime measurement
+        let agent_row_opt: Option<(chrono::DateTime<Utc>, String)> = sqlx::query_as(
+            r#"SELECT created_at, state FROM agents WHERE name = ?"#
+        )
+        .bind(&agent_name)
+        .fetch_optional(&self.pool)
+        .await?;
+        let (agent_created_at, prior_state) = agent_row_opt
+            .map(|(c, s)| (c, s))
+            .unwrap_or((chrono::Utc::now(), String::new()));
 
         info!("Sleeping container for agent {}", agent_name);
 
@@ -636,10 +640,36 @@ impl AgentManager {
                 .and_then(|v| v.as_str())
                 .unwrap_or("User requested sleep")
         };
+        // Determine runtime: time from last wake marker (or agent.created_at if none)
+        let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
+            r#"SELECT created_at, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at DESC LIMIT 50"#
+        )
+        .bind(&agent_name)
+        .fetch_all(&self.pool)
+        .await
+        .unwrap_or_default();
+        let mut start_ts = agent_created_at;
+        for (row_created_at, output) in recent_rows {
+            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                let mut found = false;
+                for it in items {
+                    if it.get("type").and_then(|v| v.as_str()) == Some("woke") {
+                        start_ts = row_created_at;
+                        found = true;
+                        break;
+                    }
+                }
+                if found { break; }
+            }
+        }
+        let now = chrono::Utc::now();
+        let mut runtime_seconds = (now - start_ts).num_seconds();
+        if runtime_seconds < 0 { runtime_seconds = 0; }
+
         let output_json = serde_json::json!({
             "text": "",
             "items": [
-                { "type": "slept", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text }
+                { "type": "slept", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text, "runtime_seconds": runtime_seconds }
             ]
         });
 
