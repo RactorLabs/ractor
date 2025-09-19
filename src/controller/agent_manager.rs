@@ -872,7 +872,13 @@ impl AgentManager {
         }
 
         // Insert response row
+        // To avoid identical timestamps with the implicit wake marker (second-level precision
+        // in MySQL DATETIME), create the response one second after the task's created_at.
         let output_json = serde_json::json!({ "text": "", "items": [] });
+        let resp_created_at = task
+            .created_at
+            .checked_add_signed(chrono::Duration::seconds(1))
+            .unwrap_or(task.created_at);
         sqlx::query(
             r#"
             INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
@@ -884,8 +890,8 @@ impl AgentManager {
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
-        .bind(&task.created_at)
-        .bind(&task.created_at)
+        .bind(&resp_created_at)
+        .bind(&resp_created_at)
         .execute(&self.pool)
         .await?;
         info!("Inserted response {} for agent {}", response_id, agent_name);
