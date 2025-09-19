@@ -414,15 +414,19 @@
   function segOutput(s) {
     try {
       const o = s?.output;
-      if (typeof o === 'string') {
-        const t = o.trim();
-        if ((t.startsWith('{') && t.endsWith('}')) || (t.startsWith('[') && t.endsWith(']'))) {
-          try { return JSON.parse(t); } catch (_) { /* fallthrough */ }
-        }
-        return o; // plain text string
-      }
+      if (typeof o === 'string') { return o; }
       return o; // object/array/null
     } catch (_) { return s?.output; }
+  }
+
+  // Summary-mode: show tool output exactly as-is (no parsing or wrapping)
+  function summaryOutputText(s) {
+    try {
+      const o = s?.output;
+      if (o == null) return '';
+      if (typeof o === 'string') return o;
+      try { return JSON.stringify(o); } catch (_) { return String(o); }
+    } catch (_) { return ''; }
   }
   function segNote(s) {
     try { return String(s?.note || '').trim(); } catch (_) { return ''; }
@@ -1121,7 +1125,7 @@
                                     <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j+1))}>Show less</button>
                                   {/if}
                                 {:else}
-                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{truncateMultiline(JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2))}</code></pre>
+                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{truncateMultiline(summaryOutputText(segmentsOf(m)[j+1]))}</code></pre>
                                   <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j+1))}>Show more</button>
                                 {/if}
                               </div>
@@ -1156,7 +1160,7 @@
                                   <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j))}>Show less</button>
                                 {/if}
                               {:else}
-                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{truncateMultiline(JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2))}</code></pre>
+                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{truncateMultiline(summaryOutputText(s))}</code></pre>
                                 <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j))}>Show more</button>
                               {/if}
                             </details>
