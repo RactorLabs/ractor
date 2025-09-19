@@ -575,7 +575,8 @@ pub async fn wake_agent(
 
     // Add task to restart the container with optional prompt
     let restore_payload = serde_json::json!({
-        "prompt": req.prompt
+        "prompt": req.prompt,
+        "reason": "user_wake"
     });
 
     sqlx::query(

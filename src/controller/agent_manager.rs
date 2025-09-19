@@ -724,6 +724,37 @@ impl AgentManager {
             info!("Prompt response {} created for woken agent {}", response_id, agent_name);
         }
 
+        // Insert a chat marker indicating the agent has woken
+        let response_id = uuid::Uuid::new_v4().to_string();
+        let now_text = chrono::Utc::now().to_rfc3339();
+        let reason = task
+            .payload
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("user_wake");
+        let note = if reason == "user_wake" {
+            "User wake"
+        } else {
+            "Wake"
+        };
+        let output_json = serde_json::json!({
+            "text": "",
+            "items": [ { "type": "woke", "note": note, "reason": reason, "by": principal, "at": now_text } ]
+        });
+        sqlx::query(
+            r#"
+            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
+            "#,
+        )
+        .bind(&response_id)
+        .bind(&agent_name)
+        .bind(&principal)
+        .bind(&serde_json::json!({"text":""}))
+        .bind(&output_json)
+        .execute(&self.pool)
+        .await?;
+
         Ok(())
     }
 
@@ -776,6 +807,27 @@ impl AgentManager {
                 r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
             )
             .bind(&agent_name)
+            .execute(&self.pool)
+            .await?;
+
+            // Insert a wake marker for implicit wake
+            let marker_id = uuid::Uuid::new_v4().to_string();
+            let now_text = chrono::Utc::now().to_rfc3339();
+            let output_json = serde_json::json!({
+                "text": "",
+                "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
+            });
+            sqlx::query(
+                r#"
+                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
+                "#,
+            )
+            .bind(&marker_id)
+            .bind(&agent_name)
+            .bind(&principal)
+            .bind(&serde_json::json!({"text":""}))
+            .bind(&output_json)
             .execute(&self.pool)
             .await?;
         }

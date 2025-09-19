@@ -375,6 +375,15 @@
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
+  function hasWokeSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'woke'); } catch(_) { return false; }
+  }
+  function wokeNoteFrom(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'woke');
+      return s ? segNote(s) : '';
+    } catch(_) { return ''; }
+  }
   function segToolTitle(s) {
     try {
       const t = segTool(s).toLowerCase();
@@ -1013,6 +1022,13 @@
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                     <span class="px-2 small">Slept{#if sleptNoteFrom(m)} ({sleptNoteFrom(m)}){/if}</span>
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                  </div>
+                  {/if}
+                  {#if hasWokeSeg(m)}
+                  <div class="d-flex align-items-center text-body mt-3">
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small">Woke{#if wokeNoteFrom(m)} ({wokeNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
