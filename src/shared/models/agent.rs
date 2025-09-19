@@ -200,7 +200,7 @@ where
 }
 
 fn default_idle_timeout() -> Option<i32> { Some(300) }
-fn default_busy_timeout() -> Option<i32> { Some(900) } // 15 minutes
+fn default_busy_timeout() -> Option<i32> { Some(3600) } // 1 hour
 
 // Custom deserializer for strict optional i32 validation
 fn deserialize_strict_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
@@ -601,7 +601,7 @@ impl Agent {
 
         // Initialize timeouts; idle_from/busy_from will be set on state transitions
         let idle_timeout = req.idle_timeout_seconds.unwrap_or(300);
-        let busy_timeout = req.busy_timeout_seconds.unwrap_or(900);
+        let busy_timeout = req.busy_timeout_seconds.unwrap_or(3600);
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when agent becomes busy
 

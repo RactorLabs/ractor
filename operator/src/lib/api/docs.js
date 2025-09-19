@@ -215,7 +215,7 @@ export function getApiDocs(base) {
     "published_by": "admin",
     "publish_permissions": {"code": true, "secrets": false, "content": true},
     "idle_timeout_seconds": 300,
-    "busy_timeout_seconds": 900,
+    "busy_timeout_seconds": 3600,
     "idle_from": "2025-01-01T12:10:00Z",
     "busy_from": null
   }
@@ -251,7 +251,7 @@ export function getApiDocs(base) {
   "published_by": "admin",
   "publish_permissions": {"code": true, "secrets": false, "content": true},
   "idle_timeout_seconds": 300,
-  "busy_timeout_seconds": 900,
+  "busy_timeout_seconds": 3600,
   "idle_from": "2025-01-01T12:10:00Z",
   "busy_from": null
 }`
@@ -296,7 +296,7 @@ export function getApiDocs(base) {
     endpoints: [
       { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List agents.', params: [
         { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept)' }
-      ], example: `curl -s ${BASE}/api/v0/agents -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent', array: true }, responses: [{ status: 200, body: `[{"name":"demo","created_by":"admin","state":"idle","description":null,"parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}]` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent', array: true }, responses: [{ status: 200, body: `[{"name":"demo","created_by":"admin","state":"idle","description":null,"parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}]` }] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
@@ -307,11 +307,11 @@ export function getApiDocs(base) {
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Idle timeout seconds (default 300)' },
-        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Busy timeout seconds (default 900)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo agent"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":900,"idle_from":null,"busy_from":null}` }] },
+        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Busy timeout seconds (default 3600)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo agent"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
       { method: 'GET', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Get agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Update agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
@@ -319,7 +319,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: 'Replace tags array; each tag must be alphanumeric (A-Za-z0-9), no spaces/symbols' },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
         { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":900,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
+      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/agents/{name}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' }

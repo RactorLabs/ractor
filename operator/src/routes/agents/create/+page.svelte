@@ -32,7 +32,7 @@
 
   let name = genName();
   let idleTimeoutSeconds = 300; // default 5 minutes
-  let busyTimeoutSeconds = 900; // default 15 minutes
+  let busyTimeoutSeconds = 3600; // default 1 hour
   let metadataText = '{}';
   // Tags input (comma-separated, alphanumeric only per tag)
   let tagsInput = '';
@@ -92,7 +92,7 @@
         metadata,
         tags: parseTags(),
         idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
-        busy_timeout_seconds: Number(busyTimeoutSeconds) || 900,
+        busy_timeout_seconds: Number(busyTimeoutSeconds) || 3600,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
@@ -193,7 +193,7 @@
             <div class="col-12 col-md-3">
               <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
               <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
-              <div class="form-text">Sleep after busy too long (default 900).</div>
+              <div class="form-text">Sleep after busy too long (default 3600).</div>
             </div>
 
             <div class="col-12">
