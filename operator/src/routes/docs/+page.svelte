@@ -309,8 +309,8 @@
         </div>
         <div class="fw-500 small text-body text-opacity-75 mb-1">Examples</div>
         <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'commentary', channel: 'analysis', text: 'Thinking about the approach…' }, null, 2)}</code></pre>
-        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_call', tool: 'bash', args: { command: 'ls -la', cwd: '/agent/code' } }, null, 2)}</code></pre>
-        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_result', tool: 'bash', output: '[exit_code:0]\nREADME.md\nsrc/' }, null, 2)}</code></pre>
+        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_call', tool: 'run_bash', args: { commands: 'ls -la', exec_dir: '/agent/code' } }, null, 2)}</code></pre>
+        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_result', tool: 'run_bash', output: { status: 'ok', tool: 'run_bash', exit_code: 0, truncated: false, stdout: 'README.md\nsrc/\n', stderr: '' } }, null, 2)}</code></pre>
         <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ type: 'final', channel: 'final', text: 'All set! Here are the results…' }, null, 2)}</code></pre>
         <div class="mt-2 small text-body text-opacity-75">Notes: Tool outputs may be truncated for size; the UI pairs each <span class="font-monospace">tool_call</span> with the next <span class="font-monospace">tool_result</span> having the same <span class="font-monospace">tool</span>.</div>
       </div>
