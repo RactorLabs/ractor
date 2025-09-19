@@ -589,7 +589,6 @@ impl AgentManager {
 
     pub async fn handle_sleep_agent(&self, task: AgentTask) -> Result<()> {
         let agent_name = task.agent_name;
-
         // Optional delay before sleeping (in seconds), minimum 5 seconds
         let delay_secs = task
             .payload
@@ -601,6 +600,12 @@ impl AgentManager {
             info!("Delaying sleep for agent {} by {} seconds", agent_name, delay_secs);
             sleep(Duration::from_secs(delay_secs)).await;
         }
+        // Capture prior state for reason classification
+        let prior_state_opt: Option<(String,)> = sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
+            .bind(&agent_name)
+            .fetch_optional(&self.pool)
+            .await?;
+        let prior_state = prior_state_opt.map(|t| t.0).unwrap_or_default();
 
         info!("Sleeping container for agent {}", agent_name);
 
@@ -614,6 +619,43 @@ impl AgentManager {
             .await?;
 
         info!("Agent {} state updated to slept", agent_name);
+        // Create a chat marker response to indicate the agent has slept
+        let response_id = uuid::Uuid::new_v4().to_string();
+        let created_by = task.created_by.clone();
+        let now_text = chrono::Utc::now().to_rfc3339();
+        // Determine note: auto timeout vs user-triggered
+        let auto = task.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
+        let reason = if auto {
+            if prior_state.to_lowercase() == "busy" { "busy_timeout" } else { "idle_timeout" }
+        } else { "user" };
+        let note = if auto {
+            if reason == "busy_timeout" { "Busy timeout" } else { "Idle timeout" }
+        } else {
+            task.payload
+                .get("note")
+                .and_then(|v| v.as_str())
+                .unwrap_or("User requested sleep")
+        };
+        let output_json = serde_json::json!({
+            "text": "",
+            "items": [
+                { "type": "slept", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text }
+            ]
+        });
+
+        sqlx::query(
+            r#"
+            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
+            "#,
+        )
+        .bind(&response_id)
+        .bind(&agent_name)
+        .bind(&created_by)
+        .bind(&serde_json::json!({"text": ""}))
+        .bind(&output_json)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }

@@ -255,15 +255,17 @@
   // Sleep modal state and actions
   let showSleepModal = false;
   let sleepDelayInput = 5;
+  let sleepNoteInput = '';
   function openSleepModal() {
     sleepDelayInput = 5;
+    sleepNoteInput = '';
     showSleepModal = true;
   }
   function closeSleepModal() { showSleepModal = false; }
   async function confirmSleep() {
     const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
     showSleepModal = false;
-    await sleepAgent(d);
+    await sleepAgent(d, sleepNoteInput);
   }
 
   async function fetchAgent() {
@@ -360,6 +362,9 @@
       }
       return o; // object/array/null
     } catch (_) { return s?.output; }
+  }
+  function segNote(s) {
+    try { return String(s?.note || '').trim(); } catch (_) { return ''; }
   }
   function segToolTitle(s) {
     try {
@@ -508,9 +513,12 @@
     sending = false;
   }
 
-  async function sleepAgent(delaySeconds = 5) {
+  async function sleepAgent(delaySeconds = 5, note = '') {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
+      const body = { delay_seconds: delaySeconds };
+      const t = String(note || '').trim();
+      if (t) body['note'] = t;
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
       // Do not optimistically flip state; let polling update when controller sleeps it
       error = null;
@@ -700,6 +708,11 @@
           <label class="form-label" for="sleep-delay">Sleep in (seconds)</label>
           <input id="sleep-delay" type="number" min="5" step="1" class="form-control" bind:value={sleepDelayInput} />
           <div class="form-text">Minimum 5 seconds. The agent will go to sleep after this delay.</div>
+          <div class="mt-3">
+            <label class="form-label" for="sleep-note">Note (optional)</label>
+            <input id="sleep-note" type="text" class="form-control" bind:value={sleepNoteInput} placeholder="e.g., Taking a break" />
+            <div class="form-text">Shown alongside the sleep marker in chat.</div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeSleepModal}>Cancel</button>
@@ -974,6 +987,11 @@
                           </div>
                         {/if}
                         {/if}
+                      {:else if segType(s) === 'slept'}
+                        <div class="my-3">
+                          <hr class="my-2" style="border-top: 2px dotted var(--bs-border-color);" />
+                          <div class="text-center small text-body-secondary">Slept{#if segNote(s)} ({segNote(s)}){/if}</div>
+                        </div>
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
                           <div class="markdown-wrap mt-1 mb-2">

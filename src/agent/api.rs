@@ -330,8 +330,8 @@ impl RaworcClient {
         }
     }
 
-    /// Sleep the current agent by name after an optional delay (seconds, min 5)
-    pub async fn sleep_agent(&self, delay_seconds: Option<u64>) -> Result<()> {
+    /// Sleep the current agent by name after an optional delay (seconds, min 5) with optional note
+    pub async fn sleep_agent(&self, delay_seconds: Option<u64>, note: Option<String>) -> Result<()> {
         let url = format!(
             "{}/api/v0/agents/{}/sleep",
             self.config.api_url, self.config.agent_name
@@ -341,9 +341,16 @@ impl RaworcClient {
             .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&serde_json::json!({
-                "delay_seconds": delay_seconds.unwrap_or(5)
-            }))
+            .json(&{
+                let mut body = serde_json::json!({ "delay_seconds": delay_seconds.unwrap_or(5) });
+                if let Some(n) = note {
+                    let t = n.trim().to_string();
+                    if !t.is_empty() {
+                        body["note"] = serde_json::json!(t);
+                    }
+                }
+                body
+            })
             .send()
             .await?;
 

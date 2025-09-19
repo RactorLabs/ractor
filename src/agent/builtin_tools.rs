@@ -424,14 +424,14 @@ impl Tool for SleepTool {
     fn name(&self) -> &str { "sleep" }
 
     fn description(&self) -> &str {
-        "Schedule the agent to sleep (stop runtime but preserve data) after a short delay."
+        "Schedule the agent to sleep (stop runtime but preserve data) after a short delay. Optionally include a note (shown in chat)."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "note": { "type": "string", "description": "Optional reason or note (ignored)" },
+                "note": { "type": "string", "description": "Optional reason or note (shown in chat)" },
                 "delay_seconds": { "type": "integer", "description": "Delay in seconds before sleeping (min/default 5)" }
             }
         })
@@ -440,8 +440,9 @@ impl Tool for SleepTool {
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
         let mut delay = args.get("delay_seconds").and_then(|v| v.as_u64()).unwrap_or(5);
         if delay < 5 { delay = 5; }
-        match self.api.sleep_agent(Some(delay)).await {
-            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted","delay_seconds": delay})),
+        let note = args.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
+        match self.api.sleep_agent(Some(delay), note.clone()).await {
+            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted","delay_seconds": delay, "note": note})),
             Err(e) => Ok(json!({"status":"error","tool":"sleep","error":e.to_string()})),
         }
     }

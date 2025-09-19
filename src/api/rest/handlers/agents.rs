@@ -406,6 +406,8 @@ pub async fn remix_agent(
 pub struct SleepAgentRequest {
     #[serde(default)]
     pub delay_seconds: Option<u64>,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 pub async fn sleep_agent(
@@ -463,7 +465,15 @@ pub async fn sleep_agent(
         .unwrap_or(5);
     if delay_seconds < 5 { delay_seconds = 5; }
     // Add task to destroy the container but keep volume after delay
-    let payload = serde_json::json!({ "delay_seconds": delay_seconds });
+    let note = maybe_req
+        .as_ref()
+        .and_then(|r| r.note.clone())
+        .and_then(|s| { let t = s.trim().to_string(); if t.is_empty() { None } else { Some(t) } });
+    let payload = if let Some(n) = note {
+        serde_json::json!({ "delay_seconds": delay_seconds, "note": n })
+    } else {
+        serde_json::json!({ "delay_seconds": delay_seconds })
+    };
     sqlx::query(
         r#"
         INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
