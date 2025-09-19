@@ -487,11 +487,10 @@
       // Reset textarea height back to default (2 rows) after clearing
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
-      // Optimistic add
-      chat = [...chat, { role: 'user', content }];
+      // Do not add optimistically; refresh from server so UI reflects authoritative messages
+      await fetchResponses();
       await tick();
       scrollToBottom();
-      // Let polling pick up the agent's response
     } catch (e) {
       error = e.message || String(e);
     } finally {
