@@ -5,6 +5,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::query;
 use std::sync::Arc;
+use chrono::{DateTime, Utc};
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -917,6 +918,79 @@ pub async fn get_published_agent(
     }
 
     Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+}
+
+// GET /agents/{name}/runtime — total runtime across sessions
+pub async fn get_agent_runtime(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Permission: owner or admin
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent runtime".to_string()))?;
+    }
+
+    // Get username for ownership check
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    // Find agent (admin can access any agent)
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+
+    // Fetch all responses for this agent (created_at + output JSON)
+    let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
+        r#"SELECT created_at, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#
+    )
+    .bind(&agent.name)
+    .fetch_all(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
+
+    // Sum runtime
+    let mut total: i64 = 0;
+    let mut last_woke: Option<DateTime<Utc>> = None;
+    for (row_created_at, output) in rows.into_iter() {
+        if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+            for it in items {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t == "woke" {
+                    let at = it
+                        .get("at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(row_created_at);
+                    last_woke = Some(at);
+                } else if t == "slept" {
+                    // Prefer embedded runtime_seconds, else compute delta
+                    if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
+                        if rs > 0 { total += rs; }
+                    } else {
+                        let end_at = it
+                            .get("at")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or(row_created_at);
+                        let start_at = last_woke.unwrap_or(agent.created_at);
+                        let delta = (end_at - start_at).num_seconds();
+                        if delta > 0 { total += delta; }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({
+        "agent_name": agent.name,
+        "total_runtime_seconds": total,
+    })))
 }
 
 pub async fn update_agent_to_busy(

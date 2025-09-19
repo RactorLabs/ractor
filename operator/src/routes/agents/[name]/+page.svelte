@@ -116,6 +116,8 @@
   let input = '';
   let sending = false;
   let pollHandle = null;
+  let runtimeSeconds = 0;
+  let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
   // Details (analysis + tool calls/results) visibility controlled via toggles
@@ -276,6 +278,18 @@
     // No content frame to compute; panel shows status only.
   }
 
+  async function fetchRuntime(force = false) {
+    try {
+      if (!force && Date.now() - _runtimeFetchedAt < 10000) return; // throttle to 10s
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/runtime`);
+      if (res.ok) {
+        const v = Number(res?.data?.total_runtime_seconds ?? 0);
+        if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
+        _runtimeFetchedAt = Date.now();
+      }
+    } catch (_) {}
+  }
+
   async function fetchResponses() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses?limit=200`);
     if (res.ok) {
@@ -318,6 +332,7 @@
     pollHandle = setInterval(async () => {
       await fetchResponses();
       await fetchAgent();
+      await fetchRuntime();
     }, 2000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
@@ -652,6 +667,7 @@
     $appOptions.appContentFullHeight = true;
     try {
       await fetchAgent();
+      await fetchRuntime(true);
       await fetchResponses();
       await tick();
       scrollToBottom();
@@ -906,6 +922,7 @@
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
               <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
+              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}</div>
               <div class="mt-2">
                 Public URL:
                 {#if agent.is_published || agent.isPublished}
