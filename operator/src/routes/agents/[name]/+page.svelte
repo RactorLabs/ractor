@@ -105,6 +105,11 @@
     thinkingPrefLoaded = true;
     toolsPrefLoaded = true;
   });
+  onMount(async () => {
+    try {
+      await fetchContextUsage();
+    } catch (_) {}
+  });
   $: if (browser && thinkingPrefLoaded) {
     setCookie(SHOW_THINKING_COOKIE, showThinking ? '1' : '0', 365);
   }
@@ -118,6 +123,45 @@
   let pollHandle = null;
   let runtimeSeconds = 0;
   let currentSessionSeconds = 0;
+
+  // Context usage state
+  let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
+  let ctxLoading = false;
+  let contextFull = false;
+  function fmtInt(n) {
+    try { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString() : String(n); } catch (_) { return String(n); }
+  }
+  function fmtPct(n) {
+    try { const v = Number(n); return Number.isFinite(v) ? `${v.toFixed(1)}%` : '-'; } catch (_) { return '-'; }
+  }
+  async function fetchContextUsage() {
+    try {
+      ctxLoading = true;
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context`);
+      if (res.ok) {
+        ctx = res.data || null;
+        // Update banner flag if over soft limit
+        const used = Number(ctx?.used_tokens_estimated || 0);
+        const limit = Number(ctx?.soft_limit_tokens || 100000);
+        contextFull = used >= limit;
+      }
+    } catch (_) { /* ignore */ }
+    ctxLoading = false;
+  }
+  async function clearContext() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context/clear`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Clear failed (HTTP ${res.status})`);
+      error = null;
+      contextFull = false;
+      await fetchContextUsage();
+      await fetchResponses();
+      await tick();
+      scrollToBottom();
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
   let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
@@ -334,6 +378,7 @@
     stopPolling();
     pollHandle = setInterval(async () => {
       await fetchResponses();
+      await fetchContextUsage();
       await fetchAgent();
       await fetchRuntime();
     }, 2000);
@@ -353,7 +398,7 @@
   // Helper: map tool key to display label
   function toolLabel(t) {
     const k = String(t || '').toLowerCase();
-    if (k === 'bash') return 'Bash';
+    if (k === 'bash' || k === 'run_bash') return 'Bash';
     if (k === 'text_editor') return 'Text Editor';
     return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
   }
@@ -409,11 +454,28 @@
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
+  function dateOnly(s) {
+    try {
+      const d = new Date(String(s || ''));
+      if (isNaN(d)) return '';
+      return d.toISOString().slice(0, 10); // YYYY-MM-DD
+    } catch (_) { return ''; }
+  }
+  function hasContextClearedSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'context_cleared'); } catch(_) { return false; }
+  }
+  function contextClearedAt(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'context_cleared');
+      const raw = String(s?.cutoff_at || '').trim();
+      return dateOnly(raw);
+    } catch(_) { return ''; }
+  }
   function segToolTitle(s) {
     try {
       const t = segTool(s).toLowerCase();
       const a = segArgs(s) || {};
-      if (t === 'bash') {
+      if (t === 'bash' || t === 'run_bash') {
         const cmd = a.command || a.cmd || '';
         return cmd ? cmd : '(bash)';
       }
@@ -438,6 +500,25 @@
       return str.length > max ? str.slice(0, max - 1) + '…' : str;
     } catch (_) { return ''; }
   }
+  // Multiline truncation for large tool outputs
+  function truncateMultiline(s, maxChars = 1200, maxLines = 24) {
+    try {
+      const str = String(s || '');
+      if (!str) return '';
+      let truncated = false;
+      let lines = str.split('\n');
+      if (lines.length > maxLines) { lines = lines.slice(0, maxLines); truncated = true; }
+      let text = lines.join('\n');
+      if (text.length > maxChars) { text = text.slice(0, maxChars); truncated = true; }
+      return truncated ? (text + '\n… truncated') : text;
+    } catch (_) { return String(s || ''); }
+  }
+
+  // Track which tool-result segments are expanded to show full output
+  let expandedSegments = new Set();
+  function segKey(m, j) { try { return `${m?.id || ''}:${j}`; } catch (_) { return `${j}`; } }
+  function expandSeg(key) { try { const s = new Set(expandedSegments); s.add(key); expandedSegments = s; } catch (_) {} }
+  function collapseSeg(key) { try { const s = new Set(expandedSegments); s.delete(key); expandedSegments = s; } catch (_) {} }
   // In-progress preview and label removed; always render full details in the feed.
 
   // Normalize metadata to an object (handles string-serialized JSON)
@@ -502,7 +583,7 @@
       const t = String(m?.metadata?.tool_type || '').toLowerCase();
       const a = m?.metadata?.args;
       if (!a || typeof a !== 'object') return '';
-      if (t === 'bash') {
+      if (t === 'bash' || t === 'run_bash') {
         const cmd = a.command || a.cmd || '';
         if (!cmd) return '';
         return `(${String(cmd).trim().slice(0, 80)})`;
@@ -530,7 +611,14 @@
         method: 'POST',
         body: JSON.stringify({ input: { text: content } })
       });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
+      if (!res.ok) {
+        if (res.status === 409) {
+          // Soft limit reached; show friendly banner and fetch latest usage
+          contextFull = true;
+          await fetchContextUsage();
+        }
+        throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
+      }
       input = '';
       // Reset textarea height back to default (2 rows) after clearing
       await tick();
@@ -840,6 +928,9 @@
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if agent}
                 <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
+                {#if agent.is_published || agent.isPublished}
+                  <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
+                {/if}
               {:else}
                 <div class="fw-bold">{name}</div>
               {/if}
@@ -848,6 +939,8 @@
             {#if isAdmin && agent}
               <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{agent.created_by}</span></div>
             {/if}
+            <!-- Public URL in main card -->
+            
             <div class="mt-2 d-flex flex-wrap gap-1">
               {#if Array.isArray(agent?.tags) && agent.tags.length}
                 {#each agent.tags as t}
@@ -922,17 +1015,22 @@
         {#if agent}
           <Card class="h-100">
             <div class="card-body small">
-              <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
+              <!-- Last Activity removed per design -->
               <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
               <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
-                Public URL:
-                {#if agent.is_published || agent.isPublished}
-                  <a href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">{getHostUrl()}/content/{agent?.name || name}/</a>
-                {:else}
-                  Not Published
-                {/if}
+                <div class="d-flex align-items-center justify-content-between">
+                  <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 100000)} ({fmtPct(ctx?.used_percent || 0)})</div>
+                  <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading}><i class="bi bi-trash3"></i> Clear</button>
+                </div>
+                <div class="progress mt-1" role="progressbar" aria-valuenow={Number(ctx?.used_percent || 0)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
+                  <div class="progress-bar {Number(ctx?.used_percent || 0) >= 90 ? 'bg-danger' : 'bg-theme'}" style={`width: ${Math.min(100, Number(ctx?.used_percent || 0)).toFixed(1)}%;`}></div>
+                </div>
+                <!-- Removed 'Since' line for context cutoff display -->
+              </div>
+              <div class="mt-2">
+                <!-- Public URL moved to main card -->
               </div>
             </div>
           </Card>
@@ -956,6 +1054,17 @@
 
     {#if error}
       <div class="alert alert-danger py-2 small mb-2">{error}</div>
+    {/if}
+    {#if contextFull}
+      <div class="alert alert-warning py-2 small mb-2 d-flex align-items-center justify-content-between" role="alert">
+        <div>
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          Context is full — clear it to continue.
+        </div>
+        <div class="ms-2">
+          <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading} title="Clear context and reset history window">Clear Context</button>
+        </div>
+      </div>
     {/if}
     {#if loading}
       <div class="flex-fill d-flex align-items-center justify-content-center border rounded-2 bg-body">
@@ -1001,7 +1110,15 @@
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
                                 <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
                                 <div class="text-body text-opacity-75 mb-1">Result</div>
-                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
+                                {#if isInProgress(m) || expandedSegments.has(segKey(m, j+1))}
+                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
+                                  {#if !isInProgress(m)}
+                                    <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j+1))}>Show less</button>
+                                  {/if}
+                                {:else}
+                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{truncateMultiline(JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2))}</code></pre>
+                                  <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j+1))}>Show more</button>
+                                {/if}
                               </div>
                             </details>
                           </div>
@@ -1028,7 +1145,15 @@
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
                               </summary>
-                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
+                              {#if isInProgress(m) || expandedSegments.has(segKey(m, j))}
+                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
+                                {#if !isInProgress(m)}
+                                  <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j))}>Show less</button>
+                                {/if}
+                              {:else}
+                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{truncateMultiline(JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2))}</code></pre>
+                                <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j))}>Show more</button>
+                              {/if}
                             </details>
                           </div>
                         {/if}
@@ -1056,6 +1181,13 @@
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                     <span class="px-2 small">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                  </div>
+                  {/if}
+                  {#if hasContextClearedSeg(m)}
+                  <div class="d-flex align-items-center text-body mt-3">
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small">Context Cleared</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}

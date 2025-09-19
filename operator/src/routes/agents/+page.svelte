@@ -164,11 +164,16 @@ import { getHostUrl } from '$lib/branding.js';
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
                       <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
+                      {#if a.is_published}
+                        <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
+                      {/if}
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
+                    <!-- Public URL in main card list -->
+                    
                     <div class="mt-2 d-flex flex-wrap gap-1">
                       {#if Array.isArray(a.tags) && a.tags.length}
                         {#each a.tags as t}
