@@ -252,6 +252,20 @@
   function closeDeleteModal() { showDeleteModal = false; }
   $: canConfirmDelete = String(deleteConfirm || '').trim() === String(name || '').trim();
 
+  // Sleep modal state and actions
+  let showSleepModal = false;
+  let sleepDelayInput = 5;
+  function openSleepModal() {
+    sleepDelayInput = 5;
+    showSleepModal = true;
+  }
+  function closeSleepModal() { showSleepModal = false; }
+  async function confirmSleep() {
+    const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
+    showSleepModal = false;
+    await sleepAgent(d);
+  }
+
   async function fetchAgent() {
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}`);
     if (res.ok && res.data) {
@@ -1097,17 +1111,4 @@
       :global(textarea.chat-no-zoom) { font-size: 16px; }
     }
   </style>
-</div>
-  // Sleep modal state and actions
-  let showSleepModal = false;
-  let sleepDelayInput = 5;
-  function openSleepModal() {
-    sleepDelayInput = 5;
-    showSleepModal = true;
-  }
-  function closeSleepModal() { showSleepModal = false; }
-  async function confirmSleep() {
-    const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
-    showSleepModal = false;
-    await sleepAgent(d);
-  }
+ </div>
