@@ -366,6 +366,15 @@
   function segNote(s) {
     try { return String(s?.note || '').trim(); } catch (_) { return ''; }
   }
+  function hasSleptSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'slept'); } catch(_) { return false; }
+  }
+  function sleptNoteFrom(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'slept');
+      return s ? segNote(s) : '';
+    } catch(_) { return ''; }
+  }
   function segToolTitle(s) {
     try {
       const t = segTool(s).toLowerCase();
@@ -934,8 +943,9 @@
               <!-- Agent side -->
               {#if hasComposite(m)}
                 <!-- Composite rendering: thinking, tool calls/results, final in one message -->
-                <div class="d-flex mb-3 justify-content-start">
-                  <div class="text-body" style="max-width: 80%; word-break: break-word;">
+                <div class="mb-3">
+                  <div class="d-flex justify-content-start">
+                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
                     {#each segmentsOf(m) as s, j}
                       {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
                         {#if showThinking}
@@ -988,13 +998,7 @@
                         {/if}
                         {/if}
                       {:else if segType(s) === 'slept'}
-                        <div class="my-3">
-                          <div class="d-flex align-items-center text-body-secondary">
-                            <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
-                            <span class="px-2 small">Slept{#if segNote(s)} ({segNote(s)}){/if}</span>
-                            <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
-                          </div>
-                        </div>
+                        <!-- handled below as a full-width marker -->
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
                           <div class="markdown-wrap mt-1 mb-2">
@@ -1003,7 +1007,15 @@
                         {/if}
                       {/if}
                     {/each}
+                    </div>
                   </div>
+                  {#if hasSleptSeg(m)}
+                  <div class="d-flex align-items-center text-body-secondary mt-3">
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
+                    <span class="px-2 small">Slept{#if sleptNoteFrom(m)} ({sleptNoteFrom(m)}){/if}</span>
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
+                  </div>
+                  {/if}
                 </div>
               {:else}
               {#if isToolExec(m) && showTools}
