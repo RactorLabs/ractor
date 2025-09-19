@@ -441,7 +441,7 @@ impl Tool for SleepTool {
         let mut delay = args.get("delay_seconds").and_then(|v| v.as_u64()).unwrap_or(5);
         if delay < 5 { delay = 5; }
         match self.api.sleep_agent(Some(delay)).await {
-            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted"})),
+            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted","delay_seconds": delay})),
             Err(e) => Ok(json!({"status":"error","tool":"sleep","error":e.to_string()})),
         }
     }

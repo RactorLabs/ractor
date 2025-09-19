@@ -237,6 +237,17 @@ impl ResponseHandler {
                     let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
                     let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
                     items_sent += 1;
+                    // Special case: after successful sleep, proactively inform the user and finalize
+                    if tool_name == "sleep" {
+                        let delay = output_value
+                            .get("delay_seconds")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(5);
+                        let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
+                        let final_seg = serde_json::json!({"type":"final","channel":"final","text": msg});
+                        let _ = self.api_client.update_response(&response.id, Some("completed".to_string()), Some(msg.clone()), Some(vec![final_seg])).await;
+                        return Ok(());
+                    }
                     // If the tool reported an error, let the model handle next step; do not mark failed
                     // Add tool result to conversation
                     let tool_content_str = if let Some(s) = output_value.as_str() { s.to_string() } else { output_value.to_string() };
@@ -292,6 +303,16 @@ impl ResponseHandler {
                             let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
                             let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
                             items_sent += 1;
+                            if tool_name == "sleep" {
+                                let delay = output_value
+                                    .get("delay_seconds")
+                                    .and_then(|v| v.as_u64())
+                                    .unwrap_or(5);
+                                let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
+                                let final_seg = serde_json::json!({"type":"final","channel":"final","text": msg});
+                                let _ = self.api_client.update_response(&response.id, Some("completed".to_string()), Some(msg.clone()), Some(vec![final_seg])).await;
+                                return Ok(());
+                            }
                             let tool_content_str = if let Some(s) = output_value.as_str() { s.to_string() } else { output_value.to_string() };
                             conversation.push(ChatMessage { role:"tool".to_string(), content: tool_content_str, name: Some(tool_name.to_string()), tool_call_id: None });
                             continue;
