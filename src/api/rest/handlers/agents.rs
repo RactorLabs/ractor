@@ -376,6 +376,166 @@ pub async fn clear_agent_context(
     Ok(Json(resp))
 }
 
+// Compact context: summarize recent conversation and set a new cutoff.
+pub async fn compact_agent_context(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<AgentContextUsageResponse>> {
+    // Require update permission
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to compact context".to_string()))?;
+    }
+
+    // Resolve principal name
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    // Confirm access to the agent
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+
+    // Load conversation history since the current cutoff (if any)
+    let cutoff = agent.context_cutoff_at;
+    let rows = if let Some(cut) = cutoff {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+        )
+        .bind(&agent.name)
+        .bind(cut)
+        .fetch_all(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    } else {
+        sqlx::query(
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#,
+        )
+        .bind(&agent.name)
+        .fetch_all(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    };
+
+    // Build a simple transcript from input/output.text fields
+    let mut transcript = String::new();
+    let mut added_chars: usize = 0;
+    let max_chars: usize = 50_000; // guard to avoid sending extremely large bodies
+    for row in rows {
+        let input: serde_json::Value = row.try_get("input").unwrap_or(serde_json::json!({}));
+        let output: serde_json::Value = row.try_get("output").unwrap_or(serde_json::json!({}));
+        if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
+            if !user_text.trim().is_empty() {
+                let line = format!("User: {}\n", user_text.trim());
+                if added_chars + line.len() > max_chars { break; }
+                transcript.push_str(&line);
+                added_chars += line.len();
+            }
+        }
+        if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
+            if !assistant_text.trim().is_empty() {
+                let line = format!("Assistant: {}\n", assistant_text.trim());
+                if added_chars + line.len() > max_chars { break; }
+                transcript.push_str(&line);
+                added_chars += line.len();
+            }
+        }
+        if added_chars >= max_chars { break; }
+    }
+
+    // If nothing to summarize, create a minimal marker
+    let summary_text = if transcript.trim().is_empty() {
+        "(No prior conversation to compact.)".to_string()
+    } else {
+        // Call Ollama to summarize the transcript
+        let base_url = std::env::var("OLLAMA_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:11434".to_string());
+        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
+        let system_prompt = "You are a helpful assistant that compresses conversation history into a concise context for future messages.\n- Keep key goals, decisions, constraints, URLs, files, and paths.\n- Remove chit‑chat and redundant steps.\n- Prefer bullet points.\n- Target 150–250 words.";
+        let user_content = format!("Please summarize the following conversation so it can be used as compact context for future turns.\n\n{}", transcript);
+        let body = serde_json::json!({
+            "model": model,
+            "stream": false,
+            "messages": [
+                { "role": "system", "content": system_prompt },
+                { "role": "user", "content": user_content }
+            ]
+        });
+
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Ollama request failed: {}", e)))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(ApiError::Internal(anyhow::anyhow!(
+                "Ollama error ({}): {}",
+                status, text
+            )));
+        }
+        let v: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Ollama parse error: {}", e)))?;
+        v.get("message")
+            .and_then(|m| m.get("content"))
+            .and_then(|c| c.as_str())
+            .unwrap_or("(summary unavailable)")
+            .to_string()
+    };
+
+    // Set the cutoff now
+    crate::shared::models::Agent::clear_context_cutoff(&state.db, &agent.name)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
+
+    // Record a history marker indicating context was compacted, include summary in output.text
+    if let Ok(created) = resp_model::AgentResponse::create(
+        &state.db,
+        &agent.name,
+        username,
+        resp_model::CreateResponseRequest { input: serde_json::json!({}), background: None },
+    ).await {
+        let cutoff_now = Utc::now().to_rfc3339();
+        let _ = resp_model::AgentResponse::update_by_id(
+            &state.db,
+            &created.id,
+            resp_model::UpdateResponseRequest {
+                status: Some("completed".to_string()),
+                input: None,
+                output: Some(serde_json::json!({
+                    "text": summary_text,
+                    "items": [ { "type": "context_compacted", "cutoff_at": cutoff_now } ]
+                })),
+            },
+        ).await;
+    }
+
+    // Return fresh measurement (post-compaction, with new cutoff at now)
+    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now()))
+        .await?;
+    let limit = soft_limit_tokens();
+    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+    let resp = AgentContextUsageResponse {
+        agent: agent.name,
+        soft_limit_tokens: limit,
+        used_tokens_estimated: used,
+        used_percent,
+        basis: "estimated_from_history_chars".to_string(),
+        cutoff_at: Some(Utc::now().to_rfc3339()),
+        measured_at: Utc::now().to_rfc3339(),
+        total_messages_considered: considered,
+    };
+    Ok(Json(resp))
+}
+
 pub async fn create_agent(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,

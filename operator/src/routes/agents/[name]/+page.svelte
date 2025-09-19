@@ -162,6 +162,20 @@
       error = e.message || String(e);
     }
   }
+  async function compactContext() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context/compact`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
+      error = null;
+      contextFull = false;
+      await fetchContextUsage();
+      await fetchResponses();
+      await tick();
+      scrollToBottom();
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
   let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
@@ -472,6 +486,9 @@
       const raw = String(s?.cutoff_at || '').trim();
       return dateOnly(raw);
     } catch(_) { return ''; }
+  }
+  function hasContextCompactedSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'context_compacted'); } catch(_) { return false; }
   }
   function segToolTitle(s) {
     try {
@@ -1031,7 +1048,7 @@
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 100000)} ({fmtPct(ctx?.used_percent || 0)})</div>
-                  <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading}><i class="bi bi-trash3"></i> Clear</button>
+                  <!-- Clear moved to toolbar next to Compact -->
                 </div>
                 <div class="progress mt-1" role="progressbar" aria-valuenow={Number(ctx?.used_percent || 0)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
                   <div class="progress-bar {Number(ctx?.used_percent || 0) >= 90 ? 'bg-danger' : 'bg-theme'}" style={`width: ${Math.min(100, Number(ctx?.used_percent || 0)).toFixed(1)}%;`}></div>
@@ -1058,6 +1075,10 @@
           <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
           <label class="form-check-label small d-none d-sm-inline" for="toggle-tools">🛠️</label>
         </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={ctxLoading} title="Compact context with LLM summary">Compact</button>
+        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading} title="Clear context and reset history window">Clear</button>
       </div>
     </div>
 
@@ -1197,6 +1218,13 @@
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                     <span class="px-2 small">Context Cleared</span>
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                  </div>
+                  {/if}
+                  {#if hasContextCompactedSeg(m)}
+                  <div class="d-flex align-items-center text-body mt-3">
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small">Context Compacted</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}

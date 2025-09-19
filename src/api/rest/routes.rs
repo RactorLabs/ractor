@@ -69,6 +69,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/agents/{name}/remix", post(handlers::agents::remix_agent))
         .route("/agents/{name}/context", get(handlers::agents::get_agent_context))
         .route("/agents/{name}/context/clear", post(handlers::agents::clear_agent_context))
+        .route("/agents/{name}/context/compact", post(handlers::agents::compact_agent_context))
         .route(
             "/agents/{name}/publish",
             post(handlers::agents::publish_agent),
