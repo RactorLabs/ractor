@@ -487,15 +487,25 @@
       // Reset textarea height back to default (2 rows) after clearing
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
-      // Do not add optimistically; refresh from server so UI reflects authoritative messages
-      await fetchResponses();
+      // Wait until the server-side response row appears, then update UI
+      const rid = res?.data?.id;
+      const deadline = Date.now() + 10000; // up to 10s
+      while (Date.now() < deadline) {
+        await fetchResponses();
+        const expectIn = rid ? `${rid}:in` : null;
+        if (!rid || (chat && chat.some(m => m.id === expectIn))) {
+          break;
+        }
+        await new Promise(r => setTimeout(r, 200));
+      }
       await tick();
       scrollToBottom();
     } catch (e) {
       error = e.message || String(e);
-    } finally {
       sending = false;
+      return;
     }
+    sending = false;
   }
 
   async function sleepAgent(delaySeconds = 5) {
