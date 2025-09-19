@@ -51,7 +51,10 @@ impl ResponseHandler {
                 let registry = registry.clone();
                 let api_client_clone = api_client.clone();
                 async move {
+                    // Register shell tool with canonical name 'bash'
                     registry.register_tool(Box::new(super::builtin_tools::ShellTool::new())).await;
+                    // Backward compatibility: accept 'run_bash' as an alias for 'bash'
+                    registry.register_alias("run_bash", "bash", None).await;
                     // Editor tools
                     registry.register_tool(Box::new(super::builtin_tools::OpenFileTool)).await;
                     registry.register_tool(Box::new(super::builtin_tools::CreateFileTool)).await;
@@ -201,7 +204,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                         let items = vec![
@@ -273,7 +276,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                             let items = vec![
@@ -722,10 +725,10 @@ Guideline: `clear_plan` should almost always be the last tool in a multi-step wo
 Examples:
 ```json
 // Assistant message (tool_call)
-{{"tool_call":{{"tool":"run_bash","args":{{"exec_dir":"/agent","commands":"echo hi"}}}}}}
+{{"tool_call":{{"tool":"bash","args":{{"exec_dir":"/agent","commands":"echo hi"}}}}}}
 
 // Tool message (tool_result)
-{{"status":"ok","tool":"run_bash","exit_code":null,"truncated":false,"stdout":"hi\n","stderr":""}}
+{{"status":"ok","tool":"bash","exit_code":null,"truncated":false,"stdout":"hi\n","stderr":""}}
 
 // Assistant message (tool_call)
 {{"tool_call":{{"tool":"open_file","args":{{"path":"/agent/code/app.py","start_line":1,"end_line":3}}}}}}

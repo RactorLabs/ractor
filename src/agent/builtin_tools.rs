@@ -44,7 +44,7 @@ impl ShellTool { pub fn new() -> Self { Self } }
 
 #[async_trait]
 impl Tool for ShellTool {
-    fn name(&self) -> &str { "run_bash" }
+    fn name(&self) -> &str { "bash" }
 
     fn description(&self) -> &str {
         "Run command(s) in a bash shell and return the output. Long outputs may be truncated and written to a log. Do not use this command to create, view, or edit files — use editor commands instead."
@@ -66,7 +66,7 @@ impl Tool for ShellTool {
         let commands = args.get("commands").and_then(|v| v.as_str()).unwrap_or("");
         // safety: restrict to /agent
         if !exec_dir.starts_with("/agent") {
-            return Ok(json!({"status":"error","tool":"run_bash","error":"exec_dir must be under /agent","exec_dir":exec_dir}));
+            return Ok(json!({"status":"error","tool":"bash","error":"exec_dir must be under /agent","exec_dir":exec_dir}));
         }
         // emulate working dir via cd then run
         let cmd = format!("export PATH=\"/agent/bin:$PATH\"; cd '{}' && {}", exec_dir.replace("'", "'\\''"), commands);
@@ -77,14 +77,14 @@ impl Tool for ShellTool {
                 let clean = strip_exit_marker(&out);
                 let (stdout, stderr) = split_stdout_stderr(&clean);
                 Ok(json!({
-                    "status":"ok","tool":"run_bash",
+                    "status":"ok","tool":"bash",
                     "exit_code": exit_code,
                     "truncated": truncated,
                     "stdout": stdout,
                     "stderr": stderr
                 }))
             }
-            Err(e) => Ok(json!({"status":"error","tool":"run_bash","error":e.to_string()})),
+            Err(e) => Ok(json!({"status":"error","tool":"bash","error":e.to_string()})),
         }
     }
 }
