@@ -1228,6 +1228,11 @@
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
+                  {#if m.content && m.content.trim()}
+                  <div class="markdown-wrap mt-2">
+                    <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
+                  </div>
+                  {/if}
                 </div>
               {:else}
               {#if isToolExec(m) && showTools}
