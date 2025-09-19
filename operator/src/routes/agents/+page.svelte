@@ -49,7 +49,14 @@ import { getHostUrl } from '$lib/branding.js';
   }
 
   async function sleepAgent(name) {
-    const delaySeconds = 5;
+    let delaySeconds = 5;
+    try {
+      const input = prompt('Sleep in how many seconds? (min 5)', '5');
+      if (input !== null) {
+        const n = Math.floor(Number(input));
+        if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
+      }
+    } catch (_) {}
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
     if (!res.ok) { error = res?.data?.message || 'Sleep failed'; return; }
     // Give the controller time to perform delayed sleep before refreshing

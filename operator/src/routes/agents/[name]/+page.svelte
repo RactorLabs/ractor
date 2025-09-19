@@ -485,9 +485,8 @@
     }
   }
 
-  async function sleepAgent() {
+  async function sleepAgent(delaySeconds = 5) {
     try {
-      const delaySeconds = 5;
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
       // Optimistic UI update to reflect new state immediately
@@ -669,6 +668,29 @@
   </div>
 {/if}
 
+<!-- Sleep Modal -->
+{#if showSleepModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Sleep Agent</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeSleepModal}></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label" for="sleep-delay">Sleep in (seconds)</label>
+          <input id="sleep-delay" type="number" min="5" step="1" class="form-control" bind:value={sleepDelayInput} />
+          <div class="form-text">Minimum 5 seconds. The agent will go to sleep after this delay.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeSleepModal}>Cancel</button>
+          <button class="btn btn-warning" on:click={confirmSleep}><i class="fas fa-moon me-1"></i>Sleep</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- Remix Modal -->
 {#if showRemixModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
@@ -775,7 +797,7 @@
                     <i class="fas fa-sun me-1"></i><span>Wake</span>
                   </button>
                 {:else if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-warning btn-sm" on:click={sleepAgent} aria-label="Put agent to sleep">
+                  <button class="btn btn-outline-warning btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
                     <i class="fas fa-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
@@ -1076,3 +1098,16 @@
     }
   </style>
 </div>
+  // Sleep modal state and actions
+  let showSleepModal = false;
+  let sleepDelayInput = 5;
+  function openSleepModal() {
+    sleepDelayInput = 5;
+    showSleepModal = true;
+  }
+  function closeSleepModal() { showSleepModal = false; }
+  async function confirmSleep() {
+    const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
+    showSleepModal = false;
+    await sleepAgent(d);
+  }
