@@ -74,6 +74,16 @@ export function getCommonSchemas() {
       { name: 'success', type: 'boolean', desc: 'true on success' },
       { name: 'state', type: 'string', desc: 'New state value' },
     ],
+    AgentContextUsage: [
+      { name: 'agent', type: 'string', desc: 'Agent name' },
+      { name: 'soft_limit_tokens', type: 'int', desc: 'Soft limit (tokens)' },
+      { name: 'used_tokens_estimated', type: 'int', desc: 'Estimated tokens since cutoff' },
+      { name: 'used_percent', type: 'float', desc: 'Usage percent of soft limit' },
+      { name: 'basis', type: 'string', desc: 'Estimation method' },
+      { name: 'cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff (null when absent)' },
+      { name: 'measured_at', type: 'string (RFC3339)', desc: 'Measurement timestamp' },
+      { name: 'total_messages_considered', type: 'int', desc: 'Messages scanned to compute estimate' },
+    ],
     Empty: [],
   };
 }
@@ -393,6 +403,22 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/agents/{name}/responses/count', auth: 'bearer', desc: 'Get response count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] }
+    ]
+  },
+  {
+    id: 'context',
+    title: 'Agent Context',
+    description: 'Context usage and management (protected).',
+    endpoints: [
+      { method: 'GET', path: '/api/v0/agents/{name}/context', auth: 'bearer', desc: 'Get estimated context usage since the current cutoff (if any).', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/context -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":12345,"used_percent":12.3,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":42}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/context/clear', auth: 'bearer', desc: 'Clear context by setting a new cutoff at now. Adds a "Context Cleared" marker response.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/clear -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/context/compact', auth: 'bearer', desc: 'Compact context by summarizing recent conversation via LLM and setting a new cutoff. Adds a "Context Compacted" marker response with the summary in output.text.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] }
     ]
   }
   ];

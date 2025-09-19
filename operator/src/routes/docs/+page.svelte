@@ -304,6 +304,16 @@
                 <td class="font-monospace">&#123; type, channel: 'final', text &#125;</td>
                 <td>Final assistant answer (mirrors <span class="font-monospace">output.text</span>).</td>
               </tr>
+              <tr>
+                <td class="font-monospace">context_cleared</td>
+                <td class="font-monospace">&#123; type, cutoff_at &#125;</td>
+                <td>Marker added when context is cleared via <span class="font-monospace">POST /agents/{name}/context/clear</span>.</td>
+              </tr>
+              <tr>
+                <td class="font-monospace">context_compacted</td>
+                <td class="font-monospace">&#123; type, cutoff_at &#125;</td>
+                <td>Marker added when context is compacted via <span class="font-monospace">POST /agents/{name}/context/compact</span>. The summary is placed in <span class="font-monospace">output.text</span>.</td>
+              </tr>
             </tbody>
           </table>
         </div>
