@@ -3,6 +3,7 @@ use super::tool_registry::ToolRegistry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone)]
 pub struct OllamaClient {
@@ -10,6 +11,7 @@ pub struct OllamaClient {
     base_url: String,
     reasoning_effort: Option<String>,
     thinking_budget: Option<u32>,
+    log_seq: Arc<AtomicU64>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -241,6 +243,7 @@ impl OllamaClient {
             base_url: base_url.trim_end_matches('/').to_string(),
             reasoning_effort,
             thinking_budget,
+            log_seq: Arc::new(AtomicU64::new(0)),
         })
     }
 
@@ -424,8 +427,10 @@ impl OllamaClient {
                 options: None,
             };
 
-            // Log request to file
-            self.log_ollama_request(&req).await;
+            // Correlate request/response logs with a simple sequence id
+            let log_id = self.log_seq.fetch_add(1, Ordering::SeqCst) + 1;
+            // Log request to file and tracing
+            self.log_ollama_request(&req, log_id).await;
 
             let resp = self
                 .client
@@ -463,8 +468,8 @@ impl OllamaClient {
                 .await
                 .map_err(|e| HostError::Model(format!("Failed to read response text: {}", e)))?;
 
-            // Log response to file
-            self.log_ollama_response(&response_text).await;
+            // Log response to file and tracing
+            self.log_ollama_response(&response_text, log_id).await;
 
             // Treat non-JSON or explicit tool parsing error as a parse failure to retry
             if let Ok(parsed) = serde_json::from_str::<ChatResponse>(&response_text) {
@@ -527,45 +532,48 @@ impl OllamaClient {
 
     // All non-standard error-salvage/channel parsing removed; rely on native tool_calls only and retry on parse errors.
     
-    async fn log_ollama_request(&self, req: &ChatRequest<'_>) {
-        if let Ok(req_json) = serde_json::to_string_pretty(req) {
-            let timestamp = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-            let filename = format!("/agent/logs/ollama_request_{}.json", timestamp);
-            
-            let log_content = format!(
-                "=== OLLAMA REQUEST {} ===\nModel: {}\nMessage Count: {}\nTools Count: {}\n\n{}",
-                timestamp,
-                req.model,
-                req.messages.len(),
-                req.tools.as_ref().map_or(0, |t| t.len()),
-                req_json
-            );
-            
-            if let Err(e) = tokio::fs::write(&filename, log_content).await {
-                tracing::warn!("Failed to write Ollama request log to {}: {}", filename, e);
+    async fn log_ollama_request(&self, req: &ChatRequest<'_>, id: u64) {
+        match serde_json::to_string_pretty(req) {
+            Ok(req_json) => {
+                let filename = format!("/agent/logs/ollama_{}_request.json", id);
+                let log_content = format!(
+                    "{{\n  \"id\": {},\n  \"model\": \"{}\",\n  \"message_count\": {},\n  \"tools_count\": {},\n  \"request\": {}\n}}\n",
+                    id,
+                    req.model,
+                    req.messages.len(),
+                    req.tools.as_ref().map_or(0, |t| t.len()),
+                    req_json
+                );
+                if let Err(e) = tokio::fs::write(&filename, log_content.as_bytes()).await {
+                    tracing::warn!("Failed to write Ollama request log to {}: {}", filename, e);
+                }
+                // Also send to tracing for quick inspection (can be large)
+                tracing::info!("OLLAMA REQUEST {} => {}", id, req_json);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to serialize Ollama request for logging: {}", e);
             }
         }
     }
     
-    async fn log_ollama_response(&self, response_text: &str) {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
-        let filename = format!("/agent/logs/ollama_response_{}.json", timestamp);
-        
+    async fn log_ollama_response(&self, response_text: &str, id: u64) {
+        // Try to pretty-print if JSON; otherwise write raw text
+        let (body_for_file, body_for_trace) = match serde_json::from_str::<serde_json::Value>(response_text) {
+            Ok(v) => (serde_json::to_string_pretty(&v).unwrap_or_else(|_| response_text.to_string()), response_text.to_string()),
+            Err(_) => (response_text.to_string(), response_text.to_string()),
+        };
+
+        let filename = format!("/agent/logs/ollama_{}_response.json", id);
         let log_content = format!(
-            "=== OLLAMA RESPONSE {} ===\nResponse Length: {} characters\n\n{}",
-            timestamp,
+            "{{\n  \"id\": {},\n  \"response_length\": {},\n  \"response\": {}\n}}\n",
+            id,
             response_text.len(),
-            response_text
+            body_for_file
         );
-        
-        if let Err(e) = tokio::fs::write(&filename, log_content).await {
+        if let Err(e) = tokio::fs::write(&filename, log_content.as_bytes()).await {
             tracing::warn!("Failed to write Ollama response log to {}: {}", filename, e);
         }
+        // Also send to tracing
+        tracing::info!("OLLAMA RESPONSE {} => {}", id, body_for_trace);
     }
 }
