@@ -925,7 +925,7 @@
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
               <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
-              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0} (Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
+              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 Public URL:
                 {#if agent.is_published || agent.isPublished}
