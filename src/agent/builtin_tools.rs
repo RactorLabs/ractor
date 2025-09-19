@@ -44,7 +44,7 @@ impl ShellTool { pub fn new() -> Self { Self } }
 
 #[async_trait]
 impl Tool for ShellTool {
-    fn name(&self) -> &str { "shell" }
+    fn name(&self) -> &str { "run_bash" }
 
     fn description(&self) -> &str {
         "Run command(s) in a bash shell and return the output. Long outputs may be truncated and written to a log. Do not use this command to create, view, or edit files — use editor commands instead."
@@ -66,10 +66,10 @@ impl Tool for ShellTool {
         let commands = args.get("commands").and_then(|v| v.as_str()).unwrap_or("");
         // safety: restrict to /agent
         if !exec_dir.starts_with("/agent") {
-            return Ok(json!({"status":"error","tool":"shell","error":"exec_dir must be under /agent","exec_dir":exec_dir}));
+            return Ok(json!({"status":"error","tool":"run_bash","error":"exec_dir must be under /agent","exec_dir":exec_dir}));
         }
         // emulate working dir via cd then run
-        let cmd = format!("cd '{}' && {}", exec_dir.replace("'", "'\\''"), commands);
+        let cmd = format!("export PATH=\"/agent/bin:$PATH\"; cd '{}' && {}", exec_dir.replace("'", "'\\''"), commands);
         match run_bash(&cmd).await {
             Ok(out) => {
                 let exit_code = parse_exit_code(&out);
@@ -77,14 +77,14 @@ impl Tool for ShellTool {
                 let clean = strip_exit_marker(&out);
                 let (stdout, stderr) = split_stdout_stderr(&clean);
                 Ok(json!({
-                    "status":"ok","tool":"shell",
+                    "status":"ok","tool":"run_bash",
                     "exit_code": exit_code,
                     "truncated": truncated,
                     "stdout": stdout,
                     "stderr": stderr
                 }))
             }
-            Err(e) => Ok(json!({"status":"error","tool":"shell","error":e.to_string()})),
+            Err(e) => Ok(json!({"status":"error","tool":"run_bash","error":e.to_string()})),
         }
     }
 }
@@ -312,8 +312,14 @@ impl Tool for FindFilecontentTool {
         if meta.as_ref().map(|m| m.is_file()).unwrap_or(false) {
             scan_file(Path::new(root), &re, &mut hits).await?;
         } else {
-            for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
-                if entry.file_type().is_file() {
+            let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
+                if e.file_type().is_dir() {
+                    let name = e.file_name().to_string_lossy();
+                    !matches_default_ignored_dir(&name)
+                } else { true }
+            });
+            for entry in walker.filter_map(|e| e.ok()) {
+                if entry.file_type().is_file() && !matches_default_ignored_file(entry.path()) {
                     scan_file(entry.path(), &re, &mut hits).await.ok();
                 }
             }
@@ -366,16 +372,22 @@ impl Tool for FindFilenameTool {
         }
         let set = builder.build()?;
         let mut matches = Vec::new();
-        for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+        let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
+            if e.file_type().is_dir() {
+                let name = e.file_name().to_string_lossy();
+                !matches_default_ignored_dir(&name)
+            } else { true }
+        });
+        for entry in walker.filter_map(|e| e.ok()) {
             let p = entry.path();
-            if set.is_match(p) {
+            if p.is_file() && !matches_default_ignored_file(p) && set.is_match(p) {
                 matches.push(p.display().to_string());
             }
         }
         Ok(json!({"status":"ok","tool":"find_filename","matches":matches}))
     }
 }
-
+    
 /// Publish tool (no confirmation required)
 pub struct PublishTool {
     api: Arc<RaworcClient>,
@@ -387,7 +399,7 @@ impl PublishTool {
 
 #[async_trait]
 impl Tool for PublishTool {
-    fn name(&self) -> &str { "publish" }
+    fn name(&self) -> &str { "publish_agent" }
 
     fn description(&self) -> &str {
         "Publish the agent's current content to its public URL."
@@ -404,8 +416,8 @@ impl Tool for PublishTool {
 
     async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
         match self.api.publish_agent().await {
-            Ok(_) => Ok(json!({"status":"ok","tool":"publish","message":"Publish request submitted"})),
-            Err(e) => Ok(json!({"status":"error","tool":"publish","error":e.to_string()})),
+            Ok(_) => Ok(json!({"status":"ok","tool":"publish_agent","message":"Publish request submitted"})),
+            Err(e) => Ok(json!({"status":"error","tool":"publish_agent","error":e.to_string()})),
         }
     }
 }
@@ -421,7 +433,7 @@ impl SleepTool {
 
 #[async_trait]
 impl Tool for SleepTool {
-    fn name(&self) -> &str { "sleep" }
+    fn name(&self) -> &str { "sleep_agent" }
 
     fn description(&self) -> &str {
         "Schedule the agent to sleep (stop runtime but preserve data) after a short delay. Optionally include a note (shown in chat)."
@@ -442,8 +454,8 @@ impl Tool for SleepTool {
         if delay < 5 { delay = 5; }
         let note = args.get("note").and_then(|v| v.as_str()).map(|s| s.to_string());
         match self.api.sleep_agent(Some(delay), note.clone()).await {
-            Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted","delay_seconds": delay, "note": note})),
-            Err(e) => Ok(json!({"status":"error","tool":"sleep","error":e.to_string()})),
+            Ok(_) => Ok(json!({"status":"ok","tool":"sleep_agent","message":"Sleep request submitted","delay_seconds": delay, "note": note})),
+            Err(e) => Ok(json!({"status":"error","tool":"sleep_agent","error":e.to_string()})),
         }
     }
 }
@@ -561,7 +573,7 @@ pub struct PlannerCreatePlanTool;
 
 #[async_trait]
 impl Tool for PlannerCreatePlanTool {
-    fn name(&self) -> &str { "planner_create_plan" }
+    fn name(&self) -> &str { "create_plan" }
 
     fn description(&self) -> &str {
         "Creates a plan. Generates a plan file under /agent/logs and sets it as the active plan."
@@ -612,7 +624,7 @@ impl Tool for PlannerCreatePlanTool {
         let marker = serde_json::json!({ "path": full_path });
         let _ = fs::write(CURRENT_PLAN_MARKER, marker.to_string()).await;
 
-        Ok(json!({"status":"ok","tool":"planner_create_plan","path": full_path, "tasks": plan.tasks.len()}))
+        Ok(json!({"status":"ok","tool":"create_plan","path": full_path, "tasks": plan.tasks.len()}))
     }
 }
 
@@ -620,7 +632,7 @@ pub struct PlannerAddTaskTool;
 
 #[async_trait]
 impl Tool for PlannerAddTaskTool {
-    fn name(&self) -> &str { "planner_add_task" }
+    fn name(&self) -> &str { "add_task" }
     fn description(&self) -> &str { "Adds a task to the active plan. Returns error if no active plan." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
@@ -636,7 +648,7 @@ impl Tool for PlannerAddTaskTool {
         let task = args.get("task").and_then(|v| v.as_str()).unwrap_or("");
         let plan_path = match current_plan_path().await {
             Ok(p) => p,
-            Err(_) => return Ok(json!({"status":"error","tool":"planner_add_task","error":"no active plan"}))
+            Err(_) => return Ok(json!({"status":"error","tool":"add_task","error":"no active plan"}))
         };
         let path = ensure_logs_dir(&plan_path)?;
         let mut plan = read_plan(path).await?;
@@ -644,12 +656,12 @@ impl Tool for PlannerAddTaskTool {
         let norm_new = normalize_task_title(task);
         if let Some(existing) = plan.tasks.iter().find(|t| normalize_task_title(&t.title) == norm_new) {
             // Treat as idempotent no-op to avoid error loops
-            return Ok(json!({"status":"ok","tool":"planner_add_task","note":"task already exists","task_id": existing.id}));
+            return Ok(json!({"status":"ok","tool":"add_task","note":"task already exists","task_id": existing.id}));
         }
         let id = next_task_id(&plan.tasks);
         plan.tasks.push(PlanTask{ id, title: task.to_string(), status: "pending".to_string(), created_at: Utc::now().to_rfc3339(), completed_at: None });
         write_plan(path, &plan).await?;
-        Ok(json!({"status":"ok","tool":"planner_add_task","task_id": id}))
+        Ok(json!({"status":"ok","tool":"add_task","task_id": id}))
     }
 }
 
@@ -663,7 +675,7 @@ impl PlannerCompleteTaskTool {
 
 #[async_trait]
 impl Tool for PlannerCompleteTaskTool {
-    fn name(&self) -> &str { "planner_complete_task" }
+    fn name(&self) -> &str { "complete_task" }
     fn description(&self) -> &str { "Completes one task in the active plan. For publish-related tasks, verify a content URL returns 200 under /content/{agent}. Returns error if no active plan." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
@@ -681,7 +693,7 @@ impl Tool for PlannerCompleteTaskTool {
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
         let plan_path = match current_plan_path().await {
             Ok(p) => p,
-            Err(_) => return Ok(json!({"status":"error","tool":"planner_complete_task","error":"no active plan"}))
+            Err(_) => return Ok(json!({"status":"error","tool":"complete_task","error":"no active plan"}))
         };
         let path = ensure_logs_dir(&plan_path)?;
         let mut plan = read_plan(path).await?;
@@ -695,7 +707,7 @@ impl Tool for PlannerCompleteTaskTool {
             if !Path::new(p).exists() { missing.push(p.clone()); }
         }
         if !missing.is_empty() && !force {
-            return Ok(json!({"status":"error","tool":"planner_complete_task","error":"verification failed","missing":missing}));
+            return Ok(json!({"status":"error","tool":"complete_task","error":"verification failed","missing":missing}));
         }
 
         // Special handling for publish tasks: verify a published URL returns HTTP 200 under /content/{agent}
@@ -707,29 +719,29 @@ impl Tool for PlannerCompleteTaskTool {
                 let base = base.trim_end_matches('/').to_string();
                 // fallback if RAWORC_HOST_URL is missing
                 if base.is_empty() {
-                    return Ok(json!({"status":"error","tool":"planner_complete_task","error":"RAWORC_HOST_URL not set; cannot verify published URL"}));
+                    return Ok(json!({"status":"error","tool":"complete_task","error":"RAWORC_HOST_URL not set; cannot verify published URL"}));
                 }
                 let agent_name = self.api_client.agent_name().to_string();
                 // If still empty, we cannot verify agent path properly
                 if agent_name.is_empty() {
-                    return Ok(json!({"status":"error","tool":"planner_complete_task","error":"Agent name not found; set RAWORC_AGENT_NAME to enable publish URL verification"}));
+                    return Ok(json!({"status":"error","tool":"complete_task","error":"Agent name not found; set RAWORC_AGENT_NAME to enable publish URL verification"}));
                 }
                 let prefix = format!("{}/content/{}/", base, agent_name);
                 let verify_url = args.get("verify_url").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| format!("{}index.html", prefix));
                 if !verify_url.starts_with(&prefix) {
-                    return Ok(json!({"status":"error","tool":"planner_complete_task","error":"verify_url must be under the agent content prefix","expected_prefix":prefix,"verify_url":verify_url}));
+                    return Ok(json!({"status":"error","tool":"complete_task","error":"verify_url must be under the agent content prefix","expected_prefix":prefix,"verify_url":verify_url}));
                 }
                 // Perform HTTP GET
                 match reqwest::Client::new().get(&verify_url).send().await {
                     Ok(resp) => {
                         let status = resp.status().as_u16();
                         if status != 200 && !force {
-                            return Ok(json!({"status":"error","tool":"planner_complete_task","error":"publish verification failed","verify_url":verify_url,"status":status}));
+                            return Ok(json!({"status":"error","tool":"complete_task","error":"publish verification failed","verify_url":verify_url,"status":status}));
                         }
                     }
                     Err(e) => {
                         if !force {
-                            return Ok(json!({"status":"error","tool":"planner_complete_task","error":"failed to fetch verify_url","detail": e.to_string()}));
+                            return Ok(json!({"status":"error","tool":"complete_task","error":"failed to fetch verify_url","detail": e.to_string()}));
                         }
                     }
                 }
@@ -745,9 +757,9 @@ impl Tool for PlannerCompleteTaskTool {
                 break;
             }
         }
-        if !updated { return Ok(json!({"status":"error","tool":"planner_complete_task","error":"task not found"})); }
+        if !updated { return Ok(json!({"status":"error","tool":"complete_task","error":"task not found"})); }
         write_plan(path, &plan).await?;
-        Ok(json!({"status":"ok","tool":"planner_complete_task","task_id": tid, "verified_missing": missing}))
+        Ok(json!({"status":"ok","tool":"complete_task","task_id": tid, "verified_missing": missing}))
     }
 }
 
@@ -755,7 +767,7 @@ pub struct PlannerClearPlanTool;
 
 #[async_trait]
 impl Tool for PlannerClearPlanTool {
-    fn name(&self) -> &str { "planner_clear_plan" }
+    fn name(&self) -> &str { "clear_plan" }
     fn description(&self) -> &str { "Remove plan marker and mark the plan complete so it no longer appears in the system prompt." }
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
@@ -767,7 +779,7 @@ impl Tool for PlannerClearPlanTool {
     async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
         let plan_path = match current_plan_path().await {
             Ok(p) => p,
-            Err(_) => return Ok(json!({"status":"error","tool":"planner_clear_plan","error":"no active plan"}))
+            Err(_) => return Ok(json!({"status":"error","tool":"clear_plan","error":"no active plan"}))
         };
         let path = ensure_logs_dir(&plan_path)?;
         let mut plan = read_plan(path).await?;
@@ -781,7 +793,7 @@ impl Tool for PlannerClearPlanTool {
         if !open.is_empty() {
             return Ok(json!({
                 "status":"error",
-                "tool":"planner_clear_plan",
+                "tool":"clear_plan",
                 "error":"cannot clear plan with open tasks",
                 "open_tasks": open
             }));
@@ -789,6 +801,23 @@ impl Tool for PlannerClearPlanTool {
         plan.completed_at = Some(Utc::now().to_rfc3339());
         write_plan(path, &plan).await?;
         let _ = fs::remove_file(CURRENT_PLAN_MARKER).await;
-        Ok(json!({"status":"ok","tool":"planner_clear_plan","path": plan_path}))
+        Ok(json!({"status":"ok","tool":"clear_plan","path": plan_path}))
     }
+}
+
+
+fn matches_default_ignored_dir(name: &str) -> bool {
+    matches!(name,
+        "node_modules"|".venv"|"venv"|"target"|"dist"|"build"|".cache"|"__pycache__"|
+        ".svelte-kit"|".next"|"logs"|".pytest_cache"|".mypy_cache"|".ruff_cache"|
+        "pip-wheel-metadata"|".tox"|".git"
+    )
+}
+
+fn matches_default_ignored_file(path: &std::path::Path) -> bool {
+    if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+        let ext = ext.to_lowercase();
+        return matches!(ext.as_str(), "pyc"|"pyo"|"o"|"so"|"a"|"d"|"class");
+    }
+    false
 }

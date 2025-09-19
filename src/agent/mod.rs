@@ -83,6 +83,14 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         }
     }
 
+
+    // Ensure /agent/bin exists and install command wrappers
+    if let Err(e) = std::fs::create_dir_all("/agent/bin") {
+        warn!("Failed to create /agent/bin: {}", e);
+    } else {
+        if let Err(e) = install_wrappers() { warn!("Failed to install wrappers: {}", e); }
+    }
+
     // No separate content preview server; content is published via raworc-content.
 
     // Wait for and execute setup script if it becomes available
@@ -201,3 +209,62 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
 }
 
     // Content preview server removed.
+
+
+fn install_wrappers() -> anyhow::Result<()> {
+    write_exec("/agent/bin/ls", LS_WRAPPER)?;
+    write_exec("/agent/bin/rg", RG_WRAPPER)?;
+    write_exec("/agent/bin/fd", FD_WRAPPER)?;
+    Ok(())
+}
+
+fn write_exec(path: &str, content: &str) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, content)?;
+    let mut perms = std::fs::metadata(path)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path, perms)?;
+    Ok(())
+}
+
+const LS_WRAPPER: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+_bin="/bin/ls"
+if [[ ! -x "$_bin" ]]; then _bin="/usr/bin/ls"; fi
+EXCLUDES=(
+  node_modules .venv venv target dist build .cache __pycache__
+  .svelte-kit .next logs .pytest_cache .mypy_cache .ruff_cache
+  pip-wheel-metadata .tox .git
+)
+args=()
+for ex in "${EXCLUDES[@]}"; do args+=( -I "$ex" ); done
+exec "$_bin" "${args[@]}" "$@"
+"#;
+
+const RG_WRAPPER: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+_bin="/usr/bin/rg"
+GLOBS=(
+  "!**/node_modules/**" "!**/.venv/**" "!**/venv/**" "!**/target/**" "!**/dist/**" "!**/build/**"
+  "!**/.cache/**" "!**/__pycache__/**" "!**/.svelte-kit/**" "!**/.next/**" "!**/logs/**" "!**/.pytest_cache/**"
+  "!**/.mypy_cache/**" "!**/.ruff_cache/**" "!**/pip-wheel-metadata/**" "!**/.tox/**" "!**/.git/**"
+  "!**/*.pyc" "!**/*.pyo" "!**/*.o" "!**/*.so" "!**/*.a" "!**/*.class"
+)
+args=()
+for g in "${GLOBS[@]}"; do args+=( -g "$g" ); done
+exec "$_bin" "${args[@]}" "$@"
+"#;
+
+const FD_WRAPPER: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+_bin="/usr/bin/fd"
+EXCLUDES=(
+  node_modules .venv venv target dist build .cache __pycache__
+  .svelte-kit .next logs .pytest_cache .mypy_cache .ruff_cache
+  pip-wheel-metadata .tox .git
+  "*.pyc" "*.pyo" "*.o" "*.so" "*.a" "*.class"
+)
+args=()
+for ex in "${EXCLUDES[@]}"; do args+=( --exclude "$ex" ); done
+exec "$_bin" "${args[@]}" "$@"
+"#;
