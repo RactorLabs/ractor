@@ -774,7 +774,7 @@ impl AgentManager {
         sqlx::query(
             r#"
             INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
-            VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
         .bind(&response_id)
@@ -782,6 +782,8 @@ impl AgentManager {
         .bind(&principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
+        .bind(&task.created_at)
+        .bind(&task.created_at)
         .execute(&self.pool)
         .await?;
 
@@ -840,26 +842,33 @@ impl AgentManager {
             .execute(&self.pool)
             .await?;
 
-            // Insert a wake marker for implicit wake
-            let marker_id = uuid::Uuid::new_v4().to_string();
-            let now_text = chrono::Utc::now().to_rfc3339();
-            let output_json = serde_json::json!({
-                "text": "",
-                "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
-            });
-            sqlx::query(
-                r#"
-                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
-                VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
-                "#,
-            )
-            .bind(&marker_id)
-            .bind(&agent_name)
-            .bind(&principal)
-            .bind(&serde_json::json!({"text":""}))
-            .bind(&output_json)
-            .execute(&self.pool)
-            .await?;
+        // Insert a wake marker for implicit wake
+        let marker_id = uuid::Uuid::new_v4().to_string();
+        let now_text = chrono::Utc::now().to_rfc3339();
+        // Ensure the wake marker sorts before the newly created response row by using a slightly earlier timestamp
+        let marker_created_at = task
+            .created_at
+            .checked_sub_signed(chrono::Duration::milliseconds(1))
+            .unwrap_or(task.created_at);
+        let output_json = serde_json::json!({
+            "text": "",
+            "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
+        });
+        sqlx::query(
+            r#"
+            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
+            "#,
+        )
+        .bind(&marker_id)
+        .bind(&agent_name)
+        .bind(&principal)
+        .bind(&serde_json::json!({"text":""}))
+        .bind(&output_json)
+        .bind(&marker_created_at)
+        .bind(&marker_created_at)
+        .execute(&self.pool)
+        .await?;
         }
 
         // Insert response row
@@ -867,7 +876,7 @@ impl AgentManager {
         sqlx::query(
             r#"
             INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
             "#,
         )
         .bind(&response_id)
@@ -875,6 +884,8 @@ impl AgentManager {
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
+        .bind(&task.created_at)
+        .bind(&task.created_at)
         .execute(&self.pool)
         .await?;
         info!("Inserted response {} for agent {}", response_id, agent_name);
