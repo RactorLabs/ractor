@@ -989,8 +989,11 @@
                         {/if}
                       {:else if segType(s) === 'slept'}
                         <div class="my-3">
-                          <hr class="my-2" style="border-top: 2px dotted var(--bs-border-color);" />
-                          <div class="text-center small text-body-secondary">Slept{#if segNote(s)} ({segNote(s)}){/if}</div>
+                          <div class="d-flex align-items-center text-body-secondary">
+                            <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
+                            <span class="px-2 small">Slept{#if segNote(s)} ({segNote(s)}){/if}</span>
+                            <hr class="flex-grow-1 my-0" style="border-top: 2px dotted var(--bs-border-color);" />
+                          </div>
                         </div>
                       {:else if segType(s) === 'final'}
                         {#if segText(s) && segText(s).trim()}
