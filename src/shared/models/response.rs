@@ -102,7 +102,7 @@ impl AgentResponse {
             SELECT id, agent_name, created_by, status, input, output, created_at, updated_at
             FROM agent_responses
             WHERE agent_name = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
             "#
         )

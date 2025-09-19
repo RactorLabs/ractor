@@ -22,6 +22,7 @@ pub struct Agent {
     pub busy_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
+    pub context_cutoff_at: Option<DateTime<Utc>>,
     // Removed: id, container_id, persistent_volume_id (derived from name)
 }
 
@@ -558,7 +559,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
             FROM agents
             ORDER BY created_at DESC
             "#,
@@ -576,7 +577,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
             FROM agents
             WHERE name = ?
             "#,
@@ -853,7 +854,7 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
             FROM agents
             WHERE is_published = true
             ORDER BY published_at DESC
@@ -861,6 +862,21 @@ impl Agent {
         )
         .fetch_all(pool)
         .await
+    }
+
+    pub async fn clear_context_cutoff(pool: &sqlx::MySqlPool, name: &str) -> Result<(), sqlx::Error> {
+        sqlx::query(
+            r#"
+            UPDATE agents
+            SET context_cutoff_at = NOW()
+            WHERE name = ?
+            "#,
+        )
+        .bind(name)
+        .execute(pool)
+        .await?;
+
+        Ok(())
     }
 
     
