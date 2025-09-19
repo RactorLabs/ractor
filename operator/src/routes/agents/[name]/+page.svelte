@@ -398,7 +398,8 @@
   // Helper: map tool key to display label
   function toolLabel(t) {
     const k = String(t || '').toLowerCase();
-    if (k === 'bash' || k === 'run_bash') return 'Bash';
+    if (k === 'run_bash') return 'run_bash';
+    if (k === 'bash') return 'bash';
     if (k === 'text_editor') return 'Text Editor';
     return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
   }
@@ -476,8 +477,11 @@
       const t = segTool(s).toLowerCase();
       const a = segArgs(s) || {};
       if (t === 'bash' || t === 'run_bash') {
-        const cmd = a.command || a.cmd || '';
-        return cmd ? cmd : '(bash)';
+        const cmd = a.commands || a.command || a.cmd || '';
+        const cwd = a.exec_dir || a.cwd || a.workdir || '';
+        if (!cmd && !cwd) return '(run_bash)';
+        if (cmd && cwd) return `${cmd} • ${cwd}`;
+        return cmd || cwd || '(run_bash)';
       }
       if (t === 'text_editor') {
         const action = a.action || 'edit';
@@ -584,9 +588,13 @@
       const a = m?.metadata?.args;
       if (!a || typeof a !== 'object') return '';
       if (t === 'bash' || t === 'run_bash') {
-        const cmd = a.command || a.cmd || '';
-        if (!cmd) return '';
-        return `(${String(cmd).trim().slice(0, 80)})`;
+        const cmd = a.commands || a.command || a.cmd || '';
+        const cwd = a.exec_dir || a.cwd || a.workdir || '';
+        const parts = [];
+        if (cmd) parts.push(String(cmd).trim().slice(0, 80));
+        if (cwd) parts.push(String(cwd).trim());
+        if (!parts.length) return '';
+        return `(${parts.join(' • ')})`;
       }
       if (t === 'text_editor') {
         const action = a.action || 'edit';
