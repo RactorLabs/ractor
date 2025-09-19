@@ -1045,7 +1045,7 @@
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 small">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
