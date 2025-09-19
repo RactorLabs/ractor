@@ -63,6 +63,7 @@ export function getCommonSchemas() {
     RuntimeTotal: [
       { name: 'agent_name', type: 'string', desc: 'Agent name' },
       { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sessions (seconds)' },
+      { name: 'current_session_seconds', type: 'int', desc: 'Current session runtime (seconds), 0 if sleeping' },
     ],
     BusyIdleAck: [
       { name: 'success', type: 'boolean', desc: 'true on success' },
@@ -340,7 +341,7 @@ export function getApiDocs(base) {
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/wake -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init",...}` }] },
       { method: 'GET', path: '/api/v0/agents/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last wake or creation).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"agent_name":"demo","total_runtime_seconds":1234}` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"agent_name":"demo","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent agent name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },

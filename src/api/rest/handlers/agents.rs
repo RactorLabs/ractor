@@ -955,6 +955,7 @@ pub async fn get_agent_runtime(
     // Sum runtime for completed sessions; track last wake for current session inclusion
     let mut total: i64 = 0;
     let mut last_woke: Option<DateTime<Utc>> = None;
+    let mut current_session: i64 = 0;
     for (row_created_at, output) in rows.into_iter() {
         if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
             for it in items {
@@ -992,12 +993,16 @@ pub async fn get_agent_runtime(
         let start_at = last_woke.unwrap_or(agent.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
-        if delta > 0 { total += delta; }
+        if delta > 0 {
+            total += delta;
+            current_session = delta;
+        }
     }
 
     Ok(Json(serde_json::json!({
         "agent_name": agent.name,
         "total_runtime_seconds": total,
+        "current_session_seconds": current_session
     })))
 }
 

@@ -117,6 +117,7 @@
   let sending = false;
   let pollHandle = null;
   let runtimeSeconds = 0;
+  let currentSessionSeconds = 0;
   let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
   // Content preview via agent ports has been removed.
@@ -285,6 +286,8 @@
       if (res.ok) {
         const v = Number(res?.data?.total_runtime_seconds ?? 0);
         if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
+        const cs = Number(res?.data?.current_session_seconds ?? 0);
+        currentSessionSeconds = Number.isFinite(cs) && cs >= 0 ? cs : 0;
         _runtimeFetchedAt = Date.now();
       }
     } catch (_) {}
@@ -922,7 +925,7 @@
               <div>Last Activity: <span class="font-monospace">{agent.last_activity_at || '-'}</span></div>
               <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
               <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
-              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}</div>
+              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0} (Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 Public URL:
                 {#if agent.is_published || agent.isPublished}
