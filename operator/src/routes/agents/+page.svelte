@@ -41,46 +41,11 @@
 
 import { getHostUrl } from '$lib/branding.js';
 
-  // Format seconds as human-readable hours/minutes/seconds
-  function fmtDuration(v) {
-    let total = Number(v || 0);
-    if (!isFinite(total) || total < 0) total = 0;
-    const h = Math.floor(total / 3600);
-    total -= h * 3600;
-    const m = Math.floor(total / 60);
-    const s = Math.floor(total - m * 60);
-    const parts = [];
-    if (h) parts.push(`${h}h`);
-    if (m) parts.push(`${m}m`);
-    if (s || parts.length === 0) parts.push(`${s}s`);
-    return parts.join(' ');
-  }
-
   async function refresh() {
     const res = await apiFetch('/agents');
     if (res.ok) {
       agents = Array.isArray(res.data) ? res.data : (res.data?.agents || []);
     }
-    // Kick off runtime fetch (throttled) for listed agents
-    try {
-      for (const a of agents) { fetchAgentRuntime(a.name); }
-    } catch (_) {}
-  }
-
-  // Runtime cache per agent
-  const runtimeByAgent = {};
-  async function fetchAgentRuntime(name, force = false) {
-    try {
-      const cur = runtimeByAgent[name];
-      if (!force && cur && Date.now() - (cur.fetchedAt || 0) < 10000) return; // throttle 10s per agent
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/runtime`);
-      if (res.ok) {
-        const v = Number(res?.data?.total_runtime_seconds ?? 0);
-        if (!runtimeByAgent[name]) runtimeByAgent[name] = { seconds: 0, fetchedAt: 0 };
-        runtimeByAgent[name].seconds = Number.isFinite(v) && v >= 0 ? v : 0;
-        runtimeByAgent[name].fetchedAt = Date.now();
-      }
-    } catch (_) {}
   }
 
   async function sleepAgent(name) {
@@ -132,12 +97,7 @@ import { getHostUrl } from '$lib/branding.js';
   let pollHandle = null;
   function startPolling() {
     stopPolling();
-    pollHandle = setInterval(async () => {
-      try {
-        await refresh();
-        for (const a of agents) { fetchAgentRuntime(a.name); }
-      } catch (_) {}
-    }, 2000);
+    pollHandle = setInterval(async () => { try { await refresh(); } catch (_) {} }, 2000);
   }
   function stopPolling() {
     if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
@@ -224,7 +184,6 @@ import { getHostUrl } from '$lib/branding.js';
                         <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
                         <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
                       </div>
-                      <div class="ms-2 small text-body-secondary">Runtime: {fmtDuration((runtimeByAgent[a.name]?.seconds) || 0)}</div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                         {#if (a.state || '').toLowerCase() === 'slept'}
                           <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent">
