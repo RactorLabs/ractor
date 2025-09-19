@@ -424,20 +424,23 @@ impl Tool for SleepTool {
     fn name(&self) -> &str { "sleep" }
 
     fn description(&self) -> &str {
-        "Put the agent to sleep (stops its runtime but preserves data)."
+        "Schedule the agent to sleep (stop runtime but preserve data) after a short delay."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "note": { "type": "string", "description": "Optional reason or note" }
+                "note": { "type": "string", "description": "Optional reason or note (ignored)" },
+                "delay_seconds": { "type": "integer", "description": "Delay in seconds before sleeping (min/default 5)" }
             }
         })
     }
 
-    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
-        match self.api.sleep_agent().await {
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let mut delay = args.get("delay_seconds").and_then(|v| v.as_u64()).unwrap_or(5);
+        if delay < 5 { delay = 5; }
+        match self.api.sleep_agent(Some(delay)).await {
             Ok(_) => Ok(json!({"status":"ok","tool":"sleep","message":"Sleep request submitted"})),
             Err(e) => Ok(json!({"status":"error","tool":"sleep","error":e.to_string()})),
         }
@@ -500,6 +503,23 @@ struct PlanFile {
     tasks: Vec<PlanTask>,
     #[serde(default)]
     completed_at: Option<String>,
+}
+
+// Normalize a task title for comparison so we can detect duplicates even if
+// the model copied decorations from the system prompt (checkboxes, IDs, etc.).
+fn normalize_task_title(s: &str) -> String {
+    let s = s.trim();
+    // Match and strip optional leading decorations then capture the core title.
+    // Covers:
+    // - optional "Next Task:" prefix
+    // - optional list checkbox like "- [ ]" or "- [x]"
+    // - optional id markers like "(#12)" or "#12 "
+    let re = Regex::new(r"^\s*(?:Next Task:\s*)?(?:-\s*\[(?: |x|X)\]\s*)?(?:\(#\d+\)\s*|#\d+\s+)?(.*)$").unwrap();
+    let core = if let Some(caps) = re.captures(s) {
+        caps.get(1).map(|m| m.as_str()).unwrap_or(s)
+    } else { s };
+    // Collapse internal whitespace and lowercase
+    core.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()
 }
 
 fn next_task_id(tasks: &[PlanTask]) -> u32 { tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1 }
@@ -573,7 +593,7 @@ impl Tool for PlannerCreatePlanTool {
         let mut tasks = Vec::new();
         let mut seen: HashSet<String> = HashSet::new();
         for t in initial_tasks {
-            let norm = t.trim().to_lowercase();
+            let norm = normalize_task_title(&t);
             if seen.contains(&norm) { continue; }
             seen.insert(norm);
             tasks.push(PlanTask{ id: next_task_id(&tasks), title: t, status: "pending".to_string(), created_at: Utc::now().to_rfc3339(), completed_at: None });
@@ -619,10 +639,11 @@ impl Tool for PlannerAddTaskTool {
         };
         let path = ensure_logs_dir(&plan_path)?;
         let mut plan = read_plan(path).await?;
-        // Reject duplicate task titles (case-insensitive, trimmed)
-        let norm_new = task.trim().to_lowercase();
-        if let Some(existing) = plan.tasks.iter().find(|t| t.title.trim().to_lowercase() == norm_new) {
-            return Ok(json!({"status":"error","tool":"planner_add_task","error":"task already exists","task_id": existing.id}));
+        // Reject duplicate task titles (robust normalization)
+        let norm_new = normalize_task_title(task);
+        if let Some(existing) = plan.tasks.iter().find(|t| normalize_task_title(&t.title) == norm_new) {
+            // Treat as idempotent no-op to avoid error loops
+            return Ok(json!({"status":"ok","tool":"planner_add_task","note":"task already exists","task_id": existing.id}));
         }
         let id = next_task_id(&plan.tasks);
         plan.tasks.push(PlanTask{ id, title: task.to_string(), status: "pending".to_string(), created_at: Utc::now().to_rfc3339(), completed_at: None });

@@ -651,7 +651,7 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 - After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `planner_clear_plan` to finalize and remove it from the prompt.
 - When a plan is active, you must follow it strictly: complete each task, update the plan after every step, and finally call `planner_clear_plan`. Do not send a final assistant message while a plan is active.
 - Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
-- Do not add duplicate tasks: Before calling `planner_add_task`, check the active plan. If the requested task is already present (exact same title), do not add it again. Instead, acknowledge it is already in the plan and proceed with execution or completion of that task.
+ - Do not add duplicate tasks: Before calling `planner_add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
 
 #### Tool: planner_create_plan
 - Creates a plan. Generates a plan file under `/agent/logs` and sets it as the active plan.

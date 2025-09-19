@@ -330,8 +330,8 @@ impl RaworcClient {
         }
     }
 
-    /// Sleep the current agent by name
-    pub async fn sleep_agent(&self) -> Result<()> {
+    /// Sleep the current agent by name after an optional delay (seconds, min 5)
+    pub async fn sleep_agent(&self, delay_seconds: Option<u64>) -> Result<()> {
         let url = format!(
             "{}/api/v0/agents/{}/sleep",
             self.config.api_url, self.config.agent_name
@@ -341,11 +341,14 @@ impl RaworcClient {
             .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&serde_json::json!({
+                "delay_seconds": delay_seconds.unwrap_or(5)
+            }))
             .send()
             .await?;
 
         match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
+            StatusCode::OK | StatusCode::NO_CONTENT | StatusCode::CREATED => Ok(()),
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }

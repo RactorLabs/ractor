@@ -49,8 +49,11 @@ import { getHostUrl } from '$lib/branding.js';
   }
 
   async function sleepAgent(name) {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST' });
+    const delaySeconds = 5;
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
     if (!res.ok) { error = res?.data?.message || 'Sleep failed'; return; }
+    // Give the controller time to perform delayed sleep before refreshing
+    await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
     await refresh();
   }
   async function wakeAgent(name) {

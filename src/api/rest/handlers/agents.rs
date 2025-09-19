@@ -402,10 +402,17 @@ pub async fn remix_agent(
     Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SleepAgentRequest {
+    #[serde(default)]
+    pub delay_seconds: Option<u64>,
+}
+
 pub async fn sleep_agent(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
+    maybe_req: Option<Json<SleepAgentRequest>>,
 ) -> ApiResult<Json<AgentResponse>> {
     tracing::info!("Sleep request received for agent: {}", name);
     let created_by = match &auth.principal {
@@ -448,41 +455,24 @@ pub async fn sleep_agent(
         ));
     }
 
-    // Update agent state to slept
-    let result = sqlx::query(
-        r#"
-        UPDATE agents 
-        SET state = ?
-        WHERE name = ?
-    "#,
-    )
-    .bind(crate::shared::models::constants::AGENT_STATE_SLEPT)
-    .bind(&agent.name)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Database error during suspend: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to sleep agent: {}", e))
-    })?;
-
-    tracing::info!(
-        "Update query executed, rows affected: {}",
-        result.rows_affected()
-    );
-
-    if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound("Agent not found".to_string()));
-    }
-
-    // Add task to destroy the container but keep volume
+    // Determine delay (min 5 seconds)
+    // Try to parse JSON body; if absent or invalid, default to 5
+    let mut delay_seconds = maybe_req
+        .as_ref()
+        .and_then(|r| r.delay_seconds)
+        .unwrap_or(5);
+    if delay_seconds < 5 { delay_seconds = 5; }
+    // Add task to destroy the container but keep volume after delay
+    let payload = serde_json::json!({ "delay_seconds": delay_seconds });
     sqlx::query(
         r#"
         INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'sleep_agent', ?, '{}', 'pending')
+        VALUES (?, 'sleep_agent', ?, ?, 'pending')
         "#,
     )
     .bind(&agent.name)
     .bind(&created_by)
+    .bind(payload)
     .execute(&*state.db)
     .await
     .map_err(|e| {
@@ -492,7 +482,7 @@ pub async fn sleep_agent(
 
     tracing::info!("Created suspend task for agent {}", name);
 
-    // Fetch updated agent
+    // Fetch agent (state remains as-is until controller executes sleep)
     let updated_agent = Agent::find_by_name(&state.db, &name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated agent: {}", e)))?

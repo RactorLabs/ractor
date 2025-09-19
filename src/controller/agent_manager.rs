@@ -590,6 +590,18 @@ impl AgentManager {
     pub async fn handle_sleep_agent(&self, task: AgentTask) -> Result<()> {
         let agent_name = task.agent_name;
 
+        // Optional delay before sleeping (in seconds), minimum 5 seconds
+        let delay_secs = task
+            .payload
+            .get("delay_seconds")
+            .and_then(|v| v.as_u64())
+            .map(|d| if d < 5 { 5 } else { d })
+            .unwrap_or(5);
+        if delay_secs > 0 {
+            info!("Delaying sleep for agent {} by {} seconds", agent_name, delay_secs);
+            sleep(Duration::from_secs(delay_secs)).await;
+        }
+
         info!("Sleeping container for agent {}", agent_name);
 
         // Sleep the Docker container but keep the persistent volume

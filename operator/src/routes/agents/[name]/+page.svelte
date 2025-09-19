@@ -184,6 +184,37 @@
     }
   }
 
+  // Edit timeouts modal state and helpers
+  let showTimeoutsModal = false;
+  let idleTimeoutInput = 0;
+  let busyTimeoutInput = 0;
+  function openEditTimeouts() {
+    const idle = Number(agent?.idle_timeout_seconds ?? 0);
+    const busy = Number(agent?.busy_timeout_seconds ?? 0);
+    idleTimeoutInput = Number.isFinite(idle) && idle >= 0 ? idle : 0;
+    busyTimeoutInput = Number.isFinite(busy) && busy >= 0 ? busy : 0;
+    showTimeoutsModal = true;
+  }
+  function closeEditTimeouts() { showTimeoutsModal = false; }
+  async function saveTimeouts() {
+    try {
+      const idle = Math.max(0, Math.floor(Number(idleTimeoutInput || 0)));
+      const busy = Math.max(0, Math.floor(Number(busyTimeoutInput || 0)));
+      const body = { idle_timeout_seconds: idle, busy_timeout_seconds: busy };
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
+      // Update local agent snapshot
+      agent = res.data || agent;
+      if (agent) {
+        agent.idle_timeout_seconds = idle;
+        agent.busy_timeout_seconds = busy;
+      }
+      showTimeoutsModal = false;
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
+
   // Remix modal state and actions
   let showRemixModal = false;
   let remixName = '';
@@ -456,12 +487,13 @@
 
   async function sleepAgent() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST' });
+      const delaySeconds = 5;
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
       // Optimistic UI update to reflect new state immediately
       if (agent) agent = { ...(agent || {}), state: 'slept' };
-      // Give the controller a moment to persist the state before fetching
-      await new Promise((r) => setTimeout(r, 600));
+      // Give the controller time to perform delayed sleep before fetching
+      await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
       await fetchAgent();
       error = null;
     } catch (e) {
@@ -599,6 +631,38 @@
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeEditTags}>Cancel</button>
           <button class="btn btn-theme" on:click={saveTags}>Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Edit Timeouts Modal -->
+{#if showTimeoutsModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Timeouts</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeEditTimeouts}></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
+              <div class="form-text">Time of inactivity before auto-sleep. 0 disables idle timeout.</div>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
+              <input id="busy-timeout" type="number" min="0" step="1" class="form-control" bind:value={busyTimeoutInput} />
+              <div class="form-text">Max time to stay busy before reset. 0 disables busy timeout.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeEditTimeouts}>Cancel</button>
+          <button class="btn btn-theme" on:click={saveTimeouts}>Save</button>
         </div>
       </div>
     </div>
@@ -746,6 +810,7 @@
                   <ul class="dropdown-menu dropdown-menu-end">
                     <li><button class="dropdown-item" on:click={remixAgent}><i class="fas fa-code-branch me-2"></i>Remix</button></li>
                     <li><button class="dropdown-item" on:click={openEditTags}><i class="fas fa-tags me-2"></i>Edit Tags</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fas fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
                     <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="fas fa-trash me-2"></i>Delete</button></li>
                   </ul>
