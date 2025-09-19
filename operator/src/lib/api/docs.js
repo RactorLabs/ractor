@@ -60,6 +60,10 @@ export function getCommonSchemas() {
       { name: 'count', type: 'int', desc: 'Count value' },
       { name: 'agent_name', type: 'string', desc: 'Agent identifier' },
     ],
+    RuntimeTotal: [
+      { name: 'agent_name', type: 'string', desc: 'Agent name' },
+      { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sessions (seconds)' },
+    ],
     BusyIdleAck: [
       { name: 'success', type: 'boolean', desc: 'true on success' },
       { name: 'state', type: 'string', desc: "'busy' or 'idle'" },
@@ -325,13 +329,18 @@ export function getApiDocs(base) {
       { method: 'POST', path: '/api/v0/agents/{name}/idle', auth: 'bearer', desc: 'Set agent idle.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/idle -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle","timeout_status":"active"}` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/sleep', auth: 'bearer', desc: 'Put agent to sleep.', params: [
-        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/sleep -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"slept",...}` }] },
-      { method: 'POST', path: '/api/v0/agents/{name}/wake', auth: 'bearer', desc: 'Wake agent.', params: [
+      { method: 'POST', path: '/api/v0/agents/{name}/sleep', auth: 'bearer', desc: 'Schedule agent to sleep after an optional delay (min/default 5s).', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before sleeping (min/default 5 seconds)' },
+        { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when sleep occurs' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/sleep -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested sleep"}'\n\n# The agent will sleep after the delay. State may not change immediately in the response.`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle",...}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/wake', auth: 'bearer', desc: 'Wake agent (optionally send a prompt).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on wake' }
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/wake -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init",...}` }] },
+      { method: 'GET', path: '/api/v0/agents/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last wake or creation).', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"agent_name":"demo","total_runtime_seconds":1234}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/remix', auth: 'bearer', desc: 'Remix agent (create a new agent from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent agent name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },

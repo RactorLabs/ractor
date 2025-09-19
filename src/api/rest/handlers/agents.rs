@@ -952,7 +952,7 @@ pub async fn get_agent_runtime(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
 
-    // Sum runtime
+    // Sum runtime for completed sessions; track last wake for current session inclusion
     let mut total: i64 = 0;
     let mut last_woke: Option<DateTime<Utc>> = None;
     for (row_created_at, output) in rows.into_iter() {
@@ -985,6 +985,14 @@ pub async fn get_agent_runtime(
                 }
             }
         }
+    }
+
+    // Include current session up to now when agent is not sleeping
+    if agent.state.to_lowercase() != crate::shared::models::constants::AGENT_STATE_SLEPT {
+        let start_at = last_woke.unwrap_or(agent.created_at);
+        let now = Utc::now();
+        let delta = (now - start_at).num_seconds();
+        if delta > 0 { total += delta; }
     }
 
     Ok(Json(serde_json::json!({
