@@ -503,11 +503,7 @@
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
-      // Optimistic UI update to reflect new state immediately
-      if (agent) agent = { ...(agent || {}), state: 'slept' };
-      // Give the controller time to perform delayed sleep before fetching
-      await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
-      await fetchAgent();
+      // Do not optimistically flip state; let polling update when controller sleeps it
       error = null;
     } catch (e) {
       error = e.message || String(e);
