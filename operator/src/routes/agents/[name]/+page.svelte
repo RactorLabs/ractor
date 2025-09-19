@@ -397,11 +397,8 @@
 
   // Helper: map tool key to display label
   function toolLabel(t) {
-    const k = String(t || '').toLowerCase();
-    if (k === 'run_bash') return 'run_bash';
-    if (k === 'bash') return 'bash';
-    if (k === 'text_editor') return 'Text Editor';
-    return k ? (k[0].toUpperCase() + k.slice(1)) : 'Tool';
+    // Show the tool name exactly as it appears
+    return String(t ?? '');
   }
 
   // Composite helpers (content_json.composite.segments)
