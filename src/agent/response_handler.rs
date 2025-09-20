@@ -1125,6 +1125,21 @@ Use `show` to briefly announce exactly what you will do next (1–2 sentences), 
 {"tool_call": {"tool": "show", "args": {"content": [
   {"type": "markdown", "content": "Next: implement /api/v0/ping handler in src/api/rest/routes.rs, then build. Starting now."}
 ]}}}
+        ```
+"#;
+
+        // Embed Create Plan example separately to avoid `format!` brace escaping issues
+        let plan_example = r#"
+Sample plan (tool_call):
+```json
+{"tool_call": {"tool": "create_plan", "args": {
+  "title": "Implement feature X",
+  "tasks": [
+    "Add API endpoint /api/v0/x",
+    "Write unit tests for handler",
+    "Update docs and examples"
+  ]
+}}}
 ```
 "#;
 
@@ -1355,6 +1370,8 @@ Workflow examples for effective execution:
   - title (optional): Plan title.
   - tasks (optional): Array of task descriptions.
 - Returns: `{{ "path": string, "tasks": number }}` within the standard envelope.
+
+{plan_example}
 
 #### Tool: add_task
 - Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.

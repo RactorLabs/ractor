@@ -1020,7 +1020,7 @@ impl Tool for PlannerCreatePlanTool {
     }
 
     fn description(&self) -> &str {
-        "Creates a plan. Generates a plan file under /agent/logs and sets it as the active plan."
+        "Creates a plan. Generates a plan file under /agent/logs and sets it as the active plan. Errors if no tasks are provided."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -1093,6 +1093,15 @@ impl Tool for PlannerCreatePlanTool {
                 created_at: Utc::now().to_rfc3339(),
                 completed_at: None,
             });
+        }
+
+        // Reject empty task lists
+        if tasks.is_empty() {
+            return Ok(json!({
+                "status":"error",
+                "tool":"create_plan",
+                "error":"plan must include at least one task"
+            }));
         }
 
         let plan = PlanFile {
