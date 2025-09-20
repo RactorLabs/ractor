@@ -2,8 +2,8 @@ use super::error::{HostError, Result};
 use super::tool_registry::ToolRegistry;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct OllamaClient {
@@ -140,7 +140,10 @@ pub struct ToolResult {
 
 impl ToolResult {
     pub fn from_tool_results(tool_results: Vec<ToolResult>) -> Vec<ChatMessage> {
-        tool_results.into_iter().map(|tr| tr.to_chat_message()).collect()
+        tool_results
+            .into_iter()
+            .map(|tr| tr.to_chat_message())
+            .collect()
     }
     pub fn new(tool_call_id: String, content: String) -> Self {
         Self {
@@ -262,7 +265,8 @@ impl OllamaClient {
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
     ) -> Result<ModelResponse> {
-        self.complete_with_tool_execution(messages, system_prompt, tool_registry, false).await
+        self.complete_with_tool_execution(messages, system_prompt, tool_registry, false)
+            .await
     }
 
     pub async fn complete_with_tool_execution(
@@ -283,15 +287,21 @@ impl OllamaClient {
                 ));
             }
 
-            let response = self.complete_single_turn(messages.clone(), system_prompt.clone(), tool_registry).await?;
-            
+            let response = self
+                .complete_single_turn(messages.clone(), system_prompt.clone(), tool_registry)
+                .await?;
+
             // If no tool calls or tool execution disabled, return response
             if !enable_tool_execution || response.tool_calls.is_none() {
                 return Ok(response);
             }
 
             let tool_calls = response.tool_calls.as_ref().unwrap();
-            tracing::info!("Processing {} tool calls in iteration {}", tool_calls.len(), iteration);
+            tracing::info!(
+                "Processing {} tool calls in iteration {}",
+                tool_calls.len(),
+                iteration
+            );
 
             // Add the assistant's message with tool calls to conversation
             messages.push(ChatMessage {
@@ -304,7 +314,7 @@ impl OllamaClient {
             // Execute tool calls if registry is available
             if let Some(registry) = tool_registry {
                 let mut tool_results = Vec::new();
-                
+
                 for tool_call in tool_calls {
                     // Insert a compact assistant message to record the tool call in history/logs
                     let call_json = serde_json::json!({
@@ -392,7 +402,7 @@ impl OllamaClient {
         let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         // For tool calling, disable thinking as it may cause parsing issues
         let include_thinking = tools.is_empty(); // Only include thinking when no tools are present
-        
+
         // Retry loop for parse errors from tool calling
         const PARSE_RETRIES: usize = 10;
         let url = format!("{}/api/chat", self.base_url);
@@ -414,13 +424,19 @@ impl OllamaClient {
                 model: &model,
                 messages: attempt_messages,
                 stream: false,
-                tools: if tools.is_empty() { None } else { Some(tools.clone()) },
-                reasoning: self
-                    .reasoning_effort
-                    .as_ref()
-                    .map(|effort| Reasoning { effort: effort.clone() }),
+                tools: if tools.is_empty() {
+                    None
+                } else {
+                    Some(tools.clone())
+                },
+                reasoning: self.reasoning_effort.as_ref().map(|effort| Reasoning {
+                    effort: effort.clone(),
+                }),
                 thinking: if include_thinking {
-                    Some(Thinking { typ: "enabled".to_string(), budget_tokens: self.thinking_budget })
+                    Some(Thinking {
+                        typ: "enabled".to_string(),
+                        budget_tokens: self.thinking_budget,
+                    })
                 } else {
                     None
                 },
@@ -476,14 +492,10 @@ impl OllamaClient {
                 tracing::info!(
                     "Ollama response: content_len={}, tool_calls={}",
                     parsed.message.content.len(),
-                    parsed
-                        .message
-                        .tool_calls
-                        .as_ref()
-                        .map_or(0, |tc| tc.len())
+                    parsed.message.tool_calls.as_ref().map_or(0, |tc| tc.len())
                 );
 
-        // Build structured response for caller (no legacy channel parsing)
+                // Build structured response for caller (no legacy channel parsing)
                 let model_resp = ModelResponse {
                     content: parsed.message.content.clone(),
                     thinking: parsed.message.thinking.clone(),
@@ -494,11 +506,19 @@ impl OllamaClient {
             } else {
                 // If the body contains a known tool-call parse error, retry silently with hint
                 if response_text.contains("error parsing tool call") {
-                    tracing::warn!("Retrying due to tool call parse error (attempt {}/{})", attempt + 1, PARSE_RETRIES);
+                    tracing::warn!(
+                        "Retrying due to tool call parse error (attempt {}/{})",
+                        attempt + 1,
+                        PARSE_RETRIES
+                    );
                     continue;
                 }
                 // Otherwise, retry on generic parse failure
-                tracing::warn!("Retrying due to unparseable response (attempt {}/{})", attempt + 1, PARSE_RETRIES);
+                tracing::warn!(
+                    "Retrying due to unparseable response (attempt {}/{})",
+                    attempt + 1,
+                    PARSE_RETRIES
+                );
                 continue;
             }
         }
@@ -509,18 +529,24 @@ impl OllamaClient {
     }
 
     async fn execute_tool_call(&self, tool_call: &ToolCall, registry: &ToolRegistry) -> ToolResult {
-        tracing::info!("Executing tool call: {} with id: {}", tool_call.function.name, tool_call.id);
-        
+        tracing::info!(
+            "Executing tool call: {} with id: {}",
+            tool_call.function.name,
+            tool_call.id
+        );
+
         // Try to execute the tool via registry
-        let result = registry.execute_tool(
-            &tool_call.function.name,
-            &tool_call.function.arguments,
-        ).await;
+        let result = registry
+            .execute_tool(&tool_call.function.name, &tool_call.function.arguments)
+            .await;
 
         match result {
             Ok(output) => {
                 tracing::info!("Tool call {} completed successfully", tool_call.id);
-                let content_str = output.as_str().map(|s| s.to_string()).unwrap_or_else(|| output.to_string());
+                let content_str = output
+                    .as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| output.to_string());
                 ToolResult::new(tool_call.id.clone(), content_str)
             }
             Err(e) => {
@@ -531,7 +557,7 @@ impl OllamaClient {
     }
 
     // All non-standard error-salvage/channel parsing removed; rely on native tool_calls only and retry on parse errors.
-    
+
     async fn log_ollama_request(&self, req: &ChatRequest<'_>, id: u64) {
         match serde_json::to_string_pretty(req) {
             Ok(req_json) => {
@@ -547,7 +573,7 @@ impl OllamaClient {
                 if let Err(e) = tokio::fs::write(&filename, log_content.as_bytes()).await {
                     tracing::warn!("Failed to write Ollama request log to {}: {}", filename, e);
                 }
-                // Also send to tracing for quick inspection (can be large)
+                // Emit full request body to Docker logs for visibility
                 tracing::info!("OLLAMA REQUEST {} => {}", id, req_json);
             }
             Err(e) => {
@@ -555,13 +581,17 @@ impl OllamaClient {
             }
         }
     }
-    
+
     async fn log_ollama_response(&self, response_text: &str, id: u64) {
         // Try to pretty-print if JSON; otherwise write raw text
-        let (body_for_file, body_for_trace) = match serde_json::from_str::<serde_json::Value>(response_text) {
-            Ok(v) => (serde_json::to_string_pretty(&v).unwrap_or_else(|_| response_text.to_string()), response_text.to_string()),
-            Err(_) => (response_text.to_string(), response_text.to_string()),
-        };
+        let (body_for_file, body_for_trace) =
+            match serde_json::from_str::<serde_json::Value>(response_text) {
+                Ok(v) => (
+                    serde_json::to_string_pretty(&v).unwrap_or_else(|_| response_text.to_string()),
+                    response_text.to_string(),
+                ),
+                Err(_) => (response_text.to_string(), response_text.to_string()),
+            };
 
         let filename = format!("/agent/logs/ollama_{}_response.json", id);
         let log_content = format!(
@@ -573,7 +603,11 @@ impl OllamaClient {
         if let Err(e) = tokio::fs::write(&filename, log_content.as_bytes()).await {
             tracing::warn!("Failed to write Ollama response log to {}: {}", filename, e);
         }
-        // Also send to tracing
-        tracing::info!("OLLAMA RESPONSE {} => {}", id, body_for_trace);
+        // Do not emit full response body to Docker logs; keep only a minimal debug line
+        tracing::debug!(
+            "OLLAMA RESPONSE {} logged to file (len={})",
+            id,
+            response_text.len()
+        );
     }
 }
