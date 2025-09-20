@@ -590,6 +590,27 @@ impl Tool for PlannerCreatePlanTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        // If an active (non-completed) plan already exists, be idempotent: do not create another
+        if let Ok(marker_str) = fs::read_to_string(CURRENT_PLAN_MARKER).await {
+            if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
+                if let Some(path) = marker_json.get("path").and_then(|v| v.as_str()) {
+                    let p = ensure_logs_dir(path)?;
+                    if p.exists() {
+                        if let Ok(existing) = read_plan(p).await {
+                            if existing.completed_at.is_none() {
+                                return Ok(json!({
+                                    "status":"ok","tool":"create_plan",
+                                    "note":"plan already exists",
+                                    "path": path,
+                                    "tasks": existing.tasks.len()
+                                }));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let title = args.get("title").and_then(|v| v.as_str()).unwrap_or("Work Plan").to_string();
         let initial_tasks: Vec<String> = args.get("tasks")
             .and_then(|v| v.as_array())
