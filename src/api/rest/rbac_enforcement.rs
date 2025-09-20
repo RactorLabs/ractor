@@ -35,6 +35,9 @@ pub async fn check_api_permission(
     let allowed = check_permission(&auth.principal, app_state, &ctx)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if allowed { Ok(()) } else { Err(StatusCode::FORBIDDEN) }
+    if allowed {
+        Ok(())
+    } else {
+        Err(StatusCode::FORBIDDEN)
+    }
 }
-

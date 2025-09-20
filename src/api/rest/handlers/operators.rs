@@ -134,7 +134,11 @@ pub async fn list_operators(
     let is_admin = crate::api::auth::check_permission(
         &auth.principal,
         &state,
-        &PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() },
+        &PermissionContext {
+            api_group: "api".into(),
+            resource: "*".into(),
+            verb: "*".into(),
+        },
     )
     .await
     .unwrap_or(false);
@@ -154,7 +158,9 @@ pub async fn list_operators(
             crate::shared::rbac::AuthPrincipal::Subject(s) => s.name.clone(),
         };
         let mut result = Vec::new();
-        if let Some(op) = state.get_operator(&self_name).await? { result.push(OperatorResponse::from(op)); }
+        if let Some(op) = state.get_operator(&self_name).await? {
+            result.push(OperatorResponse::from(op));
+        }
         Ok(Json(result))
     }
 }
@@ -179,7 +185,11 @@ pub async fn get_operator(
     let is_admin = crate::api::auth::check_permission(
         &auth.principal,
         &state,
-        &PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() },
+        &PermissionContext {
+            api_group: "api".into(),
+            resource: "*".into(),
+            verb: "*".into(),
+        },
     )
     .await
     .unwrap_or(false);

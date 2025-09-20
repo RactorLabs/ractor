@@ -199,8 +199,12 @@ where
     deserialize_strict_bool(deserializer)
 }
 
-fn default_idle_timeout() -> Option<i32> { Some(300) }
-fn default_busy_timeout() -> Option<i32> { Some(3600) } // 1 hour
+fn default_idle_timeout() -> Option<i32> {
+    Some(300)
+}
+fn default_busy_timeout() -> Option<i32> {
+    Some(3600)
+} // 1 hour
 
 // Custom deserializer for strict optional i32 validation
 fn deserialize_strict_option_i32<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
@@ -587,10 +591,6 @@ impl Agent {
         .await
     }
 
-    
-
-    
-
     pub async fn create(
         pool: &sqlx::MySqlPool,
         req: CreateAgentRequest,
@@ -864,7 +864,10 @@ impl Agent {
         .await
     }
 
-    pub async fn clear_context_cutoff(pool: &sqlx::MySqlPool, name: &str) -> Result<(), sqlx::Error> {
+    pub async fn clear_context_cutoff(
+        pool: &sqlx::MySqlPool,
+        name: &str,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE agents
@@ -878,8 +881,6 @@ impl Agent {
 
         Ok(())
     }
-
-    
 
     // find_agents_to_auto_close replaced by controller-side logic
 

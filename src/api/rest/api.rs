@@ -45,8 +45,8 @@ PID: {}
     info!("Connecting to MySQL database...");
 
     // Get required environment variables (start script provides these)
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set by the start script");
+    let database_url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set by the start script");
     let jwt_secret =
         std::env::var("JWT_SECRET").unwrap_or_else(|_| "development-secret-key".to_string());
     let host = std::env::var("RAWORC_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());

@@ -32,22 +32,34 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             ApiError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, msg),
-            ApiError::Database(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Database error: {}", e)),
+            ApiError::Database(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Database error: {}", e),
+            ),
             ApiError::Jwt(e) => (StatusCode::UNAUTHORIZED, format!("Invalid token: {}", e)),
-            ApiError::Internal(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Internal error: {}", e)),
+            ApiError::Internal(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal error: {}", e),
+            ),
         };
         (status, Json(ErrorResponse { message })).into_response()
     }
 }
 
 impl From<DatabaseError> for ApiError {
-    fn from(e: DatabaseError) -> Self { ApiError::Database(e) }
+    fn from(e: DatabaseError) -> Self {
+        ApiError::Database(e)
+    }
 }
 
 impl From<bcrypt::BcryptError> for ApiError {
-    fn from(e: bcrypt::BcryptError) -> Self { ApiError::Internal(anyhow::anyhow!(e.to_string())) }
+    fn from(e: bcrypt::BcryptError) -> Self {
+        ApiError::Internal(anyhow::anyhow!(e.to_string()))
+    }
 }
 
 impl From<anyhow::Error> for ApiError {
-    fn from(e: anyhow::Error) -> Self { ApiError::Internal(e) }
+    fn from(e: anyhow::Error) -> Self {
+        ApiError::Internal(e)
+    }
 }

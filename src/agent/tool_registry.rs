@@ -105,7 +105,11 @@ impl ToolRegistry {
     }
 
     /// Execute a tool with the given arguments
-    pub async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<serde_json::Value> {
+    pub async fn execute_tool(
+        &self,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value> {
         // Allow simple aliasing/normalization of incoming tool names
         let clean_name = name;
         tracing::info!("Executing tool: '{}'", clean_name);
@@ -262,7 +266,10 @@ impl ParameterMapper for ContainerExecMapper {
         };
 
         // Optional working directory mapping
-        let exec_dir = args.get("workdir").and_then(|v| v.as_str()).unwrap_or("/agent");
+        let exec_dir = args
+            .get("workdir")
+            .and_then(|v| v.as_str())
+            .unwrap_or("/agent");
 
         serde_json::json!({
             "exec_dir": exec_dir,
@@ -270,4 +277,3 @@ impl ParameterMapper for ContainerExecMapper {
         })
     }
 }
-

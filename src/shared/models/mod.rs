@@ -12,7 +12,7 @@ pub use agent::{
     UpdateAgentRequest, UpdateAgentStateRequest,
 };
 // legacy message exports removed
-pub use response::{AgentResponse, CreateResponseRequest, UpdateResponseRequest, ResponseView};
+pub use response::{AgentResponse, CreateResponseRequest, ResponseView, UpdateResponseRequest};
 
 // Database errors
 #[derive(Error, Debug)]
