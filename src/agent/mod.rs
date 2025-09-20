@@ -182,13 +182,26 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     info!("Content folder: /agent/content/ - Publish when ready to share");
     info!("Published content (when published): {}", published_url);
 
-    info!("Setting agent to idle to start timeout...");
-
-    // Set agent to idle after initialization to start timeout
-    if let Err(e) = api_client.update_agent_to_idle().await {
-        warn!("Failed to set agent to idle after initialization: {}", e);
-    } else {
-        info!("Agent set to idle - timeout started");
+    // Set initial state thoughtfully: don't clobber a pre-set busy state
+    match api_client.get_agent().await {
+        Ok(agent_info) => {
+            let state = agent_info.state.to_lowercase();
+            if state == "busy" {
+                info!("Skipping initial idle update because agent is marked busy");
+            } else if state == "slept" {
+                info!("Skipping initial idle update because agent is slept");
+            } else {
+                info!("Setting agent to idle to start timeout...");
+                if let Err(e) = api_client.update_agent_to_idle().await {
+                    warn!("Failed to set agent to idle after initialization: {}", e);
+                } else {
+                    info!("Agent set to idle - timeout started");
+                }
+            }
+        }
+        Err(e) => {
+            warn!("Could not fetch agent state on startup (will proceed): {}", e);
+        }
     }
 
     info!("Starting response polling loop...");

@@ -128,6 +128,8 @@
   let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
   let ctxLoading = false;
   let contextFull = false;
+  // When compacting context, block UI interactions
+  let isCompacting = false;
   function fmtInt(n) {
     try { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString() : String(n); } catch (_) { return String(n); }
   }
@@ -164,6 +166,8 @@
   }
   async function compactContext() {
     try {
+      isCompacting = true;
+      ctxLoading = true;
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context/compact`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
       error = null;
@@ -174,6 +178,9 @@
       scrollToBottom();
     } catch (e) {
       error = e.message || String(e);
+    } finally {
+      isCompacting = false;
+      ctxLoading = false;
     }
   }
   let _runtimeFetchedAt = 0;
@@ -490,21 +497,98 @@
   function hasContextCompactedSeg(m) {
     try { return segmentsOf(m).some((x) => segType(x) === 'context_compacted'); } catch(_) { return false; }
   }
+  function hasFinalSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'final'); } catch(_) { return false; }
+  }
   function segToolTitle(s) {
     try {
       const t = segTool(s).toLowerCase();
       const a = segArgs(s) || {};
+      const shortPath = (p) => { try { const s = String(p || '').trim(); return s.startsWith('/agent/') ? s.slice(7) : s; } catch(_) { return ''; } };
       if (t === 'bash' || t === 'run_bash') {
         const cmd = a.commands || a.command || a.cmd || '';
         const cwd = a.exec_dir || a.cwd || a.workdir || '';
-        if (!cmd && !cwd) return '(run_bash)';
-        if (cmd && cwd) return `${cmd} • ${cwd}`;
-        return cmd || cwd || '(run_bash)';
+        const title = [cmd ? truncate(String(cmd), 80) : '', cwd ? shortPath(cwd) : ''].filter(Boolean).join(' • ');
+        return title || '(run_bash)';
+      }
+      if (t === 'open_file') {
+        const p = a.path || '';
+        const sl = a.start_line != null ? Number(a.start_line) : null;
+        const el = a.end_line != null ? Number(a.end_line) : null;
+        const range = (sl || el) ? ` [${sl || ''}${el ? ':' + el : ''}]` : '';
+        return `${shortPath(p)}${range}` || '(open_file)';
+      }
+      if (t === 'create_file') {
+        const p = a.path || '';
+        const bytes = (a.content && typeof a.content === 'string') ? a.content.length : null;
+        const meta = bytes != null ? ` (${bytes} bytes)` : '';
+        return `${shortPath(p)}${meta}` || '(create_file)';
+      }
+      if (t === 'str_replace') {
+        const p = a.path || '';
+        const oldStr = typeof a.old_str === 'string' ? truncate(a.old_str, 30) : '';
+        const newStr = typeof a.new_str === 'string' ? truncate(a.new_str, 30) : '';
+        const many = a.many ? ' (all)' : '';
+        const pair = (oldStr || newStr) ? ` ${oldStr} → ${newStr}` : '';
+        return `${shortPath(p)}${pair}${many}` || '(str_replace)';
+      }
+      if (t === 'insert') {
+        const p = a.path || '';
+        const line = a.insert_line != null ? `:${a.insert_line}` : '';
+        const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
+        const meta = len != null ? ` (+${len})` : '';
+        return `${shortPath(p)}${line}${meta}` || '(insert)';
+      }
+      if (t === 'remove_str') {
+        const p = a.path || '';
+        const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
+        const many = a.many ? ' (all)' : '';
+        const meta = len != null ? ` (-${len})` : '';
+        return `${shortPath(p)}${meta}${many}` || '(remove_str)';
+      }
+      if (t === 'find_filecontent') {
+        const p = a.path || '';
+        const rgx = typeof a.regex === 'string' ? ` /${truncate(a.regex, 40)}/` : '';
+        return `${shortPath(p)}${rgx}` || '(find_filecontent)';
+      }
+      if (t === 'find_filename') {
+        const p = a.path || '';
+        const glob = typeof a.glob === 'string' ? ` ${truncate(a.glob, 40)}` : '';
+        return `${shortPath(p)}${glob}` || '(find_filename)';
+      }
+      if (t === 'publish_agent') {
+        const note = typeof a.note === 'string' && a.note.trim() ? ` (${truncate(a.note, 50)})` : '';
+        return `publish${note}`;
+      }
+      if (t === 'sleep_agent') {
+        const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
+        const note = typeof a.note === 'string' && a.note.trim() ? ` (${truncate(a.note, 50)})` : '';
+        return `sleep${d ? ` in ${d}s` : ''}${note}`;
+      }
+      if (t === 'create_plan') {
+        const title = typeof a.title === 'string' ? a.title : '';
+        const n = Array.isArray(a.tasks) ? a.tasks.length : 0;
+        const label = title ? ` ${truncate(title, 50)}` : '';
+        return `create_plan${label}${n ? ` (${n} tasks)` : ''}`;
+      }
+      if (t === 'add_task') {
+        const task = typeof a.task === 'string' ? ` ${truncate(a.task, 60)}` : '';
+        return `add_task${task}`;
+      }
+      if (t === 'complete_task') {
+        const id = a.task_id != null ? ` #${a.task_id}` : '';
+        const vp = Array.isArray(a.verify_paths) ? ` (verify ${a.verify_paths.length})` : '';
+        const vu = typeof a.verify_url === 'string' && a.verify_url ? ' (verify url)' : '';
+        const force = a.force ? ' [force]' : '';
+        return `complete${id}${vp || vu ? `${vp}${vu}` : ''}${force}`;
+      }
+      if (t === 'clear_plan') {
+        return 'clear_plan';
       }
       if (t === 'text_editor') {
         const action = a.action || 'edit';
         const path = a.path || '';
-        return `${action}${path ? ' ' + path : ''}`;
+        return `${action}${path ? ' ' + shortPath(path) : ''}`;
       }
       const json = JSON.stringify(a);
       return json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
@@ -629,6 +713,7 @@
 
   async function sendMessage(e) {
     e?.preventDefault?.();
+    if (isCompacting) { return; }
     const content = (input || '').trim();
     if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Agent is busy'; } return; }
     sending = true;
@@ -945,6 +1030,7 @@
 {/if}
 
 <div class="row g-3 h-100">
+  <!-- No page overlay during compaction; only disable action controls -->
   <div class="col-12 d-flex flex-column h-100" style="min-height: 0;">
     <!-- Header: Agent details on the left, info box on the right -->
     <div class="row g-3 mb-2">
@@ -1077,8 +1163,8 @@
         </div>
       </div>
       <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={ctxLoading} title="Compact context with LLM summary">Compact</button>
-        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading} title="Clear context and reset history window">Clear</button>
+        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context with LLM summary">Compact</button>
+        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear</button>
       </div>
     </div>
 
@@ -1092,7 +1178,7 @@
           Context is full — clear it to continue.
         </div>
         <div class="ms-2">
-          <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={ctxLoading} title="Clear context and reset history window">Clear Context</button>
+          <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear Context</button>
         </div>
       </div>
     {/if}
@@ -1228,7 +1314,7 @@
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
-                  {#if m.content && m.content.trim()}
+                  {#if !hasFinalSeg(m) && m.content && m.content.trim()}
                   <div class="markdown-wrap mt-2">
                     <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                   </div>
@@ -1294,6 +1380,7 @@
           <textarea
             aria-label="Message input"
             class="form-control chat-no-focus chat-no-zoom"
+            disabled={isCompacting}
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -1301,14 +1388,14 @@
             bind:value={input}
             on:keydown={(e)=>{
               // Send only on plain Enter (no modifiers). Allow Shift/Alt/Ctrl/Meta + Enter to insert newline.
-              if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+              if (!isCompacting && e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
                 e.preventDefault();
                 sendMessage();
               }
             }}
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
-          <button class="btn btn-theme" aria-label="Send message" disabled={sending || !input.trim() || stateStr === 'busy'}>
+          <button class="btn btn-theme" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'busy'}>
             {#if sending}
               <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
             {:else}

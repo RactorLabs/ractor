@@ -81,12 +81,14 @@ pub async fn create_response(
         ));
     }
 
-    // If agent is idle, mark busy to signal work enqueued
-    if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE {
+    // If agent is idle (or still init), mark busy to signal work enqueued
+    if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE
+        || agent.state == crate::shared::models::constants::AGENT_STATE_INIT
+    {
         sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)
             .bind(crate::shared::models::constants::AGENT_STATE_BUSY)
             .bind(&agent_name)
-            .bind(crate::shared::models::constants::AGENT_STATE_IDLE)
+            .bind(agent.state)
             .execute(&*state.db)
             .await
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;

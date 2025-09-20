@@ -126,7 +126,21 @@ impl ResponseHandler {
         if pending.is_empty() { return Ok(0); }
         pending.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
-        if let Err(e) = self.api_client.update_agent_to_busy().await { warn!("Failed to set busy: {}", e); }
+        // Ensure state is set to busy before processing to avoid UI mismatches
+        {
+            let mut attempt: u32 = 0;
+            loop {
+                match self.api_client.update_agent_to_busy().await {
+                    Ok(()) => break,
+                    Err(e) => {
+                        attempt += 1;
+                        warn!("Failed to set busy (attempt {}): {}", attempt, e);
+                        if attempt >= 3 { return Ok(0); }
+                        tokio::time::sleep(std::time::Duration::from_millis((attempt * 200) as u64)).await;
+                    }
+                }
+            }
+        }
         for r in &pending {
             match self.process_response(r).await {
                 Ok(_) => {
