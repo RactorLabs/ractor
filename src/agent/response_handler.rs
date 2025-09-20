@@ -1340,6 +1340,7 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 - Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
 - Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
 - After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `clear_plan` to finalize and remove it from the prompt.
+- If there is an active plan (auto-inserted below), do NOT call `create_plan` again. Instead, execute the plan as written — start with the first pending task, complete it, mark it done with `complete_task`, then proceed to the second task and mark it done, and so on until all tasks are completed.
 - When a plan is active, you must follow it strictly: work task-by-task in order. Do not start the next task until you have completed the current task and marked it done with `complete_task`. Keep only one task active at a time (no parallel work). After each step, update the plan immediately (complete/add). When all tasks are complete, call `clear_plan`. Do not send a final assistant message while a plan is active.
 - Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
  - Do not add duplicate tasks: Before calling `add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
@@ -1518,7 +1519,7 @@ You have complete freedom to execute commands, install packages, and create solu
                                     "- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n",
                                     title, plan_path, lines, next
                                 ));
-                                prompt.push_str("\nGuidance: Update this plan after each step by marking tasks completed and adding new tasks as needed. When all tasks are done, call 'clear_plan' to clear the plan so it no longer appears here.\n");
+                                prompt.push_str("\nGuidance: A plan is active. Do NOT create a new plan. Execute tasks in order:\n- Do the first pending task now, then call `complete_task` to mark it done.\n- Next, do the second task and mark it done.\n- Continue step-by-step until all tasks are complete.\n- After all tasks are completed, call `clear_plan` so the plan no longer appears here.\n- Update this plan after each step (complete/add) and use `show` for intermediate updates.\n\n");
                             }
                         }
                     }
