@@ -98,49 +98,7 @@ impl ResponseHandler {
                             api_client_clone.clone(),
                         )))
                         .await;
-                    // Back-compat aliases mapping to 'output'
-                    {
-                        use super::tool_registry::ParameterMapper;
-                        struct OutputMarkdownMapper;
-                        impl ParameterMapper for OutputMarkdownMapper {
-                            fn map(&self, args: &serde_json::Value) -> serde_json::Value {
-                                let content = args
-                                    .get("content")
-                                    .cloned()
-                                    .unwrap_or(serde_json::Value::String(String::new()));
-                                serde_json::json!({"content":[{"type":"markdown","content": content}]})
-                            }
-                        }
-                        struct OutputJsonMapper;
-                        impl ParameterMapper for OutputJsonMapper {
-                            fn map(&self, args: &serde_json::Value) -> serde_json::Value {
-                                let data =
-                                    args.get("data").cloned().unwrap_or(serde_json::Value::Null);
-                                serde_json::json!({"content":[{"type":"json","content": data}]})
-                            }
-                        }
-                        registry
-                            .register_alias(
-                                "output_markdown",
-                                "output",
-                                Some(Box::new(OutputMarkdownMapper)),
-                            )
-                            .await;
-                        registry
-                            .register_alias(
-                                "ouput_json",
-                                "output",
-                                Some(Box::new(OutputJsonMapper)),
-                            )
-                            .await;
-                        registry
-                            .register_alias(
-                                "output_json",
-                                "output",
-                                Some(Box::new(OutputJsonMapper)),
-                            )
-                            .await;
-                    }
+                    // Removed deprecated output_* aliases
                     // Planner tools (exact names only; no backward compatibility)
                     registry
                         .register_tool(Box::new(super::builtin_tools::PlannerCreatePlanTool))
@@ -918,50 +876,21 @@ impl ResponseHandler {
                     }
                 }
             }
-            // Segments (tool calls/results) — significantly trimmed for completed responses
-            // Only include segments for in-progress responses to keep context light.
-            let include_segments = r.status.to_lowercase() == "processing";
-            if include_segments {
-                if let Some(items) = r.segments.as_ref() {
-                    for it in items {
-                        match it.get("type").and_then(|v| v.as_str()) {
-                            Some("tool_call") => {
-                                let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                                let args =
-                                    it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                                let content =
-                                    serde_json::json!({"tool_call":{"tool": tool, "args": args}})
-                                        .to_string();
-                                convo.push(ChatMessage {
-                                    role: "assistant".to_string(),
-                                    content,
-                                    name: None,
-                                    tool_call_id: None,
-                                });
-                            }
-                            Some("tool_result") => {
-                                let name = it
-                                    .get("tool")
-                                    .and_then(|v| v.as_str())
-                                    .map(|s| s.to_string());
-                                let content = match it.get("output") {
-                                    Some(v) => match v.as_str() {
-                                        Some(s) => s.to_string(),
-                                        None => v.to_string(),
-                                    },
-                                    None => String::new(),
-                                };
-                                if !content.is_empty() {
-                                    convo.push(ChatMessage {
-                                        role: "tool".to_string(),
-                                        content,
-                                        name,
-                                        tool_call_id: None,
-                                    });
-                                }
-                            }
-                            _ => {}
-                        }
+            // Include tool_call segments from past responses; exclude tool_result outputs for past responses
+            if let Some(items) = r.segments.as_ref() {
+                for it in items {
+                    if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
+                        let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                        let content =
+                            serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                                .to_string();
+                        convo.push(ChatMessage {
+                            role: "assistant".to_string(),
+                            content,
+                            name: None,
+                            tool_call_id: None,
+                        });
                     }
                 }
             }
