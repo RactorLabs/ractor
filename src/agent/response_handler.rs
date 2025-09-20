@@ -1379,7 +1379,7 @@ Workflow examples for effective execution:
 #### Tool: read_plan
 - Reads the active plan file from `/agent/logs` and returns its JSON contents.
 - Parameters: none
-- Returns: `{{ "path": string, "plan": {{ ... }} }}` within the standard envelope.
+- Returns: `{{ "plan": {{ ... }} }}` within the standard envelope.
 
 #### Tool: add_task
 - Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.

@@ -1202,7 +1202,8 @@ impl Tool for PlannerReadPlanTool {
         let path = ensure_logs_dir(&plan_path)?;
         let plan = read_plan(path).await?;
         let plan_val = serde_json::to_value(plan).unwrap_or(serde_json::json!({}));
-        Ok(json!({"status":"ok","tool":"read_plan","path": plan_path, "plan": plan_val}))
+        // Do not include the file path in the response to avoid prompting the model to read it directly
+        Ok(json!({"status":"ok","tool":"read_plan","plan": plan_val}))
     }
 }
 
