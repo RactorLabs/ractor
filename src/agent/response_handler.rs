@@ -857,7 +857,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "Use the 'show' tool for intermediate updates (plans, progress, previews) and the 'output' tool for final results. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title is required). Do not place final content directly in assistant text.";
+            let nudge = "Use 'show' to briefly announce the next step (1–2 sentences), then execute it. Use 'output' for final results. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -1113,15 +1113,17 @@ impl ResponseHandler {
         let show_examples = r#"
 #### Show Examples
 
+Use `show` to briefly announce exactly what you will do next (1–2 sentences), then start doing it.
+
 ```json
 {"tool_call": {"tool": "show", "args": {"content": [
-  {"type": "markdown", "content": "- [ ] Clone repo\n- [ ] Install deps\n- [ ] Run tests\n- [ ] Implement feature"}
+  {"type": "markdown", "content": "Next: run unit tests (cargo test) to establish a baseline. Starting now."}
 ]}}}
 ```
 
 ```json
 {"tool_call": {"tool": "show", "args": {"content": [
-  {"type": "markdown", "content": "- [x] Cloned repo\n- Path: /agent/code/project\n- Branch: main"}
+  {"type": "markdown", "content": "Next: implement /api/v0/ping handler in src/api/rest/routes.rs, then build. Starting now."}
 ]}}}
 ```
 "#;
@@ -1326,13 +1328,15 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
-- Use `show` for intermediate updates — this is how you “think out loud” to the user:
-  - Start by calling `show` with a markdown plan (e.g., checklist) to outline your approach.
-  - As you make progress, call `show` again with updated plans, previews, partial results, links, or structured JSON snapshots.
-  - `show` never finalizes the response and can be called many times. Use it whenever you want to update the user on what you’re working on.
-- Treat commentary/analysis as `show` content (markdown). Do not place commentary directly in assistant text; always emit it via `show` so users can see your thoughts without cluttering the final output.
+- Use `show` only to announce what you are about to do next (1–2 concise sentences), then immediately perform that step. Keep it short and action‑oriented (no long plans or summaries).
+- `show` never finalizes the response and can be called many times to announce each next step as you proceed.
+- Keep commentary minimal. Avoid long narratives; focus on the next action.
 - After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
-- Do not place final content directly in the assistant text. Use commentary for reasoning and explanations; emit results via `output` and use `show` for intermediate updates.
+- Do not place final content directly in the assistant text. Emit results via `output` and use `show` to announce next steps only.
+
+Workflow examples for effective execution:
+- `create_plan` → `show` (announce next task) → do the task → `complete_task` → `show` (announce next task) → do the task → `complete_task` → `clear_plan`
+- When no plan is required: `show` (announce next step) → do the step(s) → `output` (final results)
 
 {show_examples}
 ### Planner Tools
@@ -1519,7 +1523,7 @@ You have complete freedom to execute commands, install packages, and create solu
                                     "- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n",
                                     title, plan_path, lines, next
                                 ));
-                                prompt.push_str("\nGuidance: A plan is active. Do NOT create a new plan. Execute tasks in order:\n- Do the first pending task now, then call `complete_task` to mark it done.\n- Next, do the second task and mark it done.\n- Continue step-by-step until all tasks are complete.\n- After all tasks are completed, call `clear_plan` so the plan no longer appears here.\n- Update this plan after each step (complete/add) and use `show` for intermediate updates.\n\n");
+                                prompt.push_str("\nGuidance: A plan is active. Do NOT create a new plan. Execute tasks in order:\n- Before each task, call `show` to announce the exact next action in 1–2 sentences, then start working on it immediately.\n- After finishing the task, call `complete_task` to mark it done.\n- Proceed to the next task, again announcing it with `show` first.\n- Continue step-by-step until all tasks are complete, then call `clear_plan`.\n\nExample flow: `create_plan` → `show` (announce next task) → do it → `complete_task` → `show` (announce next task) → do it → `complete_task` → `clear_plan`.\n\n");
                             }
                         }
                     }
