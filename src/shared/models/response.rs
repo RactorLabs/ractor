@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -16,7 +17,7 @@ pub struct AgentResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateResponseRequest {
-    pub input: serde_json::Value, // { text: string }
+    pub input: serde_json::Value, // { content: [{ type: 'text', content: string }] }
     #[serde(default)]
     pub background: Option<bool>, // default true; when false, API blocks until terminal
 }
@@ -36,8 +37,12 @@ pub struct ResponseView {
     pub id: String,
     pub agent_name: String,
     pub status: String,
-    pub input: serde_json::Value,
-    pub output: serde_json::Value,
+    #[serde(default)]
+    pub input_content: Vec<Value>,
+    #[serde(default)]
+    pub output_content: Vec<Value>,
+    #[serde(default)]
+    pub segments: Vec<Value>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -104,7 +109,7 @@ impl AgentResponse {
             WHERE agent_name = ?
             ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
-            "#
+            "#,
         )
         .bind(agent_name)
         .bind(limit)
@@ -113,7 +118,10 @@ impl AgentResponse {
         .await
     }
 
-    pub async fn count_by_agent(pool: &sqlx::MySqlPool, agent_name: &str) -> Result<i64, sqlx::Error> {
+    pub async fn count_by_agent(
+        pool: &sqlx::MySqlPool,
+        agent_name: &str,
+    ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM agent_responses WHERE agent_name = ?",
         )
@@ -123,7 +131,10 @@ impl AgentResponse {
         Ok(result)
     }
 
-    pub async fn find_by_id(pool: &sqlx::MySqlPool, id: &str) -> Result<Option<AgentResponse>, sqlx::Error> {
+    pub async fn find_by_id(
+        pool: &sqlx::MySqlPool,
+        id: &str,
+    ) -> Result<Option<AgentResponse>, sqlx::Error> {
         sqlx::query_as::<_, AgentResponse>(
             r#"SELECT id, agent_name, created_by, status, input, output, created_at, updated_at FROM agent_responses WHERE id = ?"#
         )
@@ -138,10 +149,16 @@ impl AgentResponse {
         req: UpdateResponseRequest,
     ) -> Result<AgentResponse, sqlx::Error> {
         // Load existing
-        let mut resp = Self::find_by_id(pool, id).await?.ok_or_else(|| sqlx::Error::RowNotFound)?;
+        let mut resp = Self::find_by_id(pool, id)
+            .await?
+            .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
-        if let Some(s) = req.status { resp.status = s; }
-        if let Some(i) = req.input { resp.input = i; }
+        if let Some(s) = req.status {
+            resp.status = s;
+        }
+        if let Some(i) = req.input {
+            resp.input = i;
+        }
         if let Some(o) = req.output {
             // Merge output with append semantics for items
             use serde_json::{Map, Value};
@@ -180,7 +197,7 @@ impl AgentResponse {
 
         let now = Utc::now();
         sqlx::query(
-            r#"UPDATE agent_responses SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#
+            r#"UPDATE agent_responses SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&resp.status)
         .bind(&resp.input)

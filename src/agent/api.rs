@@ -7,7 +7,6 @@ use tracing::{debug, info};
 
 // (Removed legacy message types and constants import; API now uses Responses.)
 
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Agent {
     pub name: String, // Primary key in v0.4.0
@@ -45,7 +44,9 @@ impl RaworcClient {
     }
 
     // Expose agent name for prompts/logging
-    pub fn agent_name(&self) -> &str { &self.config.agent_name }
+    pub fn agent_name(&self) -> &str {
+        &self.config.agent_name
+    }
 
     /// Get agent information
     pub async fn get_agent(&self) -> Result<Agent> {
@@ -89,14 +90,16 @@ impl RaworcClient {
         }
     }
 
-
     /// Create a new response (user input)
     pub async fn create_response(&self, input_text: &str) -> Result<ResponseView> {
         let url = format!(
             "{}/api/v0/agents/{}/responses",
             self.config.api_url, self.config.agent_name
         );
-        let req = CreateResponseRequest { input: serde_json::json!({ "text": input_text }), background: None };
+        let req = CreateResponseRequest {
+            input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
+            background: None,
+        };
         let response = self
             .client
             .post(&url)
@@ -106,11 +109,19 @@ impl RaworcClient {
             .await?;
         match response.status() {
             StatusCode::OK | StatusCode::CREATED => Ok(response.json::<ResponseView>().await?),
-            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
             StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
             status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!("Failed to create response ({}): {}", status, error_text)))
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to create response ({}): {}",
+                    status, error_text
+                )))
             }
         }
     }
@@ -128,8 +139,12 @@ impl RaworcClient {
             self.config.api_url, self.config.agent_name, id
         );
         let mut output = serde_json::Map::new();
-        if let Some(t) = output_text { output.insert("text".to_string(), serde_json::json!(t)); }
-        if let Some(list) = items { output.insert("items".to_string(), serde_json::Value::Array(list)); }
+        if let Some(t) = output_text {
+            output.insert("text".to_string(), serde_json::json!(t));
+        }
+        if let Some(list) = items {
+            output.insert("items".to_string(), serde_json::Value::Array(list));
+        }
         let req = UpdateResponseRequest {
             status,
             input: None,
@@ -144,11 +159,19 @@ impl RaworcClient {
             .await?;
         match response.status() {
             StatusCode::OK => Ok(response.json::<ResponseView>().await?),
-            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
             StatusCode::NOT_FOUND => Err(HostError::Api("Response not found".to_string())),
             status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!("Failed to update response ({}): {}", status, error_text)))
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to update response ({}): {}",
+                    status, error_text
+                )))
             }
         }
     }
@@ -164,8 +187,13 @@ impl RaworcClient {
             self.config.api_url, self.config.agent_name
         );
         let mut sep = '?';
-        if let Some(l) = limit { url.push_str(&format!("{}limit={}", sep, l)); sep = '&'; }
-        if let Some(o) = offset { url.push_str(&format!("{}offset={}", sep, o)); }
+        if let Some(l) = limit {
+            url.push_str(&format!("{}limit={}", sep, l));
+            sep = '&';
+        }
+        if let Some(o) = offset {
+            url.push_str(&format!("{}offset={}", sep, o));
+        }
         let response = self
             .client
             .get(&url)
@@ -173,12 +201,23 @@ impl RaworcClient {
             .send()
             .await?;
         match response.status() {
-            StatusCode::OK => Ok(response.json::<Vec<ResponseView>>().await.map_err(|e| HostError::Api(e.to_string()))?),
-            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::OK => Ok(response
+                .json::<Vec<ResponseView>>()
+                .await
+                .map_err(|e| HostError::Api(e.to_string()))?),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
             StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
             status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!("Failed to fetch responses ({}): {}", status, error_text)))
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to fetch responses ({}): {}",
+                    status, error_text
+                )))
             }
         }
     }
@@ -197,20 +236,29 @@ impl RaworcClient {
             .await?;
         match response.status() {
             StatusCode::OK => {
-                let v = response.json::<serde_json::Value>().await.map_err(|e| HostError::Api(e.to_string()))?;
+                let v = response
+                    .json::<serde_json::Value>()
+                    .await
+                    .map_err(|e| HostError::Api(e.to_string()))?;
                 let count = v.get("count").and_then(|c| c.as_i64()).unwrap_or(0) as u64;
                 Ok(count)
             }
-            StatusCode::UNAUTHORIZED => Err(HostError::Api("Unauthorized - check API token".to_string())),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
             StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
             status => {
-                let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!("Failed to get response count ({}): {}", status, error_text)))
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to get response count ({}): {}",
+                    status, error_text
+                )))
             }
         }
     }
-
-    
 
     /// Update agent to busy (clears idle_from)
     pub async fn update_agent_to_busy(&self) -> Result<()> {
@@ -332,7 +380,11 @@ impl RaworcClient {
     }
 
     /// Sleep the current agent by name after an optional delay (seconds, min 5) with optional note
-    pub async fn sleep_agent(&self, delay_seconds: Option<u64>, note: Option<String>) -> Result<()> {
+    pub async fn sleep_agent(
+        &self,
+        delay_seconds: Option<u64>,
+        note: Option<String>,
+    ) -> Result<()> {
         let url = format!(
             "{}/api/v0/agents/{}/sleep",
             self.config.api_url, self.config.agent_name
@@ -382,8 +434,12 @@ pub struct ResponseView {
     pub id: String,
     pub agent_name: String,
     pub status: String,
-    pub input: serde_json::Value,
-    pub output: serde_json::Value,
+    #[serde(default)]
+    pub input_content: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub output_content: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub segments: Option<Vec<serde_json::Value>>,
     pub created_at: String,
     pub updated_at: String,
 }

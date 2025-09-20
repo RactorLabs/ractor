@@ -52,26 +52,110 @@ impl ResponseHandler {
                 let api_client_clone = api_client.clone();
                 async move {
                     // Register shell tool (exposed as 'run_bash')
-                    registry.register_tool(Box::new(super::builtin_tools::ShellTool::new())).await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::ShellTool::new()))
+                        .await;
                     // Editor tools
-                    registry.register_tool(Box::new(super::builtin_tools::OpenFileTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::CreateFileTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::StrReplaceTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::InsertTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::RemoveStrTool)).await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::OpenFileTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::CreateFileTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::StrReplaceTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::InsertTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::RemoveStrTool))
+                        .await;
                     // Search tools
-                    registry.register_tool(Box::new(super::builtin_tools::FindFilecontentTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::FindFilenameTool)).await;
-                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(api_client_clone.clone()));
-                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(api_client_clone.clone()));
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::FindFilecontentTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::FindFilenameTool))
+                        .await;
+                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(
+                        api_client_clone.clone(),
+                    ));
+                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(
+                        api_client_clone.clone(),
+                    ));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
+                    // Unified Output tool + Show tool + validation tool
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::OutputTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::ShowTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::ValidateResponseTool::new(
+                            api_client_clone.clone(),
+                        )))
+                        .await;
+                    // Back-compat aliases mapping to 'output'
+                    {
+                        use super::tool_registry::ParameterMapper;
+                        struct OutputMarkdownMapper;
+                        impl ParameterMapper for OutputMarkdownMapper {
+                            fn map(&self, args: &serde_json::Value) -> serde_json::Value {
+                                let content = args
+                                    .get("content")
+                                    .cloned()
+                                    .unwrap_or(serde_json::Value::String(String::new()));
+                                serde_json::json!({"content":[{"type":"markdown","content": content}]})
+                            }
+                        }
+                        struct OutputJsonMapper;
+                        impl ParameterMapper for OutputJsonMapper {
+                            fn map(&self, args: &serde_json::Value) -> serde_json::Value {
+                                let data =
+                                    args.get("data").cloned().unwrap_or(serde_json::Value::Null);
+                                serde_json::json!({"content":[{"type":"json","content": data}]})
+                            }
+                        }
+                        registry
+                            .register_alias(
+                                "output_markdown",
+                                "output",
+                                Some(Box::new(OutputMarkdownMapper)),
+                            )
+                            .await;
+                        registry
+                            .register_alias(
+                                "ouput_json",
+                                "output",
+                                Some(Box::new(OutputJsonMapper)),
+                            )
+                            .await;
+                        registry
+                            .register_alias(
+                                "output_json",
+                                "output",
+                                Some(Box::new(OutputJsonMapper)),
+                            )
+                            .await;
+                    }
                     // Planner tools (exact names only; no backward compatibility)
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerCreatePlanTool)).await;
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerAddTaskTool)).await;
-                    let complete_tool = Box::new(super::builtin_tools::PlannerCompleteTaskTool::new(api_client_clone.clone()));
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::PlannerCreatePlanTool))
+                        .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::PlannerAddTaskTool))
+                        .await;
+                    let complete_tool =
+                        Box::new(super::builtin_tools::PlannerCompleteTaskTool::new(
+                            api_client_clone.clone(),
+                        ));
                     registry.register_tool(complete_tool).await;
-                    registry.register_tool(Box::new(super::builtin_tools::PlannerClearPlanTool)).await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::PlannerClearPlanTool))
+                        .await;
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -89,11 +173,21 @@ impl ResponseHandler {
     }
 
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
-        info!("Initializing response tracking; task created at {}", self.task_created_at);
+        info!(
+            "Initializing response tracking; task created at {}",
+            self.task_created_at
+        );
         let total = self.api_client.get_response_count().await.unwrap_or(0);
         let limit: u32 = 500;
-        let offset = if total > limit as u64 { (total - limit as u64) as u32 } else { 0 };
-        let all = self.api_client.get_responses(Some(limit), Some(offset)).await?;
+        let offset = if total > limit as u64 {
+            (total - limit as u64) as u32
+        } else {
+            0
+        };
+        let all = self
+            .api_client
+            .get_responses(Some(limit), Some(offset))
+            .await?;
         let mut pre = HashSet::new();
         for r in &all {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
@@ -110,20 +204,35 @@ impl ResponseHandler {
     pub async fn poll_and_process(&self) -> Result<usize> {
         let total = self.api_client.get_response_count().await.unwrap_or(0);
         let window: u32 = 50;
-        let offset = if total > window as u64 { (total - window as u64) as u32 } else { 0 };
-        let recent = self.api_client.get_responses(Some(window), Some(offset)).await?;
-        if recent.is_empty() { return Ok(0); }
+        let offset = if total > window as u64 {
+            (total - window as u64) as u32
+        } else {
+            0
+        };
+        let recent = self
+            .api_client
+            .get_responses(Some(window), Some(offset))
+            .await?;
+        if recent.is_empty() {
+            return Ok(0);
+        }
 
         let mut pending: Vec<ResponseView> = Vec::new();
         for r in &recent {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
-                if t.with_timezone(&Utc) >= self.task_created_at && r.status.to_lowercase() == "pending" {
+                if t.with_timezone(&Utc) >= self.task_created_at
+                    && r.status.to_lowercase() == "pending"
+                {
                     let processed = self.processed_response_ids.lock().await;
-                    if !processed.contains(&r.id) { pending.push(r.clone()); }
+                    if !processed.contains(&r.id) {
+                        pending.push(r.clone());
+                    }
                 }
             }
         }
-        if pending.is_empty() { return Ok(0); }
+        if pending.is_empty() {
+            return Ok(0);
+        }
         pending.sort_by(|a, b| a.created_at.cmp(&b.created_at));
 
         // Ensure state is set to busy before processing to avoid UI mismatches
@@ -135,8 +244,13 @@ impl ResponseHandler {
                     Err(e) => {
                         attempt += 1;
                         warn!("Failed to set busy (attempt {}): {}", attempt, e);
-                        if attempt >= 3 { return Ok(0); }
-                        tokio::time::sleep(std::time::Duration::from_millis((attempt * 200) as u64)).await;
+                        if attempt >= 3 {
+                            return Ok(0);
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            (attempt * 200) as u64,
+                        ))
+                        .await;
                     }
                 }
             }
@@ -153,13 +267,27 @@ impl ResponseHandler {
                 }
             }
         }
-        if let Err(e) = self.api_client.update_agent_to_idle().await { warn!("Failed to set idle: {}", e); }
+        if let Err(e) = self.api_client.update_agent_to_idle().await {
+            warn!("Failed to set idle: {}", e);
+        }
         Ok(pending.len())
     }
 
     async fn process_response(&self, response: &ResponseView) -> Result<()> {
-        let input_text = response.input.get("text").and_then(|v| v.as_str()).unwrap_or("");
-        self.guardrails.validate_input(input_text)?;
+        // Validate first text item from input_content, if any
+        let mut input_text = "".to_string();
+        if let Some(arr) = response.input_content.as_ref() {
+            for it in arr {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t.eq_ignore_ascii_case("text") {
+                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                        input_text = s.to_string();
+                        break;
+                    }
+                }
+            }
+        }
+        self.guardrails.validate_input(&input_text)?;
 
         // Build conversation from prior responses, respecting optional context cutoff
         let all = self.api_client.get_responses(None, None).await?;
@@ -173,7 +301,7 @@ impl ResponseHandler {
 
         let mut conversation = convo;
         // Track whether we have already appended any segments to avoid duplicating commentary
-        let mut items_sent: usize = 0;
+        let mut _items_sent: usize = 0;
         let mut call_attempts: u32 = 0;
         let mut spill_retry_attempts: u32 = 0;
         let mut empty_retry_attempts: u32 = 0;
@@ -184,7 +312,11 @@ impl ResponseHandler {
             // Call model (with simple retry/backoff inside ollama client)
             let model_resp: ModelResponse = match self
                 .ollama_client
-                .complete_with_registry(conversation.clone(), Some(system_prompt), Some(&*self.tool_registry))
+                .complete_with_registry(
+                    conversation.clone(),
+                    Some(system_prompt),
+                    Some(&*self.tool_registry),
+                )
                 .await
             {
                 Ok(r) => r,
@@ -216,7 +348,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                         let items = vec![
@@ -225,25 +357,58 @@ impl ResponseHandler {
                         ];
                         let _ = self
                             .api_client
-                            .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                            .update_response(
+                                &response.id,
+                                Some("processing".to_string()),
+                                None,
+                                Some(items),
+                            )
                             .await;
 
                         // Always inform the model in this turn (system nudge), but do not add to history later
-                        conversation.push(ChatMessage { role: "system".to_string(), content: dev_note, name: None, tool_call_id: None });
+                        conversation.push(ChatMessage {
+                            role: "system".to_string(),
+                            content: dev_note,
+                            name: None,
+                            tool_call_id: None,
+                        });
                         continue;
                     }
 
-                    // Append thinking + tool_call only for valid tools
+                    // Append thinking/commentary + tool_call only for valid tools
                     let mut segs = Vec::new();
-                    if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
-                    let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
+                    if let Some(thinking) = &model_resp.thinking {
+                        if !thinking.trim().is_empty() {
+                            segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking}));
+                        }
+                    }
+                    if !model_resp.content.trim().is_empty() {
+                        segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
+                    }
+                    let seg_tool_call =
+                        serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
                     segs.push(seg_tool_call.clone());
-                    let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
-                    items_sent += segs.len();
+                    let _ = self
+                        .api_client
+                        .update_response(
+                            &response.id,
+                            Some("processing".to_string()),
+                            None,
+                            Some(segs.clone()),
+                        )
+                        .await;
+                    _items_sent += segs.len();
 
                     // Also add an assistant message for the tool call into the in-memory conversation
-                    let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
-                    conversation.push(ChatMessage { role: "assistant".to_string(), content: call_summary, name: None, tool_call_id: None });
+                    let call_summary =
+                        serde_json::json!({"tool_call": {"tool": tool_name, "args": args }})
+                            .to_string();
+                    conversation.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: call_summary,
+                        name: None,
+                        tool_call_id: None,
+                    });
 
                     // Execute tool and capture structured output
                     let output_value: serde_json::Value = match self
@@ -252,12 +417,22 @@ impl ResponseHandler {
                         .await
                     {
                         Ok(v) => v,
-                        Err(e) => serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()}),
+                        Err(e) => {
+                            serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
+                        }
                     };
                     // Append only the tool_result (avoid duplicating prior items)
                     let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
-                    let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
-                    items_sent += 1;
+                    let _ = self
+                        .api_client
+                        .update_response(
+                            &response.id,
+                            Some("processing".to_string()),
+                            None,
+                            Some(vec![seg_tool_result.clone()]),
+                        )
+                        .await;
+                    _items_sent += 1;
                     // Special case: after successful sleep, proactively inform the user and finalize
                     if tool_name == "sleep_agent" {
                         let delay = output_value
@@ -265,14 +440,91 @@ impl ResponseHandler {
                             .and_then(|v| v.as_u64())
                             .unwrap_or(5);
                         let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
-                        let final_seg = serde_json::json!({"type":"final","channel":"final","text": msg});
-                        let _ = self.api_client.update_response(&response.id, Some("completed".to_string()), Some(msg.clone()), Some(vec![final_seg])).await;
+                        let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
+                        let _ = self
+                            .api_client
+                            .update_response(
+                                &response.id,
+                                Some("completed".to_string()),
+                                None,
+                                Some(vec![final_seg]),
+                            )
+                            .await;
+                        return Ok(());
+                    }
+                    // Special case: unified output tool finalizes immediately
+                    if tool_name == "output" {
+                        let items = seg_tool_result
+                            .get("output")
+                            .and_then(|v| v.get("items"))
+                            .and_then(|v| v.as_array())
+                            .cloned()
+                            .unwrap_or_default();
+                        let mut parts: Vec<String> = Vec::new();
+                        for it in items.iter() {
+                            let typ = it
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_lowercase();
+                            let title = it.get("title").and_then(|v| v.as_str());
+                            if let Some(t) = title {
+                                parts.push(format!("## {}\n", t));
+                            }
+                            match typ.as_str() {
+                                "markdown" => {
+                                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                                        parts.push(s.to_string());
+                                    }
+                                }
+                                "json" => {
+                                    let val = it
+                                        .get("content")
+                                        .cloned()
+                                        .unwrap_or(serde_json::Value::Null);
+                                    let pretty = serde_json::to_string_pretty(&val)
+                                        .unwrap_or_else(|_| val.to_string());
+                                    parts.push(format!("```json\n{}\n```", pretty));
+                                }
+                                "url" => {
+                                    if let Some(u) = it.get("content").and_then(|v| v.as_str()) {
+                                        if let Some(tl) = title {
+                                            parts.push(format!("- [{}]({})", tl, u));
+                                        } else {
+                                            parts.push(format!("- {}", u));
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        let combined = parts.join("\n\n");
+                        let sanitized = self.guardrails.validate_output(&combined)?;
+                        let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": sanitized});
+                        let _ = self
+                            .api_client
+                            .update_response(
+                                &response.id,
+                                Some("completed".to_string()),
+                                None,
+                                Some(vec![final_seg]),
+                            )
+                            .await;
                         return Ok(());
                     }
                     // If the tool reported an error, let the model handle next step; do not mark failed
                     // Add tool result to conversation
-                    let tool_content_str = if let Some(s) = output_value.as_str() { s.to_string() } else { output_value.to_string() };
-                    conversation.push(ChatMessage { role:"tool".to_string(), content: tool_content_str, name: Some(tool_name.clone()), tool_call_id: None });
+                    let tool_content_str = if let Some(s) = output_value.as_str() {
+                        s.to_string()
+                    } else {
+                        output_value.to_string()
+                    };
+                    conversation.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: tool_content_str,
+                        name: Some(tool_name.clone()),
+                        tool_call_id: None,
+                    });
                     continue;
                 }
             }
@@ -287,8 +539,8 @@ impl ResponseHandler {
                         let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
-                        let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            let dev_note = format!(
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
                             tool_name
                         );
                             let items = vec![
@@ -297,21 +549,53 @@ impl ResponseHandler {
                             ];
                             let _ = self
                                 .api_client
-                                .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                                .update_response(
+                                    &response.id,
+                                    Some("processing".to_string()),
+                                    None,
+                                    Some(items),
+                                )
                                 .await;
-                            conversation.push(ChatMessage { role: "system".to_string(), content: dev_note, name: None, tool_call_id: None });
+                            conversation.push(ChatMessage {
+                                role: "system".to_string(),
+                                content: dev_note,
+                                name: None,
+                                tool_call_id: None,
+                            });
                             spill_retry_attempts += 1;
-                            if spill_retry_attempts < 10 { continue; }
+                            if spill_retry_attempts < 10 {
+                                continue;
+                            }
                         } else {
                             // Treat as a valid tool call and execute
                             let mut segs = Vec::new();
-                            if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
+                            if let Some(thinking) = &model_resp.thinking {
+                                if !thinking.trim().is_empty() {
+                                    segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking}));
+                                }
+                            }
+                            if !model_resp.content.trim().is_empty() {
+                                segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
+                            }
                             let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
                             segs.push(seg_tool_call.clone());
-                            let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(segs.clone())).await;
-                            items_sent += segs.len();
+                            let _ = self
+                                .api_client
+                                .update_response(
+                                    &response.id,
+                                    Some("processing".to_string()),
+                                    None,
+                                    Some(segs.clone()),
+                                )
+                                .await;
+                            _items_sent += segs.len();
                             let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
-                            conversation.push(ChatMessage { role: "assistant".to_string(), content: call_summary, name: None, tool_call_id: None });
+                            conversation.push(ChatMessage {
+                                role: "assistant".to_string(),
+                                content: call_summary,
+                                name: None,
+                                tool_call_id: None,
+                            });
 
                             let output_value: serde_json::Value = match self
                                 .tool_registry
@@ -319,23 +603,115 @@ impl ResponseHandler {
                                 .await
                             {
                                 Ok(v) => v,
-                                Err(e) => serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()}),
+                                Err(e) => {
+                                    serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
+                                }
                             };
                             let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
-                            let _ = self.api_client.update_response(&response.id, Some("processing".to_string()), None, Some(vec![seg_tool_result.clone()])).await;
-                            items_sent += 1;
+                            let _ = self
+                                .api_client
+                                .update_response(
+                                    &response.id,
+                                    Some("processing".to_string()),
+                                    None,
+                                    Some(vec![seg_tool_result.clone()]),
+                                )
+                                .await;
+                            _items_sent += 1;
+                            // Finalize for unified output here as well
+                            if tool_name == "output" {
+                                let items = seg_tool_result
+                                    .get("output")
+                                    .and_then(|v| v.get("items"))
+                                    .and_then(|v| v.as_array())
+                                    .cloned()
+                                    .unwrap_or_default();
+                                let mut parts: Vec<String> = Vec::new();
+                                for it in items.iter() {
+                                    let typ = it
+                                        .get("type")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_lowercase();
+                                    let title = it.get("title").and_then(|v| v.as_str());
+                                    if let Some(t) = title {
+                                        parts.push(format!("## {}\n", t));
+                                    }
+                                    match typ.as_str() {
+                                        "markdown" => {
+                                            if let Some(s) =
+                                                it.get("content").and_then(|v| v.as_str())
+                                            {
+                                                parts.push(s.to_string());
+                                            }
+                                        }
+                                        "json" => {
+                                            let val = it
+                                                .get("content")
+                                                .cloned()
+                                                .unwrap_or(serde_json::Value::Null);
+                                            let pretty = serde_json::to_string_pretty(&val)
+                                                .unwrap_or_else(|_| val.to_string());
+                                            parts.push(format!("```json\n{}\n```", pretty));
+                                        }
+                                        "url" => {
+                                            if let Some(u) =
+                                                it.get("content").and_then(|v| v.as_str())
+                                            {
+                                                if let Some(tl) = title {
+                                                    parts.push(format!("- [{}]({})", tl, u));
+                                                } else {
+                                                    parts.push(format!("- {}", u));
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                let combined = parts.join("\n\n");
+                                let sanitized = self.guardrails.validate_output(&combined)?;
+                                let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": sanitized});
+                                let _ = self
+                                    .api_client
+                                    .update_response(
+                                        &response.id,
+                                        Some("completed".to_string()),
+                                        None,
+                                        Some(vec![final_seg]),
+                                    )
+                                    .await;
+                                return Ok(());
+                            }
                             if tool_name == "sleep_agent" {
                                 let delay = output_value
                                     .get("delay_seconds")
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(5);
-                                let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
-                                let final_seg = serde_json::json!({"type":"final","channel":"final","text": msg});
-                                let _ = self.api_client.update_response(&response.id, Some("completed".to_string()), Some(msg.clone()), Some(vec![final_seg])).await;
+                                let msg =
+                                    format!("Okay — I will go to sleep in {} seconds.", delay);
+                                let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
+                                let _ = self
+                                    .api_client
+                                    .update_response(
+                                        &response.id,
+                                        Some("completed".to_string()),
+                                        None,
+                                        Some(vec![final_seg]),
+                                    )
+                                    .await;
                                 return Ok(());
                             }
-                            let tool_content_str = if let Some(s) = output_value.as_str() { s.to_string() } else { output_value.to_string() };
-                            conversation.push(ChatMessage { role:"tool".to_string(), content: tool_content_str, name: Some(tool_name.to_string()), tool_call_id: None });
+                            let tool_content_str = if let Some(s) = output_value.as_str() {
+                                s.to_string()
+                            } else {
+                                output_value.to_string()
+                            };
+                            conversation.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: tool_content_str,
+                                name: Some(tool_name.to_string()),
+                                tool_call_id: None,
+                            });
                             continue;
                         }
                     }
@@ -345,8 +721,8 @@ impl ResponseHandler {
             // If no tool call was parsed but the assistant content looks like raw JSON
             // not wrapped in backticks, treat it as a spillover (failed tool parsing).
             // Log as invalid tool and retry with a brief system nudge.
-            let looks_like_spillover_json =
-                (content_trimmed.starts_with('{') || content_trimmed.starts_with('['))
+            let looks_like_spillover_json = (content_trimmed.starts_with('{')
+                || content_trimmed.starts_with('['))
                 && !content_trimmed.starts_with("```");
             if looks_like_spillover_json {
                 spill_retry_attempts += 1;
@@ -357,11 +733,21 @@ impl ResponseHandler {
                 ];
                 let _ = self
                     .api_client
-                    .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                    .update_response(
+                        &response.id,
+                        Some("processing".to_string()),
+                        None,
+                        Some(items),
+                    )
                     .await;
 
                 // Nudge the model; do not add the spillover JSON into conversation history
-                conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
+                conversation.push(ChatMessage {
+                    role: "system".to_string(),
+                    content: dev_note.to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
 
                 // Limit spillover retries to avoid infinite loops
                 if spill_retry_attempts < 10 {
@@ -371,7 +757,10 @@ impl ResponseHandler {
             }
 
             // If there is neither a tool call nor final text (thinking-only), treat as parse failure and retry
-            let no_tool_calls = model_resp.tool_calls.as_ref().map_or(true, |v| v.is_empty());
+            let no_tool_calls = model_resp
+                .tool_calls
+                .as_ref()
+                .map_or(true, |v| v.is_empty());
             let has_no_final_text = model_resp.content.trim().is_empty();
             if no_tool_calls && has_no_final_text {
                 empty_retry_attempts += 1;
@@ -382,30 +771,54 @@ impl ResponseHandler {
                 ];
                 let _ = self
                     .api_client
-                    .update_response(&response.id, Some("processing".to_string()), None, Some(items))
+                    .update_response(
+                        &response.id,
+                        Some("processing".to_string()),
+                        None,
+                        Some(items),
+                    )
                     .await;
 
-                conversation.push(ChatMessage { role: "system".to_string(), content: dev_note.to_string(), name: None, tool_call_id: None });
+                conversation.push(ChatMessage {
+                    role: "system".to_string(),
+                    content: dev_note.to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
 
-                if empty_retry_attempts < 10 { continue; }
+                if empty_retry_attempts < 10 {
+                    continue;
+                }
                 // If exceeded retries, fall through to finalize with an explicit fallback note
             }
 
             // Enforce plan progression: if an active plan exists, do not allow a final answer until completed and cleared
-            if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await {
+            if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await
+            {
                 if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
                     if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
                         if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
                             if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
-                                let completed = plan.get("completed_at").and_then(|v| v.as_str()).is_some();
+                                let completed =
+                                    plan.get("completed_at").and_then(|v| v.as_str()).is_some();
                                 if !completed {
-                                    let tasks = plan.get("tasks").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                    let tasks = plan
+                                        .get("tasks")
+                                        .and_then(|v| v.as_array())
+                                        .cloned()
+                                        .unwrap_or_default();
                                     let mut pending: Vec<String> = Vec::new();
                                     for t in tasks.iter() {
-                                        let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                                        let status = t
+                                            .get("status")
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("pending");
                                         let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                                        let ttl = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
-                                        if status != "completed" { pending.push(format!("#{} {}", id, ttl)); }
+                                        let ttl =
+                                            t.get("title").and_then(|v| v.as_str()).unwrap_or("");
+                                        if status != "completed" {
+                                            pending.push(format!("#{} {}", id, ttl));
+                                        }
                                     }
                                     let guidance = if pending.is_empty() {
                                         "Active plan detected with no pending tasks. Call 'clear_plan' to finish and then proceed.".to_string()
@@ -416,7 +829,12 @@ impl ResponseHandler {
                                             pending.join("; ")
                                         )
                                     };
-                                    conversation.push(ChatMessage { role: "system".to_string(), content: guidance, name: None, tool_call_id: None });
+                                    conversation.push(ChatMessage {
+                                        role: "system".to_string(),
+                                        content: guidance,
+                                        name: None,
+                                        tool_call_id: None,
+                                    });
                                     // loop again to get tool_call(s) instead of final
                                     continue;
                                 }
@@ -426,75 +844,263 @@ impl ResponseHandler {
                 }
             }
 
-            // Final answer
-            let sanitized = self.guardrails.validate_output(&model_resp.content)?;
+            // Final answer (no tool_call in this turn)
+            // Enforce: final content must be sent via the 'output' tool.
+            // Record the model content as commentary and nudge to call output_markdown.
             let mut segs = Vec::new();
-            // Only include commentary here if we haven't already sent commentary in this turn
-            if items_sent == 0 {
-                if let Some(thinking) = &model_resp.thinking { if !thinking.trim().is_empty() { segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking})); } }
+            if let Some(thinking) = &model_resp.thinking {
+                if !thinking.trim().is_empty() {
+                    segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking}));
+                }
             }
-            segs.push(serde_json::json!({"type":"final","channel":"final","text":sanitized}));
-            let _ = self.api_client.update_response(&response.id, Some("completed".to_string()), Some(sanitized), Some(segs)).await?;
-            return Ok(());
+            if !model_resp.content.trim().is_empty() {
+                segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
+            }
+            // Nudge note
+            let nudge = "Use the 'show' tool for intermediate updates (plans, progress, previews) and the 'output' tool for final results. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title is required). Do not place final content directly in assistant text.";
+            segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
+            let _ = self
+                .api_client
+                .update_response(
+                    &response.id,
+                    Some("processing".to_string()),
+                    None,
+                    Some(segs),
+                )
+                .await?;
+            // Also add a system message nudge into conversation and continue loop
+            conversation.push(ChatMessage {
+                role: "system".to_string(),
+                content: nudge.to_string(),
+                name: None,
+                tool_call_id: None,
+            });
+            continue;
         }
     }
 
-    fn prepare_conversation_from_responses(&self, responses: &[ResponseView], current: &ResponseView, since: Option<DateTime<Utc>>) -> Vec<ChatMessage> {
+    fn prepare_conversation_from_responses(
+        &self,
+        responses: &[ResponseView],
+        current: &ResponseView,
+        since: Option<DateTime<Utc>>,
+    ) -> Vec<ChatMessage> {
         let mut convo = Vec::new();
         for r in responses.iter() {
-            if r.id == current.id { continue; }
+            if r.id == current.id {
+                continue;
+            }
             if let Some(since_dt) = since {
                 if let Ok(created_dt) = DateTime::parse_from_rfc3339(&r.created_at) {
-                    if created_dt.with_timezone(&Utc) < since_dt { continue; }
-                }
-            }
-            if let Some(text) = r.input.get("text").and_then(|v| v.as_str()) { if !text.is_empty() { convo.push(ChatMessage { role:"user".to_string(), content:text.to_string(), name:None, tool_call_id:None }); } }
-            if let Some(items) = r.output.get("items").and_then(|v| v.as_array()) {
-                for it in items {
-                    match it.get("type").and_then(|v| v.as_str()) {
-                        Some("tool_call") => {
-                            let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                            let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                            let content = serde_json::json!({"tool_call":{"tool": tool, "args": args}}).to_string();
-                            convo.push(ChatMessage { role: "assistant".to_string(), content, name: None, tool_call_id: None });
-                        }
-                        Some("tool_result") => {
-                        let name = it.get("tool").and_then(|v| v.as_str()).map(|s| s.to_string());
-                        let content = match it.get("output") {
-                            Some(v) => match v.as_str() {
-                                Some(s) => s.to_string(),
-                                None => v.to_string(),
-                            },
-                            None => String::new(),
-                        };
-                        if !content.is_empty() { convo.push(ChatMessage { role:"tool".to_string(), content, name, tool_call_id: None }); }
-                        }
-                        _ => {}
+                    if created_dt.with_timezone(&Utc) < since_dt {
+                        continue;
                     }
                 }
             }
-            if let Some(out) = r.output.get("text").and_then(|v| v.as_str()) { if !out.trim().is_empty() { convo.push(ChatMessage { role:"assistant".to_string(), content:out.to_string(), name:None, tool_call_id:None }); } }
+            // Input content
+            if let Some(arr) = r.input_content.as_ref() {
+                for it in arr {
+                    let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if t.eq_ignore_ascii_case("text") {
+                        if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                            if !s.is_empty() {
+                                convo.push(ChatMessage {
+                                    role: "user".to_string(),
+                                    content: s.to_string(),
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            // Segments (tool calls/results) — significantly trimmed for completed responses
+            // Only include segments for in-progress responses to keep context light.
+            let include_segments = r.status.to_lowercase() == "processing";
+            if include_segments {
+                if let Some(items) = r.segments.as_ref() {
+                    for it in items {
+                        match it.get("type").and_then(|v| v.as_str()) {
+                            Some("tool_call") => {
+                                let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                                let args =
+                                    it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                                let content =
+                                    serde_json::json!({"tool_call":{"tool": tool, "args": args}})
+                                        .to_string();
+                                convo.push(ChatMessage {
+                                    role: "assistant".to_string(),
+                                    content,
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                            }
+                            Some("tool_result") => {
+                                let name = it
+                                    .get("tool")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+                                let content = match it.get("output") {
+                                    Some(v) => match v.as_str() {
+                                        Some(s) => s.to_string(),
+                                        None => v.to_string(),
+                                    },
+                                    None => String::new(),
+                                };
+                                if !content.is_empty() {
+                                    convo.push(ChatMessage {
+                                        role: "tool".to_string(),
+                                        content,
+                                        name,
+                                        tool_call_id: None,
+                                    });
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            // For completed responses, include a compact assistant message synthesized from output_content
+            if r.status.to_lowercase() == "completed" {
+                if let Some(arr) = r.output_content.as_ref() {
+                    if !arr.is_empty() {
+                        // Build a concise assistant content from output items
+                        const MAX_TOTAL: usize = 3000; // total max chars from all items
+                        const MAX_ITEM: usize = 1200; // per-item max chars
+                        let mut used: usize = 0;
+                        let mut parts: Vec<String> = Vec::new();
+                        for it in arr.iter() {
+                            if used >= MAX_TOTAL {
+                                break;
+                            }
+                            let typ = it
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_lowercase();
+                            let title = it.get("title").and_then(|v| v.as_str());
+                            if let Some(t) = title {
+                                parts.push(format!("## {}\n", t));
+                                used =
+                                    used.saturating_add(parts.last().map(|s| s.len()).unwrap_or(0));
+                            }
+                            match typ.as_str() {
+                                "markdown" => {
+                                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                                        let mut chunk = s.trim().to_string();
+                                        if chunk.len() > MAX_ITEM {
+                                            chunk.truncate(MAX_ITEM);
+                                        }
+                                        parts.push(chunk);
+                                    }
+                                }
+                                "json" => {
+                                    let val = it
+                                        .get("content")
+                                        .cloned()
+                                        .unwrap_or(serde_json::Value::Null);
+                                    let pretty = serde_json::to_string_pretty(&val)
+                                        .unwrap_or_else(|_| val.to_string());
+                                    let mut chunk = pretty;
+                                    if chunk.len() > MAX_ITEM {
+                                        chunk.truncate(MAX_ITEM);
+                                    }
+                                    parts.push(format!("```json\n{}\n```", chunk));
+                                }
+                                "url" => {
+                                    if let Some(u) = it.get("content").and_then(|v| v.as_str()) {
+                                        if let Some(tl) = title {
+                                            parts.push(format!("- [{}]({})", tl, u));
+                                        } else {
+                                            parts.push(u.to_string());
+                                        }
+                                    }
+                                }
+                                _ => {}
+                            }
+                            used = used.saturating_add(parts.last().map(|s| s.len()).unwrap_or(0));
+                            if used >= MAX_TOTAL {
+                                break;
+                            }
+                        }
+                        let content = parts.join("\n\n");
+                        if !content.trim().is_empty() {
+                            convo.push(ChatMessage {
+                                role: "assistant".to_string(),
+                                content,
+                                name: None,
+                                tool_call_id: None,
+                            });
+                        } else {
+                            // If no output_content, check for a compact_summary segment
+                            if let Some(items) = r.segments.as_ref() {
+                                for it in items.iter() {
+                                    let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                                    if t.eq_ignore_ascii_case("compact_summary") {
+                                        if let Some(s) = it.get("content").and_then(|v| v.as_str())
+                                        {
+                                            let summary = s.trim().to_string();
+                                            if !summary.is_empty() {
+                                                convo.push(ChatMessage {
+                                                    role: "assistant".to_string(),
+                                                    content: summary,
+                                                    name: None,
+                                                    tool_call_id: None,
+                                                });
+                                            }
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        if let Some(text) = current.input.get("text").and_then(|v| v.as_str()) { convo.push(ChatMessage { role:"user".to_string(), content:text.to_string(), name:None, tool_call_id:None }); }
+        if let Some(arr) = current.input_content.as_ref() {
+            for it in arr {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t.eq_ignore_ascii_case("text") {
+                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                        convo.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: s.to_string(),
+                            name: None,
+                            tool_call_id: None,
+                        });
+                    }
+                }
+            }
+        }
         convo
     }
 
     async fn build_system_prompt(&self) -> String {
         // Read hosting context from environment (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let base_url_env = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
+        let base_url_env = std::env::var("RAWORC_HOST_URL")
+            .expect("RAWORC_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
         // Fetch agent info from API/DB (name, publish state)
-        let (agent_name_ctx, is_published_ctx, published_at_ctx) = match self.api_client.get_agent().await {
-            Ok(agent) => {
-                let nm = agent.name.clone();
-                let ip = agent.is_published;
-                let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
-                (nm, ip, pa)
-            }
-            Err(_) => (self.api_client.agent_name().to_string(), false, String::new()),
-        };
+        let (agent_name_ctx, is_published_ctx, published_at_ctx) =
+            match self.api_client.get_agent().await {
+                Ok(agent) => {
+                    let nm = agent.name.clone();
+                    let ip = agent.is_published;
+                    let pa = agent.published_at.clone().unwrap_or_else(|| "".to_string());
+                    (nm, ip, pa)
+                }
+                Err(_) => (
+                    self.api_client.agent_name().to_string(),
+                    false,
+                    String::new(),
+                ),
+            };
 
         // Current timestamp in UTC for context
         let current_time_utc = chrono::Utc::now().to_rfc3339();
@@ -502,6 +1108,23 @@ impl ResponseHandler {
         let operator_url = format!("{}", base_url);
         let api_url = format!("{}/api", base_url);
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
+
+        // Embed Show examples separately to avoid `format!` brace escaping issues
+        let show_examples = r#"
+#### Show Examples
+
+```json
+{"tool_call": {"tool": "show", "args": {"content": [
+  {"type": "markdown", "content": "- [ ] Clone repo\n- [ ] Install deps\n- [ ] Run tests\n- [ ] Implement feature"}
+]}}}
+```
+
+```json
+{"tool_call": {"tool": "show", "args": {"content": [
+  {"type": "markdown", "content": "- [x] Cloned repo\n- Path: /agent/code/project\n- Branch: main"}
+]}}}
+```
+"#;
 
         // Start with System Context specific to Raworc runtime
         let mut prompt = String::from(format!(
@@ -525,6 +1148,7 @@ You are running as an Agent in the {host_name} system.
 
 ### Content and Publishing
 - Your working content lives under /agent/content/.
+- Default HTML template: Use `/agent/template/simple.html` as the starting point for new HTML files under `/agent/content/` unless the user explicitly requests a different layout. Copy it and adapt content/sections as needed.
 - There is no live preview server. When the user wants to view content, publish it.
 - Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
 - Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
@@ -695,6 +1319,22 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 
 ### Tool Result Schema
 
+### Output & Validation
+
+- Use `output` to send final user-facing content. Provide `content` as an array of items. Each item supports:
+  - type: `"markdown"` | `"json"` | `"url"`
+  - title: string (required), rendered as a heading or link text
+  - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
+- You may include multiple items in a single `output` call.
+- Use `show` for intermediate updates — this is how you “think out loud” to the user:
+  - Start by calling `show` with a markdown plan (e.g., checklist) to outline your approach.
+  - As you make progress, call `show` again with updated plans, previews, partial results, links, or structured JSON snapshots.
+  - `show` never finalizes the response and can be called many times. Use it whenever you want to update the user on what you’re working on.
+- Treat commentary/analysis as `show` content (markdown). Do not place commentary directly in assistant text; always emit it via `show` so users can see your thoughts without cluttering the final output.
+- After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
+- Do not place final content directly in the assistant text. Use commentary for reasoning and explanations; emit results via `output` and use `show` for intermediate updates.
+
+{show_examples}
 ### Planner Tools
 
 - Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
@@ -804,7 +1444,11 @@ You have complete freedom to execute commands, install packages, and create solu
             agent_name = agent_name_ctx,
             published_url = published_url,
             published_flag = if is_published_ctx { "true" } else { "false" },
-            published_at = if is_published_ctx && !published_at_ctx.is_empty() { published_at_ctx.as_str() } else { "(not published)" },
+            published_at = if is_published_ctx && !published_at_ctx.is_empty() {
+                published_at_ctx.as_str()
+            } else {
+                "(not published)"
+            },
             current_time_utc = current_time_utc,
         ));
 
@@ -828,7 +1472,10 @@ You have complete freedom to execute commands, install packages, and create solu
                 }
             }
         } else {
-            info!("No instructions file found at {}", instructions_path.display());
+            info!(
+                "No instructions file found at {}",
+                instructions_path.display()
+            );
         }
 
         // Auto-insert current plan details (after user's custom instructions), if any
@@ -837,23 +1484,40 @@ You have complete freedom to execute commands, install packages, and create solu
                 if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
                     if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
                         if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
-                            let completed = plan.get("completed_at").and_then(|v| v.as_str()).is_some();
+                            let completed =
+                                plan.get("completed_at").and_then(|v| v.as_str()).is_some();
                             if !completed {
-                                let title = plan.get("title").and_then(|v| v.as_str()).unwrap_or("Work Plan");
-                                let tasks = plan.get("tasks").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+                                let title = plan
+                                    .get("title")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Work Plan");
+                                let tasks = plan
+                                    .get("tasks")
+                                    .and_then(|v| v.as_array())
+                                    .cloned()
+                                    .unwrap_or_default();
                                 let mut lines = String::new();
                                 let mut next_hint: Option<String> = None;
                                 for t in tasks.iter() {
                                     let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                                    let status = t.get("status").and_then(|v| v.as_str()).unwrap_or("pending");
+                                    let status = t
+                                        .get("status")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("pending");
                                     let ttl = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
                                     let check = if status == "completed" { "x" } else { " " };
-                                    if status != "completed" && next_hint.is_none() { next_hint = Some(format!("#{} {}", id, ttl)); }
+                                    if status != "completed" && next_hint.is_none() {
+                                        next_hint = Some(format!("#{} {}", id, ttl));
+                                    }
                                     lines.push_str(&format!("- [{}] (#{}) {}\n", check, id, ttl));
                                 }
-                                let next = next_hint.unwrap_or_else(|| "All tasks completed".to_string());
+                                let next =
+                                    next_hint.unwrap_or_else(|| "All tasks completed".to_string());
                                 prompt.push_str("\n\n### Current Plan (auto-inserted)\n");
-                                prompt.push_str(&format!("- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n", title, plan_path, lines, next));
+                                prompt.push_str(&format!(
+                                    "- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n",
+                                    title, plan_path, lines, next
+                                ));
                                 prompt.push_str("\nGuidance: Update this plan after each step by marking tasks completed and adding new tasks as needed. When all tasks are done, call 'clear_plan' to clear the plan so it no longer appears here.\n");
                             }
                         }

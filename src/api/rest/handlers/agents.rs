@@ -2,26 +2,30 @@ use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::query;
 use sqlx::Row;
 use std::sync::Arc;
-use chrono::{DateTime, Utc};
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
-use crate::shared::rbac::PermissionContext;
 use crate::shared::models::{
     Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
     RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
 };
+use crate::shared::rbac::PermissionContext;
 // Use fully-qualified names for response records to avoid name conflict with local AgentResponse
 use crate::shared::models::response as resp_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
-    let ctx = PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() };
+    let ctx = PermissionContext {
+        api_group: "api".into(),
+        resource: "*".into(),
+        verb: "*".into(),
+    };
     match crate::api::auth::check_permission(&auth.principal, state, &ctx).await {
         Ok(true) => true,
         _ => false,
@@ -124,7 +128,9 @@ pub async fn list_agents(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_LIST)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list agents".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to list agents".to_string())
+            })?;
     }
 
     let mut agents = Agent::find_all(&state.db)
@@ -168,7 +174,9 @@ pub async fn get_agent(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to get agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -279,7 +287,9 @@ pub async fn get_agent_context(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent context".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to get agent context".to_string())
+            })?;
     }
 
     // Get username
@@ -293,7 +303,11 @@ pub async fn get_agent_context(
 
     let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, cutoff).await?;
     let limit = soft_limit_tokens();
-    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+    let used_percent = if limit > 0 {
+        (used as f64 * 100.0) / (limit as f64)
+    } else {
+        0.0
+    };
 
     let resp = AgentContextUsageResponse {
         agent: agent.name,
@@ -319,7 +333,9 @@ pub async fn clear_agent_context(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to clear context".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to clear context".to_string())
+            })?;
     }
 
     // Ownership
@@ -341,8 +357,13 @@ pub async fn clear_agent_context(
         &state.db,
         &agent.name,
         username,
-        resp_model::CreateResponseRequest { input: serde_json::json!({}), background: None },
-    ).await {
+        resp_model::CreateResponseRequest {
+            input: serde_json::json!({ "content": [] }),
+            background: None,
+        },
+    )
+    .await
+    {
         let cutoff_now = Utc::now().to_rfc3339();
         let _ = resp_model::AgentResponse::update_by_id(
             &state.db,
@@ -355,14 +376,19 @@ pub async fn clear_agent_context(
                     "items": [ { "type": "context_cleared", "cutoff_at": cutoff_now } ]
                 })),
             },
-        ).await;
+        )
+        .await;
     }
 
     // Return fresh measurement (should be near zero immediately after clear)
-    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now()))
-        .await?;
+    let (used, considered) =
+        estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now())).await?;
     let limit = soft_limit_tokens();
-    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+    let used_percent = if limit > 0 {
+        (used as f64 * 100.0) / (limit as f64)
+    } else {
+        0.0
+    };
     let resp = AgentContextUsageResponse {
         agent: agent.name,
         soft_limit_tokens: limit,
@@ -387,7 +413,9 @@ pub async fn compact_agent_context(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to compact context".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to compact context".to_string())
+            })?;
     }
 
     // Resolve principal name
@@ -430,7 +458,9 @@ pub async fn compact_agent_context(
         if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
             if !user_text.trim().is_empty() {
                 let line = format!("User: {}\n", user_text.trim());
-                if added_chars + line.len() > max_chars { break; }
+                if added_chars + line.len() > max_chars {
+                    break;
+                }
                 transcript.push_str(&line);
                 added_chars += line.len();
             }
@@ -438,12 +468,16 @@ pub async fn compact_agent_context(
         if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
             if !assistant_text.trim().is_empty() {
                 let line = format!("Assistant: {}\n", assistant_text.trim());
-                if added_chars + line.len() > max_chars { break; }
+                if added_chars + line.len() > max_chars {
+                    break;
+                }
                 transcript.push_str(&line);
                 added_chars += line.len();
             }
         }
-        if added_chars >= max_chars { break; }
+        if added_chars >= max_chars {
+            break;
+        }
     }
 
     // If nothing to summarize, create a minimal marker
@@ -452,7 +486,8 @@ pub async fn compact_agent_context(
     } else {
         // Call Ollama to summarize the transcript
         // Prefer the same variable name used by controller/agent; default to Docker network hostname
-        let base_url = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
+        let base_url =
+            std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
         let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:120b".to_string());
         let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
         let system_prompt = "You are a helpful assistant that compresses conversation history into a concise context for future messages.\n- Keep key goals, decisions, constraints, URLs, files, and paths.\n- Remove chit‑chat and redundant steps.\n- Prefer bullet points.\n- Target 150–250 words.";
@@ -478,7 +513,8 @@ pub async fn compact_agent_context(
             let text = resp.text().await.unwrap_or_default();
             return Err(ApiError::Internal(anyhow::anyhow!(
                 "Ollama error ({}): {}",
-                status, text
+                status,
+                text
             )));
         }
         let v: serde_json::Value = resp
@@ -497,13 +533,18 @@ pub async fn compact_agent_context(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
-    // Record a history marker indicating context was compacted, include summary in output.text
+    // Record a history marker indicating context was compacted, include summary as a compact_summary item
     if let Ok(created) = resp_model::AgentResponse::create(
         &state.db,
         &agent.name,
         username,
-        resp_model::CreateResponseRequest { input: serde_json::json!({}), background: None },
-    ).await {
+        resp_model::CreateResponseRequest {
+            input: serde_json::json!({ "content": [] }),
+            background: None,
+        },
+    )
+    .await
+    {
         let cutoff_now = Utc::now().to_rfc3339();
         let _ = resp_model::AgentResponse::update_by_id(
             &state.db,
@@ -512,18 +553,26 @@ pub async fn compact_agent_context(
                 status: Some("completed".to_string()),
                 input: None,
                 output: Some(serde_json::json!({
-                    "text": summary_text,
-                    "items": [ { "type": "context_compacted", "cutoff_at": cutoff_now } ]
+                    "text": "",
+                    "items": [
+                        { "type": "context_compacted", "cutoff_at": cutoff_now },
+                        { "type": "compact_summary", "content": summary_text }
+                    ]
                 })),
             },
-        ).await;
+        )
+        .await;
     }
 
     // Return fresh measurement (post-compaction, with new cutoff at now)
-    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now()))
-        .await?;
+    let (used, considered) =
+        estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now())).await?;
     let limit = soft_limit_tokens();
-    let used_percent = if limit > 0 { (used as f64 * 100.0) / (limit as f64) } else { 0.0 };
+    let used_percent = if limit > 0 {
+        (used as f64 * 100.0) / (limit as f64)
+    } else {
+        0.0
+    };
     let resp = AgentContextUsageResponse {
         agent: agent.name,
         soft_limit_tokens: limit,
@@ -554,7 +603,9 @@ pub async fn create_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to create agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to create agent".to_string())
+            })?;
     }
 
     // Get the principal name
@@ -642,7 +693,9 @@ pub async fn remix_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to remix agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to remix agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -792,7 +845,9 @@ pub async fn sleep_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to sleep agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to sleep agent".to_string())
+            })?;
     }
 
     // Allow sleeping own agents or admin can sleep any agent
@@ -823,12 +878,21 @@ pub async fn sleep_agent(
         .as_ref()
         .and_then(|r| r.delay_seconds)
         .unwrap_or(5);
-    if delay_seconds < 5 { delay_seconds = 5; }
+    if delay_seconds < 5 {
+        delay_seconds = 5;
+    }
     // Add task to destroy the container but keep volume after delay
     let note = maybe_req
         .as_ref()
         .and_then(|r| r.note.clone())
-        .and_then(|s| { let t = s.trim().to_string(); if t.is_empty() { None } else { Some(t) } });
+        .and_then(|s| {
+            let t = s.trim().to_string();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t)
+            }
+        });
     let payload = if let Some(ref n) = note {
         serde_json::json!({ "delay_seconds": delay_seconds, "note": n })
     } else {
@@ -875,7 +939,9 @@ pub async fn wake_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to wake agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to wake agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -964,8 +1030,13 @@ pub async fn wake_agent(
         &state.db,
         &agent.name,
         username,
-        resp_model::CreateResponseRequest { input: serde_json::json!({}) , background: None },
-    ).await {
+        resp_model::CreateResponseRequest {
+            input: serde_json::json!({ "content": [] }),
+            background: None,
+        },
+    )
+    .await
+    {
         let _ = resp_model::AgentResponse::update_by_id(
             &state.db,
             &created.id,
@@ -977,7 +1048,8 @@ pub async fn wake_agent(
                     "items": [ { "type": "woke", "note": "Wake requested" } ]
                 })),
             },
-        ).await;
+        )
+        .await;
     }
 
     // Fetch updated agent
@@ -1001,7 +1073,9 @@ pub async fn update_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to update agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to update agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -1090,7 +1164,9 @@ pub async fn delete_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_DELETE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to delete agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -1153,7 +1229,9 @@ pub async fn publish_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to publish agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to publish agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -1215,7 +1293,9 @@ pub async fn unpublish_agent(
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -1313,7 +1393,9 @@ pub async fn get_agent_runtime(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to get agent runtime".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to get agent runtime".to_string())
+            })?;
     }
 
     // Get username for ownership check
@@ -1353,7 +1435,9 @@ pub async fn get_agent_runtime(
                 } else if t == "slept" {
                     // Prefer embedded runtime_seconds, else compute delta
                     if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
-                        if rs > 0 { total += rs; }
+                        if rs > 0 {
+                            total += rs;
+                        }
                     } else {
                         let end_at = it
                             .get("at")
@@ -1363,7 +1447,9 @@ pub async fn get_agent_runtime(
                             .unwrap_or(row_created_at);
                         let start_at = last_woke.unwrap_or(agent.created_at);
                         let delta = (end_at - start_at).num_seconds();
-                        if delta > 0 { total += delta; }
+                        if delta > 0 {
+                            total += delta;
+                        }
                     }
                 }
             }

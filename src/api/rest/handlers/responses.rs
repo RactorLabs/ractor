@@ -1,14 +1,23 @@
-use axum::{extract::{Extension, Path, Query, State}, Json};
-use std::sync::Arc;
-use sqlx::Row;
+use axum::{
+    extract::{Extension, Path, Query, State},
+    Json,
+};
 use chrono::{DateTime, Utc};
+use serde_json::Value;
+use sqlx::Row;
+use std::sync::Arc;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
-use crate::shared::models::{AppState, AgentResponse, CreateResponseRequest, UpdateResponseRequest, ResponseView};
+use crate::shared::models::{
+    AgentResponse, AppState, CreateResponseRequest, ResponseView, UpdateResponseRequest,
+};
 
 #[derive(Debug, serde::Deserialize)]
-pub struct ListQuery { pub limit: Option<i64>, pub offset: Option<i64> }
+pub struct ListQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
 
 pub async fn list_responses(
     State(state): State<Arc<AppState>>,
@@ -25,15 +34,19 @@ pub async fn list_responses(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
 
-    let result = list.into_iter().map(|r| ResponseView {
-        id: r.id,
-        agent_name: r.agent_name,
-        status: r.status,
-        input: r.input,
-        output: r.output,
-        created_at: r.created_at.to_rfc3339(),
-        updated_at: r.updated_at.to_rfc3339(),
-    }).collect();
+    let result = list
+        .into_iter()
+        .map(|r| ResponseView {
+            id: r.id,
+            agent_name: r.agent_name,
+            status: r.status,
+            input_content: extract_input_content(&r.input),
+            output_content: extract_output_content(&r.output),
+            segments: extract_segments(&r.output),
+            created_at: r.created_at.to_rfc3339(),
+            updated_at: r.updated_at.to_rfc3339(),
+        })
+        .collect();
     Ok(Json(result))
 }
 
@@ -141,8 +154,9 @@ pub async fn create_response(
                             id: cur.id,
                             agent_name: cur.agent_name,
                             status: cur.status,
-                            input: cur.input,
-                            output: cur.output,
+                            input_content: extract_input_content(&cur.input),
+                            output_content: extract_output_content(&cur.output),
+                            segments: extract_segments(&cur.output),
                             created_at: cur.created_at.to_rfc3339(),
                             updated_at: cur.updated_at.to_rfc3339(),
                         }));
@@ -169,8 +183,9 @@ pub async fn create_response(
         id: response_id,
         agent_name: agent_name,
         status: "pending".to_string(),
-        input: req.input,
-        output: serde_json::json!({ "text": "", "items": [] }),
+        input_content: extract_input_content(&req.input),
+        output_content: vec![],
+        segments: vec![],
         created_at: now.clone(),
         updated_at: now,
     }))
@@ -223,6 +238,16 @@ async fn estimate_history_tokens_since(
         if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
             total_chars += user_text.len() as i64;
         }
+        if let Some(arr) = input.get("content").and_then(|v| v.as_array()) {
+            for it in arr {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t.eq_ignore_ascii_case("text") {
+                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                        total_chars += s.len() as i64;
+                    }
+                }
+            }
+        }
         if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
             total_chars += assistant_text.len() as i64;
         }
@@ -259,7 +284,8 @@ pub async fn update_response(
     // Check belongs
     if let Some(existing) = AgentResponse::find_by_id(&state.db, &response_id)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    {
         if existing.agent_name != agent_name {
             return Err(ApiError::NotFound("Response not found".to_string()));
         }
@@ -275,8 +301,9 @@ pub async fn update_response(
         id: updated.id,
         agent_name: updated.agent_name,
         status: updated.status,
-        input: updated.input,
-        output: updated.output,
+        input_content: extract_input_content(&updated.input),
+        output_content: extract_output_content(&updated.output),
+        segments: extract_segments(&updated.output),
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
     }))
@@ -294,5 +321,42 @@ pub async fn get_response_count(
     let count = AgentResponse::count_by_agent(&state.db, &agent_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count responses: {}", e)))?;
-    Ok(Json(serde_json::json!({ "count": count, "agent_name": agent_name })))
+    Ok(Json(
+        serde_json::json!({ "count": count, "agent_name": agent_name }),
+    ))
+}
+
+fn extract_input_content(input: &Value) -> Vec<Value> {
+    input
+        .get("content")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn extract_output_content(output: &Value) -> Vec<Value> {
+    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("output")
+                    .and_then(|v| v.get("items"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+    }
+    vec![]
+}
+
+fn extract_segments(output: &Value) -> Vec<Value> {
+    output
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
 }

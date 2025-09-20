@@ -483,8 +483,9 @@ impl AgentManager {
 
             // Create response record in database (pending)
             let response_id = uuid::Uuid::new_v4().to_string();
-            let input_json = serde_json::json!({ "text": prompt });
-            let output_json = serde_json::json!({ "text": "", "items": [] });
+            let input_json =
+                serde_json::json!({ "content": [ { "type": "text", "content": prompt } ] });
+            let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
                 INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
@@ -498,7 +499,10 @@ impl AgentManager {
             .bind(&output_json)
             .execute(&self.pool)
             .await?;
-            info!("Prompt response {} created for agent {}", response_id, agent_name);
+            info!(
+                "Prompt response {} created for agent {}",
+                response_id, agent_name
+            );
         }
 
         // Set agent state to INIT after container creation only if it hasn't changed yet.
@@ -597,16 +601,18 @@ impl AgentManager {
             .map(|d| if d < 5 { 5 } else { d })
             .unwrap_or(5);
         if delay_secs > 0 {
-            info!("Delaying sleep for agent {} by {} seconds", agent_name, delay_secs);
+            info!(
+                "Delaying sleep for agent {} by {} seconds",
+                agent_name, delay_secs
+            );
             sleep(Duration::from_secs(delay_secs)).await;
         }
         // Capture prior state and created_at for runtime measurement
-        let agent_row_opt: Option<(chrono::DateTime<Utc>, String)> = sqlx::query_as(
-            r#"SELECT created_at, state FROM agents WHERE name = ?"#
-        )
-        .bind(&agent_name)
-        .fetch_optional(&self.pool)
-        .await?;
+        let agent_row_opt: Option<(chrono::DateTime<Utc>, String)> =
+            sqlx::query_as(r#"SELECT created_at, state FROM agents WHERE name = ?"#)
+                .bind(&agent_name)
+                .fetch_optional(&self.pool)
+                .await?;
         let (agent_created_at, prior_state) = agent_row_opt
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
@@ -628,12 +634,23 @@ impl AgentManager {
         let created_by = task.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
         // Determine note: auto timeout vs user-triggered
-        let auto = task.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
+        let auto =
+            task.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
         let reason = if auto {
-            if prior_state.to_lowercase() == "busy" { "busy_timeout" } else { "idle_timeout" }
-        } else { "user" };
+            if prior_state.to_lowercase() == "busy" {
+                "busy_timeout"
+            } else {
+                "idle_timeout"
+            }
+        } else {
+            "user"
+        };
         let note = if auto {
-            if reason == "busy_timeout" { "Busy timeout" } else { "Idle timeout" }
+            if reason == "busy_timeout" {
+                "Busy timeout"
+            } else {
+                "Idle timeout"
+            }
         } else {
             task.payload
                 .get("note")
@@ -659,12 +676,16 @@ impl AgentManager {
                         break;
                     }
                 }
-                if found { break; }
+                if found {
+                    break;
+                }
             }
         }
         let now = chrono::Utc::now();
         let mut runtime_seconds = (now - start_ts).num_seconds();
-        if runtime_seconds < 0 { runtime_seconds = 0; }
+        if runtime_seconds < 0 {
+            runtime_seconds = 0;
+        }
 
         let output_json = serde_json::json!({
             "text": "",
@@ -751,7 +772,10 @@ impl AgentManager {
             .bind(&output_json)
             .execute(&self.pool)
             .await?;
-            info!("Prompt response {} created for woken agent {}", response_id, agent_name);
+            info!(
+                "Prompt response {} created for woken agent {}",
+                response_id, agent_name
+            );
         }
 
         // Insert a chat marker indicating the agent has woken
@@ -814,15 +838,19 @@ impl AgentManager {
             .unwrap_or(true);
 
         // Inspect agent state
-        let state_opt: Option<(String,)> = sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
-            .bind(&agent_name)
-            .fetch_optional(&self.pool)
-            .await?;
+        let state_opt: Option<(String,)> =
+            sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
+                .bind(&agent_name)
+                .fetch_optional(&self.pool)
+                .await?;
         let state = state_opt.map(|t| t.0).unwrap_or_default();
 
         // Wake if needed
         if wake_if_slept && state == "slept" {
-            info!("Agent {} slept; waking prior to inserting response", agent_name);
+            info!(
+                "Agent {} slept; waking prior to inserting response",
+                agent_name
+            );
             let wake_token = self
                 .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
                 .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
@@ -842,19 +870,19 @@ impl AgentManager {
             .execute(&self.pool)
             .await?;
 
-        // Insert a wake marker for implicit wake
-        let marker_id = uuid::Uuid::new_v4().to_string();
-        let now_text = chrono::Utc::now().to_rfc3339();
-        // Ensure the wake marker sorts before the newly created response row by using a slightly earlier timestamp
-        let marker_created_at = task
-            .created_at
-            .checked_sub_signed(chrono::Duration::milliseconds(1))
-            .unwrap_or(task.created_at);
-        let output_json = serde_json::json!({
-            "text": "",
-            "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
-        });
-        sqlx::query(
+            // Insert a wake marker for implicit wake
+            let marker_id = uuid::Uuid::new_v4().to_string();
+            let now_text = chrono::Utc::now().to_rfc3339();
+            // Ensure the wake marker sorts before the newly created response row by using a slightly earlier timestamp
+            let marker_created_at = task
+                .created_at
+                .checked_sub_signed(chrono::Duration::milliseconds(1))
+                .unwrap_or(task.created_at);
+            let output_json = serde_json::json!({
+                "text": "",
+                "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
+            });
+            sqlx::query(
             r#"
             INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
