@@ -93,10 +93,14 @@ impl DockerManager {
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /agent/code /agent/secrets /agent/logs /agent/content
+        let init_script = "sudo mkdir -p /agent/code /agent/secrets /agent/logs /agent/content /agent/template
 sudo chown -R agent:agent /agent
 sudo chmod -R 755 /agent
-echo 'Agent directories created (code, secrets, logs, content)'
+# Seed default HTML template if missing
+if [ ! -f /agent/template/simple.html ] && [ -f /opt/raworc/templates/simple.html ]; then
+  sudo cp /opt/raworc/templates/simple.html /agent/template/simple.html && sudo chown agent:agent /agent/template/simple.html;
+fi
+echo 'Agent directories created (code, secrets, logs, content, template)'
 ";
 
         self.execute_command(agent_name, init_script).await?;
@@ -172,7 +176,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let container_name = self.create_container(agent_name).await?;
 
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let parent_volume = format!(
+            "raworc_agent_data_{}",
+            parent_agent_name.to_ascii_lowercase()
+        );
         let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
@@ -298,7 +305,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let parent_volume = format!(
+            "raworc_agent_data_{}",
+            parent_agent_name.to_ascii_lowercase()
+        );
         let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
@@ -507,7 +517,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
         let agent_volume = self.create_agent_volume(agent_name).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("raworc_agent_data_{}", parent_agent_name.to_ascii_lowercase());
+        let parent_volume = format!(
+            "raworc_agent_data_{}",
+            parent_agent_name.to_ascii_lowercase()
+        );
         let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
@@ -1127,13 +1140,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
+        let host_url = std::env::var("RAWORC_HOST_URL")
+            .expect("RAWORC_HOST_URL must be set by the start script");
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST")
-            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
+        let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
+            anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
+        })?;
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
@@ -1247,7 +1262,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
             .await?;
         }
 
-        info!("Container {} created with agent volume {}", container_name, agent_volume);
+        info!(
+            "Container {} created with agent volume {}",
+            container_name, agent_volume
+        );
         Ok(container.id)
     }
 
@@ -1314,13 +1332,15 @@ echo 'Agent directories created (code, secrets, logs, content)'
 
         // Propagate host branding and URL to agents (provided by start script)
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL").expect("RAWORC_HOST_URL must be set by the start script");
+        let host_url = std::env::var("RAWORC_HOST_URL")
+            .expect("RAWORC_HOST_URL must be set by the start script");
         env.push(format!("RAWORC_HOST_NAME={}", host_name));
         env.push(format!("RAWORC_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST")
-            .map_err(|_| anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)"))?;
+        let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
+            anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
+        })?;
         env.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
@@ -1415,7 +1435,10 @@ echo 'Agent directories created (code, secrets, logs, content)'
             .await?;
         }
 
-        info!("Container {} created with agent volume {} and fresh system tokens", container_name, agent_volume);
+        info!(
+            "Container {} created with agent volume {} and fresh system tokens",
+            container_name, agent_volume
+        );
         Ok(container.id)
     }
 

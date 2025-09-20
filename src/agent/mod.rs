@@ -4,8 +4,8 @@ mod builtin_tools;
 mod config;
 mod error;
 mod guardrails;
-mod response_handler;
 mod ollama;
+mod response_handler;
 mod tool_registry;
 mod tools;
 
@@ -75,7 +75,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
     // Initialize agent directories
-    let agent_dirs = ["/agent", "/agent/code", "/agent/secrets", "/agent/content"];
+    let agent_dirs = [
+        "/agent",
+        "/agent/code",
+        "/agent/secrets",
+        "/agent/content",
+        "/agent/template",
+    ];
 
     for dir in agent_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {
@@ -83,12 +89,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         }
     }
 
-
     // Ensure /agent/bin exists and install command wrappers
     if let Err(e) = std::fs::create_dir_all("/agent/bin") {
         warn!("Failed to create /agent/bin: {}", e);
     } else {
-        if let Err(e) = install_wrappers() { warn!("Failed to install wrappers: {}", e); }
+        if let Err(e) = install_wrappers() {
+            warn!("Failed to install wrappers: {}", e);
+        }
     }
 
     // No separate content preview server; content is published via raworc-content.
@@ -180,6 +187,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     info!("Operator: {}", operator_url);
     info!("API: {}", api_url);
     info!("Content folder: /agent/content/ - Publish when ready to share");
+    info!("Templates folder: /agent/template/ - Default HTML templates");
     info!("Published content (when published): {}", published_url);
 
     // Set initial state thoughtfully: don't clobber a pre-set busy state
@@ -200,7 +208,10 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
             }
         }
         Err(e) => {
-            warn!("Could not fetch agent state on startup (will proceed): {}", e);
+            warn!(
+                "Could not fetch agent state on startup (will proceed): {}",
+                e
+            );
         }
     }
 
@@ -209,7 +220,11 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     // Main polling loop with comprehensive error handling
     loop {
         match message_handler.poll_and_process().await {
-            Ok(count) => { if count > 0 { info!("Processed {} responses", count); } }
+            Ok(count) => {
+                if count > 0 {
+                    info!("Processed {} responses", count);
+                }
+            }
             Err(e) => {
                 error!("Error processing responses: {}", e);
                 // Continue polling - agent should never die silently
@@ -221,8 +236,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 }
 
-    // Content preview server removed.
-
+// Content preview server removed.
 
 fn install_wrappers() -> anyhow::Result<()> {
     write_exec("/agent/bin/ls", LS_WRAPPER)?;
