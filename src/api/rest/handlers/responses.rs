@@ -251,6 +251,57 @@ async fn estimate_history_tokens_since(
         if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
             total_chars += assistant_text.len() as i64;
         }
+        // Structured: count output tool_result ('output' et al.) content length
+        if let Some(segs) = output.get("items").and_then(|v| v.as_array()) {
+            for seg in segs {
+                let seg_type = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if seg_type == "tool_result" {
+                    let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                    if tool == "output"
+                        || tool == "output_markdown"
+                        || tool == "ouput_json"
+                        || tool == "output_json"
+                    {
+                        if let Some(out) = seg.get("output") {
+                            if let Some(items) = out.get("items").and_then(|v| v.as_array()) {
+                                for item in items {
+                                    let typ = item
+                                        .get("type")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_ascii_lowercase();
+                                    match typ.as_str() {
+                                        "markdown" => {
+                                            if let Some(s) =
+                                                item.get("content").and_then(|v| v.as_str())
+                                            {
+                                                total_chars += s.len() as i64;
+                                            }
+                                        }
+                                        "json" => {
+                                            let val = item
+                                                .get("content")
+                                                .cloned()
+                                                .unwrap_or(serde_json::Value::Null);
+                                            let s = val.to_string();
+                                            total_chars += s.len() as i64;
+                                        }
+                                        "url" => {
+                                            if let Some(s) =
+                                                item.get("content").and_then(|v| v.as_str())
+                                            {
+                                                total_chars += s.len() as i64;
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
             for it in items {
                 if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {

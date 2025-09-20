@@ -448,13 +448,14 @@ pub async fn compact_agent_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     };
 
-    // Build a simple transcript from input/output.text fields
+    // Build a transcript from input.content text items and assistant output tool results
     let mut transcript = String::new();
     let mut added_chars: usize = 0;
     let max_chars: usize = 50_000; // guard to avoid sending extremely large bodies
     for row in rows {
         let input: serde_json::Value = row.try_get("input").unwrap_or(serde_json::json!({}));
         let output: serde_json::Value = row.try_get("output").unwrap_or(serde_json::json!({}));
+        // Legacy: single text field
         if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
             if !user_text.trim().is_empty() {
                 let line = format!("User: {}\n", user_text.trim());
@@ -465,6 +466,25 @@ pub async fn compact_agent_context(
                 added_chars += line.len();
             }
         }
+        // Structured: input.content text items
+        if let Some(arr) = input.get("content").and_then(|v| v.as_array()) {
+            for it in arr {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t.eq_ignore_ascii_case("text") {
+                    if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                        if !s.trim().is_empty() {
+                            let line = format!("User: {}\n", s.trim());
+                            if added_chars + line.len() > max_chars {
+                                break;
+                            }
+                            transcript.push_str(&line);
+                            added_chars += line.len();
+                        }
+                    }
+                }
+            }
+        }
+        // Legacy: assistant text
         if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
             if !assistant_text.trim().is_empty() {
                 let line = format!("Assistant: {}\n", assistant_text.trim());
@@ -473,6 +493,65 @@ pub async fn compact_agent_context(
                 }
                 transcript.push_str(&line);
                 added_chars += line.len();
+            }
+        }
+        // Structured: find final output tool_result (tool == 'output') and render its items
+        if let Some(segs) = output.get("items").and_then(|v| v.as_array()) {
+            for seg in segs {
+                let seg_type = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if seg_type == "tool_result" {
+                    let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                    if tool == "output"
+                        || tool == "output_markdown"
+                        || tool == "ouput_json"
+                        || tool == "output_json"
+                    {
+                        if let Some(out) = seg.get("output") {
+                            if let Some(items) = out.get("items").and_then(|v| v.as_array()) {
+                                for item in items {
+                                    let typ = item
+                                        .get("type")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_ascii_lowercase();
+                                    let mut content_str = String::new();
+                                    match typ.as_str() {
+                                        "markdown" => {
+                                            if let Some(s) =
+                                                item.get("content").and_then(|v| v.as_str())
+                                            {
+                                                content_str = s.trim().to_string();
+                                            }
+                                        }
+                                        "json" => {
+                                            let val = item
+                                                .get("content")
+                                                .cloned()
+                                                .unwrap_or(serde_json::Value::Null);
+                                            content_str = val.to_string();
+                                        }
+                                        "url" => {
+                                            if let Some(s) =
+                                                item.get("content").and_then(|v| v.as_str())
+                                            {
+                                                content_str = s.trim().to_string();
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                    if !content_str.is_empty() {
+                                        let line = format!("Assistant: {}\n", content_str);
+                                        if added_chars + line.len() > max_chars {
+                                            break;
+                                        }
+                                        transcript.push_str(&line);
+                                        added_chars += line.len();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
         if added_chars >= max_chars {
