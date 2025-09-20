@@ -410,7 +410,11 @@ impl ResponseHandler {
                                     let guidance = if pending.is_empty() {
                                         "Active plan detected with no pending tasks. Call 'clear_plan' to finish and then proceed.".to_string()
                                     } else {
-                                        format!("Active plan detected. Do not send a final message. Continue following the plan: {}. After each step, update the plan (complete/add). When all tasks are done, call 'clear_plan'.", pending.join("; "))
+                                        let current = pending.get(0).cloned().unwrap_or_default();
+                                        format!(
+                                            "Active plan detected. Do not send a final message. Work strictly task-by-task: complete the current task ({current}) before starting another. After finishing it, call 'complete_task' to mark it done, then continue to the next. Keep only one task active at a time. Pending: {}. When all tasks are done, call 'clear_plan'.",
+                                            pending.join("; ")
+                                        )
                                     };
                                     conversation.push(ChatMessage { role: "system".to_string(), content: guidance, name: None, tool_call_id: None });
                                     // loop again to get tool_call(s) instead of final
@@ -696,7 +700,7 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 - Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
 - Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
 - After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `clear_plan` to finalize and remove it from the prompt.
-- When a plan is active, you must follow it strictly: complete each task, update the plan after every step, and finally call `clear_plan`. Do not send a final assistant message while a plan is active.
+- When a plan is active, you must follow it strictly: work task-by-task in order. Do not start the next task until you have completed the current task and marked it done with `complete_task`. Keep only one task active at a time (no parallel work). After each step, update the plan immediately (complete/add). When all tasks are complete, call `clear_plan`. Do not send a final assistant message while a plan is active.
 - Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
  - Do not add duplicate tasks: Before calling `add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
 
