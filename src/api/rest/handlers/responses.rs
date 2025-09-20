@@ -213,16 +213,18 @@ async fn estimate_history_tokens_since(
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<i64, ApiError> {
     let rows = if let Some(cut) = cutoff {
+        // Ordering is unnecessary for token estimation; avoid ORDER BY to reduce DB sort pressure
         sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#,
         )
         .bind(agent_name)
         .bind(cut)
         .fetch_all(pool)
         .await
     } else {
+        // No ORDER BY needed here either
         sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM agent_responses WHERE agent_name = ?"#,
         )
         .bind(agent_name)
         .fetch_all(pool)
