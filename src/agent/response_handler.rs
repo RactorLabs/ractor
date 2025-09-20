@@ -1120,6 +1120,12 @@ Use `show` to briefly announce exactly what you will do next (1–2 sentences), 
 
 ```json
 {"tool_call": {"tool": "show", "args": {"content": [
+  {"type": "markdown", "content": "I am going to clone the repository."}
+]}}}
+```
+
+```json
+{"tool_call": {"tool": "show", "args": {"content": [
   {"type": "markdown", "content": "Next: run unit tests (cargo test) to establish a baseline. Starting now."}
 ]}}}
 ```

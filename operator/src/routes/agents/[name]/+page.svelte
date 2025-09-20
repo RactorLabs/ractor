@@ -682,12 +682,30 @@
     } catch (_) { return String(s || ''); }
   }
 
-  // Track which tool-result segments are expanded to show full output
+  // Track which tool-result segments are expanded (full output) and which <details> are open
   let expandedSegments = new Set();
+  let openedSegments = new Set();
   let expandAll = false; // when true, force-open all <details> blocks and full segment views
   function segKey(m, j) { try { return `${m?.id || ''}:${j}`; } catch (_) { return `${j}`; } }
-  function expandSeg(key) { try { const s = new Set(expandedSegments); s.add(key); expandedSegments = s; } catch (_) {} }
-  function collapseSeg(key) { try { const s = new Set(expandedSegments); s.delete(key); expandedSegments = s; } catch (_) {} }
+  function expandSeg(key) {
+    try {
+      const s = new Set(expandedSegments); s.add(key); expandedSegments = s;
+      if (!expandAll) { const o = new Set(openedSegments); o.add(key); openedSegments = o; }
+    } catch (_) {}
+  }
+  function collapseSeg(key) {
+    try {
+      const s = new Set(expandedSegments); s.delete(key); expandedSegments = s;
+      if (!expandAll) { const o = new Set(openedSegments); o.delete(key); openedSegments = o; }
+    } catch (_) {}
+  }
+  function onToggleDetails(key, isOpen) {
+    try {
+      const o = new Set(openedSegments);
+      if (isOpen) { o.add(key); } else { o.delete(key); }
+      openedSegments = o;
+    } catch (_) {}
+  }
   // In-progress preview and label removed; always render full details in the feed.
 
   // Normalize metadata to an object (handles string-serialized JSON)
@@ -746,6 +764,7 @@
   function collapseAllDetails() {
     try {
       expandedSegments = new Set();
+      openedSegments = new Set();
       expandAll = false;
     } catch (_) {}
   }
@@ -1304,7 +1323,7 @@
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">
-                            <details class="mt-0" open={expandAll}>
+                            <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
@@ -1315,7 +1334,7 @@
                                 <div class="text-body text-opacity-75 mb-1">Result</div>
                                 {#if isInProgress(m) || expandAll || expandedSegments.has(segKey(m, j+1))}
                                   <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
-                                  {#if !isInProgress(m)}
+                                  {#if !isInProgress(m) && !expandAll}
                                     <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j+1))}>Show less</button>
                                   {/if}
                                 {:else}
@@ -1343,14 +1362,14 @@
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-1 justify-content-start">
-                            <details class="mt-0" open={expandAll}>
+                            <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
                               </summary>
                               {#if isInProgress(m) || expandedSegments.has(segKey(m, j))}
                                 <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
-                                {#if !isInProgress(m)}
+                                {#if !isInProgress(m) && !expandAll}
                                   <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j))}>Show less</button>
                                 {/if}
                               {:else}

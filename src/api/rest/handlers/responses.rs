@@ -212,109 +212,169 @@ async fn estimate_history_tokens_since(
     agent_name: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<i64, ApiError> {
+    // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
-        // Ordering is unnecessary for token estimation; avoid ORDER BY to reduce DB sort pressure
-        sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#,
-        )
-        .bind(agent_name)
-        .bind(cut)
-        .fetch_all(pool)
-        .await
+        sqlx::query(r#"SELECT status, input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#)
+            .bind(agent_name)
+            .bind(cut)
+            .fetch_all(pool)
+            .await
     } else {
-        // No ORDER BY needed here either
-        sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ?"#,
-        )
-        .bind(agent_name)
-        .fetch_all(pool)
-        .await
+        sqlx::query(r#"SELECT status, input, output FROM agent_responses WHERE agent_name = ?"#)
+            .bind(agent_name)
+            .fetch_all(pool)
+            .await
     }
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     let mut total_chars: i64 = 0;
     for row in rows {
+        let status: String = row
+            .try_get::<String, _>("status")
+            .unwrap_or_else(|_| "completed".to_string());
         let input: serde_json::Value = row.try_get("input").unwrap_or(serde_json::json!({}));
         let output: serde_json::Value = row.try_get("output").unwrap_or(serde_json::json!({}));
 
+        // User input
         if let Some(user_text) = input.get("text").and_then(|v| v.as_str()) {
-            total_chars += user_text.len() as i64;
+            if !user_text.trim().is_empty() {
+                total_chars += user_text.len() as i64;
+            }
         }
         if let Some(arr) = input.get("content").and_then(|v| v.as_array()) {
             for it in arr {
                 let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 if t.eq_ignore_ascii_case("text") {
                     if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
-                        total_chars += s.len() as i64;
+                        if !s.trim().is_empty() {
+                            total_chars += s.len() as i64;
+                        }
                     }
                 }
             }
         }
-        if let Some(assistant_text) = output.get("text").and_then(|v| v.as_str()) {
-            total_chars += assistant_text.len() as i64;
-        }
-        // Structured: count output tool_result ('output' et al.) content length
-        if let Some(segs) = output.get("items").and_then(|v| v.as_array()) {
-            for seg in segs {
-                let seg_type = seg.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if seg_type == "tool_result" {
-                    let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                    if tool == "output"
-                        || tool == "output_markdown"
-                        || tool == "ouput_json"
-                        || tool == "output_json"
-                    {
-                        if let Some(out) = seg.get("output") {
-                            if let Some(items) = out.get("items").and_then(|v| v.as_array()) {
-                                for item in items {
-                                    let typ = item
-                                        .get("type")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_ascii_lowercase();
-                                    match typ.as_str() {
-                                        "markdown" => {
-                                            if let Some(s) =
-                                                item.get("content").and_then(|v| v.as_str())
-                                            {
-                                                total_chars += s.len() as i64;
-                                            }
-                                        }
-                                        "json" => {
-                                            let val = item
-                                                .get("content")
-                                                .cloned()
-                                                .unwrap_or(serde_json::Value::Null);
-                                            let s = val.to_string();
-                                            total_chars += s.len() as i64;
-                                        }
-                                        "url" => {
-                                            if let Some(s) =
-                                                item.get("content").and_then(|v| v.as_str())
-                                            {
-                                                total_chars += s.len() as i64;
-                                            }
-                                        }
-                                        _ => {}
-                                    }
+
+        let status_lc = status.to_lowercase();
+        if status_lc == "processing" {
+            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                for it in items {
+                    match it.get("type").and_then(|v| v.as_str()) {
+                        Some("tool_call") => {
+                            let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                            let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                            let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                                .to_string();
+                            total_chars += s.len() as i64;
+                        }
+                        Some("tool_result") => {
+                            if let Some(out) = it.get("output") {
+                                let s = out
+                                    .as_str()
+                                    .map(|x| x.to_string())
+                                    .unwrap_or_else(|| out.to_string());
+                                if !s.is_empty() {
+                                    total_chars += s.len() as i64;
                                 }
                             }
                         }
+                        _ => {}
                     }
                 }
             }
-        }
-        if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-            for it in items {
-                if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
-                    if let Some(out) = it.get("output") {
-                        if let Some(s) = out.as_str() {
-                            total_chars += s.len() as i64;
-                        } else {
-                            total_chars += out.to_string().len() as i64;
+        } else if status_lc == "completed" {
+            // Build compact assistant content from 'output' items or compact_summary
+            const MAX_TOTAL: usize = 3000;
+            const MAX_ITEM: usize = 1200;
+            let mut out_items: Vec<serde_json::Value> = Vec::new();
+            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                for it in items.iter().rev() {
+                    let is_output = it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
+                        && it.get("tool").and_then(|v| v.as_str()) == Some("output");
+                    if is_output {
+                        if let Some(arr) = it
+                            .get("output")
+                            .and_then(|v| v.get("items"))
+                            .and_then(|v| v.as_array())
+                        {
+                            out_items = arr.clone();
                         }
+                        break;
                     }
                 }
+            }
+            let mut used: usize = 0;
+            let mut parts: Vec<String> = Vec::new();
+            if !out_items.is_empty() {
+                for it in out_items.iter() {
+                    if used >= MAX_TOTAL {
+                        break;
+                    }
+                    let typ = it
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    let title = it.get("title").and_then(|v| v.as_str());
+                    if let Some(t) = title {
+                        let h = format!("## {}\n", t);
+                        used = used.saturating_add(h.len());
+                        parts.push(h);
+                    }
+                    match typ.as_str() {
+                        "markdown" => {
+                            if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                                let mut chunk = s.trim().to_string();
+                                if chunk.len() > MAX_ITEM {
+                                    chunk.truncate(MAX_ITEM);
+                                }
+                                used = used.saturating_add(chunk.len());
+                                parts.push(chunk);
+                            }
+                        }
+                        "json" => {
+                            let val = it
+                                .get("content")
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Null);
+                            let mut chunk = serde_json::to_string_pretty(&val)
+                                .unwrap_or_else(|_| val.to_string());
+                            if chunk.len() > MAX_ITEM {
+                                chunk.truncate(MAX_ITEM);
+                            }
+                            used = used.saturating_add(chunk.len());
+                            parts.push(format!("```json\n{}\n```", chunk));
+                        }
+                        "url" => {
+                            if let Some(u) = it.get("content").and_then(|v| v.as_str()) {
+                                let line = if let Some(tl) = title {
+                                    format!("- [{}]({})", tl, u)
+                                } else {
+                                    u.to_string()
+                                };
+                                used = used.saturating_add(line.len());
+                                parts.push(line);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            } else if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                for it in items.iter() {
+                    let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    if t.eq_ignore_ascii_case("compact_summary") {
+                        if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                            let summary = s.trim().to_string();
+                            if !summary.is_empty() {
+                                parts.push(summary);
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            if !parts.is_empty() {
+                let content = parts.join("\n\n");
+                total_chars += content.len() as i64;
             }
         }
     }
