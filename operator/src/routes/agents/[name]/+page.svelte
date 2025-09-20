@@ -684,6 +684,7 @@
 
   // Track which tool-result segments are expanded to show full output
   let expandedSegments = new Set();
+  let expandAll = false; // when true, force-open all <details> blocks and full segment views
   function segKey(m, j) { try { return `${m?.id || ''}:${j}`; } catch (_) { return `${j}`; } }
   function expandSeg(key) { try { const s = new Set(expandedSegments); s.add(key); expandedSegments = s; } catch (_) {} }
   function collapseSeg(key) { try { const s = new Set(expandedSegments); s.delete(key); expandedSegments = s; } catch (_) {} }
@@ -735,10 +736,18 @@
     } catch (_) { return []; }
   }
   function expandAllDetails() {
-    try { const s = new Set(expandedSegments); for (const k of allSegmentKeys()) s.add(k); expandedSegments = s; } catch (_) {}
+    try {
+      const s = new Set(expandedSegments);
+      for (const k of allSegmentKeys()) s.add(k);
+      expandedSegments = s;
+      expandAll = true;
+    } catch (_) {}
   }
   function collapseAllDetails() {
-    try { expandedSegments = new Set(); } catch (_) {}
+    try {
+      expandedSegments = new Set();
+      expandAll = false;
+    } catch (_) {}
   }
 
   // Format seconds as human-readable hours/minutes/seconds, e.g., 1h 5m 3s, 5m, 30s
@@ -1295,7 +1304,7 @@
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">
-                            <details class="mt-0">
+                            <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
@@ -1304,7 +1313,7 @@
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
                                 <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
                                 <div class="text-body text-opacity-75 mb-1">Result</div>
-                                {#if isInProgress(m) || expandedSegments.has(segKey(m, j+1))}
+                                {#if isInProgress(m) || expandAll || expandedSegments.has(segKey(m, j+1))}
                                   <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
                                   {#if !isInProgress(m)}
                                     <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j+1))}>Show less</button>
@@ -1319,7 +1328,7 @@
                         {:else}
                           <!-- Unpaired tool call -->
                           <div class="d-flex mb-1 justify-content-start">
-                            <details class="mt-0">
+                            <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
@@ -1334,7 +1343,7 @@
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-1 justify-content-start">
-                            <details class="mt-0">
+                            <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
@@ -1446,7 +1455,7 @@
               {#if isToolExec(m) && showTools}
                 <!-- Compact single-line summary that toggles details for ALL tool requests -->
                 <div class="d-flex mb-2 justify-content-start">
-                  <details class="mt-0">
+                  <details class="mt-0" open={expandAll}>
                     <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                       {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
                     </summary>
@@ -1458,7 +1467,7 @@
                 {#if isToolResult(m) && showTools}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-2 justify-content-start">
-                    <details class="mt-0">
+                    <details class="mt-0" open={expandAll}>
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                         {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
                       </summary>
@@ -1482,7 +1491,7 @@
                         <Card class="mt-2 mb-2">
                           <div class="card-body py-2">
                             {#each m.content_json.output_content as it}
-                              <details class="mb-2" open={false}>
+                              <details class="mb-2" open={expandAll}>
                                 <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
                                   <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
@@ -1516,7 +1525,7 @@
                         <Card class="mt-2 mb-2">
                           <div class="card-body py-2">
                             {#each parsedItemsFromTopCard(m) as it}
-                              <details class="mb-2" open={false}>
+                              <details class="mb-2" open={expandAll}>
                                 <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
                                   <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
