@@ -156,6 +156,9 @@ impl ResponseHandler {
                     registry
                         .register_tool(Box::new(super::builtin_tools::PlannerClearPlanTool))
                         .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::PlannerReadPlanTool))
+                        .await;
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -1373,6 +1376,11 @@ Workflow examples for effective execution:
 
 {plan_example}
 
+#### Tool: read_plan
+- Reads the active plan file from `/agent/logs` and returns its JSON contents.
+- Parameters: none
+- Returns: `{{ "path": string, "plan": {{ ... }} }}` within the standard envelope.
+
 #### Tool: add_task
 - Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.
 - Parameters:
@@ -1500,7 +1508,7 @@ You have complete freedom to execute commands, install packages, and create solu
             );
         }
 
-        // Auto-insert current plan details (after user's custom instructions), if any
+        // If an active (non-completed) plan exists, add a short guidance note (do not inline the plan)
         if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await {
             if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
                 if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
@@ -1509,38 +1517,7 @@ You have complete freedom to execute commands, install packages, and create solu
                             let completed =
                                 plan.get("completed_at").and_then(|v| v.as_str()).is_some();
                             if !completed {
-                                let title = plan
-                                    .get("title")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Work Plan");
-                                let tasks = plan
-                                    .get("tasks")
-                                    .and_then(|v| v.as_array())
-                                    .cloned()
-                                    .unwrap_or_default();
-                                let mut lines = String::new();
-                                let mut next_hint: Option<String> = None;
-                                for t in tasks.iter() {
-                                    let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                                    let status = t
-                                        .get("status")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("pending");
-                                    let ttl = t.get("title").and_then(|v| v.as_str()).unwrap_or("");
-                                    let check = if status == "completed" { "x" } else { " " };
-                                    if status != "completed" && next_hint.is_none() {
-                                        next_hint = Some(format!("#{} {}", id, ttl));
-                                    }
-                                    lines.push_str(&format!("- [{}] (#{}) {}\n", check, id, ttl));
-                                }
-                                let next =
-                                    next_hint.unwrap_or_else(|| "All tasks completed".to_string());
-                                prompt.push_str("\n\n### Current Plan (auto-inserted)\n");
-                                prompt.push_str(&format!(
-                                    "- Title: {}\n- Plan File: {}\n- Tasks:\n{}- Next Task: {}\n",
-                                    title, plan_path, lines, next
-                                ));
-                                prompt.push_str("\nGuidance: A plan is active. Do NOT create a new plan. Execute tasks in order:\n- Before each task, call `show` to announce the exact next action in 1–2 sentences, then start working on it immediately.\n- After finishing the task, call `complete_task` to mark it done.\n- Proceed to the next task, again announcing it with `show` first.\n- Continue step-by-step until all tasks are complete, then call `clear_plan`.\n\nExample flow: `create_plan` → `show` (announce next task) → do it → `complete_task` → `show` (announce next task) → do it → `complete_task` → `clear_plan`.\n\n");
+                                prompt.push_str("\n\nNote: An active plan exists. Do NOT create a new plan. If you are unclear about the tasks, call `read_plan` to retrieve the plan. Work task-by-task: `show` to announce the next step, do it, then `complete_task`. Call `clear_plan` when all tasks are complete.\n");
                             }
                         }
                     }

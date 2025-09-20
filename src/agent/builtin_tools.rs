@@ -1175,6 +1175,37 @@ impl Tool for PlannerAddTaskTool {
     }
 }
 
+/// Read the active plan file and return its contents
+pub struct PlannerReadPlanTool;
+
+#[async_trait]
+impl Tool for PlannerReadPlanTool {
+    fn name(&self) -> &str {
+        "read_plan"
+    }
+
+    fn description(&self) -> &str {
+        "Reads the active plan file from /agent/logs and returns its JSON contents. Returns error if there is no active plan."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({"type":"object","properties":{}})
+    }
+
+    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
+        let plan_path = match current_plan_path().await {
+            Ok(p) => p,
+            Err(_) => {
+                return Ok(json!({"status":"error","tool":"read_plan","error":"no active plan"}))
+            }
+        };
+        let path = ensure_logs_dir(&plan_path)?;
+        let plan = read_plan(path).await?;
+        let plan_val = serde_json::to_value(plan).unwrap_or(serde_json::json!({}));
+        Ok(json!({"status":"ok","tool":"read_plan","path": plan_path, "plan": plan_val}))
+    }
+}
+
 pub struct PlannerCompleteTaskTool {
     api_client: Arc<RaworcClient>,
 }
