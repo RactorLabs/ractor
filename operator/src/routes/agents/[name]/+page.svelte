@@ -375,18 +375,28 @@
       const transformed = [];
       for (const r of list) {
         const inputText = r?.input?.text || '';
-        if (inputText && inputText.trim()) {
+        const inputContent = Array.isArray(r?.input_content) ? r.input_content : null;
+        if (inputContent && inputContent.length > 0) {
+          // Render first text item as user bubble; future: support richer inputs
+          const firstText = inputContent.find((it) => String(it?.type || '').toLowerCase() === 'text' && typeof it?.content === 'string' && it.content.trim());
+          if (firstText) {
+            transformed.push({ role: 'user', content: firstText.content, id: r.id + ':in' });
+          } else if (inputText && inputText.trim()) {
+            transformed.push({ role: 'user', content: inputText, id: r.id + ':in' });
+          }
+        } else if (inputText && inputText.trim()) {
           transformed.push({ role: 'user', content: inputText, id: r.id + ':in' });
         }
-        const items = (r && r.output && Array.isArray(r.output.items)) ? r.output.items : [];
-        const contentText = (r && r.output && typeof r.output.text === 'string') ? r.output.text : '';
+        const items = Array.isArray(r?.segments) ? r.segments : [];
+        const contentText = '';
         const meta = { type: 'composite_step', in_progress: String(r?.status || '').toLowerCase() === 'processing' };
+        const outputContent = Array.isArray(r?.output_content) ? r.output_content : [];
         transformed.push({
           role: 'agent',
           id: r.id + ':out',
           content: contentText,
           metadata: meta,
-          content_json: { composite: { segments: items } },
+          content_json: { composite: { segments: items }, output_content: outputContent },
         });
       }
       chat = transformed;
@@ -430,6 +440,7 @@
   function segType(s) { return String(s?.type || '').toLowerCase(); }
   function segChannel(s) { return String(s?.channel || '').toLowerCase(); }
   function segText(s) { return String(s?.text || ''); }
+  function segContent(s) { return String(s?.content || ''); }
   function segTool(s) { return String(s?.tool || ''); }
   function segArgs(s) { try { return (s && typeof s.args === 'object') ? s.args : null; } catch(_) { return null; } }
   function segOutput(s) {
@@ -438,6 +449,62 @@
       if (typeof o === 'string') { return o; }
       return o; // object/array/null
     } catch (_) { return s?.output; }
+  }
+
+  // Output_* helpers
+  function isOutputToolName(t) {
+    try { const n = String(t || '').toLowerCase(); return n === 'output' || n === 'output_markdown' || n === 'ouput_json' || n === 'output_json'; } catch (_) { return false; }
+  }
+  function isOutputSeg(s) { try { return segType(s) === 'tool_result' && isOutputToolName(segTool(s)); } catch (_) { return false; } }
+  function isShowSeg(s) { try { return segType(s) === 'tool_result' && String(segTool(s) || '').toLowerCase() === 'show'; } catch (_) { return false; } }
+  function outputMarkdownOfSeg(s) {
+    try {
+      const out = segOutput(s);
+      if (out && typeof out === 'object' && typeof out.content === 'string') return out.content;
+      if (typeof out === 'string') return out; // fallback if tool returned string
+      return '';
+    } catch (_) { return ''; }
+  }
+  function outputItemsOfSeg(s) {
+    try {
+      const out = segOutput(s);
+      if (out && typeof out === 'object' && Array.isArray(out.items)) return out.items;
+      return [];
+    } catch (_) { return []; }
+  }
+  function typeBadge(t) {
+    try { const n = String(t || '').toLowerCase();
+      if (n === 'markdown') return 'Markdown';
+      if (n === 'json') return 'JSON';
+      if (n === 'url') return 'URL';
+      return n;
+    } catch (_) { return String(t || ''); }
+  }
+
+  // Parse helpers for rare top-level tool_result card content
+  function parseJsonSafe(s) {
+    try { return JSON.parse(String(s ?? '')); } catch (_) { return null; }
+  }
+  function outputMarkdownFromTopCard(m) {
+    try {
+      const p = parseJsonSafe(m?.content);
+      if (p && typeof p === 'object' && typeof p.content === 'string') return p.content;
+      return '';
+    } catch (_) { return ''; }
+  }
+  function outputJsonFromTopCard(m) {
+    try {
+      const p = parseJsonSafe(m?.content);
+      if (p && typeof p === 'object' && Object.prototype.hasOwnProperty.call(p, 'data')) return p.data;
+      return undefined;
+    } catch (_) { return undefined; }
+  }
+  function parsedItemsFromTopCard(m) {
+    try {
+      const p = parseJsonSafe(m?.content);
+      if (p && Array.isArray(p.items)) return p.items;
+      return [];
+    } catch (_) { return []; }
   }
 
   // Summary-mode: show tool output exactly as-is (no parsing or wrapping)
@@ -653,6 +720,27 @@
     return `${Math.round(n)}s`;
   }
 
+  // Expand/Collapse all details across visible composite segments
+  function allSegmentKeys() {
+    try {
+      const keys = [];
+      for (const m of (chat || [])) {
+        if (!hasComposite(m)) continue;
+        const segs = segmentsOf(m);
+        for (let j = 0; j < segs.length; j++) {
+          keys.push(segKey(m, j));
+        }
+      }
+      return keys;
+    } catch (_) { return []; }
+  }
+  function expandAllDetails() {
+    try { const s = new Set(expandedSegments); for (const k of allSegmentKeys()) s.add(k); expandedSegments = s; } catch (_) {}
+  }
+  function collapseAllDetails() {
+    try { expandedSegments = new Set(); } catch (_) {}
+  }
+
   // Format seconds as human-readable hours/minutes/seconds, e.g., 1h 5m 3s, 5m, 30s
   function fmtDuration(v) {
     let total = Number(v || 0);
@@ -702,7 +790,7 @@
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses`, {
         method: 'POST',
-        body: JSON.stringify({ input: { text: content } })
+        body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
       });
       if (!res.ok) {
         if (res.status === 409) {
@@ -1133,20 +1221,22 @@
     </div>
 
     <!-- Toolbar -->
-    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
-      <div class="d-flex align-items-center gap-2">
-        <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
-          <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-          <label class="form-check-label small d-none d-sm-inline" for="toggle-thinking">🧠</label>
-        </div>
-        <div class="form-check form-switch" title="Toggle display of tool calls/results">
-          <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
-          <label class="form-check-label small d-none d-sm-inline" for="toggle-tools">🛠️</label>
-        </div>
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+      <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context with LLM summary">Compact</button>
+      <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear</button>
+      <button class="btn btn-sm btn-outline-secondary" title="Expand all details" on:click={expandAllDetails} aria-label="Expand all">
+        <i class="fas fa-angles-down"></i>
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" title="Collapse all details" on:click={collapseAllDetails} aria-label="Collapse all">
+        <i class="fas fa-angles-up"></i>
+      </button>
+      <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
+        <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
+        <label class="form-check-label small" for="toggle-thinking">🧠</label>
       </div>
-      <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context with LLM summary">Compact</button>
-        <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear</button>
+      <div class="form-check form-switch" title="Toggle display of tool calls/results">
+        <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
+        <label class="form-check-label small" for="toggle-tools">🛠️</label>
       </div>
     </div>
 
@@ -1193,6 +1283,12 @@
                       {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
                         {#if showThinking}
                           <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {/if}
+                      {:else if segType(s) === 'compact_summary'}
+                        {#if segContent(s)}
+                          <div class="markdown-wrap mt-2 mb-2">
+                            <div class="markdown-body">{@html renderMarkdown(segContent(s))}</div>
+                          </div>
                         {/if}
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
@@ -1256,14 +1352,58 @@
                           </div>
                         {/if}
                         {/if}
+                        <!-- Always render output_* content inline during processing -->
+                        {#if isOutputSeg(s)}
+                          <Card class="mt-2 mb-2">
+                            <div class="card-body py-2">
+                              {#each outputItemsOfSeg(s) as it, k}
+                                <details class="mb-2" open={true}>
+                                  <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                                    <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                    {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
+                                  </summary>
+                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <div class="markdown-wrap mt-1 mb-2">
+                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                      </div>
+                                    {/if}
+                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                    {/if}
+                                  {/if}
+                                </details>
+                              {/each}
+                          </div>
+                          </Card>
+                        {/if}
+                        {#if isShowSeg(s)}
+                          {#each outputItemsOfSeg(s) as it, k}
+                            <div class="mt-2">
+                              {#if typeof it?.title === 'string' && it.title.trim()}
+                                <div class="small fw-500 mb-1">{it.title}</div>
+                              {/if}
+                              {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                {#if typeof it?.content === 'string' && it.content.trim()}
+                                  <div class="markdown-wrap mt-1 mb-2">
+                                    <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                  </div>
+                                {/if}
+                              {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                              {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                {#if typeof it?.content === 'string' && it.content.trim()}
+                                  <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                {/if}
+                              {/if}
+                            </div>
+                          {/each}
+                        {/if}
                       {:else if segType(s) === 'slept'}
                         <!-- handled below as a full-width marker -->
-                      {:else if segType(s) === 'final'}
-                        {#if segText(s) && segText(s).trim()}
-                          <div class="markdown-wrap mt-1 mb-2">
-                            <div class="markdown-body">{@html renderMarkdown(segText(s))}</div>
-                          </div>
-                        {/if}
                       {/if}
                     {/each}
                     </div>
@@ -1338,8 +1478,95 @@
                           <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
                         </div>
                       {/if}
+                      {#if Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0}
+                        <Card class="mt-2 mb-2">
+                          <div class="card-body py-2">
+                            {#each m.content_json.output_content as it}
+                              <details class="mb-2" open={false}>
+                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                                  <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
+                                </summary>
+                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <div class="markdown-wrap mt-1 mb-2">
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                    </div>
+                                  {/if}
+                                {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                  {/if}
+                                {/if}
+                              </details>
+                            {/each}
+                          </div>
+                        </Card>
+                      {/if}
                     </div>
                   </div>
+                {/if}
+                <!-- If this is an output_* tool result card, render content inline during processing regardless of showTools -->
+                {#if isToolResult(m)}
+                  {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'output')}
+                    {#if m.content && m.content.trim()}
+                      {#if parsedItemsFromTopCard(m).length > 0}
+                        <Card class="mt-2 mb-2">
+                          <div class="card-body py-2">
+                            {#each parsedItemsFromTopCard(m) as it}
+                              <details class="mb-2" open={false}>
+                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                                  <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
+                                </summary>
+                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <div class="markdown-wrap mt-1 mb-2">
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                    </div>
+                                  {/if}
+                                {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                  {/if}
+                                {/if}
+                              </details>
+                            {/each}
+                          </div>
+                        </Card>
+                      {/if}
+                    {/if}
+                  {/if}
+                  {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'show')}
+                    {#if m.content && m.content.trim()}
+                      {#if parsedItemsFromTopCard(m).length > 0}
+                        {#each parsedItemsFromTopCard(m) as it}
+                          <div class="mt-2">
+                            {#if typeof it?.title === 'string' && it.title.trim()}
+                              <div class="small fw-500 mb-1">{it.title}</div>
+                            {/if}
+                            {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                              {#if typeof it?.content === 'string' && it.content.trim()}
+                                <div class="markdown-wrap mt-1 mb-2">
+                                  <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                </div>
+                              {/if}
+                            {:else if String(it?.type || '').toLowerCase() === 'json'}
+                              <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                            {:else if String(it?.type || '').toLowerCase() === 'url'}
+                              {#if typeof it?.content === 'string' && it.content.trim()}
+                                <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                              {/if}
+                            {/if}
+                          </div>
+                        {/each}
+                      {/if}
+                    {/if}
+                  {/if}
                 {/if}
               {/if}
               {/if}
