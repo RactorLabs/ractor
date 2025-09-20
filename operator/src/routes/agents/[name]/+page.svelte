@@ -505,7 +505,7 @@
       const t = segTool(s).toLowerCase();
       const a = segArgs(s) || {};
       const shortPath = (p) => { try { const s = String(p || '').trim(); return s.startsWith('/agent/') ? s.slice(7) : s; } catch(_) { return ''; } };
-      if (t === 'bash' || t === 'run_bash') {
+      if (t === 'run_bash') {
         const cmd = a.commands || a.command || a.cmd || '';
         const cwd = a.exec_dir || a.cwd || a.workdir || '';
         const title = [cmd ? truncate(String(cmd), 80) : '', cwd ? shortPath(cwd) : ''].filter(Boolean).join(' • ');
@@ -585,11 +585,6 @@
       if (t === 'clear_plan') {
         return 'clear_plan';
       }
-      if (t === 'text_editor') {
-        const action = a.action || 'edit';
-        const path = a.path || '';
-        return `${action}${path ? ' ' + shortPath(path) : ''}`;
-      }
       const json = JSON.stringify(a);
       return json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
     } catch (_) { return ''; }
@@ -649,14 +644,7 @@
     try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_result' && meta.tool_type); } catch (_) { return false; }
   }
 
-  // Helper: for Text Editor description like "write /path/file" => { action, path }
-  function parseTextEditorDesc(desc) {
-    const s = String(desc || '').trim();
-    if (!s) return { action: '', path: '' };
-    const firstSpace = s.indexOf(' ');
-    if (firstSpace === -1) return { action: s, path: '' };
-    return { action: s.slice(0, firstSpace), path: s.slice(firstSpace + 1).trim() };
-  }
+  // (old text_editor helper removed)
   function fmtSeconds(v) {
     const n = Number(v || 0);
     if (!isFinite(n) || n <= 0) return '';
@@ -689,7 +677,7 @@
       const t = String(m?.metadata?.tool_type || '').toLowerCase();
       const a = m?.metadata?.args;
       if (!a || typeof a !== 'object') return '';
-      if (t === 'bash' || t === 'run_bash') {
+      if (t === 'run_bash') {
         const cmd = a.commands || a.command || a.cmd || '';
         const cwd = a.exec_dir || a.cwd || a.workdir || '';
         const parts = [];
@@ -697,12 +685,6 @@
         if (cwd) parts.push(String(cwd).trim());
         if (!parts.length) return '';
         return `(${parts.join(' • ')})`;
-      }
-      if (t === 'text_editor') {
-        const action = a.action || 'edit';
-        const path = a.path || '';
-        const extra = path ? ` ${path}` : '';
-        return `(${action}${extra})`;
       }
       const json = JSON.stringify(a);
       if (!json) return '';
