@@ -231,7 +231,7 @@
   }
   function closeEditTags() { showTagsModal = false; }
   function parseTagsInput() {
-    const parts = tagsInput.split(',').map(s => s.trim()).filter(Boolean);
+    const parts = tagsInput.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     const re = /^[A-Za-z0-9]+$/;
     for (const t of parts) {
       if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Tags must be alphanumeric.`);

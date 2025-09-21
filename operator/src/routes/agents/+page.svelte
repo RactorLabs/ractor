@@ -54,7 +54,7 @@ import { getHostUrl } from '$lib/branding.js';
     if (q && q.trim().length) params.set('q', q.trim());
     if (stateFilter && stateFilter.trim().length) params.set('state', stateFilter.trim());
     if (tagsText && tagsText.trim().length) {
-      const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
+      const tags = tagsText.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
       for (const t of tags) params.append('tags', t);
     }
     if (limit) params.set('limit', String(limit));

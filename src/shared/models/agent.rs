@@ -328,7 +328,7 @@ where
                         "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
                     ));
                 }
-                out.push(t.to_string());
+                out.push(t.to_lowercase());
             }
             Ok(out)
         }
@@ -378,7 +378,7 @@ where
                         "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
                     ));
                 }
-                out.push(t.to_string());
+                out.push(t.to_lowercase());
             }
             Ok(Some(out))
         }
@@ -616,7 +616,7 @@ impl Agent {
         .bind(created_by)
         .bind(&req.description)
         .bind(&req.metadata)
-        .bind(serde_json::json!(req.tags))
+        .bind(serde_json::json!(req.tags.into_iter().map(|t| t.to_lowercase()).collect::<Vec<_>>()))
         .bind(idle_timeout)
         .bind(busy_timeout)
         .bind(idle_from)
@@ -659,7 +659,16 @@ impl Agent {
         .bind(&parent.description)
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
-        .bind(&parent.tags)
+        .bind(
+            &match &parent.tags {
+                serde_json::Value::Array(arr) => serde_json::Value::Array(
+                    arr.iter()
+                        .map(|v| v.as_str().map(|s| serde_json::Value::String(s.to_lowercase())).unwrap_or_else(|| v.clone()))
+                        .collect(),
+                ),
+                v => v.clone(),
+            },
+        )
         .bind(parent.idle_timeout_seconds) // Inherit idle timeout from parent
         .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
         .bind(idle_from)
@@ -758,7 +767,8 @@ impl Agent {
             query = query.bind(description);
         }
         if let Some(tags) = req.tags {
-            query = query.bind(serde_json::json!(tags));
+            let lowered: Vec<String> = tags.into_iter().map(|t| t.to_lowercase()).collect();
+            query = query.bind(serde_json::json!(lowered));
         }
 
         if let Some(idle_timeout_seconds) = req.idle_timeout_seconds {

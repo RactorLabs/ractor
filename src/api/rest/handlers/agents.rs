@@ -193,7 +193,7 @@ pub async fn list_agents(
     if let Some(tags) = query.tags.clone() {
         let list: Vec<String> = tags
             .into_iter()
-            .flat_map(|s| s.split(',').map(|t| t.trim().to_string()).collect::<Vec<_>>())
+            .flat_map(|s| s.split(',').map(|t| t.trim().to_lowercase()).collect::<Vec<_>>())
             .filter(|t| !t.is_empty())
             .collect();
         for _t in list {

@@ -37,7 +37,7 @@ export function getCommonSchemas() {
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Last activity timestamp' },
       { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata' },
-      { name: 'tags', type: 'string[]', desc: 'Array of alphanumeric tags' },
+      { name: 'tags', type: 'string[]', desc: 'Array of alphanumeric tags (stored lowercase)' },
       { name: 'is_published', type: 'boolean', desc: 'Published state' },
       { name: 'published_at', type: 'string|null (RFC3339)', desc: 'When published' },
       { name: 'published_by', type: 'string|null', desc: 'Who published' },
