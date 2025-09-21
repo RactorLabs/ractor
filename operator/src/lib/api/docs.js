@@ -320,7 +320,7 @@ export function getApiDocs(base) {
     endpoints: [
       { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List/search agents with pagination.', params: [
         { in: 'query', name: 'q', type: 'string', required: false, desc: 'Search substring over name and description (case-insensitive)' },
-        { in: 'query', name: 'tags[]', type: 'string|repeat', required: false, desc: 'Filter by tags (AND). Provide multiple via repeated tags[] params (e.g., tags[]=prod&tags[]=team). UI also accepts comma-separated input.' },
+        { in: 'query', name: 'tags', type: 'string (comma-separated)', required: false, desc: 'Filter by tags (AND). Provide multiple tags as a comma-separated list (e.g., tags=prod,team). Tags are matched case-insensitively and stored lowercase.' },
         { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|slept' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
