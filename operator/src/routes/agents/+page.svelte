@@ -55,7 +55,7 @@ import { getHostUrl } from '$lib/branding.js';
     if (stateFilter && stateFilter.trim().length) params.set('state', stateFilter.trim());
     if (tagsText && tagsText.trim().length) {
       const tags = tagsText.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-      for (const t of tags) params.append('tags', t);
+      for (const t of tags) params.append('tags[]', t);
     }
     if (limit) params.set('limit', String(limit));
     if (pageNum) params.set('page', String(pageNum));
@@ -169,7 +169,7 @@ import { getHostUrl } from '$lib/branding.js';
       const sp = new URLSearchParams(location.search || '');
       q = sp.get('q') || '';
       stateFilter = sp.get('state') || '';
-      const t = sp.getAll('tags');
+      const t = [...sp.getAll('tags[]'), ...sp.getAll('tags')];
       tagsText = t && t.length ? t.join(',') : '';
       limit = Number(sp.get('limit') || 30);
       pageNum = Number(sp.get('page') || 1);
