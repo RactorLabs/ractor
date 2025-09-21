@@ -714,7 +714,7 @@ impl Tool for ShowAndTellTool {
     }
 
     fn description(&self) -> &str {
-        "Show and tell intermediate updates to the user. Accepts the same structure as 'output' with { type: 'markdown'|'json'|'url', content }. Call after each step to explain what you did, which files you touched, and what commands you ran. Does not finalize the response."
+        "Show and tell intermediate updates to the user. Accepts the same structure as 'output' with { type: 'markdown'|'json'|'url', content }. Call after each completed step to explain what you did, which files you touched, and what commands you ran. Does not finalize the response."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -773,7 +773,7 @@ impl Tool for ShowAndTellTool {
                     let url_trim = url.trim();
                     if !(url_trim.starts_with("http://") || url_trim.starts_with("https://")) {
                         return Ok(json!({
-                            "status":"error","tool":"show",
+                            "status":"error","tool":"show_and_tell",
                             "error": format!("invalid url scheme at index {}: must start with http:// or https://", idx)
                         }));
                     }
@@ -782,7 +782,7 @@ impl Tool for ShowAndTellTool {
                 _ => {
                     return Ok(json!({
                         "status":"error",
-                        "tool":"show",
+                        "tool":"show_and_tell",
                         "error": format!("unsupported type '{}' at index {}", typ, idx),
                         "supported_types": ["markdown","json","url"]
                     }));
@@ -791,7 +791,7 @@ impl Tool for ShowAndTellTool {
         }
         Ok(json!({
             "status":"ok",
-            "tool":"show",
+            "tool":"show_and_tell",
             "items": items_out,
             "supported_types": ["markdown","json","url"]
         }))

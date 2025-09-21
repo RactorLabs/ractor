@@ -86,7 +86,7 @@ impl ResponseHandler {
                     ));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
-                    // Unified Output tool + Show tool + validation tool
+                    // Unified Output tool + Show_and_tell tool + validation tool
                     registry
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
                         .await;
@@ -1314,7 +1314,7 @@ You have complete freedom to execute commands, install packages, and create solu
 
         // If an active plan file exists, add a short guidance note (do not inline the plan)
         if std::path::Path::new("/agent/plan.md").exists() {
-            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it, then proceed task-by-task: `show_and_tell` to announce the next step, do it, update /agent/plan.md (check off items), and continue. When all items are complete, remove /agent/plan.md.\n");
+            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, then call `show_and_tell` to summarize what you just did (paths + commands), update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
         }
 
         prompt
