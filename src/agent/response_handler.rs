@@ -91,7 +91,7 @@ impl ResponseHandler {
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
                         .await;
                     registry
-                        .register_tool(Box::new(super::builtin_tools::ShowTool))
+                        .register_tool(Box::new(super::builtin_tools::ShowAndTellTool))
                         .await;
                     registry
                         .register_tool(Box::new(super::builtin_tools::ValidateResponseTool::new(
@@ -292,7 +292,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show_and_tell', 'validate_response'.",
                             tool_name
                         );
                         let items = vec![
@@ -484,7 +484,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response'.",
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show_and_tell', 'validate_response'.",
                             tool_name
                         );
                             let items = vec![
@@ -751,7 +751,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "Use 'show' to briefly announce the next step (1–2 sentences), then execute it. Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final results or to ask the user clarifying questions. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
+            let nudge = "Use 'show_and_tell' after every step to keep the user informed (what you did, which files you touched with full paths, what commands you ran and why). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final results or to ask the user clarifying questions. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -959,25 +959,25 @@ impl ResponseHandler {
 
         // Embed Show examples separately to avoid `format!` brace escaping issues
         let show_examples = r#"
-#### Show Examples
+#### Show_and_tell Examples
 
-Use `show` to briefly announce exactly what you will do next (1–2 sentences), then start doing it.
+Use `show_and_tell` after every step to keep the user informed. Briefly announce what you will do next (1–2 sentences), then do it. Include file paths you edit and explain commands you run.
 
 ```json
-{"tool_call": {"tool": "show", "args": {"content": [
-  {"type": "markdown", "content": "I am going to clone the repository."}
+{"tool_call": {"tool": "show_and_tell", "args": {"content": [
+  {"type": "markdown", "content": "I am going to clone the repository to /agent/code/app. Then I will run cargo build. I will explain the command flags used."}
 ]}}}
 ```
 
 ```json
-{"tool_call": {"tool": "show", "args": {"content": [
-  {"type": "markdown", "content": "Next: run unit tests (cargo test) to establish a baseline. Starting now."}
+{"tool_call": {"tool": "show_and_tell", "args": {"content": [
+  {"type": "markdown", "content": "Next: run unit tests (cargo test) to establish a baseline. I will paste the failing tests and summarize results."}
 ]}}}
 ```
 
 ```json
-{"tool_call": {"tool": "show", "args": {"content": [
-  {"type": "markdown", "content": "Next: implement /api/v0/ping handler in src/api/rest/routes.rs, then build. Starting now."}
+{"tool_call": {"tool": "show_and_tell", "args": {"content": [
+  {"type": "markdown", "content": "Next: implement /api/v0/ping handler in src/api/rest/routes.rs, then build. I will show the path and explain the change."}
 ]}}}
         ```
 "#;
@@ -1015,7 +1015,7 @@ You are running as an Agent in the {host_name} system.
 ### Important Behavior
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
-- For multi-step tasks, create and use a plan: If you judge the request involves multiple steps, create a plan with `create_plan` (include an initial set of tasks). As you progress, keep the plan updated using `add_task` and complete items using `complete_task`. Before marking a task complete, double-check work products; if in doubt, verify by checking the relevant files exist (e.g., via `complete_task.verify_paths`, `open_file`, or `find_filename`). When all tasks are complete, call `clear_plan`.
+- For multi-step tasks, maintain a plan in `/agent/plan.md`: If you judge the request involves multiple steps, create `/agent/plan.md` (markdown) with a concise checklist. Update it as you go, mark items completed, and remove the file when everything is done. Use `open_file`, `create_file`, `insert`, and `str_replace` to manage and update the plan file.
 - After completing each step, immediately update the plan: mark that step complete and, if needed, add the next step. Always keep the plan in sync with reality.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
@@ -1184,15 +1184,15 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
-- Use `show` only to announce what you are about to do next (1–2 concise sentences), then immediately perform that step. Keep it short and action‑oriented (no long plans or summaries).
-- `show` never finalizes the response and can be called many times to announce each next step as you proceed.
-- Keep commentary minimal. Avoid long narratives; focus on the next action.
+- Use `show_and_tell` after every step to keep the user informed: announce the next action, show the file paths you edited, and explain any commands you ran (and why). Keep it concise and actionable.
+- `show_and_tell` never finalizes the response and can be called many times as you proceed.
+- Keep commentary focused on actions, paths, and commands.
 - After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
-- Do not place final content directly in the assistant text. Emit results via `output` and use `show` to announce next steps only.
+- Do not place final content directly in the assistant text. Emit results via `output` and use `show_and_tell` to keep the user informed after each step.
 
 Workflow examples for effective execution:
-- `create_plan` → `show` (announce next task) → do the task → `complete_task` → `show` (announce next task) → do the task → `complete_task` → `clear_plan`
-- When no plan is required: `show` (announce next step) → do the step(s) → `output` (final results)
+- With a plan: `show_and_tell` (announce next step) → do the step(s) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
+- No plan needed: `show_and_tell` (announce next step) → do the step(s) → `output` (final results)
 
 {show_examples}
 ### Planning with plan.md
@@ -1312,21 +1312,9 @@ You have complete freedom to execute commands, install packages, and create solu
             );
         }
 
-        // If an active (non-completed) plan exists, add a short guidance note (do not inline the plan)
-        if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await {
-            if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
-                if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
-                    if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
-                        if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
-                            let completed =
-                                plan.get("completed_at").and_then(|v| v.as_str()).is_some();
-                            if !completed {
-                                prompt.push_str("\n\nNote: An active plan exists. Do NOT create a new plan. If you are unclear about the tasks, call `read_plan` to retrieve the plan. Work task-by-task: `show` to announce the next step, do it, then `complete_task`. Call `clear_plan` when all tasks are complete.\n");
-                            }
-                        }
-                    }
-                }
-            }
+        // If an active plan file exists, add a short guidance note (do not inline the plan)
+        if std::path::Path::new("/agent/plan.md").exists() {
+            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it, then proceed task-by-task: `show_and_tell` to announce the next step, do it, update /agent/plan.md (check off items), and continue. When all items are complete, remove /agent/plan.md.\n");
         }
 
         prompt
