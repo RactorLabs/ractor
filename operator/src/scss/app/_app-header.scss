@@ -6,6 +6,9 @@
 	inset-inline-end: 0;
 	z-index: $app-header-zindex;
 	background: var(--#{$prefix}app-header-bg);
+	// Respect iOS safe area and color the browser UI area consistently
+	padding-top: constant(safe-area-inset-top);
+	padding-top: env(safe-area-inset-top);
 	display: flex;
 	transition: all .15s ease-in-out;
 	

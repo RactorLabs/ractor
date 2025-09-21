@@ -47,6 +47,32 @@
     });
     try { observer.observe(document.body, { childList: true, subtree: true }); } catch (_) {}
     
+    // Set dynamic viewport unit for iOS Safari and older browsers
+    const setViewportUnit = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--app-vh', `${vh}px`);
+    };
+    setViewportUnit();
+    window.addEventListener('resize', setViewportUnit);
+    window.addEventListener('orientationchange', setViewportUnit);
+
+    // Sync theme color with header background for iOS Safari top bar
+    const setThemeColor = () => {
+      const root = document.documentElement;
+      const cs = getComputedStyle(root);
+      // Try app header bg var, then body bg
+      const headerBg = cs.getPropertyValue('--bs-app-header-bg') || cs.getPropertyValue('--bs-body-bg');
+      const color = (headerBg && headerBg.trim().length) ? headerBg.trim() : '#111111';
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'theme-color');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', color);
+    };
+    setThemeColor();
+
     $appVariables = generateVariables();
     // Always keep sidebar minimized
     $appOptions.appSidebarCollapsed = true;
@@ -58,6 +84,18 @@
     const _ = $page.url.pathname; // react to route changes
     $appOptions.appSidebarCollapsed = true;
     $appOptions.appSidebarToggled = false;
+    // Re-evaluate theme color on navigation (theme may change per route/theme panel)
+    if (typeof window !== 'undefined') {
+      try { const evt = new Event('resize'); window.dispatchEvent(evt); } catch {}
+      try {
+        const cs = getComputedStyle(document.documentElement);
+        const headerBg = cs.getPropertyValue('--bs-app-header-bg') || cs.getPropertyValue('--bs-body-bg');
+        const color = (headerBg && headerBg.trim().length) ? headerBg.trim() : '#111111';
+        let meta = document.querySelector('meta[name="theme-color"]');
+        if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'theme-color'); document.head.appendChild(meta); }
+        meta.setAttribute('content', color);
+      } catch {}
+    }
   })();
 </script>
 

@@ -1,3 +1,7 @@
 .app-full-height {
 	min-height: 100vh;
+	@supports (min-height: 100svh) {
+		min-height: 100svh;
+	}
+	min-height: calc(var(--app-vh, 1vh) * 100);
 }

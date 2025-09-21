@@ -1,10 +1,21 @@
 .app-content-full-height {
 	& .app-content {
+		// Default fallback
 		height: calc(100vh - #{$app-header-height});
+		// Modern viewport unit that excludes iOS browser chrome
+		@supports (height: 100svh) {
+			height: calc(100svh - #{$app-header-height});
+		}
+		// JavaScript-measured vh for older iOS Safari
+		height: calc(var(--app-vh, 1vh) * 100 - #{$app-header-height});
 	}
 	&.app-without-header {
 		& .app-content {
 			height: 100vh;
+			@supports (height: 100svh) {
+				height: 100svh;
+			}
+			height: calc(var(--app-vh, 1vh) * 100);
 		}
 	}
 }
