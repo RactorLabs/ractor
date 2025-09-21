@@ -86,8 +86,6 @@
     <div class="col-12 col-xxl-10">
       <div class="row">
   <div class="col-xl-9">
-    {#if false}
-    {#if false}
     <Card class="mb-3">
       <div class="card-body p-4">
         <div class="text-center mb-2">
@@ -99,8 +97,6 @@
         </div>
       </div>
     </Card>
-    {/if}
-    {/if}
 
     
 
