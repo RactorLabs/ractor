@@ -86,12 +86,9 @@ impl ResponseHandler {
                     ));
                     registry.register_tool(publish_tool).await;
                     registry.register_tool(sleep_tool).await;
-                    // Unified Output tool + Show_and_tell tool + validation tool
+                    // Unified Output tool + validation tool
                     registry
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
-                        .await;
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::ShowAndTellTool))
                         .await;
                     registry
                         .register_tool(Box::new(super::builtin_tools::ValidateResponseTool::new(
@@ -292,7 +289,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show_and_tell', 'validate_response'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'validate_response'.",
                             tool_name
                         );
                         let items = vec![
@@ -319,7 +316,7 @@ impl ResponseHandler {
                         continue;
                     }
 
-                    // Append thinking/commentary + tool_call only for valid tools
+                    // Append thinking/commentary + optional tool commentary + tool_call (valid tool)
                     let mut segs = Vec::new();
                     if let Some(thinking) = &model_resp.thinking {
                         if !thinking.trim().is_empty() {
@@ -329,8 +326,19 @@ impl ResponseHandler {
                     if !model_resp.content.trim().is_empty() {
                         segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
                     }
-                    let seg_tool_call =
-                        serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
+                    // Extract optional 'commentary' field from args (if object) and store as its own segment before the tool_call
+                    let mut args_clean = args.clone();
+                    if let serde_json::Value::Object(ref mut map) = args_clean {
+                        if let Some(c) = map.remove("commentary") {
+                            if let Some(txt) = c.as_str() {
+                                let t = txt.trim();
+                                if !t.is_empty() {
+                                    segs.push(serde_json::json!({"type":"tool_commentary","text": t}));
+                                }
+                            }
+                        }
+                    }
+                    let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args_clean});
                     segs.push(seg_tool_call.clone());
                     let _ = self
                         .api_client
@@ -344,9 +352,7 @@ impl ResponseHandler {
                     _items_sent += segs.len();
 
                     // Also add an assistant message for the tool call into the in-memory conversation
-                    let call_summary =
-                        serde_json::json!({"tool_call": {"tool": tool_name, "args": args }})
-                            .to_string();
+                    let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args_clean }}).to_string();
                     conversation.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: call_summary,
@@ -484,9 +490,9 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show_and_tell', 'validate_response'.",
-                            tool_name
-                        );
+                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'validate_response'.",
+                                tool_name
+                            );
                             let items = vec![
                                 serde_json::json!({"type":"tool_call_invalid","tool":tool_name, "args": args}),
                                 serde_json::json!({"type":"note","level":"warning","text": dev_note}),
@@ -521,7 +527,19 @@ impl ResponseHandler {
                             if !model_resp.content.trim().is_empty() {
                                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
                             }
-                            let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
+                            // Extract optional commentary from args and store before tool call
+                            let mut args_clean = args.clone();
+                            if let serde_json::Value::Object(ref mut map) = args_clean {
+                                if let Some(c) = map.remove("commentary") {
+                                    if let Some(txt) = c.as_str() {
+                                        let t = txt.trim();
+                                        if !t.is_empty() {
+                                            segs.push(serde_json::json!({"type":"tool_commentary","text": t}));
+                                        }
+                                    }
+                                }
+                            }
+                            let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args_clean});
                             segs.push(seg_tool_call.clone());
                             let _ = self
                                 .api_client
@@ -533,7 +551,7 @@ impl ResponseHandler {
                                 )
                                 .await;
                             _items_sent += segs.len();
-                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
+                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args_clean }}).to_string();
                             conversation.push(ChatMessage {
                                 role: "assistant".to_string(),
                                 content: call_summary,
@@ -751,7 +769,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "Use 'show_and_tell' after every step to keep the user informed (what you did, which files you touched with full paths, what commands you ran and why). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final results or to ask the user clarifying questions. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
+            let nudge = "If helpful, include a short plain-text 'commentary' string in your tool call args to explain what you are doing (what, which paths, what command and why). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -957,28 +975,22 @@ impl ResponseHandler {
         let api_url = format!("{}/api", base_url);
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 
-        // Embed Show_and_tell examples separately to avoid `format!` brace escaping issues
-        let show_examples = r#"
-#### Show_and_tell Examples
+        // Embed Tool Commentary examples (no markdown; commentary is plain text)
+        let commentary_examples = r#"
+#### Tool Commentary Examples
 
-Use `show_and_tell` immediately after completing a step to briefly explain what you just did. Include the exact file paths you touched and any commands you ran (with flags). Do NOT use `show_and_tell` to announce future steps.
+Include an optional plain-text 'commentary' field in your tool call args to briefly explain what you are about to do or what you just did.
 
 ```json
-{"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "Completed: cloned the repository into /agent/code/app and ran 'cargo build --release'.\nPaths touched: /agent/code/app\nCommands: git clone <repo-url> /agent/code/app && cargo build --release\nResult: build succeeded."}
-]}}}
+{"tool_call": {"tool": "open_file", "args": {"path": "/agent/code/src/main.rs", "start_line": 1, "end_line": 60, "commentary": "Open main.rs to inspect the CLI entrypoint."}}}
 ```
 
 ```json
-{"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "Completed: implemented /api/v0/ping in src/api/rest/routes.rs and rebuilt.\nFiles: /agent/code/src/api/rest/routes.rs\nCommands: cargo build --release\nResult: binary compiled successfully."}
-]}}}
+{"tool_call": {"tool": "run_bash", "args": {"exec_dir": "/agent/code", "commands": "cargo build --release", "commentary": "Build the Rust workspace in release mode to validate changes."}}}
 ```
 
 ```json
-{"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "Completed: created /agent/content/dashboard/index.html from template and published.\nFiles: /agent/content/dashboard/index.html\nCommands: (publish via tool/UI)\nPublished URL: {published_url}/dashboard/index.html"}
-]}}}
+{"tool_call": {"tool": "create_file", "args": {"path": "/agent/content/report/index.html", "content": "<html>...</html>", "commentary": "Create a publishable HTML report under /agent/content/report/."}}}
 ```
 "#;
 
@@ -1184,17 +1196,14 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
-- Use `show_and_tell` after completing each step to summarize what you just did: list the file paths you edited (absolute), and explain any commands you ran (and why). Do NOT use `show_and_tell` to announce future steps. Keep it concise and actionable.
-- `show_and_tell` never finalizes the response and can be called many times as you proceed.
-- Keep commentary focused on actions, paths, and commands.
+- Optional tool commentary: You may include a short plain-text `commentary` field in your tool call args to explain what you are doing and why (what, paths, commands). This is displayed before the tool call in the Operator.
 - After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
-- Do not place final content directly in the assistant text. Emit results via `output` and use `show_and_tell` to keep the user informed after each completed step.
+- Do not place final content directly in the assistant text. Emit results via `output`.
 
 Workflow examples for effective execution:
-- With a plan: do the step(s) → `show_and_tell` (what you just did) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
-- No plan needed: do the step(s) → `show_and_tell` (what you just did) → `output` (final results)
-
-{show_examples}
+- With a plan: do the step(s) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
+- No plan needed: do the step(s) → `output` (final results)
+{commentary_examples}
 ### Planning with plan.md
 
 - Maintain a single Markdown file at `/agent/plan.md` for multi-step work. Use a checklist to track tasks and their status.
@@ -1314,7 +1323,7 @@ You have complete freedom to execute commands, install packages, and create solu
 
         // If an active plan file exists, add a short guidance note (do not inline the plan)
         if std::path::Path::new("/agent/plan.md").exists() {
-            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, then call `show_and_tell` to summarize what you just did (paths + commands), update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
+            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, optionally include a short 'commentary' in your next tool call to explain what you are doing, update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
         }
 
         prompt

@@ -456,7 +456,6 @@
     try { const n = String(t || '').toLowerCase(); return n === 'output' || n === 'output_markdown' || n === 'ouput_json' || n === 'output_json'; } catch (_) { return false; }
   }
   function isOutputSeg(s) { try { return segType(s) === 'tool_result' && isOutputToolName(segTool(s)); } catch (_) { return false; } }
-  function isShowSeg(s) { try { const n = String(segTool(s) || '').toLowerCase(); return segType(s) === 'tool_result' && (n === 'show' || n === 'show_and_tell'); } catch (_) { return false; } }
   function outputMarkdownOfSeg(s) {
     try {
       const out = segOutput(s);
@@ -1318,6 +1317,8 @@
                             <div class="markdown-body">{@html renderMarkdown(segContent(s))}</div>
                           </div>
                         {/if}
+                      {:else if segType(s) === 'tool_commentary'}
+                        <div class="small text-body mb-1" style="white-space: pre-wrap;">{segText(s)}</div>
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
@@ -1408,28 +1409,7 @@
                           </div>
                           </Card>
                         {/if}
-                        {#if isShowSeg(s)}
-                          {#each outputItemsOfSeg(s) as it, k}
-                            <div class="mt-2">
-                              {#if typeof it?.title === 'string' && it.title.trim()}
-                                <div class="small fw-500 mb-1">{it.title}</div>
-                              {/if}
-                              {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                {#if typeof it?.content === 'string' && it.content.trim()}
-                                  <div class="markdown-wrap mt-1 mb-2">
-                                    <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                  </div>
-                                {/if}
-                              {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                              {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                {#if typeof it?.content === 'string' && it.content.trim()}
-                                  <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                {/if}
-                              {/if}
-                            </div>
-                          {/each}
-                        {/if}
+                        
                       {:else if segType(s) === 'slept'}
                         <!-- handled below as a full-width marker -->
                       {/if}
@@ -1569,32 +1549,7 @@
                       {/if}
                     {/if}
                   {/if}
-                  {#if (['show','show_and_tell'].includes(String(metaOf(m)?.tool_type || '').toLowerCase()))}
-                    {#if m.content && m.content.trim()}
-                      {#if parsedItemsFromTopCard(m).length > 0}
-                        {#each parsedItemsFromTopCard(m) as it}
-                          <div class="mt-2">
-                            {#if typeof it?.title === 'string' && it.title.trim()}
-                              <div class="small fw-500 mb-1">{it.title}</div>
-                            {/if}
-                            {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                              {#if typeof it?.content === 'string' && it.content.trim()}
-                                <div class="markdown-wrap mt-1 mb-2">
-                                  <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                </div>
-                              {/if}
-                            {:else if String(it?.type || '').toLowerCase() === 'json'}
-                              <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                            {:else if String(it?.type || '').toLowerCase() === 'url'}
-                              {#if typeof it?.content === 'string' && it.content.trim()}
-                                <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                              {/if}
-                            {/if}
-                          </div>
-                        {/each}
-                      {/if}
-                    {/if}
-                  {/if}
+                  
                 {/if}
               {/if}
               {/if}
