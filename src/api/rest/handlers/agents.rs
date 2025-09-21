@@ -207,9 +207,9 @@ pub async fn cancel_active_response(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
 
-    // Find latest processing response
+    // Find latest in-progress response (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status = 'processing' ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
     .bind(&agent.name)
     .fetch_optional(&*state.db)
@@ -241,6 +241,44 @@ pub async fn cancel_active_response(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         cancelled = true;
+    }
+
+    // If no response row, try to cancel a queued create_response task (pre-insert race)
+    if !cancelled {
+        if let Some((task_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+            r#"SELECT id, created_by, payload FROM agent_tasks WHERE agent_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+        )
+        .bind(&agent.name)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
+            let resp_id = payload.get("response_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !resp_id.is_empty() {
+                let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
+                let now = chrono::Utc::now();
+                let cancelled_item = serde_json::json!({"type":"cancelled","reason":"user_cancel","at": now.to_rfc3339()});
+                let output = serde_json::json!({"text":"","items":[cancelled_item]});
+                // Insert cancelled response row (idempotent behavior if it already exists)
+                let _ = sqlx::query(
+                    r#"INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                        VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
+                )
+                .bind(&resp_id)
+                .bind(&agent.name)
+                .bind(&created_by)
+                .bind(&input)
+                .bind(&output)
+                .execute(&*state.db)
+                .await;
+                // Mark task completed to prevent later insertion
+                let _ = sqlx::query(r#"UPDATE agent_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                    .bind(&task_id)
+                    .execute(&*state.db)
+                    .await;
+                cancelled = true;
+            }
+        }
     }
 
     // Set agent to idle

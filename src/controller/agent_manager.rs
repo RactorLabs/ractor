@@ -658,9 +658,9 @@ impl AgentManager {
                 .unwrap_or("User requested sleep")
         };
 
-        // Mark the latest in-progress response as cancelled (applies to any sleep reason)
+        // Mark the latest in-progress response as cancelled (processing or pending) (applies to any sleep reason)
         if let Some((resp_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status = 'processing' ORDER BY created_at DESC LIMIT 1"#,
+            r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
         .bind(&agent_name)
         .fetch_optional(&self.pool)
@@ -692,6 +692,38 @@ impl AgentManager {
             .bind(&resp_id)
             .execute(&self.pool)
             .await;
+        } else {
+            // If no response row exists yet (pre-insert race), try to find the latest create_response task and insert a cancelled response
+            if let Some((task_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+                r#"SELECT id, created_by, payload FROM agent_tasks WHERE agent_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            )
+            .bind(&agent_name)
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap_or(None)
+            {
+                if let Some(resp_id) = payload.get("response_id").and_then(|v| v.as_str()) {
+                    let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
+                    let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
+                    let output = serde_json::json!({"text":"","items":[cancelled_item]});
+                    let _ = sqlx::query(
+                        r#"INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                            VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
+                            ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
+                    )
+                    .bind(resp_id)
+                    .bind(&agent_name)
+                    .bind(&created_by)
+                    .bind(&input)
+                    .bind(&output)
+                    .execute(&self.pool)
+                    .await;
+                    let _ = sqlx::query(r#"UPDATE agent_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                        .bind(&task_id)
+                        .execute(&self.pool)
+                        .await;
+                }
+            }
         }
         // Determine runtime: time from last wake marker (or agent.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
@@ -933,6 +965,17 @@ impl AgentManager {
         .bind(&marker_created_at)
         .execute(&self.pool)
         .await?;
+        }
+
+        // If a response with this id already exists (e.g., pre-insert cancel), skip insertion
+        if let Some((_existing_id, existing_status)) = sqlx::query_as::<_, (String, String)>(
+            r#"SELECT id, status FROM agent_responses WHERE id = ?"#
+        )
+        .bind(&response_id)
+        .fetch_optional(&self.pool)
+        .await? {
+            info!("Response {} already exists with status {}, skipping insert", response_id, existing_status);
+            return Ok(());
         }
 
         // Insert response row
