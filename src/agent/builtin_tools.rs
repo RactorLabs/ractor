@@ -803,7 +803,7 @@ impl Tool for ShowTool {
 }
 
 /// Validation tool: validate_response
-/// Checks invariants before concluding: output_* was called and no active plan remains.
+/// Checks the current response used the 'output' tool at least once.
 pub struct ValidateResponseTool {
     api: Arc<RaworcClient>,
 }
@@ -820,9 +820,7 @@ impl Tool for ValidateResponseTool {
         "validate_response"
     }
 
-    fn description(&self) -> &str {
-        "Validate the current response: ensure an output tool was called and there is no active plan with pending tasks."
-    }
+    fn description(&self) -> &str { "Validate the current response: ensure an 'output' tool was called." }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({ "type":"object", "properties":{} })
@@ -852,11 +850,7 @@ impl Tool for ValidateResponseTool {
                     let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     if t == "tool_result" {
                         let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                        if tool == "output"
-                            || tool == "output_markdown"
-                            || tool == "ouput_json"
-                            || tool == "output_json"
-                        {
+                        if tool == "output" {
                             has_output = true;
                             last_output_tool = Some(tool.to_string());
                         }
@@ -865,49 +859,12 @@ impl Tool for ValidateResponseTool {
             }
         }
 
-        // Check active plan (exists and has any non-completed tasks)
-        let mut active_plan = false;
-        let mut pending_tasks: Vec<serde_json::Value> = Vec::new();
-        let mut plan_path: Option<String> = None;
-        if let Ok(marker_str) = fs::read_to_string(CURRENT_PLAN_MARKER).await {
-            if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
-                if let Some(pp) = marker_json.get("path").and_then(|v| v.as_str()) {
-                    if let Ok(plan_str) = fs::read_to_string(pp).await {
-                        if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
-                            let completed =
-                                plan.get("completed_at").and_then(|v| v.as_str()).is_some();
-                            if !completed {
-                                if let Some(tasks) = plan.get("tasks").and_then(|v| v.as_array()) {
-                                    for t in tasks {
-                                        let status = t
-                                            .get("status")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or("pending");
-                                        if status != "completed" {
-                                            let id = t.get("id").and_then(|v| v.as_u64());
-                                            let title = t.get("title").and_then(|v| v.as_str());
-                                            pending_tasks.push(json!({"id": id, "title": title}));
-                                        }
-                                    }
-                                    active_plan = !pending_tasks.is_empty();
-                                }
-                            }
-                            plan_path = Some(pp.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        if !has_output || active_plan {
+        if !has_output {
             return Ok(json!({
                 "status": "error",
                 "tool": "validate_response",
                 "has_output": has_output,
                 "last_output_tool": last_output_tool,
-                "active_plan": active_plan,
-                "pending_tasks": pending_tasks,
-                "plan_path": plan_path,
                 "response_id": current.as_ref().map(|r| r.id.clone())
             }));
         }
@@ -917,7 +874,6 @@ impl Tool for ValidateResponseTool {
             "tool": "validate_response",
             "has_output": true,
             "last_output_tool": last_output_tool,
-            "active_plan": false,
             "response_id": current.as_ref().map(|r| r.id.clone())
         }))
     }

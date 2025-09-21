@@ -99,24 +99,7 @@ impl ResponseHandler {
                         )))
                         .await;
                     // Removed deprecated output_* aliases
-                    // Planner tools (exact names only; no backward compatibility)
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::PlannerCreatePlanTool))
-                        .await;
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::PlannerAddTaskTool))
-                        .await;
-                    let complete_tool =
-                        Box::new(super::builtin_tools::PlannerCompleteTaskTool::new(
-                            api_client_clone.clone(),
-                        ));
-                    registry.register_tool(complete_tool).await;
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::PlannerClearPlanTool))
-                        .await;
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::PlannerReadPlanTool))
-                        .await;
+                    // Planner tools removed; planning now managed via /agent/plan.md file edits
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -309,7 +292,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response'.",
                             tool_name
                         );
                         let items = vec![
@@ -501,7 +484,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response', 'create_plan', 'add_task', 'complete_task', 'clear_plan'.",
+                            "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'show', 'validate_response'.",
                             tool_name
                         );
                             let items = vec![
@@ -753,57 +736,7 @@ impl ResponseHandler {
                 // If exceeded retries, fall through to finalize with an explicit fallback note
             }
 
-            // Enforce plan progression: if an active plan exists, do not allow a final answer until completed and cleared
-            if let Ok(marker_str) = tokio::fs::read_to_string("/agent/logs/current_plan.json").await
-            {
-                if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
-                    if let Some(plan_path) = marker_json.get("path").and_then(|v| v.as_str()) {
-                        if let Ok(plan_str) = tokio::fs::read_to_string(plan_path).await {
-                            if let Ok(plan) = serde_json::from_str::<serde_json::Value>(&plan_str) {
-                                let completed =
-                                    plan.get("completed_at").and_then(|v| v.as_str()).is_some();
-                                if !completed {
-                                    let tasks = plan
-                                        .get("tasks")
-                                        .and_then(|v| v.as_array())
-                                        .cloned()
-                                        .unwrap_or_default();
-                                    let mut pending: Vec<String> = Vec::new();
-                                    for t in tasks.iter() {
-                                        let status = t
-                                            .get("status")
-                                            .and_then(|v| v.as_str())
-                                            .unwrap_or("pending");
-                                        let id = t.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
-                                        let ttl =
-                                            t.get("title").and_then(|v| v.as_str()).unwrap_or("");
-                                        if status != "completed" {
-                                            pending.push(format!("#{} {}", id, ttl));
-                                        }
-                                    }
-                                    let guidance = if pending.is_empty() {
-                                        "Active plan detected with no pending tasks. Call 'clear_plan' to finish and then proceed.".to_string()
-                                    } else {
-                                        let current = pending.get(0).cloned().unwrap_or_default();
-                                        format!(
-                                            "Active plan detected. Do not send a final message. Work strictly task-by-task: complete the current task ({current}) before starting another. After finishing it, call 'complete_task' to mark it done, then continue to the next. Keep only one task active at a time. Pending: {}. When all tasks are done, call 'clear_plan'.",
-                                            pending.join("; ")
-                                        )
-                                    };
-                                    conversation.push(ChatMessage {
-                                        role: "system".to_string(),
-                                        content: guidance,
-                                        name: None,
-                                        tool_call_id: None,
-                                    });
-                                    // loop again to get tool_call(s) instead of final
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // Planning is managed via /agent/plan.md; no special enforcement in runtime
 
             // Final answer (no tool_call in this turn)
             // Enforce: final content must be sent via the 'output' tool.
@@ -818,7 +751,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "Use 'show' to briefly announce the next step (1–2 sentences), then execute it. Use 'output' for final results. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
+            let nudge = "Use 'show' to briefly announce the next step (1–2 sentences), then execute it. Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final results or to ask the user clarifying questions. For output: pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -876,24 +809,7 @@ impl ResponseHandler {
                     }
                 }
             }
-            // Include tool_call segments from past responses; exclude tool_result outputs for past responses
-            if let Some(items) = r.segments.as_ref() {
-                for it in items {
-                    if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
-                        let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                        let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                        let content =
-                            serde_json::json!({"tool_call": {"tool": tool, "args": args}})
-                                .to_string();
-                        convo.push(ChatMessage {
-                            role: "assistant".to_string(),
-                            content,
-                            name: None,
-                            tool_call_id: None,
-                        });
-                    }
-                }
-            }
+            // Do not include tool_call/tool_result segments from past responses to keep context lean
 
             // For completed responses, include a compact assistant message synthesized from output_content
             if r.status.to_lowercase() == "completed" {
@@ -1066,20 +982,7 @@ Use `show` to briefly announce exactly what you will do next (1–2 sentences), 
         ```
 "#;
 
-        // Embed Create Plan example separately to avoid `format!` brace escaping issues
-        let plan_example = r#"
-Sample plan (tool_call):
-```json
-{"tool_call": {"tool": "create_plan", "args": {
-  "title": "Implement feature X",
-  "tasks": [
-    "Add API endpoint /api/v0/x",
-    "Write unit tests for handler",
-    "Update docs and examples"
-  ]
-}}}
-```
-"#;
+        // Planning is managed via /agent/plan.md (no tool example needed)
 
         // Start with System Context specific to Raworc runtime
         let mut prompt = String::from(format!(
@@ -1292,49 +1195,15 @@ Workflow examples for effective execution:
 - When no plan is required: `show` (announce next step) → do the step(s) → `output` (final results)
 
 {show_examples}
-### Planner Tools
+### Planning with plan.md
 
-- Use these to plan and track multi-step work. All plan files live under `/agent/logs`.
-- Prefer creating a new plan when a task has multiple steps or unclear dependencies. Keep it updated as you go.
-- After each completed step, update the plan immediately. The system prompt automatically includes the current plan (no need to fetch it with tools). When all tasks are complete, use `clear_plan` to finalize and remove it from the prompt.
-- If there is an active plan (auto-inserted below), do NOT call `create_plan` again. Instead, execute the plan as written — start with the first pending task, complete it, mark it done with `complete_task`, then proceed to the second task and mark it done, and so on until all tasks are completed.
-- When a plan is active, you must follow it strictly: work task-by-task in order. Do not start the next task until you have completed the current task and marked it done with `complete_task`. Keep only one task active at a time (no parallel work). After each step, update the plan immediately (complete/add). When all tasks are complete, call `clear_plan`. Do not send a final assistant message while a plan is active.
-- Planning rule: Whenever you edit files under `/agent/content/` (including the home page or any user‑facing content), add a "Publish updated content" task to your plan and complete it immediately after the edit, before sharing any links.
- - Do not add duplicate tasks: Before calling `add_task`, check the active plan. If the requested task is already present, do not add it again. Never copy tasks from the auto-inserted "Current Plan" section of the system prompt — those are already in the plan. Instead, acknowledge it is already present and proceed to execute or complete that task.
-
-#### Tool: create_plan
-- Creates a plan. Generates a plan file under `/agent/logs` and sets it as the active plan.
-- Parameters:
-  - title (optional): Plan title.
-  - tasks (optional): Array of task descriptions.
-- Returns: `{{ "path": string, "tasks": number }}` within the standard envelope.
-
-{plan_example}
-
-#### Tool: read_plan
-- Reads the active plan file from `/agent/logs` and returns its JSON contents.
-- Parameters: none
-- Returns: `{{ "plan": {{ ... }} }}` within the standard envelope.
-
-#### Tool: add_task
-- Adds a task to the active plan. Returns error if there is no active plan. Rejects duplicates if the same task title already exists.
-- Parameters:
-  - task (required): Task description.
-
-#### Tool: complete_task
-- Completes one task in the active plan. For publish tasks, you must verify a published URL under `/content/{agent_name}/` returns HTTP 200.
-- Parameters:
-  - task_id (required): Numeric ID.
-  - verify_paths (optional): Array of absolute file paths under `/agent` to check for existence.
-  - verify_url (optional, required for publish tasks): Full published URL to verify (must start with `{base_url}/content/{agent_name}/...`). If omitted for publish tasks, defaults to `{base_url}/content/{agent_name}/index.html`.
-  - force (optional): Complete even if verification fails.
-
-#### Tool: clear_plan
-- Removes the plan marker and marks the plan complete so it no longer appears in the system prompt.
-- Parameters: none
-  - Fails if there are any open (non-completed) tasks. Complete all tasks first.
-  
-Guideline: `clear_plan` should almost always be the last tool in a multi-step workflow once all tasks are finished.
+- Maintain a single Markdown file at `/agent/plan.md` for multi-step work. Use a checklist to track tasks and their status.
+- If the file does not exist when you start, create it. Keep it concise and up to date.
+- For complex tasks, draft a plan in `/agent/plan.md` and follow it. Mark items completed as you go.
+- If you have questions or need clarifications, use `output` to ask the user. When the user answers, update `/agent/plan.md` and continue.
+- Read `/agent/plan.md` whenever you are unsure what to do next and to carry context across responses.
+- Keep working until the plan is complete or you truly need more information. Do not stop early without finishing the plan.
+- When the plan is fully completed and all items are checked off, remove `/agent/plan.md`.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"
