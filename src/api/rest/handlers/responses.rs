@@ -214,13 +214,17 @@ async fn estimate_history_tokens_since(
 ) -> Result<i64, ApiError> {
     // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
-        sqlx::query(r#"SELECT status, input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#)
+        sqlx::query(
+            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#,
+        )
             .bind(agent_name)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
-        sqlx::query(r#"SELECT status, input, output FROM agent_responses WHERE agent_name = ?"#)
+        sqlx::query(
+            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ?"#,
+        )
             .bind(agent_name)
             .fetch_all(pool)
             .await
@@ -228,6 +232,21 @@ async fn estimate_history_tokens_since(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     let mut total_chars: i64 = 0;
+
+    // Determine the single latest 'processing' response by created_at
+    let mut latest_proc: Option<DateTime<Utc>> = None;
+    for row in rows.iter() {
+        let status: String = row
+            .try_get::<String, _>("status")
+            .unwrap_or_else(|_| "completed".to_string());
+        if status.to_lowercase() == "processing" {
+            if let Ok(ca) = row.try_get::<DateTime<Utc>, _>("created_at") {
+                if latest_proc.map(|x| ca > x).unwrap_or(true) {
+                    latest_proc = Some(ca);
+                }
+            }
+        }
+    }
     for row in rows {
         let status: String = row
             .try_get::<String, _>("status")
@@ -256,17 +275,26 @@ async fn estimate_history_tokens_since(
 
         let status_lc = status.to_lowercase();
         if status_lc == "processing" {
-            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-                for it in items {
-                    match it.get("type").and_then(|v| v.as_str()) {
-                        Some("tool_call") => {
+            // Only include tools for the single most recent processing response
+            let include_tools = latest_proc
+                .and_then(|lp| {
+                    row.try_get::<DateTime<Utc>, _>("created_at")
+                        .ok()
+                        .map(|c| c == lp)
+                })
+                .unwrap_or(false);
+            if include_tools {
+                // For the response being worked on, include tool_call and tool_result outputs
+                if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                    for it in items {
+                        if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                             let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
                             let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
                             let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
                                 .to_string();
                             total_chars += s.len() as i64;
                         }
-                        Some("tool_result") => {
+                        if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
                             if let Some(out) = it.get("output") {
                                 let s = out
                                     .as_str()
@@ -277,7 +305,6 @@ async fn estimate_history_tokens_since(
                                 }
                             }
                         }
-                        _ => {}
                     }
                 }
             }
