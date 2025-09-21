@@ -717,13 +717,11 @@ impl Agent {
 
         query = query.bind(name);
 
-        let result = query.execute(pool).await?;
+        let _result = query.execute(pool).await?;
 
-        if result.rows_affected() > 0 {
-            Self::find_by_name(pool, name).await
-        } else {
-            Ok(None)
-        }
+        // Always fetch and return the current record. rows_affected() can be 0 when
+        // updating with the same values; treat that as a successful no-op update.
+        Self::find_by_name(pool, name).await
     }
 
     pub async fn update(
