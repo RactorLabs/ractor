@@ -149,7 +149,7 @@ pub async fn create_response(
             match AgentResponse::find_by_id(&state.db, &response_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
-                    if status_lc == "completed" || status_lc == "failed" {
+                    if status_lc == "completed" || status_lc == "failed" || status_lc == "timedout" {
                         return Ok(Json(ResponseView {
                             id: cur.id,
                             agent_name: cur.agent_name,

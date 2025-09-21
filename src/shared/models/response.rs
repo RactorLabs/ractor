@@ -8,7 +8,7 @@ pub struct AgentResponse {
     pub id: String,
     pub agent_name: String,
     pub created_by: String,
-    pub status: String, // pending | processing | completed | failed
+    pub status: String, // pending | processing | completed | failed | timedout
     pub input: serde_json::Value,
     pub output: serde_json::Value,
     pub created_at: DateTime<Utc>,

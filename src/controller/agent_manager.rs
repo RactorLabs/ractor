@@ -657,6 +657,44 @@ impl AgentManager {
                 .and_then(|v| v.as_str())
                 .unwrap_or("User requested sleep")
         };
+
+        // If this was a busy timeout, mark the latest in-progress response as timed out
+        if reason == "busy_timeout" {
+            if let Some((resp_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
+                r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status = 'processing' ORDER BY created_at DESC LIMIT 1"#,
+            )
+            .bind(&agent_name)
+            .fetch_optional(&self.pool)
+            .await
+            .unwrap_or(None)
+            {
+                let mut new_output = output_json.clone();
+                // Append a timedout marker item to the output
+                let mut items = new_output
+                    .get("items")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_else(Vec::new);
+                items.push(serde_json::json!({
+                    "type": "timedout",
+                    "reason": reason,
+                    "at": now_text,
+                }));
+                if let serde_json::Value::Object(ref mut map) = new_output {
+                    map.insert("items".to_string(), serde_json::Value::Array(items));
+                } else {
+                    new_output = serde_json::json!({"text":"","items": [ {"type":"timedout","reason": reason, "at": now_text } ]});
+                }
+                // Update response status to 'timedout'
+                let _ = sqlx::query(
+                    r#"UPDATE agent_responses SET status = 'timedout', output = ?, updated_at = NOW() WHERE id = ?"#,
+                )
+                .bind(&new_output)
+                .bind(&resp_id)
+                .execute(&self.pool)
+                .await;
+            }
+        }
         // Determine runtime: time from last wake marker (or agent.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
             r#"SELECT created_at, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at DESC LIMIT 50"#
