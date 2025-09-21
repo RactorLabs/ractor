@@ -12,10 +12,11 @@ pub async fn request_logging_middleware(
 
     let response = next.run(request).await;
     let duration = start_time.elapsed();
-
+    let status = response.status().as_u16();
     info!(
         method = %method,
         path = %uri.path(),
+        status = status,
         duration_ms = %duration.as_millis(),
         "Handled request"
     );

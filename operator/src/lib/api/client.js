@@ -28,6 +28,13 @@ export async function apiFetch(path, options = {}, opts = {}) {
   const res = await fetch(url, { ...options, headers });
   let data = null;
   try { data = await res.json(); } catch (_) { /* ignore */ }
+  if (!res.ok) {
+    try {
+      // Surface useful debug info in browser console for troubleshooting
+      // eslint-disable-next-line no-console
+      console.error('[apiFetch]', method, url, 'HTTP', res.status, data);
+    } catch (_) {}
+  }
   // Centralized auth failure handling
   // 401 = invalid/expired token: log out and redirect to login
   // 403 = insufficient permissions: keep token so UI can show an error state
