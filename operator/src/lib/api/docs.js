@@ -46,13 +46,15 @@ export function getCommonSchemas() {
       { name: 'busy_timeout_seconds', type: 'int', desc: 'Busy timeout' },
       { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When idle started' },
       { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When busy started' },
+      { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff timestamp if set' },
     ],
     ResponseObject: [
       { name: 'id', type: 'string', desc: 'Response ID (UUID)' },
       { name: 'agent_name', type: 'string', desc: 'Agent name' },
-      { name: 'status', type: 'string', desc: "'pending'|'processing'|'completed'|'failed'" },
-      { name: 'input', type: 'object', desc: 'User input JSON (e.g., { text: string })' },
-      { name: 'output', type: 'object', desc: 'Agent output JSON (see items structure)' },
+      { name: 'status', type: 'string', desc: "'pending'|'processing'|'completed'|'failed'|'cancelled'" },
+      { name: 'input_content', type: 'array', desc: "User input content items (e.g., [{ type: 'text', content: 'hello' }]). Preferred input shape uses 'content' array; legacy { text: string } is accepted but not echoed in input_content." },
+      { name: 'output_content', type: 'array', desc: "Final content items extracted from segments (typically the 'output' tool_result payload)" },
+      { name: 'segments', type: 'array', desc: 'All step-by-step segments/items: commentary, tool calls/results, system markers, final' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
     ],
@@ -83,6 +85,11 @@ export function getCommonSchemas() {
       { name: 'cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff (null when absent)' },
       { name: 'measured_at', type: 'string (RFC3339)', desc: 'Measurement timestamp' },
       { name: 'total_messages_considered', type: 'int', desc: 'Messages scanned to compute estimate' },
+    ],
+    CancelAck: [
+      { name: 'status', type: 'string', desc: "Always 'ok' on success" },
+      { name: 'agent', type: 'string', desc: 'Agent name' },
+      { name: 'cancelled', type: 'boolean', desc: 'true if a pending/processing response or queued task was cancelled' },
     ],
     Empty: [],
   };
@@ -125,7 +132,6 @@ export function getApiDocs(base) {
         method: 'POST',
         path: '/api/v0/operators/{name}/login',
         auth: 'public',
-        adminOnly: true,
         desc: 'Login with operator name and password. Returns JWT token and user info.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
@@ -345,6 +351,9 @@ export function getApiDocs(base) {
         { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before sleeping (min/default 5 seconds)' },
         { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when sleep occurs' }
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/sleep -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested sleep"}'\n\n# The agent will sleep after the delay. State may not change immediately in the response.`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle",...}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing response (or queued task) and set agent to idle.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/cancel -H "Authorization: Bearer <token>"`, resp: { schema: 'CancelAck' }, responses: [{ status: 200, body: `{"status":"ok","agent":"demo","cancelled":true}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/wake', auth: 'bearer', desc: 'Wake agent (optionally send a prompt).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on wake' }
@@ -384,14 +393,20 @@ export function getApiDocs(base) {
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max responses (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'ResponseObject', array: true }, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","status":"completed","input":{"text":"hi"},"output":{"text":"hello","items":[]},"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'ResponseObject', array: true }, responses: [{ status: 200, body: `[{"id":"uuid","agent_name":"demo","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/responses', auth: 'bearer', desc: 'Create a response (user input). Supports blocking when background=false.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
-        { in: 'body', name: 'input', type: 'object', required: true, desc: 'User input; shape: { text: string }' },
-        { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending).' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/responses -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"text":"hello"},"background":false}'`, resp: { schema: 'ResponseObject' }, responses: [
-        { status: 200, body: `{"id":"uuid","status":"completed",...}` },
+        { in: 'body', name: 'input', type: 'object', required: true, desc: "User input; preferred shape: { content: [{ type: 'text', content: string }] }. Legacy: { text: string } also accepted." },
+        { in: 'body', name: 'background', type: 'boolean', required: false, desc: "Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed|cancelled). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending)." }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/responses -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`, resp: { schema: 'ResponseObject' }, responses: [
+        { status: 200, body: `{"id":"uuid","agent_name":"demo","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"created_at":"...","updated_at":"..."}` },
         { status: 504, body: `{"message":"Timed out waiting for response to complete"}` }
+      ] },
+      { method: 'GET', path: '/api/v0/agents/{name}/responses/{id}', auth: 'bearer', desc: 'Get a single response by id.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Response id' }
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'ResponseObject' }, responses: [
+        { status: 200, body: `{"id":"uuid","agent_name":"demo","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[{"type":"tool_call","tool":"search","args":{}}],"created_at":"...","updated_at":"..."}` }
       ] },
       { method: 'PUT', path: '/api/v0/agents/{name}/responses/{id}', auth: 'bearer', desc: 'Update a response (agent-only typical). Used to append output.items and mark status.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
@@ -399,7 +414,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'", required: false, desc: 'Status update' },
         { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update; replaces existing input JSON' },
         { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; shape: { text?: string, items?: [] }' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name>/responses/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","text":"done"}]}}'`, resp: { schema: 'ResponseObject' }, responses: [{ status: 200, body: `{"id":"uuid","status":"completed",...}` }] },
+      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name>/responses/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","channel":"final","text":"done"}]}}'`, resp: { schema: 'ResponseObject' }, responses: [{ status: 200, body: `{"id":"uuid","agent_name":"demo","status":"completed","input_content":[],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"created_at":"...","updated_at":"..."}` }] },
       { method: 'GET', path: '/api/v0/agents/{name}/responses/count', auth: 'bearer', desc: 'Get response count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] }
@@ -419,6 +434,16 @@ export function getApiDocs(base) {
       { method: 'POST', path: '/api/v0/agents/{name}/context/compact', auth: 'bearer', desc: 'Compact context by summarizing recent conversation via LLM and setting a new cutoff. Adds a "Context Compacted" marker response with the summary in output.text.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] }
+    ]
+  },
+  {
+    id: 'content',
+    title: 'Content (Public)',
+    description: 'Static content served by raworc-content service, mounted under /content.',
+    endpoints: [
+      { method: 'GET', path: '/content/health', auth: 'public', desc: 'Health endpoint for the content server.', params: [], example: `curl -s ${BASE}/content/health`, resp: { schema: 'Empty' }, responses: [ { status: 200, body: `{"status":"healthy","service":"raworc-content"}` } ] },
+      { method: 'GET', path: '/content/', auth: 'public', desc: 'Root of published content. Returns 200 with no body.', params: [], example: `curl -i ${BASE}/content/`, resp: { schema: 'Empty' }, responses: [ { status: 200 } ] },
+      { method: 'GET', path: '/content/{path...}', auth: 'public', desc: 'Serve static files from published content. 404 returns a small HTML page indicating no content.', params: [ { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path within content volume (e.g., {agent}/index.html)' } ], example: `curl -i ${BASE}/content/<agent>/index.html`, resp: { schema: 'Empty' }, responses: [ { status: 200 }, { status: 404, body: '<html>...No Content...</html>' } ] }
     ]
   }
   ];

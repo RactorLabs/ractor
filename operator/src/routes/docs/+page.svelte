@@ -86,7 +86,6 @@
     <div class="col-12 col-xxl-10">
       <div class="row">
   <div class="col-xl-9">
-    {#if false}
     <Card class="mb-3">
       <div class="card-body p-4">
         <div class="text-center mb-2">
@@ -98,7 +97,6 @@
         </div>
       </div>
     </Card>
-    {/if}
 
     
 
@@ -246,38 +244,27 @@
             <tbody>
               <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
               <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent name</td></tr>
-              <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span></td></tr>
-              <tr><td class="font-monospace">input</td><td>object</td><td>User input JSON (typically <span class="font-monospace">&#123; text: string &#125;</span>)</td></tr>
-              <tr><td class="font-monospace">output</td><td>object</td><td>Agent output JSON with fields below</td></tr>
+              <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span>, <span class="font-monospace">cancelled</span></td></tr>
+              <tr><td class="font-monospace">input_content</td><td>array</td><td>User input content items (e.g., <span class="font-monospace">&#91;&#123; type: 'text', content: 'hello' &#125;&#93;</span>). Preferred input shape uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">&#123; text: string &#125;</span> is accepted.</td></tr>
+              <tr><td class="font-monospace">output_content</td><td>array</td><td>Final content items extracted from <span class="font-monospace">segments</span> (typically the <span class="font-monospace">tool_result</span> with <span class="font-monospace">tool='output'</span>).</td></tr>
+              <tr><td class="font-monospace">segments</td><td>array</td><td>All step-by-step segments/items including commentary, tool calls/results, markers, and final.</td></tr>
               <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp (UTC)</td></tr>
               <tr><td class="font-monospace">updated_at</td><td>string (RFC3339)</td><td>Last update timestamp (UTC)</td></tr>
             </tbody>
           </table>
         </div>
-        <div class="fw-500 small text-body text-opacity-75 mb-1">output fields</div>
-        <div class="table-responsive">
-          <table class="table table-sm table-bordered mb-2">
-            <thead>
-              <tr><th>Name</th><th>Type</th><th>Description</th></tr>
-            </thead>
-            <tbody>
-              <tr><td class="font-monospace">text</td><td>string</td><td>Final assistant message (may be empty while processing)</td></tr>
-              <tr><td class="font-monospace">items</td><td>array</td><td>Ordered list of structured items (see “Items Structure”)</td></tr>
-            </tbody>
-          </table>
-        </div>
         <ul class="mb-0">
           <li>GET list is ordered by <span class="font-monospace">created_at</span> ascending.</li>
-          <li>Update semantics: <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
-          <li>Typical <span class="font-monospace">input</span> is <span class="font-monospace">&#123; text: string &#125;</span>, but arbitrary JSON is allowed.</li>
+          <li>Update semantics (PUT <span class="font-monospace">/responses/&#123;id&#125;</span>): <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
+          <li>Preferred input uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">text</span> field is still accepted.</li>
         </ul>
       </div>
     </Card>
 
     <Card class="mb-3">
-      <div class="card-header fw-bold">Items Structure (output.items)</div>
+      <div class="card-header fw-bold">Segments Structure</div>
       <div class="card-body p-3 p-sm-4 small">
-        <div class="mb-2">The <span class="font-monospace">output.items</span> array captures step-by-step progress, tool usage, and final output. Items are appended in order.</div>
+        <div class="mb-2">The <span class="font-monospace">segments</span> array captures step-by-step progress, tool usage, and final output. Items are appended in order.</div>
         <div class="mb-2 small text-body text-opacity-75">The <span class="font-monospace">tool_result.output</span> value may be plain text or structured JSON. The UI renders JSON objects/arrays directly and falls back to strings for text outputs.</div>
         <div class="fw-500 small text-body text-opacity-75 mb-1">Item types</div>
         <div class="table-responsive mb-2">
@@ -302,7 +289,7 @@
               <tr>
                 <td class="font-monospace">final</td>
                 <td class="font-monospace">&#123; type, channel: 'final', text &#125;</td>
-                <td>Final assistant answer (mirrors <span class="font-monospace">output.text</span>).</td>
+                <td>Final assistant answer (mirrors the final message; also reflected in <span class="font-monospace">output_content</span>).</td>
               </tr>
               <tr>
                 <td class="font-monospace">context_cleared</td>
@@ -312,7 +299,7 @@
               <tr>
                 <td class="font-monospace">context_compacted</td>
                 <td class="font-monospace">&#123; type, cutoff_at &#125;</td>
-                <td>Marker added when context is compacted via <span class="font-monospace">POST /agents/{name}/context/compact</span>. The summary is placed in <span class="font-monospace">output.text</span>.</td>
+                <td>Marker added when context is compacted via <span class="font-monospace">POST /agents/{name}/context/compact</span>. The summary text is returned via <span class="font-monospace">output_content</span>.</td>
               </tr>
             </tbody>
           </table>
