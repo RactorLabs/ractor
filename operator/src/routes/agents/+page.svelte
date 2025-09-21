@@ -11,6 +11,14 @@
   let loading = true;
   let error = null;
   let agents = [];
+  // Filters + pagination
+  let q = '';
+  let stateFilter = '';
+  let tagsText = '';
+  let limit = 30;
+  let pageNum = 1; // 1-based
+  let total = 0;
+  let pages = 1;
   import { auth, getOperatorName } from '$lib/auth.js';
   let operatorName = '';
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
@@ -41,11 +49,34 @@
 
 import { getHostUrl } from '$lib/branding.js';
 
-  async function refresh() {
-    const res = await apiFetch('/agents');
-    if (res.ok) {
-      agents = Array.isArray(res.data) ? res.data : (res.data?.agents || []);
+  function buildQuery() {
+    const params = new URLSearchParams();
+    if (q && q.trim().length) params.set('q', q.trim());
+    if (stateFilter && stateFilter.trim().length) params.set('state', stateFilter.trim());
+    if (tagsText && tagsText.trim().length) {
+      const tags = tagsText.split(',').map(t => t.trim()).filter(Boolean);
+      for (const t of tags) params.append('tags', t);
     }
+    if (limit) params.set('limit', String(limit));
+    if (pageNum) params.set('page', String(pageNum));
+    return params.toString();
+  }
+
+  async function fetchAgents() {
+    const qs = buildQuery();
+    const res = await apiFetch(`/agents?${qs}`);
+    if (!res.ok) {
+      error = res?.data?.message || `Failed to load agents (HTTP ${res.status})`;
+      loading = false;
+      return;
+    }
+    const data = res.data || {};
+    agents = Array.isArray(data.items) ? data.items : [];
+    total = Number(data.total || 0);
+    limit = Number(data.limit || limit);
+    const offset = Number(data.offset || 0);
+    pageNum = Number(data.page || (limit ? (Math.floor(offset / limit) + 1) : 1));
+    pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
   async function sleepAgent(name) {
@@ -97,10 +128,34 @@ import { getHostUrl } from '$lib/branding.js';
   let pollHandle = null;
   function startPolling() {
     stopPolling();
-    pollHandle = setInterval(async () => { try { await refresh(); } catch (_) {} }, 2000);
+    const filtersActive = (q && q.trim()) || (tagsText && tagsText.trim()) || (stateFilter && stateFilter.trim());
+    if (!filtersActive && pageNum === 1) {
+      pollHandle = setInterval(async () => { try { await fetchAgents(); } catch (_) {} }, 3000);
+    }
   }
   function stopPolling() {
     if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+  }
+
+  function syncUrl() {
+    try {
+      const qs = buildQuery();
+      const url = qs ? `/agents?${qs}` : '/agents';
+      goto(url, { replaceState: true, keepfocus: true, noScroll: true });
+    } catch (_) {}
+  }
+
+  let searchTimer;
+  function onFiltersChanged() {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(async () => {
+      pageNum = 1;
+      syncUrl();
+      loading = true;
+      await fetchAgents();
+      loading = false;
+      startPolling();
+    }, 250);
   }
 
   onMount(async () => {
@@ -109,12 +164,17 @@ import { getHostUrl } from '$lib/branding.js';
       return;
     }
     try { operatorName = getOperatorName() || ''; } catch (_) { operatorName = ''; }
-    const res = await apiFetch('/agents');
-    if (!res.ok) {
-      error = `Failed to load agents (HTTP ${res.status})`;
-    } else {
-      agents = Array.isArray(res.data) ? res.data : (res.data?.agents || []);
-    }
+    // Seed from URL
+    try {
+      const sp = new URLSearchParams(location.search || '');
+      q = sp.get('q') || '';
+      stateFilter = sp.get('state') || '';
+      const t = sp.getAll('tags');
+      tagsText = t && t.length ? t.join(',') : '';
+      limit = Number(sp.get('limit') || 30);
+      pageNum = Number(sp.get('page') || 1);
+    } catch (_) {}
+    await fetchAgents();
     loading = false;
     startPolling();
   });
@@ -135,8 +195,23 @@ import { getHostUrl } from '$lib/branding.js';
 {/if}
 <div class="d-flex align-items-center mb-3">
   <div class="fw-bold">Agents</div>
-  <div class="ms-auto d-flex align-items-center gap-2">
-    <div class="small text-body text-opacity-75">{agents?.length || 0} total</div>
+  <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
+    <div class="input-group input-group-sm" style="min-width: 260px;">
+      <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
+      <input class="form-control" placeholder="Search by name or description" bind:value={q} on:input={onFiltersChanged} autocapitalize="none" />
+    </div>
+    <select class="form-select form-select-sm w-auto" bind:value={stateFilter} on:change={onFiltersChanged} aria-label="State filter">
+      <option value="">All states</option>
+      <option value="init">init</option>
+      <option value="idle">idle</option>
+      <option value="busy">busy</option>
+      <option value="slept">slept</option>
+    </select>
+    <div class="input-group input-group-sm" style="min-width: 220px;">
+      <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
+      <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} on:input={onFiltersChanged} autocapitalize="none" />
+    </div>
+    <div class="small text-body text-opacity-75">{total} total</div>
     <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
   </div>
 </div>
@@ -246,6 +321,19 @@ import { getHostUrl } from '$lib/branding.js';
               </div>
             {/each}
           </div>
+          {#if pages > 1}
+          <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>Prev</button>
+            {#each Array(pages) as _, idx}
+              {#if Math.abs((idx+1) - pageNum) <= 2 || idx === 0 || idx+1 === pages}
+                <button class={`btn btn-sm ${idx+1===pageNum ? 'btn-theme' : 'btn-outline-secondary'}`} on:click={async () => { pageNum = idx+1; syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>{idx+1}</button>
+              {:else if Math.abs((idx+1) - pageNum) === 3}
+                <span class="px-1">…</span>
+              {/if}
+            {/each}
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum >= pages} on:click={async () => { pageNum = Math.min(pages, pageNum+1); syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>Next</button>
+          </div>
+          {/if}
         {/if}
     </div>
   </div>
