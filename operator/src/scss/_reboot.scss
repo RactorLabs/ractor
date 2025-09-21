@@ -40,6 +40,9 @@ body {
 	letter-spacing: var(--#{$prefix}body-letter-spacing);
 	position: relative;
 	min-height: 100vh;
+	@supports (min-height: 100svh) {
+		min-height: 100svh;
+	}
 	z-index: 9999;
 	
 	&:before {
