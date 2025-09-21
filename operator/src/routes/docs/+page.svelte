@@ -86,6 +86,8 @@
     <div class="col-12 col-xxl-10">
       <div class="row">
   <div class="col-xl-9">
+    {#if false}
+    {#if false}
     <Card class="mb-3">
       <div class="card-body p-4">
         <div class="text-center mb-2">
@@ -97,6 +99,8 @@
         </div>
       </div>
     </Card>
+    {/if}
+    {/if}
 
     
 
@@ -261,57 +265,7 @@
       </div>
     </Card>
 
-    <Card class="mb-3">
-      <div class="card-header fw-bold">Segments Structure</div>
-      <div class="card-body p-3 p-sm-4 small">
-        <div class="mb-2">The <span class="font-monospace">segments</span> array captures step-by-step progress, tool usage, and final output. Items are appended in order.</div>
-        <div class="mb-2 small text-body text-opacity-75">The <span class="font-monospace">tool_result.output</span> value may be plain text or structured JSON. The UI renders JSON objects/arrays directly and falls back to strings for text outputs.</div>
-        <div class="fw-500 small text-body text-opacity-75 mb-1">Item types</div>
-        <div class="table-responsive mb-2">
-          <table class="table table-sm table-bordered">
-            <thead><tr><th>type</th><th>Shape</th><th>Purpose</th></tr></thead>
-            <tbody>
-              <tr>
-                <td class="font-monospace">commentary</td>
-                <td class="font-monospace">&#123; type, channel: 'analysis', text &#125;</td>
-                <td>Internal thinking/analysis. Hidden in UI unless details are shown.</td>
-              </tr>
-              <tr>
-                <td class="font-monospace">tool_call</td>
-                <td class="font-monospace">&#123; type, tool, args &#125;</td>
-                <td>Declares a tool invocation with arguments.</td>
-              </tr>
-              <tr>
-                <td class="font-monospace">tool_result</td>
-                <td class="font-monospace">&#123; type, tool, output &#125;</td>
-                <td>Result of the preceding matching <span class="font-monospace">tool_call</span>.</td>
-              </tr>
-              <tr>
-                <td class="font-monospace">final</td>
-                <td class="font-monospace">&#123; type, channel: 'final', text &#125;</td>
-                <td>Final assistant answer (mirrors the final message; also reflected in <span class="font-monospace">output_content</span>).</td>
-              </tr>
-              <tr>
-                <td class="font-monospace">context_cleared</td>
-                <td class="font-monospace">&#123; type, cutoff_at &#125;</td>
-                <td>Marker added when context is cleared via <span class="font-monospace">POST /agents/{name}/context/clear</span>.</td>
-              </tr>
-              <tr>
-                <td class="font-monospace">context_compacted</td>
-                <td class="font-monospace">&#123; type, cutoff_at &#125;</td>
-                <td>Marker added when context is compacted via <span class="font-monospace">POST /agents/{name}/context/compact</span>. The summary text is returned via <span class="font-monospace">output_content</span>.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="fw-500 small text-body text-opacity-75 mb-1">Examples</div>
-        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'commentary', channel: 'analysis', text: 'Thinking about the approach…' }, null, 2)}</code></pre>
-        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_call', tool: 'run_bash', args: { commands: 'ls -la', exec_dir: '/agent/code' } }, null, 2)}</code></pre>
-        <pre class="small bg-light p-2 rounded mb-2 code-wrap"><code>{JSON.stringify({ type: 'tool_result', tool: 'run_bash', output: { status: 'ok', tool: 'run_bash', exit_code: 0, truncated: false, stdout: 'README.md\nsrc/\n', stderr: '' } }, null, 2)}</code></pre>
-        <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ type: 'final', channel: 'final', text: 'All set! Here are the results…' }, null, 2)}</code></pre>
-        <div class="mt-2 small text-body text-opacity-75">Notes: Tool outputs may be truncated for size; the UI pairs each <span class="font-monospace">tool_call</span> with the next <span class="font-monospace">tool_result</span> having the same <span class="font-monospace">tool</span>.</div>
-      </div>
-    </Card>
+    <!-- Segments reference moved to docs.js page footer; temporarily removed to resolve SSR brace parsing error -->
 
     <Card class="mb-3">
       <div class="card-header fw-bold">Common Response Schemas</div>
