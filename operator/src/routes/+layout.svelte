@@ -25,6 +25,27 @@
       window.__RAWORC_HOST_NAME__ = (data && data.hostName) ? data.hostName : getHostName();
       window.__RAWORC_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : getHostUrl();
     }
+
+    // Disable auto-capitalization in all text inputs/textareas/contenteditable fields
+    const applyNoAutoCaps = (root) => {
+      const scope = root && root.querySelectorAll ? root : document;
+      const nodes = scope.querySelectorAll('input, textarea, [contenteditable], [contenteditable="true"], [contenteditable=""]');
+      nodes.forEach((el) => {
+        try { el.setAttribute('autocapitalize', 'none'); } catch (_) {}
+      });
+    };
+    applyNoAutoCaps(document);
+    // Watch for dynamic DOM updates and enforce attribute
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes && m.addedNodes.forEach((n) => {
+          if (n && n.nodeType === 1) { // ELEMENT_NODE
+            applyNoAutoCaps(n);
+          }
+        });
+      }
+    });
+    try { observer.observe(document.body, { childList: true, subtree: true }); } catch (_) {}
     
     $appVariables = generateVariables();
     // Always keep sidebar minimized
