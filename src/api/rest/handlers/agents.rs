@@ -55,9 +55,25 @@ pub struct AgentResponse {
     // Removed: id, container_id, persistent_volume_id
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct ListAgentsQuery {
     pub state: Option<String>,
+    pub q: Option<String>,
+    #[serde(default)]
+    pub tags: Option<Vec<String>>, // supports repeated tags=tag1&tags=tag2
+    pub limit: Option<i64>,
+    pub page: Option<i64>, // 1-based
+    pub offset: Option<i64>, // takes precedence over page when provided
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaginatedAgents {
+    pub items: Vec<AgentResponse>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
+    pub page: i64,
+    pub pages: i64,
 }
 
 impl AgentResponse {
@@ -122,7 +138,7 @@ pub async fn list_agents(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListAgentsQuery>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<Vec<AgentResponse>>> {
+) -> ApiResult<Json<PaginatedAgents>> {
     // Admins require explicit permission; non-admins can list only their own agents
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
@@ -133,35 +149,110 @@ pub async fn list_agents(
             })?;
     }
 
-    let mut agents = Agent::find_all(&state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list agents: {}", e)))?;
-
-    // For non-admin users, only show their own agents
+    // Resolve principal for ownership constraint
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Only admin operator can see all agents
+    // Normalize pagination
+    let limit = query.limit.unwrap_or(30).clamp(1, 100);
+    let offset = match query.offset {
+        Some(o) if o >= 0 => o,
+        _ => {
+            let page = query.page.unwrap_or(1).max(1);
+            (page - 1) * limit
+        }
+    };
 
-    // For regular users, only show their own agents
-    // Admins can see all agents
+    // Build dynamic WHERE clauses
+    let mut where_sql = String::from(" WHERE 1=1 ");
+    let mut binds: Vec<serde_json::Value> = Vec::new();
+
     if !is_admin {
-        agents.retain(|s| s.created_by == *username);
+        where_sql.push_str(" AND created_by = ? ");
+        binds.push(serde_json::Value::String(username.to_string()));
     }
 
-    // Filter by state if provided
-    if let Some(state_filter) = query.state {
-        agents.retain(|s| s.state == state_filter);
+    if let Some(state_filter) = query.state.as_ref().map(|s| s.trim().to_string()) {
+        if !state_filter.is_empty() {
+            where_sql.push_str(" AND state = ? ");
+            binds.push(serde_json::Value::String(state_filter));
+        }
     }
 
-    let mut response = Vec::new();
+    if let Some(q) = query.q.as_ref().map(|s| s.trim().to_lowercase()) {
+        if !q.is_empty() {
+            where_sql.push_str(" AND (LOWER(name) LIKE ? OR (description IS NOT NULL AND LOWER(description) LIKE ?)) ");
+            let pat = format!("%{}%", q);
+            binds.push(serde_json::Value::String(pat.clone()));
+            binds.push(serde_json::Value::String(pat));
+        }
+    }
+
+    if let Some(tags) = query.tags.clone() {
+        let list: Vec<String> = tags
+            .into_iter()
+            .flat_map(|s| s.split(',').map(|t| t.trim().to_string()).collect::<Vec<_>>())
+            .filter(|t| !t.is_empty())
+            .collect();
+        for _t in list {
+            where_sql.push_str(" AND JSON_CONTAINS(tags, JSON_QUOTE(?), '$') ");
+            binds.push(serde_json::Value::String(_t));
+        }
+    }
+
+    // Count total
+    let count_sql = format!(
+        "SELECT COUNT(*) as cnt FROM agents {}",
+        where_sql
+    );
+    let mut q_count = sqlx::query_scalar::<_, i64>(&count_sql);
+    for b in binds.iter() {
+        if let Some(s) = b.as_str() {
+            q_count = q_count.bind(s);
+        } else {
+            // Should not happen for our binds
+        }
+    }
+    let total: i64 = q_count
+        .fetch_one(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count agents: {}", e)))?;
+
+    // Fetch page
+    let select_sql = format!(
+        r#"
+        SELECT name, created_by, state, description, parent_agent_name,
+               created_at, last_activity_at, metadata, tags,
+               is_published, published_at, published_by, publish_permissions,
+               idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
+        FROM agents
+        {} 
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+        "#,
+        where_sql
+    );
+    let mut q_items = sqlx::query_as::<_, Agent>(&select_sql);
+    for b in binds.iter() {
+        if let Some(s) = b.as_str() { q_items = q_items.bind(s); }
+    }
+    q_items = q_items.bind(limit).bind(offset);
+
+    let agents: Vec<Agent> = q_items
+        .fetch_all(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list agents: {}", e)))?;
+
+    let mut items: Vec<AgentResponse> = Vec::with_capacity(agents.len());
     for agent in agents {
-        response.push(AgentResponse::from_agent(agent, &state.db).await?);
+        items.push(AgentResponse::from_agent(agent, &state.db).await?);
     }
+    let page = if limit > 0 { (offset / limit) + 1 } else { 1 };
+    let pages = if limit > 0 { ((total + limit - 1) / limit).max(1) } else { 1 };
 
-    Ok(Json(response))
+    Ok(Json(PaginatedAgents { items, total, limit, offset, page, pages }))
 }
 
 pub async fn get_agent(
