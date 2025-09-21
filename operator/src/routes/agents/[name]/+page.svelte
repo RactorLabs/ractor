@@ -1318,7 +1318,9 @@
                           </div>
                         {/if}
                       {:else if segType(s) === 'tool_commentary'}
-                        <div class="small text-body mb-1" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {#if showTools}
+                          <div class="small text-body mb-1" style="white-space: pre-wrap;">{segText(s)}</div>
+                        {/if}
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
