@@ -193,26 +193,42 @@ import { getHostUrl } from '$lib/branding.js';
     </div>
   </div>
 {/if}
-<div class="d-flex align-items-center mb-3">
-  <div class="fw-bold">Agents</div>
-  <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
-    <div class="input-group input-group-sm" style="min-width: 260px;">
-      <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
-      <input class="form-control" placeholder="Search by name or description" bind:value={q} on:input={onFiltersChanged} autocapitalize="none" />
-    </div>
-    <select class="form-select form-select-sm w-auto" bind:value={stateFilter} on:change={onFiltersChanged} aria-label="State filter">
-      <option value="">All states</option>
-      <option value="init">init</option>
-      <option value="idle">idle</option>
-      <option value="busy">busy</option>
-      <option value="slept">slept</option>
-    </select>
-    <div class="input-group input-group-sm" style="min-width: 220px;">
-      <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
-      <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} on:input={onFiltersChanged} autocapitalize="none" />
-    </div>
-    <div class="small text-body text-opacity-75">{total} total</div>
+<div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+  <div class="fw-bold fs-5">Agents</div>
+  <div class="ms-auto d-flex align-items-center gap-2">
+    <div class="small text-body text-opacity-75 d-none d-md-block">{total} total</div>
     <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
+  </div>
+  
+  <!-- Filters row -->
+  <div class="w-100"></div>
+  <div class="w-100 mb-2">
+    <div class="row g-2">
+      <div class="col-12 col-md-6">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
+          <input class="form-control" placeholder="Search by name or description" bind:value={q} on:input={onFiltersChanged} autocapitalize="none" />
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <select class="form-select form-select-sm w-100" bind:value={stateFilter} on:change={onFiltersChanged} aria-label="State filter">
+          <option value="">All states</option>
+          <option value="init">init</option>
+          <option value="idle">idle</option>
+          <option value="busy">busy</option>
+          <option value="slept">slept</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
+          <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} on:input={onFiltersChanged} autocapitalize="none" />
+        </div>
+      </div>
+      <div class="col-12 d-md-none">
+        <div class="small text-body text-opacity-75">{total} total</div>
+      </div>
+    </div>
   </div>
 </div>
 
