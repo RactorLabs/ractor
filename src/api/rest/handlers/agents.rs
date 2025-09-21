@@ -191,6 +191,68 @@ pub async fn get_agent(
     Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
 }
 
+// Cancel the latest in-progress response for an agent and set agent to idle
+pub async fn cancel_active_response(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Permission: same as update state
+    check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        .await
+        .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
+
+    let agent = crate::shared::models::Agent::find_by_name(&state.db, &name)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+
+    // Find latest processing response
+    let row: Option<(String, serde_json::Value)> = sqlx::query_as(
+        r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status = 'processing' ORDER BY created_at DESC LIMIT 1"#
+    )
+    .bind(&agent.name)
+    .fetch_optional(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let mut cancelled = false;
+    if let Some((resp_id, output)) = row {
+        let mut new_output = output.clone();
+        let mut items = new_output
+            .get("items")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_else(Vec::new);
+        items.push(serde_json::json!({
+            "type": "cancelled", "reason": "user_cancel", "at": chrono::Utc::now().to_rfc3339()
+        }));
+        if let serde_json::Value::Object(ref mut map) = new_output {
+            map.insert("items".to_string(), serde_json::Value::Array(items));
+        } else {
+            new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
+        }
+        sqlx::query(
+            r#"UPDATE agent_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
+        )
+        .bind(&new_output)
+        .bind(&resp_id)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        cancelled = true;
+    }
+
+    // Set agent to idle
+    sqlx::query(r#"UPDATE agents SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE name = ?"#)
+        .bind(&agent.name)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent: {}", e)))?;
+
+    Ok(Json(serde_json::json!({"status":"ok", "agent": agent.name, "cancelled": cancelled})))
+}
+
 #[derive(Debug, Serialize)]
 pub struct AgentContextUsageResponse {
     pub agent: String,

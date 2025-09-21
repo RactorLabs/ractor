@@ -48,6 +48,37 @@ impl RaworcClient {
         &self.config.agent_name
     }
 
+    /// Get a response by id for current agent
+    pub async fn get_response_by_id(&self, id: &str) -> Result<ResponseView> {
+        let url = format!(
+            "{}/api/v0/agents/{}/responses/{}",
+            self.config.api_url, self.config.agent_name, id
+        );
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK => Ok(response.json::<ResponseView>().await?),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api("Response not found".to_string())),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to get response ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
     /// Get agent information
     pub async fn get_agent(&self) -> Result<Agent> {
         let url = format!(

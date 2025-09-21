@@ -247,6 +247,14 @@ impl ResponseHandler {
         let mut spill_retry_attempts: u32 = 0;
         let mut empty_retry_attempts: u32 = 0;
         loop {
+            // Check if the response has been cancelled or otherwise terminal before proceeding
+            if let Ok(cur) = self.api_client.get_response_by_id(&response.id).await {
+                let sl = cur.status.to_lowercase();
+                if sl != "processing" && sl != "pending" {
+                    // Stop processing if response moved to a terminal or non-processing state
+                    return Ok(());
+                }
+            }
             // Rebuild system prompt each iteration so newly created plan/publish state
             // appears immediately in the prompt during the same processing cycle.
             let system_prompt = self.build_system_prompt().await;
@@ -278,6 +286,14 @@ impl ResponseHandler {
                     }
                 }
             };
+
+            // Check for external cancellation between model calls
+            if let Ok(cur) = self.api_client.get_response_by_id(&response.id).await {
+                let sl = cur.status.to_lowercase();
+                if sl == "cancelled" || sl == "failed" || sl == "completed" {
+                    return Ok(());
+                }
+            }
 
             if let Some(tool_calls) = &model_resp.tool_calls {
                 if let Some(tc) = tool_calls.first() {

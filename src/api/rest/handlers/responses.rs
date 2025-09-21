@@ -149,7 +149,7 @@ pub async fn create_response(
             match AgentResponse::find_by_id(&state.db, &response_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
-                    if status_lc == "completed" || status_lc == "failed" || status_lc == "timedout" {
+                    if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled" {
                         return Ok(Json(ResponseView {
                             id: cur.id,
                             agent_name: cur.agent_name,
@@ -446,6 +446,34 @@ pub async fn update_response(
         segments: extract_segments(&updated.output),
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
+    }))
+}
+
+pub async fn get_response_by_id(
+    State(state): State<Arc<AppState>>,
+    Path((agent_name, response_id)): Path<(String, String)>,
+    Extension(_auth): Extension<AuthContext>,
+) -> ApiResult<Json<ResponseView>> {
+    // Ensure agent exists
+    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+
+    let cur = crate::shared::models::AgentResponse::find_by_id(&state.db, &response_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch response: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Response not found".to_string()))?;
+
+    Ok(Json(ResponseView {
+        id: cur.id,
+        agent_name: cur.agent_name,
+        status: cur.status,
+        input_content: extract_input_content(&cur.input),
+        output_content: extract_output_content(&cur.output),
+        segments: extract_segments(&cur.output),
+        created_at: cur.created_at.to_rfc3339(),
+        updated_at: cur.updated_at.to_rfc3339(),
     }))
 }
 

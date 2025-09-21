@@ -911,6 +911,17 @@
     }
   }
 
+  async function cancelActive() {
+    try {
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
+      await fetchAgent();
+      await fetchResponses();
+    } catch (e) {
+      error = e.message || String(e);
+    }
+  }
+
   // Remix action: open modal instead of prompt
   function remixAgent() { openRemixModal(); }
 
@@ -1575,7 +1586,7 @@
           <textarea
             aria-label="Message input"
             class="form-control chat-no-focus chat-no-zoom"
-            disabled={isCompacting}
+            disabled={isCompacting || stateStr === 'busy'}
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -1590,13 +1601,19 @@
             }}
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
-          <button class="btn btn-theme" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'busy'}>
-            {#if sending}
-              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-            {:else}
-              <i class="fas fa-paper-plane"></i>
-            {/if}
-          </button>
+          {#if stateStr === 'busy'}
+            <button type="button" class="btn btn-danger" aria-label="Cancel active" on:click={cancelActive}>
+              <i class="fas fa-stop"></i>
+            </button>
+          {:else}
+            <button class="btn btn-theme" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
+              {#if sending}
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              {:else}
+                <i class="fas fa-paper-plane"></i>
+              {/if}
+            </button>
+          {/if}
         </div>
       </form>
     {/if}
