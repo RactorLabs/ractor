@@ -1437,6 +1437,13 @@
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
+                  {#if hasCancelledSeg(m)}
+                  <div class="d-flex align-items-center text-body mt-3">
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
+                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                  </div>
+                  {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
@@ -1670,3 +1677,9 @@
     }
   </style>
  </div>
+  function hasCancelledSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'cancelled'); } catch(_) { return false; }
+  }
+  function cancelledReasonFrom(m) {
+    try { const s = segmentsOf(m).find((x) => segType(x) === 'cancelled'); return s ? String(s?.reason || '').trim() : ''; } catch(_) { return ''; }
+  }
