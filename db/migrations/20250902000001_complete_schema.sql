@@ -53,9 +53,12 @@ CREATE TABLE IF NOT EXISTS agents (
     
     -- Timeout functionality (idle/busy)
     idle_timeout_seconds INT NOT NULL DEFAULT 300,
-    busy_timeout_seconds INT NOT NULL DEFAULT 900,
+    busy_timeout_seconds INT NOT NULL DEFAULT 3600,
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
+    
+    -- Context cutoff marker for conversation trimming
+    context_cutoff_at TIMESTAMP NULL,
     
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
@@ -77,7 +80,8 @@ CREATE TABLE IF NOT EXISTS agents (
     INDEX idx_agents_parent_agent_name (parent_agent_name),
     INDEX idx_agents_published (is_published, published_at),
     INDEX idx_agents_idle_from (idle_from, state),
-    INDEX idx_agents_busy_from (busy_from, state)
+    INDEX idx_agents_busy_from (busy_from, state),
+    INDEX idx_agents_context_cutoff (context_cutoff_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Agent Responses (new composite model)
@@ -85,7 +89,7 @@ CREATE TABLE IF NOT EXISTS agent_responses (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     agent_name VARCHAR(64) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed')),
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
     input JSON NOT NULL,
     output JSON NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -93,7 +97,8 @@ CREATE TABLE IF NOT EXISTS agent_responses (
     CONSTRAINT fk_responses_agent FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE,
     INDEX idx_agent_responses_agent_name (agent_name),
     INDEX idx_agent_responses_created_by (created_by),
-    INDEX idx_agent_responses_created_at (created_at)
+    INDEX idx_agent_responses_created_at (created_at),
+    INDEX idx_agent_responses_agent_created_at_id (agent_name, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Agent Tasks

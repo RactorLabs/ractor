@@ -543,6 +543,15 @@
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
+  function hasCancelledSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'cancelled'); } catch(_) { return false; }
+  }
+  function cancelledReasonFrom(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'cancelled');
+      return s ? String(s?.reason || '').trim() : '';
+    } catch(_) { return ''; }
+  }
   function dateOnly(s) {
     try {
       const d = new Date(String(s || ''));
@@ -1677,9 +1686,3 @@
     }
   </style>
  </div>
-  function hasCancelledSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'cancelled'); } catch(_) { return false; }
-  }
-  function cancelledReasonFrom(m) {
-    try { const s = segmentsOf(m).find((x) => segType(x) === 'cancelled'); return s ? String(s?.reason || '').trim() : ''; } catch(_) { return ''; }
-  }
