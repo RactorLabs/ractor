@@ -745,7 +745,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "If helpful, include a short plain-text 'commentary' string in your tool call args to explain what you are doing (what, which paths, what command and why). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
+            let nudge = "Include a short plain-text 'commentary' string in EVERY tool call's args to explain what you are doing (what, which paths, what command and why). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -951,11 +951,11 @@ impl ResponseHandler {
         let api_url = format!("{}/api", base_url);
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 
-        // Embed Tool Commentary examples (no markdown; commentary is plain text)
+        // Embed Tool Commentary examples (no markdown; commentary is required plain text)
         let commentary_examples = r#"
 #### Tool Commentary Examples
 
-Include an optional plain-text 'commentary' field in your tool call args to briefly explain what you are about to do or what you just did.
+Include a plain-text 'commentary' field in every tool call args to briefly explain what you are doing.
 
 ```json
 {"tool_call": {"tool": "open_file", "args": {"path": "/agent/code/src/main.rs", "start_line": 1, "end_line": 60, "commentary": "Open main.rs to inspect the CLI entrypoint."}}}
@@ -1172,7 +1172,7 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
-- Optional tool commentary: You may include a short plain-text `commentary` field in your tool call args to explain what you are doing and why (what, paths, commands). This is displayed before the tool call in the Operator.
+- Required tool commentary: Include a short plain-text `commentary` field in EVERY tool call args to explain what you are doing and why (what, paths, commands). The Operator shows this before the tool call.
 - After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
 - Do not place final content directly in the assistant text. Emit results via `output`.
 
@@ -1299,7 +1299,7 @@ You have complete freedom to execute commands, install packages, and create solu
 
         // If an active plan file exists, add a short guidance note (do not inline the plan)
         if std::path::Path::new("/agent/plan.md").exists() {
-            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, optionally include a short 'commentary' in your next tool call to explain what you are doing, update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
+            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, then include a short 'commentary' in your next tool call to explain what you are doing, update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
         }
 
         prompt

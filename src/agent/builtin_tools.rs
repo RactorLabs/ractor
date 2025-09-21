@@ -56,14 +56,24 @@ impl Tool for ShellTool {
         serde_json::json!({
             "type": "object",
             "properties": {
+                "commentary": {"type": "string", "description": "Plain-text explanation of what you are doing (paths/commands/why)"},
                 "exec_dir": {"type": "string", "description": "Absolute path to directory where command should be executed"},
                 "commands": {"type": "string", "description": "Command(s) to execute. Use && for multi-step."}
             },
-            "required": ["exec_dir", "commands"]
+            "required": ["commentary", "exec_dir", "commands"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        let commentary_present = args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_some();
+        if !commentary_present {
+            return Ok(json!({"status":"error","tool":"run_bash","error":"commentary is required"}));
+        }
         let exec_dir = args
             .get("exec_dir")
             .and_then(|v| v.as_str())
@@ -117,16 +127,20 @@ impl Tool for OpenFileTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of what you are doing (paths/why)"},
                 "path": {"type":"string","description":"Absolute path to the file."},
                 "start_line": {"type":"integer","description":"Start line (optional)"},
                 "end_line": {"type":"integer","description":"End line (optional)"},
                 "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required":["path"]
+            "required":["commentary","path"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"open_file","error":"commentary is required"}));
+        }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let start_line = args
             .get("start_line")
@@ -169,15 +183,19 @@ impl Tool for CreateFileTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of what you are creating and why"},
                 "path": {"type":"string","description":"Absolute path to the file. File must not exist yet."},
                 "content": {"type":"string","description":"Content of the new file. Don't start with backticks."},
                 "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required":["path","content"]
+            "required":["commentary","path","content"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"create_file","error":"commentary is required"}));
+        }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let p = ensure_under_agent(path)?;
@@ -212,17 +230,21 @@ impl Tool for StrReplaceTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the replacement and why"},
                 "path": {"type":"string","description":"Absolute path to the file"},
                 "old_str": {"type":"string","description":"Original text to replace (exact match)"},
                 "new_str": {"type":"string","description":"Replacement text"},
                 "many": {"type":"boolean","description":"Whether to replace all occurrences (default false)"},
                 "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required":["path","old_str","new_str"]
+            "required":["commentary","path","old_str","new_str"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"str_replace","error":"commentary is required"}));
+        }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let old_str = args.get("old_str").and_then(|v| v.as_str()).unwrap_or("");
         let new_str = args.get("new_str").and_then(|v| v.as_str()).unwrap_or("");
@@ -267,16 +289,20 @@ impl Tool for InsertTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the insertion and why"},
                 "path": {"type":"string","description":"Absolute path to the file"},
                 "insert_line": {"type":"integer","description":"Line number to insert at (1-based)"},
                 "content": {"type":"string","description":"Content to insert"},
                 "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required":["path","insert_line","content"]
+            "required":["commentary","path","insert_line","content"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"insert","error":"commentary is required"}));
+        }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let line = args
             .get("insert_line")
@@ -313,16 +339,20 @@ impl Tool for RemoveStrTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the removal and why"},
                 "path": {"type":"string","description":"Absolute path to the file"},
                 "content": {"type":"string","description":"Exact string to remove (may be multi-line)"},
                 "many": {"type":"boolean","description":"Whether to remove all instances (default false)"},
                 "sudo": {"type":"boolean","description":"Ignored"}
             },
-            "required":["path","content"]
+            "required":["commentary","path","content"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"remove_str","error":"commentary is required"}));
+        }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -365,14 +395,18 @@ impl Tool for FindFilecontentTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the search and why"},
                 "path": {"type":"string","description":"Absolute path to a file or directory"},
                 "regex": {"type":"string","description":"Regex to search for"}
             },
-            "required":["path","regex"]
+            "required":["commentary","path","regex"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"find_filecontent","error":"commentary is required"}));
+        }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let pattern = args.get("regex").and_then(|v| v.as_str()).unwrap_or("");
         let re = Regex::new(pattern).map_err(|e| anyhow::anyhow!(e))?;
@@ -428,14 +462,18 @@ impl Tool for FindFilenameTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the filename search and why"},
                 "path": {"type":"string","description":"Absolute path of the directory to search in."},
                 "glob": {"type":"string","description":"Patterns to search for; separate multiple with '; '"}
             },
-            "required":["path","glob"]
+            "required":["commentary","path","glob"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"find_filename","error":"commentary is required"}));
+        }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let glob_str = args.get("glob").and_then(|v| v.as_str()).unwrap_or("");
         let _ = ensure_under_agent(root)?;
@@ -493,12 +531,15 @@ impl Tool for PublishTool {
         serde_json::json!({
             "type": "object",
             "properties": {
+                "commentary": { "type": "string", "description": "Plain-text explanation of why you are publishing" },
                 "note": { "type": "string", "description": "Optional reason or note" }
             }
+            ,"required":["commentary"]
         })
     }
 
     async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
+        // commentary required by schema; no-op at runtime
         match self.api.publish_agent().await {
             Ok(_) => Ok(
                 json!({"status":"ok","tool":"publish_agent","message":"Publish request submitted"}),
@@ -533,13 +574,18 @@ impl Tool for SleepTool {
         serde_json::json!({
             "type": "object",
             "properties": {
+                "commentary": { "type": "string", "description": "Plain-text explanation of why you are sleeping the agent" },
                 "note": { "type": "string", "description": "Optional reason or note (shown in chat)" },
                 "delay_seconds": { "type": "integer", "description": "Delay in seconds before sleeping (min/default 5)" }
-            }
+            },
+            "required":["commentary"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"sleep_agent","error":"commentary is required"}));
+        }
         let mut delay = args
             .get("delay_seconds")
             .and_then(|v| v.as_u64())
@@ -620,6 +666,7 @@ impl Tool for OutputTool {
         serde_json::json!({
             "type":"object",
             "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of the final outputs"},
                 "content": {
                     "type":"array",
                     "description":"List of outputs to present to the user",
@@ -634,11 +681,14 @@ impl Tool for OutputTool {
                     }
                 }
             },
-            "required":["content"]
+            "required":["commentary","content"]
         })
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"output","error":"commentary is required"}));
+        }
         let items_in = args
             .get("content")
             .and_then(|v| v.as_array())
@@ -728,10 +778,19 @@ impl Tool for ValidateResponseTool {
     }
 
     fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({ "type":"object", "properties":{} })
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of what you validated"}
+            },
+            "required":["commentary"]
+        })
     }
 
-    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"validate_response","error":"commentary is required"}));
+        }
         // Heuristic: pick the most recent response with status 'processing' (this flow),
         // otherwise fall back to the most recent response.
         let list = self.api.get_responses(None, None).await.unwrap_or_default();
