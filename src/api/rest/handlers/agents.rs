@@ -4,6 +4,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use sqlx::query;
 use sqlx::Row;
 use std::sync::Arc;
@@ -59,11 +60,61 @@ pub struct AgentResponse {
 pub struct ListAgentsQuery {
     pub state: Option<String>,
     pub q: Option<String>,
-    #[serde(default)]
-    pub tags: Option<Vec<String>>, // supports repeated tags=tag1&tags=tag2
+    // Accept both tags=alpha (single), tags=alpha&tags=beta (repeat), or tags[]=alpha
+    #[serde(default, deserialize_with = "deserialize_opt_string_or_seq")]
+    pub tags: Option<Vec<String>>,
     pub limit: Option<i64>,
     pub page: Option<i64>, // 1-based
     pub offset: Option<i64>, // takes precedence over page when provided
+}
+
+// Custom deserializer for query param that can be string or array
+fn deserialize_opt_string_or_seq<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringOrSeq;
+    impl<'de> Visitor<'de> for StringOrSeq {
+        type Value = Option<Vec<String>>;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a string, a sequence of strings, or null")
+        }
+        fn visit_unit<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+        fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(vec![v.to_string()]))
+        }
+        fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(vec![v]))
+        }
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut out: Vec<String> = Vec::new();
+            while let Some(item) = seq.next_element::<String>()? {
+                out.push(item);
+            }
+            Ok(Some(out))
+        }
+    }
+    deserializer.deserialize_any(StringOrSeq)
 }
 
 #[derive(Debug, Serialize)]
@@ -196,9 +247,14 @@ pub async fn list_agents(
             .flat_map(|s| s.split(',').map(|t| t.trim().to_lowercase()).collect::<Vec<_>>())
             .filter(|t| !t.is_empty())
             .collect();
-        for _t in list {
-            where_sql.push_str(" AND JSON_CONTAINS(tags, JSON_QUOTE(?), '$') ");
-            binds.push(serde_json::Value::String(_t));
+        if !list.is_empty() {
+            where_sql.push_str(" AND (");
+            for (idx, _t) in list.into_iter().enumerate() {
+                if idx > 0 { where_sql.push_str(" OR "); }
+                where_sql.push_str(" JSON_CONTAINS(tags, JSON_QUOTE(?), '$') ");
+                binds.push(serde_json::Value::String(_t));
+            }
+            where_sql.push_str(") ");
         }
     }
 
