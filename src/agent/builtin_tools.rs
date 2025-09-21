@@ -5,12 +5,9 @@ use super::api::RaworcClient;
 use super::tool_registry::Tool;
 use super::tools::{run_bash, text_edit, TextEditAction};
 use anyhow::anyhow;
-use chrono::Utc;
 use globset::{GlobBuilder, GlobSetBuilder};
-use rand::Rng;
 use regex::Regex;
 use serde_json::{json, Value};
-use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::fs;
@@ -18,7 +15,6 @@ use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 
 const AGENT_ROOT: &str = "/agent";
-const CURRENT_PLAN_MARKER: &str = "/agent/logs/current_plan.json";
 
 fn ensure_under_agent(path: &str) -> anyhow::Result<&Path> {
     let p = Path::new(path);
@@ -707,18 +703,18 @@ impl Tool for OutputTool {
     }
 }
 
-/// Intermediate Show tool: show
-/// Same schema and validation as output, but does not finalize and is intended for intermediate cards.
-pub struct ShowTool;
+/// Intermediate 'show_and_tell' tool: always keep the user informed
+/// Same schema and validation as output, but does not finalize and is intended for intermediate updates.
+pub struct ShowAndTellTool;
 
 #[async_trait]
-impl Tool for ShowTool {
+impl Tool for ShowAndTellTool {
     fn name(&self) -> &str {
-        "show"
+        "show_and_tell"
     }
 
     fn description(&self) -> &str {
-        "Show intermediate outputs to the user. Accepts the same structure as 'output' with { type: 'markdown'|'json'|'url', content }. May be called many times. Does not finalize the response."
+        "Show and tell intermediate updates to the user. Accepts the same structure as 'output' with { type: 'markdown'|'json'|'url', content }. Call after each step to explain what you did, which files you touched, and what commands you ran. Does not finalize the response."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -820,7 +816,9 @@ impl Tool for ValidateResponseTool {
         "validate_response"
     }
 
-    fn description(&self) -> &str { "Validate the current response: ensure an 'output' tool was called." }
+    fn description(&self) -> &str {
+        "Validate the current response: ensure an 'output' tool was called."
+    }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({ "type":"object", "properties":{} })
@@ -879,483 +877,18 @@ impl Tool for ValidateResponseTool {
     }
 }
 
-// ------------------------------
-// Planner tools
-// ------------------------------
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-struct PlanTask {
-    id: u32,
-    title: String,
-    status: String, // "pending" | "completed"
-    created_at: String,
-    completed_at: Option<String>,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-struct PlanFile {
-    plan_id: String,
-    title: String,
-    created_at: String,
-    tasks: Vec<PlanTask>,
-    #[serde(default)]
-    completed_at: Option<String>,
-}
+// (planner tools removed)
 
 // Normalize a task title for comparison so we can detect duplicates even if
 // the model copied decorations from the system prompt (checkboxes, IDs, etc.).
-fn normalize_task_title(s: &str) -> String {
-    let s = s.trim();
-    // Match and strip optional leading decorations then capture the core title.
-    // Covers:
-    // - optional "Next Task:" prefix
-    // - optional list checkbox like "- [ ]" or "- [x]"
-    // - optional id markers like "(#12)" or "#12 "
-    let re =
-        Regex::new(r"^\s*(?:Next Task:\s*)?(?:-\s*\[(?: |x|X)\]\s*)?(?:\(#\d+\)\s*|#\d+\s+)?(.*)$")
-            .unwrap();
-    let core = if let Some(caps) = re.captures(s) {
-        caps.get(1).map(|m| m.as_str()).unwrap_or(s)
-    } else {
-        s
-    };
-    // Collapse internal whitespace and lowercase
-    core.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
-}
+// (planner helpers removed)
 
-fn next_task_id(tasks: &[PlanTask]) -> u32 {
-    tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1
-}
+// (PlannerCreatePlanTool removed)
 
-async fn write_plan(path: &Path, plan: &PlanFile) -> anyhow::Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).await.ok();
-    }
-    let data = serde_json::to_string_pretty(plan)?;
-    let mut f = fs::File::create(path).await?;
-    f.write_all(data.as_bytes()).await?;
-    Ok(())
-}
+// (PlannerAddTaskTool removed)
 
-async fn read_plan(path: &Path) -> anyhow::Result<PlanFile> {
-    let s = fs::read_to_string(path).await?;
-    let plan: PlanFile = serde_json::from_str(&s)?;
-    Ok(plan)
-}
-
-async fn current_plan_path() -> anyhow::Result<String> {
-    let s = fs::read_to_string(CURRENT_PLAN_MARKER).await?;
-    let v: serde_json::Value = serde_json::from_str(&s)?;
-    let p = v
-        .get("path")
-        .and_then(|x| x.as_str())
-        .ok_or_else(|| anyhow!("no active plan"))?;
-    Ok(p.to_string())
-}
-
-fn ensure_logs_dir(p: &str) -> anyhow::Result<&Path> {
-    let path = ensure_under_agent(p)?;
-    // additionally enforce under /agent/logs
-    if !path.starts_with("/agent/logs") {
-        return Err(anyhow!("planner path must be under /agent/logs"));
-    }
-    Ok(path)
-}
-
-// New tool set with explicit names
-
-pub struct PlannerCreatePlanTool;
-
-#[async_trait]
-impl Tool for PlannerCreatePlanTool {
-    fn name(&self) -> &str {
-        "create_plan"
-    }
-
-    fn description(&self) -> &str {
-        "Creates a plan. Generates a plan file under /agent/logs and sets it as the active plan. Errors if no tasks are provided."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{
-                "title": {"type":"string","description":"Plan title (optional)"},
-                "tasks": {"type":"array","items":{"type":"string"},"description":"Initial task list (optional)"}
-            }
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        // If an active (non-completed) plan already exists, be idempotent: do not create another
-        if let Ok(marker_str) = fs::read_to_string(CURRENT_PLAN_MARKER).await {
-            if let Ok(marker_json) = serde_json::from_str::<serde_json::Value>(&marker_str) {
-                if let Some(path) = marker_json.get("path").and_then(|v| v.as_str()) {
-                    let p = ensure_logs_dir(path)?;
-                    if p.exists() {
-                        if let Ok(existing) = read_plan(p).await {
-                            if existing.completed_at.is_none() {
-                                return Ok(json!({
-                                    "status":"ok","tool":"create_plan",
-                                    "note":"plan already exists",
-                                    "path": path,
-                                    "tasks": existing.tasks.len()
-                                }));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let title = args
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Work Plan")
-            .to_string();
-        let initial_tasks: Vec<String> = args
-            .get("tasks")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect()
-            })
-            .unwrap_or_else(|| vec![]);
-
-        // Generate unique plan path under /agent/logs
-        let ts = Utc::now();
-        let suffix: u32 = rand::thread_rng().gen_range(10000..99999);
-        let filename = format!("plan_{}_{:05}.json", ts.format("%Y%m%d_%H%M%S"), suffix);
-        let full_path = format!("/agent/logs/{}", filename);
-        let path = Path::new(&full_path);
-
-        let mut tasks = Vec::new();
-        let mut seen: HashSet<String> = HashSet::new();
-        for t in initial_tasks {
-            let norm = normalize_task_title(&t);
-            if seen.contains(&norm) {
-                continue;
-            }
-            seen.insert(norm);
-            tasks.push(PlanTask {
-                id: next_task_id(&tasks),
-                title: t,
-                status: "pending".to_string(),
-                created_at: Utc::now().to_rfc3339(),
-                completed_at: None,
-            });
-        }
-
-        // Reject empty task lists
-        if tasks.is_empty() {
-            return Ok(json!({
-                "status":"error",
-                "tool":"create_plan",
-                "error":"plan must include at least one task"
-            }));
-        }
-
-        let plan = PlanFile {
-            plan_id: filename.clone(),
-            title,
-            created_at: ts.to_rfc3339(),
-            tasks,
-            completed_at: None,
-        };
-        write_plan(path, &plan).await?;
-        // Record as current active plan
-        let marker = serde_json::json!({ "path": full_path });
-        let _ = fs::write(CURRENT_PLAN_MARKER, marker.to_string()).await;
-
-        Ok(json!({"status":"ok","tool":"create_plan","path": full_path, "tasks": plan.tasks.len()}))
-    }
-}
-
-pub struct PlannerAddTaskTool;
-
-#[async_trait]
-impl Tool for PlannerAddTaskTool {
-    fn name(&self) -> &str {
-        "add_task"
-    }
-    fn description(&self) -> &str {
-        "Adds a task to the active plan. Returns error if no active plan."
-    }
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{
-                "task": {"type":"string","description":"Task description"}
-            },
-            "required":["task"]
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        let task = args.get("task").and_then(|v| v.as_str()).unwrap_or("");
-        let plan_path = match current_plan_path().await {
-            Ok(p) => p,
-            Err(_) => {
-                return Ok(json!({"status":"error","tool":"add_task","error":"no active plan"}))
-            }
-        };
-        let path = ensure_logs_dir(&plan_path)?;
-        let mut plan = read_plan(path).await?;
-        // Reject duplicate task titles (robust normalization)
-        let norm_new = normalize_task_title(task);
-        if let Some(existing) = plan
-            .tasks
-            .iter()
-            .find(|t| normalize_task_title(&t.title) == norm_new)
-        {
-            // Treat as idempotent no-op to avoid error loops
-            return Ok(
-                json!({"status":"ok","tool":"add_task","note":"task already exists","task_id": existing.id}),
-            );
-        }
-        let id = next_task_id(&plan.tasks);
-        plan.tasks.push(PlanTask {
-            id,
-            title: task.to_string(),
-            status: "pending".to_string(),
-            created_at: Utc::now().to_rfc3339(),
-            completed_at: None,
-        });
-        write_plan(path, &plan).await?;
-        Ok(json!({"status":"ok","tool":"add_task","task_id": id}))
-    }
-}
-
-/// Read the active plan file and return its contents
-pub struct PlannerReadPlanTool;
-
-#[async_trait]
-impl Tool for PlannerReadPlanTool {
-    fn name(&self) -> &str {
-        "read_plan"
-    }
-
-    fn description(&self) -> &str {
-        "Reads the active plan file from /agent/logs and returns its JSON contents. Returns error if there is no active plan."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({"type":"object","properties":{}})
-    }
-
-    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
-        let plan_path = match current_plan_path().await {
-            Ok(p) => p,
-            Err(_) => {
-                return Ok(json!({"status":"error","tool":"read_plan","error":"no active plan"}))
-            }
-        };
-        let path = ensure_logs_dir(&plan_path)?;
-        let plan = read_plan(path).await?;
-        let plan_val = serde_json::to_value(plan).unwrap_or(serde_json::json!({}));
-        // Do not include the file path in the response to avoid prompting the model to read it directly
-        Ok(json!({"status":"ok","tool":"read_plan","plan": plan_val}))
-    }
-}
-
-pub struct PlannerCompleteTaskTool {
-    api_client: Arc<RaworcClient>,
-}
-
-impl PlannerCompleteTaskTool {
-    pub fn new(api_client: Arc<RaworcClient>) -> Self {
-        Self { api_client }
-    }
-}
-
-#[async_trait]
-impl Tool for PlannerCompleteTaskTool {
-    fn name(&self) -> &str {
-        "complete_task"
-    }
-    fn description(&self) -> &str {
-        "Completes one task in the active plan. For publish-related tasks, verify a content URL returns 200 under /content/{agent}. Returns error if no active plan."
-    }
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{
-                "task_id": {"type":"integer","description":"Task ID to complete"},
-                "verify_paths": {"type":"array","items":{"type":"string"},"description":"Optional list of files expected to exist when done"},
-                "verify_url": {"type":"string","description":"For publish tasks: full published URL to verify (must be under /content/{agent_name}/)"},
-                "force": {"type":"boolean","description":"Complete even if verification fails (default false)"}
-            },
-            "required":["task_id"]
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        let plan_path = match current_plan_path().await {
-            Ok(p) => p,
-            Err(_) => {
-                return Ok(
-                    json!({"status":"error","tool":"complete_task","error":"no active plan"}),
-                )
-            }
-        };
-        let path = ensure_logs_dir(&plan_path)?;
-        let mut plan = read_plan(path).await?;
-        let tid = args
-            .get("task_id")
-            .and_then(|v| v.as_u64())
-            .map(|n| n as u32)
-            .ok_or_else(|| anyhow!("task_id required"))?;
-        let verify: Vec<String> = args
-            .get("verify_paths")
-            .and_then(|v| v.as_array())
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .collect()
-            })
-            .unwrap_or_default();
-        let force = args.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
-
-        let mut missing: Vec<String> = Vec::new();
-        for p in verify.iter() {
-            if ensure_under_agent(p).is_err() {
-                missing.push(p.clone());
-                continue;
-            }
-            if !Path::new(p).exists() {
-                missing.push(p.clone());
-            }
-        }
-        if !missing.is_empty() && !force {
-            return Ok(
-                json!({"status":"error","tool":"complete_task","error":"verification failed","missing":missing}),
-            );
-        }
-
-        // Special handling for publish tasks: verify a published URL returns HTTP 200 under /content/{agent}
-        if let Some(this_task) = plan.tasks.iter().find(|t| t.id == tid) {
-            let title_lc = this_task.title.to_lowercase();
-            if title_lc.contains("publish") {
-                // Build expected prefix using RAWORC_HOST_URL and agent name from env or API
-                let base = std::env::var("RAWORC_HOST_URL").unwrap_or_else(|_| "".to_string());
-                let base = base.trim_end_matches('/').to_string();
-                // fallback if RAWORC_HOST_URL is missing
-                if base.is_empty() {
-                    return Ok(
-                        json!({"status":"error","tool":"complete_task","error":"RAWORC_HOST_URL not set; cannot verify published URL"}),
-                    );
-                }
-                let agent_name = self.api_client.agent_name().to_string();
-                // If still empty, we cannot verify agent path properly
-                if agent_name.is_empty() {
-                    return Ok(
-                        json!({"status":"error","tool":"complete_task","error":"Agent name not found; set RAWORC_AGENT_NAME to enable publish URL verification"}),
-                    );
-                }
-                let prefix = format!("{}/content/{}/", base, agent_name);
-                let verify_url = args
-                    .get("verify_url")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| format!("{}index.html", prefix));
-                if !verify_url.starts_with(&prefix) {
-                    return Ok(
-                        json!({"status":"error","tool":"complete_task","error":"verify_url must be under the agent content prefix","expected_prefix":prefix,"verify_url":verify_url}),
-                    );
-                }
-                // Perform HTTP GET
-                match reqwest::Client::new().get(&verify_url).send().await {
-                    Ok(resp) => {
-                        let status = resp.status().as_u16();
-                        if status != 200 && !force {
-                            return Ok(
-                                json!({"status":"error","tool":"complete_task","error":"publish verification failed","verify_url":verify_url,"status":status}),
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        if !force {
-                            return Ok(
-                                json!({"status":"error","tool":"complete_task","error":"failed to fetch verify_url","detail": e.to_string()}),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut updated = false;
-        for t in plan.tasks.iter_mut() {
-            if t.id == tid {
-                t.status = "completed".to_string();
-                t.completed_at = Some(Utc::now().to_rfc3339());
-                updated = true;
-                break;
-            }
-        }
-        if !updated {
-            return Ok(json!({"status":"error","tool":"complete_task","error":"task not found"}));
-        }
-        write_plan(path, &plan).await?;
-        Ok(
-            json!({"status":"ok","tool":"complete_task","task_id": tid, "verified_missing": missing}),
-        )
-    }
-}
-
-pub struct PlannerClearPlanTool;
-
-#[async_trait]
-impl Tool for PlannerClearPlanTool {
-    fn name(&self) -> &str {
-        "clear_plan"
-    }
-    fn description(&self) -> &str {
-        "Remove plan marker and mark the plan complete so it no longer appears in the system prompt."
-    }
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{}
-        })
-    }
-
-    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
-        let plan_path = match current_plan_path().await {
-            Ok(p) => p,
-            Err(_) => {
-                return Ok(json!({"status":"error","tool":"clear_plan","error":"no active plan"}))
-            }
-        };
-        let path = ensure_logs_dir(&plan_path)?;
-        let mut plan = read_plan(path).await?;
-        // Fail if there are any open (non-completed) tasks
-        let mut open: Vec<serde_json::Value> = Vec::new();
-        for t in plan.tasks.iter() {
-            if t.status.as_str() != "completed" {
-                open.push(json!({"id": t.id, "title": t.title}));
-            }
-        }
-        if !open.is_empty() {
-            return Ok(json!({
-                "status":"error",
-                "tool":"clear_plan",
-                "error":"cannot clear plan with open tasks",
-                "open_tasks": open
-            }));
-        }
-        plan.completed_at = Some(Utc::now().to_rfc3339());
-        write_plan(path, &plan).await?;
-        let _ = fs::remove_file(CURRENT_PLAN_MARKER).await;
-        Ok(json!({"status":"ok","tool":"clear_plan","path": plan_path}))
-    }
-}
+// (PlannerReadPlanTool removed)
+// Purged legacy planner tools (complete_task, clear_plan). Planning is now managed via /agent/plan.md.
 
 fn matches_default_ignored_dir(name: &str) -> bool {
     matches!(
