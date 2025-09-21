@@ -150,3 +150,4 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
     ('admin', 'Admin', 'admin');
+
