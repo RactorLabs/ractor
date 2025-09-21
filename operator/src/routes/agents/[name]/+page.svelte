@@ -456,7 +456,7 @@
     try { const n = String(t || '').toLowerCase(); return n === 'output' || n === 'output_markdown' || n === 'ouput_json' || n === 'output_json'; } catch (_) { return false; }
   }
   function isOutputSeg(s) { try { return segType(s) === 'tool_result' && isOutputToolName(segTool(s)); } catch (_) { return false; } }
-  function isShowSeg(s) { try { return segType(s) === 'tool_result' && String(segTool(s) || '').toLowerCase() === 'show'; } catch (_) { return false; } }
+  function isShowSeg(s) { try { const n = String(segTool(s) || '').toLowerCase(); return segType(s) === 'tool_result' && (n === 'show' || n === 'show_and_tell'); } catch (_) { return false; } }
   function outputMarkdownOfSeg(s) {
     try {
       const out = segOutput(s);
@@ -1569,7 +1569,7 @@
                       {/if}
                     {/if}
                   {/if}
-                  {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'show')}
+                  {#if (['show','show_and_tell'].includes(String(metaOf(m)?.tool_type || '').toLowerCase()))}
                     {#if m.content && m.content.trim()}
                       {#if parsedItemsFromTopCard(m).length > 0}
                         {#each parsedItemsFromTopCard(m) as it}
