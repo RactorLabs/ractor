@@ -538,8 +538,10 @@ impl Tool for PublishTool {
         })
     }
 
-    async fn execute(&self, _args: &serde_json::Value) -> Result<serde_json::Value> {
-        // commentary required by schema; no-op at runtime
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+            return Ok(json!({"status":"error","tool":"publish_agent","error":"commentary is required"}));
+        }
         match self.api.publish_agent().await {
             Ok(_) => Ok(
                 json!({"status":"ok","tool":"publish_agent","message":"Publish request submitted"}),
