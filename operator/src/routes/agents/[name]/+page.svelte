@@ -1317,12 +1317,13 @@
                             <div class="markdown-body">{@html renderMarkdown(segContent(s))}</div>
                           </div>
                         {/if}
-                      {:else if segType(s) === 'tool_commentary'}
-                        {#if showTools}
-                          <div class="small text-body mb-1" style="white-space: pre-wrap;">{segText(s)}</div>
-                        {/if}
+                      
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
+                        <!-- Optional commentary from args.commentary -->
+                        {#if typeof (segArgs(s)?.commentary) === 'string' && String(segArgs(s)?.commentary).trim()}
+                          <div class="small text-body mb-1" style="white-space: pre-wrap;">{String(segArgs(s).commentary).trim()}</div>
+                        {/if}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-1 justify-content-start">

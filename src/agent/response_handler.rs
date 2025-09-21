@@ -316,7 +316,7 @@ impl ResponseHandler {
                         continue;
                     }
 
-                    // Append thinking/commentary + optional tool commentary + tool_call (valid tool)
+                    // Append thinking/commentary + tool_call (valid tool)
                     let mut segs = Vec::new();
                     if let Some(thinking) = &model_resp.thinking {
                         if !thinking.trim().is_empty() {
@@ -326,19 +326,7 @@ impl ResponseHandler {
                     if !model_resp.content.trim().is_empty() {
                         segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
                     }
-                    // Extract optional 'commentary' field from args (if object) and store as its own segment before the tool_call
-                    let mut args_clean = args.clone();
-                    if let serde_json::Value::Object(ref mut map) = args_clean {
-                        if let Some(c) = map.remove("commentary") {
-                            if let Some(txt) = c.as_str() {
-                                let t = txt.trim();
-                                if !t.is_empty() {
-                                    segs.push(serde_json::json!({"type":"tool_commentary","text": t}));
-                                }
-                            }
-                        }
-                    }
-                    let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args_clean});
+                    let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
                     segs.push(seg_tool_call.clone());
                     let _ = self
                         .api_client
@@ -352,7 +340,7 @@ impl ResponseHandler {
                     _items_sent += segs.len();
 
                     // Also add an assistant message for the tool call into the in-memory conversation
-                    let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args_clean }}).to_string();
+                    let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
                     conversation.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: call_summary,
@@ -527,19 +515,7 @@ impl ResponseHandler {
                             if !model_resp.content.trim().is_empty() {
                                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
                             }
-                            // Extract optional commentary from args and store before tool call
-                            let mut args_clean = args.clone();
-                            if let serde_json::Value::Object(ref mut map) = args_clean {
-                                if let Some(c) = map.remove("commentary") {
-                                    if let Some(txt) = c.as_str() {
-                                        let t = txt.trim();
-                                        if !t.is_empty() {
-                                            segs.push(serde_json::json!({"type":"tool_commentary","text": t}));
-                                        }
-                                    }
-                                }
-                            }
-                            let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args_clean});
+                            let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
                             segs.push(seg_tool_call.clone());
                             let _ = self
                                 .api_client
@@ -551,7 +527,7 @@ impl ResponseHandler {
                                 )
                                 .await;
                             _items_sent += segs.len();
-                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args_clean }}).to_string();
+                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
                             conversation.push(ChatMessage {
                                 role: "assistant".to_string(),
                                 content: call_summary,
