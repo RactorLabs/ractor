@@ -48,6 +48,14 @@ export function getCommonSchemas() {
       { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When busy started' },
       { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff timestamp if set' },
     ],
+    ListAgentsResult: [
+      { name: 'items', type: 'Agent[]', desc: 'Array of agents for current page' },
+      { name: 'total', type: 'int', desc: 'Total agents matching filters' },
+      { name: 'limit', type: 'int', desc: 'Page size' },
+      { name: 'offset', type: 'int', desc: 'Row offset (0-based)' },
+      { name: 'page', type: 'int', desc: 'Current page number (1-based)' },
+      { name: 'pages', type: 'int', desc: 'Total page count' },
+    ],
     ResponseObject: [
       { name: 'id', type: 'string', desc: 'Response ID (UUID)' },
       { name: 'agent_name', type: 'string', desc: 'Agent name' },
@@ -310,9 +318,14 @@ export function getApiDocs(base) {
     title: 'Agents',
     description: 'Agent lifecycle and management endpoints (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List agents.', params: [
-        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state (e.g., init|idle|busy|slept)' }
-      ], example: `curl -s ${BASE}/api/v0/agents -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent', array: true }, responses: [{ status: 200, body: `[{"name":"demo","created_by":"admin","state":"idle","description":null,"parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}]` }] },
+      { method: 'GET', path: '/api/v0/agents', auth: 'bearer', desc: 'List/search agents with pagination.', params: [
+        { in: 'query', name: 'q', type: 'string', required: false, desc: 'Search substring over name and description (case-insensitive)' },
+        { in: 'query', name: 'tags', type: 'string|repeat', required: false, desc: 'Filter by tags (AND). Provide multiple tags as comma-separated or repeated params.' },
+        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|slept' },
+        { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
+        { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
+        { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
+      ], example: `curl -s ${BASE}/api/v0/agents?q=demo&tags=prod&tags=team&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListAgentsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
