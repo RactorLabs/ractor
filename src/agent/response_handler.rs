@@ -957,29 +957,29 @@ impl ResponseHandler {
         let api_url = format!("{}/api", base_url);
         let published_url = format!("{}/content/{}", base_url, agent_name_ctx);
 
-        // Embed Show examples separately to avoid `format!` brace escaping issues
+        // Embed Show_and_tell examples separately to avoid `format!` brace escaping issues
         let show_examples = r#"
 #### Show_and_tell Examples
 
-Use `show_and_tell` after every step to keep the user informed. Briefly announce what you will do next (1–2 sentences), then do it. Include file paths you edit and explain commands you run.
+Use `show_and_tell` immediately after completing a step to briefly explain what you just did. Include the exact file paths you touched and any commands you ran (with flags). Do NOT use `show_and_tell` to announce future steps.
 
 ```json
 {"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "I am going to clone the repository to /agent/code/app. Then I will run cargo build. I will explain the command flags used."}
+  {"type": "markdown", "content": "Completed: cloned the repository into /agent/code/app and ran 'cargo build --release'.\nPaths touched: /agent/code/app\nCommands: git clone <repo-url> /agent/code/app && cargo build --release\nResult: build succeeded."}
 ]}}}
 ```
 
 ```json
 {"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "Next: run unit tests (cargo test) to establish a baseline. I will paste the failing tests and summarize results."}
+  {"type": "markdown", "content": "Completed: implemented /api/v0/ping in src/api/rest/routes.rs and rebuilt.\nFiles: /agent/code/src/api/rest/routes.rs\nCommands: cargo build --release\nResult: binary compiled successfully."}
 ]}}}
 ```
 
 ```json
 {"tool_call": {"tool": "show_and_tell", "args": {"content": [
-  {"type": "markdown", "content": "Next: implement /api/v0/ping handler in src/api/rest/routes.rs, then build. I will show the path and explain the change."}
+  {"type": "markdown", "content": "Completed: created /agent/content/dashboard/index.html from template and published.\nFiles: /agent/content/dashboard/index.html\nCommands: (publish via tool/UI)\nPublished URL: {published_url}/dashboard/index.html"}
 ]}}}
-        ```
+```
 "#;
 
         // Planning is managed via /agent/plan.md (no tool example needed)
@@ -1184,15 +1184,15 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
-- Use `show_and_tell` after every step to keep the user informed: announce the next action, show the file paths you edited, and explain any commands you ran (and why). Keep it concise and actionable.
+- Use `show_and_tell` after completing each step to summarize what you just did: list the file paths you edited (absolute), and explain any commands you ran (and why). Do NOT use `show_and_tell` to announce future steps. Keep it concise and actionable.
 - `show_and_tell` never finalizes the response and can be called many times as you proceed.
 - Keep commentary focused on actions, paths, and commands.
 - After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
-- Do not place final content directly in the assistant text. Emit results via `output` and use `show_and_tell` to keep the user informed after each step.
+- Do not place final content directly in the assistant text. Emit results via `output` and use `show_and_tell` to keep the user informed after each completed step.
 
 Workflow examples for effective execution:
-- With a plan: `show_and_tell` (announce next step) → do the step(s) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
-- No plan needed: `show_and_tell` (announce next step) → do the step(s) → `output` (final results)
+- With a plan: do the step(s) → `show_and_tell` (what you just did) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
+- No plan needed: do the step(s) → `show_and_tell` (what you just did) → `output` (final results)
 
 {show_examples}
 ### Planning with plan.md
