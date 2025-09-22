@@ -215,18 +215,7 @@
       </div>
     </Card>
   </div>
-  <div class="col-xl-4">
-    <Card>
-      <div class="card-header fw-bold">Tips</div>
-      <div class="card-body small text-body text-opacity-75">
-        <ul class="mb-0 ps-3">
-          <li>Playground always uses the token from your login cookie.</li>
-          <li>Login first, then call protected endpoints here.</li>
-          <li>Use additional query rows to include parameters not listed.</li>
-        </ul>
-      </div>
-    </Card>
-  </div>
+  <!-- Tips panel removed per request -->
 
   <style>
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
