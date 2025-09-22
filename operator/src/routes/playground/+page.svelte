@@ -146,9 +146,6 @@
             </select>
           </div>
           <div class="col-12 col-md-4 d-flex justify-content-md-end align-items-center gap-2 text-md-end">
-            {#if cookieToken}
-              <span class="badge bg-secondary">Cookie token</span>
-            {/if}
             <button class="btn btn-theme" on:click|preventDefault={execute} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Calling…{:else}Call API{/if}
             </button>
