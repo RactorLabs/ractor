@@ -58,6 +58,9 @@
                 <div class="fs-20px fw-bold">{hostName} Admin APIs</div>
                 <div class="text-body text-opacity-75">Endpoints restricted to admin operators.</div>
               </div>
+              <div class="d-flex justify-content-center gap-2 mb-2">
+                <a href="/login/operator" class="btn btn-outline-theme btn-sm" aria-label="Operator Login">Operator Login</a>
+              </div>
               {#if !isAdmin}
                 <div class="alert alert-warning small mb-0">You are not logged in as an admin. Some endpoints may require admin privileges to access.</div>
               {/if}
