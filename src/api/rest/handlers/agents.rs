@@ -247,14 +247,9 @@ pub async fn list_agents(
             .flat_map(|s| s.split(',').map(|t| t.trim().to_lowercase()).collect::<Vec<_>>())
             .filter(|t| !t.is_empty())
             .collect();
-        if !list.is_empty() {
-            where_sql.push_str(" AND (");
-            for (idx, _t) in list.into_iter().enumerate() {
-                if idx > 0 { where_sql.push_str(" OR "); }
-                where_sql.push_str(" JSON_CONTAINS(tags, JSON_QUOTE(?), '$') ");
-                binds.push(serde_json::Value::String(_t));
-            }
-            where_sql.push_str(") ");
+        for _t in list {
+            where_sql.push_str(" AND JSON_CONTAINS(tags, JSON_QUOTE(?), '$') ");
+            binds.push(serde_json::Value::String(_t));
         }
     }
 
