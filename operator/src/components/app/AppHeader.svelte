@@ -65,6 +65,7 @@
             <div class="menu-icon"><i class="bi bi-grid-3x3-gap nav-icon"></i></div>
           </a>
           <div class="dropdown-menu fade dropdown-menu-end w-300px text-center p-0 mt-1">
+            <!-- Top row -->
             <div class="row row-grid gx-0">
               <div class="col-4">
                 <a href="/agents/create" aria-label="Create Agent" class="dropdown-item text-decoration-none p-3 bg-none">
@@ -84,6 +85,9 @@
                   <div class="fw-500 fs-10px text-inverse">PLAYGROUND</div>
                 </a>
               </div>
+            </div>
+            <!-- Bottom row (shows divider via .row-grid + .row-grid) -->
+            <div class="row row-grid gx-0">
               {#if isAdmin}
                 <div class="col-4">
                   <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">

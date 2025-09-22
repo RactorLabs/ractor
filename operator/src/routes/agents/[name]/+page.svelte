@@ -206,11 +206,11 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'slept') return 'fas fa-moon';
-    if (s === 'idle') return 'fas fa-sun';
-    if (s === 'busy') return 'fas fa-circle-notch fa-spin';
-    if (s === 'init') return 'fas fa-spinner fa-spin';
-    return 'fas fa-circle-dot';
+    if (s === 'slept') return 'bi bi-moon';
+    if (s === 'idle') return 'bi bi-sun';
+    if (s === 'busy') return 'spinner-border spinner-border-sm';
+    if (s === 'init') return 'spinner-border spinner-border-sm';
+    return 'bi bi-circle';
   }
 
   function normState(v) { return String(v || '').trim().toLowerCase(); }
@@ -1076,7 +1076,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeSleepModal}>Cancel</button>
-          <button class="btn btn-primary" on:click={confirmSleep}><i class="fas fa-moon me-1"></i>Sleep</button>
+          <button class="btn btn-primary" on:click={confirmSleep}><i class="bi bi-moon me-1"></i>Sleep</button>
         </div>
       </div>
     </div>
@@ -1156,12 +1156,12 @@
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if agent}
-                <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
+                <a class="fw-bold text-decoration-none fs-22px" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
                 {#if agent.is_published || agent.isPublished}
                   <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
                 {/if}
               {:else}
-                <div class="fw-bold">{name}</div>
+                <div class="fw-bold fs-22px">{name}</div>
               {/if}
             </div>
             <div class="small text-body text-opacity-75 flex-grow-1">{agent?.description || agent?.desc || 'No description'}</div>
@@ -1192,43 +1192,43 @@
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
                   <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
-                    <i class="fas fa-moon me-1"></i><span>Sleep</span>
+                    <i class="bi bi-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
                       <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                        <i class="fas fa-globe me-1"></i><span>Published</span>
+                        <i class="bi bi-globe me-1"></i><span>Published</span>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li>
-                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-2"></i>Open Public URL</a>
+                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-2"></i>Open Public URL</a>
                         </li>
                         <li>
-                          <button class="dropdown-item" on:click={publishAgent}><i class="fas fa-cloud-arrow-up me-2"></i>Publish New Version</button>
+                          <button class="dropdown-item" on:click={publishAgent}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
                         </li>
                         <li>
-                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="fas fa-eye-slash me-2"></i>Unpublish</button>
+                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
                         </li>
                       </ul>
                     </div>
-                  {:else}
-                    <button class="btn btn-secondary btn-sm" on:click={publishAgent} aria-label="Publish content">
-                      <i class="fas fa-cloud-arrow-up me-1"></i><span>Publish</span>
-                    </button>
-                  {/if}
+                {:else}
+                  <button type="button" class="btn btn-outline-secondary btn-sm" on:click={publishAgent} aria-label="Publish content">
+                    <i class="bi bi-cloud-arrow-up me-1"></i><span>Publish</span>
+                  </button>
+                {/if}
                 {/if}
                 <div class="dropdown">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={remixAgent}><i class="fas fa-code-branch me-2"></i>Remix</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTags}><i class="fas fa-tags me-2"></i>Edit Tags</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fas fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
+                    <li><button class="dropdown-item" on:click={remixAgent}><i class="bi bi-shuffle me-2"></i>Remix</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="fas fa-trash me-2"></i>Delete</button></li>
+                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="bi bi-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>
@@ -1268,10 +1268,10 @@
       <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context with LLM summary">Compact</button>
       <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear</button>
       <button class="btn btn-sm btn-outline-secondary" title="Expand all details" on:click={expandAllDetails} aria-label="Expand all">
-        <i class="fas fa-angles-down"></i>
+        <i class="bi bi-chevron-double-down"></i>
       </button>
       <button class="btn btn-sm btn-outline-secondary" title="Collapse all details" on:click={collapseAllDetails} aria-label="Collapse all">
-        <i class="fas fa-angles-up"></i>
+        <i class="bi bi-chevron-double-up"></i>
       </button>
       <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
@@ -1305,7 +1305,7 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill px-2 py-2 rounded-0 shadow-none" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
+      <div id="chat-body" class="flex-fill px-3 pt-3 pb-0 rounded-0 shadow-none border border-bottom-0 bg-transparent" style="overflow-y: auto; min-height: 0; height: 100%;">
           <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
         {#if chat && chat.length}
           {#each chat as m, i}
@@ -1345,7 +1345,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
                               </summary>
                               <div class="small text-body">
@@ -1369,7 +1369,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">{segToolTitle(s)}</span>
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
@@ -1384,7 +1384,7 @@
                           <div class="d-flex mb-1 justify-content-start">
                             <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge rounded-pill bg-transparent border text-body text-opacity-75 me-2 px-2 py-1" style="font-size: .7rem;">{toolLabel(segTool(s))}</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
                               </summary>
                               {#if isInProgress(m) || expandedSegments.has(segKey(m, j))}
@@ -1407,7 +1407,7 @@
                               {#each outputItemsOfSeg(s) as it, k}
                                 <details class="mb-2" open={true}>
                                   <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
-                                    <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                     {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                   </summary>
                                   {#if String(it?.type || '').toLowerCase() === 'markdown'}
@@ -1437,9 +1437,9 @@
                   </div>
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                     <span class="px-2 small">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasCancelledSeg(m)}
@@ -1451,9 +1451,9 @@
                   {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                     <span class="px-2 small">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextClearedSeg(m)}
@@ -1518,7 +1518,7 @@
                             {#each m.content_json.output_content as it}
                               <details class="mb-2" open={expandAll}>
                                 <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
-                                  <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </summary>
                                 {#if String(it?.type || '').toLowerCase() === 'markdown'}
@@ -1552,7 +1552,7 @@
                             {#each parsedItemsFromTopCard(m) as it}
                               <details class="mb-2" open={expandAll}>
                                 <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
-                                  <span class="badge rounded-pill bg-transparent border me-2 px-2 py-1" style="font-size: .7rem;">{typeBadge(it?.type)}</span>
+                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </summary>
                                 {#if String(it?.type || '').toLowerCase() === 'markdown'}
@@ -1593,8 +1593,8 @@
         </div>
         </div>
 
-      <form class="pt-2" on:submit|preventDefault={sendMessage}>
-        <div class="input-group chat-input-wrap">
+      <form class="pt-0" on:submit|preventDefault={sendMessage}>
+        <div class="input-group chat-input-wrap rounded-0 shadow-none border border-top-0 bg-transparent">
           <textarea
             aria-label="Message input"
             class="form-control form-control-lg shadow-none rounded-0 chat-input chat-no-zoom"
@@ -1615,14 +1615,14 @@
           ></textarea>
           {#if stateStr === 'busy'}
             <button type="button" class="btn btn-danger" aria-label="Cancel active" on:click={cancelActive}>
-              <i class="fas fa-stop"></i>
+              <i class="bi bi-stop"></i>
             </button>
           {:else}
             <button class="btn btn-theme rounded-0 shadow-none" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
-                <i class="fas fa-paper-plane"></i>
+                <i class="bi bi-send"></i>
               {/if}
             </button>
           {/if}
@@ -1632,26 +1632,11 @@
   </div>
 
   <style>
+    /* Remove any bottom gap inside the responses panel */
+    :global(#chat-body > *:last-child) { margin-bottom: 0 !important; }
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
     /* Chat input container adopts border; textarea is borderless */
-    /* Connected panel + composer borders (sharp, three-side split) */
-    :global(#chat-body) {
-      border-top: 1px solid var(--bs-border-color);
-      border-left: 1px solid var(--bs-border-color);
-      border-right: 1px solid var(--bs-border-color);
-      border-bottom: 0;
-      border-radius: 0;
-      background: var(--bs-body-bg);
-    }
-    :global(.chat-input-wrap) {
-      border-top: 0;
-      border-left: 1px solid var(--bs-border-color);
-      border-right: 1px solid var(--bs-border-color);
-      border-bottom: 1px solid var(--bs-border-color);
-      border-radius: 0;
-      background: var(--bs-body-bg);
-      box-shadow: none;
-    }
+    /* Borders handled via Bootstrap classes on containers */
     :global(textarea.chat-input) {
       border: 0 !important;
       outline: 0 !important;
@@ -1705,6 +1690,11 @@
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
     :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
+    /* Slightly darker separator lines for sleep/wake markers */
+    :global(#chat-body .chat-marker-hr) {
+      border: 0;
+      border-top: 2px dotted rgba(var(--bs-body-color-rgb), 0.85);
+    }
     /* Make the Published dropdown caret arrow a bit bigger */
     :global(.published-toggle.dropdown-toggle::after) {
       border-top-width: 0.5em;

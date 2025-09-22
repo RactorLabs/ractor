@@ -40,11 +40,11 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'slept') return 'fas fa-moon';
-    if (s === 'idle') return 'fas fa-sun';
-    if (s === 'busy') return 'fas fa-circle-notch fa-spin';
-    if (s === 'init') return 'fas fa-spinner fa-spin';
-    return 'fas fa-circle-dot';
+    if (s === 'slept') return 'bi bi-moon';
+    if (s === 'idle') return 'bi bi-sun';
+    if (s === 'busy') return 'spinner-border spinner-border-sm';
+    if (s === 'init') return 'spinner-border spinner-border-sm';
+    return 'bi bi-circle';
   }
 
 import { getHostUrl } from '$lib/branding.js';
@@ -192,7 +192,7 @@ import { getHostUrl } from '$lib/branding.js';
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
+    <a href="/agents/create" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
   </div>
   
   <!-- Filters row -->
@@ -200,22 +200,25 @@ import { getHostUrl } from '$lib/branding.js';
   <div class="w-100 mb-2">
     <form class="row g-2" on:submit|preventDefault={applyFilters}>
       <div class="col-12 col-md-6">
-        <div class="input-group input-group-sm">
+        <div class="input-group input-group-sm flex-nowrap">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
           <input class="form-control" placeholder="Search by name or description" bind:value={q} name="q" autocapitalize="none" />
         </div>
       </div>
       <div class="col-6 col-md-3">
-        <select class="form-select form-select-sm w-100" bind:value={stateFilter} aria-label="State filter" name="state">
-          <option value="">All states</option>
-          <option value="init">init</option>
-          <option value="idle">idle</option>
-          <option value="busy">busy</option>
-          <option value="slept">slept</option>
-        </select>
+        <div class="input-group input-group-sm flex-nowrap">
+          <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-activity"></i></span>
+          <select class="form-select form-select-sm" bind:value={stateFilter} aria-label="State filter" name="state">
+            <option value="">All states</option>
+            <option value="init">init</option>
+            <option value="idle">idle</option>
+            <option value="busy">busy</option>
+            <option value="slept">slept</option>
+          </select>
+        </div>
       </div>
       <div class="col-6 col-md-3">
-        <div class="input-group input-group-sm">
+        <div class="input-group input-group-sm flex-nowrap">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
           <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} name="tags" autocapitalize="none" />
         </div>
@@ -247,7 +250,7 @@ import { getHostUrl } from '$lib/branding.js';
         {:else if !agents || agents.length === 0}
           <div class="text-body text-opacity-75">No agents found.</div>
           <div class="mt-3">
-            <a href="/agents/create" class="btn btn-theme"><i class="bi bi-plus me-1"></i>Create your first agent</a>
+            <a href="/agents/create" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Create your first agent</a>
           </div>
         {:else}
           <div class="row g-3">
@@ -256,7 +259,7 @@ import { getHostUrl } from '$lib/branding.js';
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none" href={'/agents/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
+                      <a class="fw-bold text-decoration-none fs-18px" href={'/agents/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
                       {#if a.is_published}
                         <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
                       {/if}
@@ -285,29 +288,29 @@ import { getHostUrl } from '$lib/branding.js';
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
                           <button class="btn btn-outline-primary btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
-                            <i class="fas fa-moon me-1"></i><span>Sleep</span>
+                            <i class="bi bi-moon me-1"></i><span>Sleep</span>
                           </button>
                         {/if}
                         {#if a.is_published}
                           <div class="dropdown">
                           <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                              <i class="fas fa-globe me-1"></i><span>Published</span>
+                              <i class="bi bi-globe me-1"></i><span>Published</span>
                           </button>
                             <ul class="dropdown-menu dropdown-menu-end">
                               <li>
-                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="fas fa-up-right-from-square me-2"></i>Open Public URL</a>
+                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-2"></i>Open Public URL</a>
                               </li>
                               <li>
-                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}><i class="fas fa-cloud-arrow-up me-2"></i>Publish New Version</button>
+                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
                               </li>
                               <li>
-                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}><i class="fas fa-eye-slash me-2"></i>Unpublish</button>
+                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
                               </li>
                             </ul>
                           </div>
                         {:else}
-                          <button class="btn btn-secondary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
-                            <i class="fas fa-cloud-arrow-up me-1"></i><span>Publish</span>
+                          <button type="button" class="btn btn-outline-secondary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
+                            <i class="bi bi-cloud-arrow-up me-1"></i><span>Publish</span>
                           </button>
                         {/if}
                         <div class="dropdown">
@@ -315,10 +318,10 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}><i class="fas fa-code-branch me-2"></i>Remix</button></li>
-                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}><i class="fas fa-tags me-2"></i>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}><i class="bi bi-shuffle me-2"></i>Remix</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}><i class="fas fa-trash me-2"></i>Delete</button></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}><i class="bi bi-trash me-2"></i>Delete</button></li>
                           </ul>
                         </div>
                       </div>

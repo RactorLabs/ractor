@@ -124,11 +124,11 @@
         <div class="fw-bold fs-20px">Create Agent</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
-          <button class="btn btn-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Create agent">
+          <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
             {#if loading}
-              <span class="spinner-border spinner-border-sm me-2"></span>Creating…
+              <span class="spinner-border spinner-border-sm me-2"></span>Submitting…
             {:else}
-              <i class="bi bi-plus me-1"></i>Create Agent
+              Submit
             {/if}
           </button>
         </div>
@@ -209,7 +209,7 @@
             </div>
 
             <div class="col-12 d-flex gap-2">
-              <button class="btn btn-theme" disabled={loading}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Creating…{:else}Create Agent{/if}</button>
+              <button type="button" class="btn btn-outline-theme" on:click|preventDefault={submit} disabled={loading}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Submitting…{:else}Submit{/if}</button>
               <a class="btn btn-outline-secondary" href="/agents">Cancel</a>
             </div>
           </div>
