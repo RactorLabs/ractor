@@ -49,9 +49,6 @@
 	<!-- BEGIN brand -->
 	<div class="brand">
 		<a href="/" aria-label="link" class="brand-logo">
-			<span class="brand-img">
-    	<span class="brand-img-text text-theme">ர</span>
-    		</span>
             <span class="brand-text">{resolvedHostName}</span>
 		</a>
 	</div>
