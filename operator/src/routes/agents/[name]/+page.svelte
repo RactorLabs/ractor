@@ -1309,7 +1309,7 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill px-2 py-2 border rounded-2" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
+      <div id="chat-body" class="flex-fill px-2 py-2 rounded-0 shadow-none" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%; border: 0;">
         <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
         {#if chat && chat.length}
           {#each chat as m, i}
