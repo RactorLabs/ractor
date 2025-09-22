@@ -79,12 +79,7 @@
                   <div class="fw-500 fs-10px text-inverse">AGENTS</div>
                 </a>
               </div>
-              <div class="col-4">
-                <a href="/playground" aria-label="Playground" class="dropdown-item text-decoration-none p-3 bg-none">
-                  <div><i class="bi bi-joystick h2 opacity-5 d-block my-1"></i></div>
-                  <div class="fw-500 fs-10px text-inverse">PLAYGROUND</div>
-                </a>
-              </div>
+              
             </div>
             <!-- Bottom row (shows divider via .row-grid + .row-grid) -->
             <div class="row row-grid gx-0">
