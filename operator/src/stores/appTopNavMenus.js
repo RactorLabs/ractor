@@ -3,7 +3,6 @@ import { writable } from 'svelte/store';
 const menus = [
   { 'url': '/', 'icon': 'bi bi-house-door', 'text': 'Home' },
   { 'url': '/agents', 'icon': 'bi bi-robot', 'text': 'Agents' },
-  { 'url': '/agents/create', 'icon': 'bi bi-plus-circle', 'text': 'Create Agent' },
   { 'url': '/playground', 'icon': 'bi bi-joystick', 'text': 'API Playground' },
   { 'url': '/docs', 'icon': 'bi bi-journal-text', 'text': 'Documentation' }
 ];
