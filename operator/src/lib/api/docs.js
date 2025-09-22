@@ -289,6 +289,11 @@ export function getApiDocs(base) {
     title: 'Operators',
     description: 'Operator management endpoints (protected).',
     endpoints: [
+      { method: 'POST', path: '/api/v0/operators/{name}/login', auth: 'public', adminOnly: true, desc: 'Operator login with username and password. Returns JWT token and user info.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Operator username' },
+        { in: 'body', name: 'pass', type: 'string', required: true, desc: 'Operator password' },
+        { in: 'body', name: 'ttl_hours', type: 'number', required: false, desc: 'Optional token TTL in hours; omit or <= 0 for no expiry (default)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/operators/<name>/login -H "Content-Type: application/json" -d '{"pass":"<password>","ttl_hours":24}'\n\n# ttl_hours is optional. Omit or set <=0 for no expiry (default).`, resp: { schema: 'TokenResponse' }, responses: [ { status: 200, body: `{"token":"<jwt>","token_type":"Bearer","expires_at":"2025-01-01T12:34:56Z","user":"admin","role":"admin"}` } ] },
       { method: 'GET', path: '/api/v0/operators', auth: 'bearer', desc: 'List operators.', adminOnly: true, params: [], example: `curl -s ${BASE}/api/v0/operators -H "Authorization: Bearer <token>"`, resp: { schema: 'Operator', array: true }, responses: [{ status: 200, body: `[{"user":"admin","description":null,"active":true,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","last_login_at":"2025-01-01T12:00:00Z"}]` }] },
       { method: 'POST', path: '/api/v0/operators', auth: 'bearer', desc: 'Create operator.', adminOnly: true, params: [
         { in: 'body', name: 'user', type: 'string', required: true, desc: 'Operator username' },
