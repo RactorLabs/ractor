@@ -1598,10 +1598,10 @@
       </div>
 
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
-        <div class="input-group">
+        <div class="input-group chat-input-wrap">
           <textarea
             aria-label="Message input"
-            class="form-control chat-no-focus chat-no-zoom"
+            class="form-control chat-input chat-no-zoom"
             disabled={isCompacting || stateStr === 'busy'}
             placeholder="Type a message…"
             rows="2"
@@ -1637,12 +1637,22 @@
 
   <style>
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-    /* Restore default border/background for chat input */
-    /* Remove focus border and shadow on the chat input to match template behavior */
-    :global(.chat-no-focus:focus) {
+    /* Chat input container adopts border; textarea is borderless */
+    :global(.chat-input-wrap) {
+      border: 1px solid var(--bs-border-color);
+      border-radius: .5rem;
+      background: var(--bs-body-bg);
+      overflow: hidden; /* clip inner corners */
+    }
+    :global(.chat-input-wrap:focus-within) {
+      border-color: rgba(var(--bs-theme-rgb), .5);
+      box-shadow: 0 0 0 .25rem rgba(var(--bs-theme-rgb), .15);
+    }
+    :global(textarea.chat-input) {
+      border: 0 !important;
       outline: 0 !important;
       box-shadow: none !important;
-      border-color: var(--bs-border-color) !important; /* keep neutral border on focus */
+      background: transparent !important;
     }
     :global(.markdown-body) { white-space: normal; }
     :global(.markdown-body p) { margin-bottom: 0.5rem; }
