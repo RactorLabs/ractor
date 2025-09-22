@@ -75,7 +75,7 @@
     <div class="col-12 col-xxl-8">
       <Card>
         <div class="card-header fw-bold d-flex align-items-center">
-          <div>Generate User Token</div>
+          <div class="fs-20px">Generate User Token</div>
         </div>
         <div class="card-body">
           <div class="alert alert-info small">You are logged in as <strong>{operatorName || 'admin'}</strong>. Enter any user name to mint a token for that user.</div>

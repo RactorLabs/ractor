@@ -11,7 +11,7 @@
   <div class="col-xl-12">
     <Card>
       <div class="card-body">
-        <div class="fs-18px fw-bold mb-1">Welcome</div>
+        <div class="fs-20px fw-bold mb-1">Welcome</div>
   <div class="text-body text-opacity-75">Hello, {name}. Use the navigation to manage agents and view responses. Interactive pages require your active session.</div>
       </div>
     </Card>

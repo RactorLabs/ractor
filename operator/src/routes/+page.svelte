@@ -11,7 +11,7 @@
   <div class="col-xl-12">
     <Card>
       <div class="card-body p-4">
-        <div class="fs-18px fw-bold mb-1">Welcome to {hostName}</div>
+        <div class="fs-20px fw-bold mb-1">Welcome to {hostName}</div>
         <div class="text-body text-opacity-75">Use the navigation to explore the UI and API documentation.</div>
         <div class="mt-3">
           <a href="/docs" class="btn btn-outline-theme">View API Documentation</a>
