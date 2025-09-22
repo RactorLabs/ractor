@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { goto } from '$app/navigation';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
@@ -145,17 +145,13 @@ import { getHostUrl } from '$lib/branding.js';
     } catch (_) {}
   }
 
-  let searchTimer;
-  function onFiltersChanged() {
-    if (searchTimer) clearTimeout(searchTimer);
-    searchTimer = setTimeout(async () => {
-      pageNum = 1;
-      syncUrl();
-      loading = true;
-      await fetchAgents();
-      loading = false;
-      startPolling();
-    }, 250);
+  async function applyFilters() {
+    pageNum = 1;
+    syncUrl();
+    loading = true;
+    await fetchAgents();
+    loading = false;
+    startPolling();
   }
 
   onMount(async () => {
@@ -203,15 +199,15 @@ import { getHostUrl } from '$lib/branding.js';
   <!-- Filters row -->
   <div class="w-100"></div>
   <div class="w-100 mb-2">
-    <div class="row g-2">
+    <form class="row g-2" on:submit|preventDefault={applyFilters}>
       <div class="col-12 col-md-6">
         <div class="input-group input-group-sm">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
-          <input class="form-control" placeholder="Search by name or description" bind:value={q} on:input={onFiltersChanged} autocapitalize="none" />
+          <input class="form-control" placeholder="Search by name or description" bind:value={q} name="q" autocapitalize="none" />
         </div>
       </div>
       <div class="col-6 col-md-3">
-        <select class="form-select form-select-sm w-100" bind:value={stateFilter} on:change={onFiltersChanged} aria-label="State filter">
+        <select class="form-select form-select-sm w-100" bind:value={stateFilter} aria-label="State filter" name="state">
           <option value="">All states</option>
           <option value="init">init</option>
           <option value="idle">idle</option>
@@ -222,13 +218,16 @@ import { getHostUrl } from '$lib/branding.js';
       <div class="col-6 col-md-3">
         <div class="input-group input-group-sm">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
-          <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} on:input={onFiltersChanged} autocapitalize="none" />
+          <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} name="tags" autocapitalize="none" />
         </div>
+      </div>
+      <div class="col-12 col-md-auto">
+        <button type="submit" class="btn btn-outline-secondary btn-sm w-100"><i class="bi bi-funnel me-1"></i>Apply Filter</button>
       </div>
       <div class="col-12 d-md-none">
         <div class="small text-body text-opacity-75">{total} total</div>
       </div>
-    </div>
+    </form>
   </div>
 </div>
 
