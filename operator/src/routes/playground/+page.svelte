@@ -195,7 +195,7 @@
 
         <div class="mt-3">
           <div class="fw-500 small text-body text-opacity-75 mb-1">Request</div>
-          <div class="small"><span class="badge bg-secondary me-2">{selected.method}</span><span class="font-monospace">{buildUrl()}</span></div>
+          <div class="small mb-2"><span class="badge bg-secondary me-2">{selected.method}</span><span class="font-monospace">{buildUrl()}</span></div>
           <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{formatCurl()}</code></pre>
         </div>
 
