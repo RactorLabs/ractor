@@ -79,29 +79,28 @@
                   <div class="fw-500 fs-10px text-inverse">AGENTS</div>
                 </a>
               </div>
-              
-            </div>
-            <!-- Bottom row (shows divider via .row-grid + .row-grid) -->
-            <div class="row row-grid gx-0">
-              {#if isAdmin}
-                <div class="col-4">
-                  <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
-                    <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>
-                    <div class="fw-500 fs-10px text-inverse">TOKENS</div>
-                  </a>
-                </div>
-              {/if}
               <div class="col-4">
                 <a href="/docs" aria-label="Docs" class="dropdown-item text-decoration-none p-3 bg-none">
                   <div><i class="bi bi-journal-text h2 opacity-5 d-block my-1"></i></div>
                   <div class="fw-500 fs-10px text-inverse">DOCS</div>
                 </a>
               </div>
+            </div>
+            <!-- Bottom row (shows divider via .row-grid + .row-grid) -->
+            <div class="row row-grid gx-0">
               {#if isAdmin}
                 <div class="col-4">
                   <a href="/docs/admin" aria-label="Admin APIs" class="dropdown-item text-decoration-none p-3 bg-none">
                     <div><i class="bi bi-shield-lock h2 opacity-5 d-block my-1"></i></div>
                     <div class="fw-500 fs-10px text-inverse">ADMIN APIs</div>
+                  </a>
+                </div>
+              {/if}
+              {#if isAdmin}
+                <div class="col-4">
+                  <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
+                    <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>
+                    <div class="fw-500 fs-10px text-inverse">TOKENS</div>
                   </a>
                 </div>
               {/if}
