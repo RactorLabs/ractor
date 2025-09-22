@@ -11,7 +11,7 @@
   // Compute docs once reactively and order Published section last
   $: docs = (() => {
     const list = (getApiDocs($page?.data?.hostUrl) || [])
-      .filter((sec) => sec.id !== 'auth') // hide authentication section from public docs
+      .filter((sec) => sec.id !== 'auth' && sec.id !== 'content') // hide auth + content sections from public docs
       .map((sec) => ({ ...sec, endpoints: (sec.endpoints || []).filter((ep) => !ep.adminOnly) }))
       .filter((sec) => (sec.endpoints || []).length > 0);
     return [
