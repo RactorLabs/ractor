@@ -54,6 +54,11 @@ mapfile -t ORDERED < <(process_args "${ORDERED[@]}")
 for COMPONENT in "${ORDERED[@]}"; do
   echo "[INFO] Rebuilding component: $COMPONENT"
 
+  # 1) Build first to minimize downtime
+  echo "[INFO] Building $COMPONENT..."
+  bash "$(dirname "$0")/build.sh" "$COMPONENT"
+
+  # 2) Stop the running container (when applicable)
   if [[ "$COMPONENT" != "agent" ]]; then
     echo "[INFO] Stopping $COMPONENT..."
     if command -v raworc >/dev/null 2>&1; then
@@ -65,9 +70,7 @@ for COMPONENT in "${ORDERED[@]}"; do
     echo "[INFO] Skipping stop for agent (no standalone agent container)"
   fi
 
-  echo "[INFO] Building $COMPONENT..."
-  bash "$(dirname "$0")/build.sh" "$COMPONENT"
-
+  # 3) Start the container so it picks up the freshly built image
   if [[ "$COMPONENT" != "agent" ]]; then
     echo "[INFO] Starting $COMPONENT..."
     if command -v raworc >/dev/null 2>&1; then
