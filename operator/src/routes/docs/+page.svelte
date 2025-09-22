@@ -102,12 +102,12 @@
     
 
     {#each docs as section}
-      <Card id={section.id} class="mb-3">
-        <div class="card-header">
-          <div class="fw-bold">{section.title}</div>
+      <div id={section.id} class="mb-3">
+        <div class="mb-2">
+          <div class="fw-bold fs-5">{section.title}</div>
           <div class="text-body text-opacity-75 small">{section.description}</div>
         </div>
-        <div class="card-body p-3 p-sm-4">
+        <div>
           <div class="row g-3">
             {#each section.endpoints as ep}
               <div class="col-12">
@@ -219,7 +219,7 @@
             {/each}
           </div>
         </div>
-      </Card>
+      </div>
     {/each}
 
     <!-- Moved reference sections to end -->
