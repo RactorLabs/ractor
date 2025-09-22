@@ -67,6 +67,12 @@
           <div class="dropdown-menu fade dropdown-menu-end w-300px text-center p-0 mt-1">
             <div class="row row-grid gx-0">
               <div class="col-4">
+                <a href="/agents/create" aria-label="Create Agent" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-plus-circle h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">CREATE</div>
+                </a>
+              </div>
+              <div class="col-4">
                 <a href="/agents" aria-label="Agents" class="dropdown-item text-decoration-none p-3 bg-none">
                   <div><i class="bi bi-robot h2 opacity-5 d-block my-1"></i></div>
                   <div class="fw-500 fs-10px text-inverse">AGENTS</div>
