@@ -133,7 +133,7 @@
   <div class="col-xl-8">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
-        <div class="fw-bold">API Playground</div>
+        <div class="fw-bold fs-20px">API Playground</div>
       </div>
       <div class="card-body">
         <div class="row g-3 align-items-end">

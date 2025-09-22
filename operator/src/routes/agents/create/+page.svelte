@@ -121,7 +121,7 @@
   <div class="col-xl-8">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
-        <div class="fw-bold">Create Agent</div>
+        <div class="fw-bold fs-20px">Create Agent</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
           <button class="btn btn-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Create agent">

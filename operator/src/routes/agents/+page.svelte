@@ -190,7 +190,7 @@ import { getHostUrl } from '$lib/branding.js';
   </div>
 {/if}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-  <div class="fw-bold fs-5">Agents</div>
+  <div class="fw-bold fs-20px">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
     <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
   </div>

@@ -69,7 +69,7 @@
           {#each adminDocs as section}
             <div id={section.id} class="mb-3">
               <div class="mb-2">
-                <div class="fw-bold fs-5">{section.title}</div>
+                <div class="fw-bold fs-20px">{section.title}</div>
                 <div class="text-body text-opacity-75 small">{section.description}</div>
               </div>
               <div>
