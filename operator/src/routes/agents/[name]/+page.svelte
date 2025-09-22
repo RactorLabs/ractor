@@ -1601,7 +1601,7 @@
         <div class="input-group chat-input-wrap">
           <textarea
             aria-label="Message input"
-            class="form-control chat-input chat-no-zoom"
+            class="form-control form-control-lg shadow-none rounded-0 chat-input chat-no-zoom"
             disabled={isCompacting || stateStr === 'busy'}
             placeholder="Type a message…"
             rows="2"
@@ -1622,7 +1622,7 @@
               <i class="fas fa-stop"></i>
             </button>
           {:else}
-            <button class="btn btn-theme" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
+            <button class="btn btn-theme rounded-0 shadow-none" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
@@ -1638,22 +1638,15 @@
   <style>
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
     /* Chat input container adopts border; textarea is borderless */
-    :global(.chat-input-wrap) {
-      border: 1px solid var(--bs-border-color);
-      border-radius: .5rem;
-      background: var(--bs-body-bg);
-      overflow: hidden; /* clip inner corners */
-    }
-    :global(.chat-input-wrap:focus-within) {
-      border-color: rgba(var(--bs-theme-rgb), .5);
-      box-shadow: 0 0 0 .25rem rgba(var(--bs-theme-rgb), .15);
-    }
+    :global(.chat-input-wrap) { border: 0; background: transparent; box-shadow: none; }
+    :global(.chat-input-wrap:focus-within) { border: 0; box-shadow: none; }
     :global(textarea.chat-input) {
       border: 0 !important;
       outline: 0 !important;
       box-shadow: none !important;
       background: transparent !important;
     }
+    :global(textarea.chat-input:focus) { border-color: var(--bs-border-color) !important; }
     :global(.markdown-body) { white-space: normal; }
     :global(.markdown-body p) { margin-bottom: 0.5rem; }
     :global(.markdown-body pre) {
