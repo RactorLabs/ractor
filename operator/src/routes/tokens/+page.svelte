@@ -87,7 +87,7 @@
             <input id="user" class="form-control" bind:value={username} placeholder="e.g., alice" />
           </div>
           <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-theme" on:click|preventDefault={generateToken} disabled={loading}>
+            <button class="btn btn-outline-theme" on:click|preventDefault={generateToken} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Token{/if}
             </button>
           </div>
