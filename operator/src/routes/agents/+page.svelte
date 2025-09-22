@@ -192,7 +192,6 @@ import { getHostUrl } from '$lib/branding.js';
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-5">Agents</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <div class="small text-body text-opacity-75 d-none d-md-block">{total} total</div>
     <a href="/agents/create" class="btn btn-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
   </div>
   
@@ -223,6 +222,10 @@ import { getHostUrl } from '$lib/branding.js';
       </div>
       <div class="col-12 col-md-auto">
         <button type="submit" class="btn btn-outline-secondary btn-sm w-100"><i class="bi bi-funnel me-1"></i>Apply Filter</button>
+      </div>
+      <!-- Desktop total aligned to far right -->
+      <div class="col-12 col-md-auto ms-md-auto d-none d-md-flex align-items-center">
+        <div class="small text-body text-opacity-75">{total} total</div>
       </div>
       <div class="col-12 d-md-none">
         <div class="small text-body text-opacity-75">{total} total</div>
