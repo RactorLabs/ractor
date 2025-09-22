@@ -1307,8 +1307,7 @@
     {:else}
       <div id="chat-body" class="flex-fill px-3 pt-3 pb-0 rounded-0 shadow-none border border-bottom-0 bg-transparent" style="overflow-y: auto; min-height: 0; height: 100%;">
           <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
-        {#if chat && chat.length}
-          {#each chat as m, i}
+          {#each (chat || []) as m, i}
             {#if m.role === 'user'}
               <div class="d-flex mb-3 justify-content-end">
                 <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
@@ -1400,38 +1399,37 @@
                           </div>
                         {/if}
                         {/if}
-                        <!-- Always render output_* content inline during processing -->
-                        {#if isOutputSeg(s)}
-                          <Card class="mt-2 mb-2">
-                            <div class="card-body py-2">
-                              {#each outputItemsOfSeg(s) as it, k}
-                                <details class="mb-2" open={true}>
-                                  <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
-                                    <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
-                                    {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                  </summary>
-                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-wrap mt-1 mb-2">
-                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                      </div>
-                                    {/if}
-                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                    {/if}
-                                  {/if}
-                                </details>
-                              {/each}
-                          </div>
-                          </Card>
-                        {/if}
-                        
                       {:else if segType(s) === 'slept'}
                         <!-- handled below as a full-width marker -->
                       {/if}
+                    <!-- Always render output_* content inline during processing -->
+                    {#if isOutputSeg(s)}
+                      <Card class="mt-2 mb-2">
+                        <div class="card-body py-2">
+                          {#each outputItemsOfSeg(s) as it, k}
+                            <details class="mb-2" open={true}>
+                              <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
+                                {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
+                              </summary>
+                              {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                {#if typeof it?.content === 'string' && it.content.trim()}
+                                  <div class="markdown-wrap mt-1 mb-2">
+                                    <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                  </div>
+                                {/if}
+                              {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                              {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                {#if typeof it?.content === 'string' && it.content.trim()}
+                                  <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                {/if}
+                              {/if}
+                            </details>
+                          {/each}
+                        </div>
+                      </Card>
+                    {/if}
                     {/each}
                     </div>
                   </div>
@@ -1578,10 +1576,9 @@
                   
                 {/if}
               {/if}
-              {/if}
+            {/if}
             {/if}
           {/each}
-        {/if}
         {#if stateStr === 'busy'}
           <div class="d-flex mb-2 justify-content-start">
             <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
@@ -1589,10 +1586,9 @@
               <span>Working...</span>
             </div>
           </div>
-        {/if}
-        </div>
-        </div>
-
+              {/if}
+            </div>
+          </div>
       <form class="pt-0" on:submit|preventDefault={sendMessage}>
         <div class="input-group chat-input-wrap rounded-0 shadow-none border border-top-0 bg-transparent">
           <textarea
@@ -1614,11 +1610,11 @@
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
           {#if stateStr === 'busy'}
-            <button type="button" class="btn btn-danger" aria-label="Cancel active" on:click={cancelActive}>
+            <button type="button" class="btn btn-outline-danger" aria-label="Cancel active" on:click={cancelActive}>
               <i class="bi bi-stop"></i>
             </button>
           {:else}
-            <button class="btn btn-theme rounded-0 shadow-none" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
+            <button class="btn btn-outline-theme rounded-0 shadow-none" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
@@ -1690,10 +1686,10 @@
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
     :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
-    /* Slightly darker separator lines for sleep/wake markers */
+    /* Darker, dotted separator lines for sleep/wake markers */
     :global(#chat-body .chat-marker-hr) {
       border: 0;
-      border-top: 2px dotted rgba(var(--bs-body-color-rgb), 0.85);
+      border-top: 2px dotted rgba(var(--bs-body-color-rgb), 1);
     }
     /* Make the Published dropdown caret arrow a bit bigger */
     :global(.published-toggle.dropdown-toggle::after) {
