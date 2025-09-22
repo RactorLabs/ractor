@@ -339,15 +339,27 @@ pub async fn cancel_active_response(
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Permission: same as update state
-    check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
-        .await
-        .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
+    // Admins must have AGENT_UPDATE; owners can cancel their own without RBAC grant
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
+    }
 
-    let agent = crate::shared::models::Agent::find_by_name(&state.db, &name)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+    // Resolve principal identity
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    // Confirm access to the agent; enforce ownership for non-admins
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    if !is_admin && agent.created_by != *username {
+        return Err(ApiError::Forbidden(
+            "You can only cancel your own agents".to_string(),
+        ));
+    }
 
     // Find latest in-progress response (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
