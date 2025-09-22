@@ -283,18 +283,14 @@ import { getHostUrl } from '$lib/branding.js';
                         <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
-                        {#if (a.state || '').toLowerCase() === 'slept'}
-                          <button class="btn btn-outline-success btn-sm" on:click={() => wakeAgent(a.name)} aria-label="Wake agent">
-                            <i class="fas fa-sun me-1"></i><span>Wake</span>
-                          </button>
-                        {:else if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-warning btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
+                        {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
                             <i class="fas fa-moon me-1"></i><span>Sleep</span>
                           </button>
                         {/if}
                         {#if a.is_published}
                           <div class="dropdown">
-                          <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                          <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
                               <i class="fas fa-globe me-1"></i><span>Published</span>
                           </button>
                             <ul class="dropdown-menu dropdown-menu-end">
@@ -310,7 +306,7 @@ import { getHostUrl } from '$lib/branding.js';
                             </ul>
                           </div>
                         {:else}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
+                          <button class="btn btn-secondary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
                             <i class="fas fa-cloud-arrow-up me-1"></i><span>Publish</span>
                           </button>
                         {/if}

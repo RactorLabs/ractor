@@ -1076,7 +1076,7 @@
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeSleepModal}>Cancel</button>
-          <button class="btn btn-warning" on:click={confirmSleep}><i class="fas fa-moon me-1"></i>Sleep</button>
+          <button class="btn btn-primary" on:click={confirmSleep}><i class="fas fa-moon me-1"></i>Sleep</button>
         </div>
       </div>
     </div>
@@ -1190,19 +1190,15 @@
               </div>
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
-                {#if stateStr === 'slept'}
-                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent} aria-label="Wake agent">
-                    <i class="fas fa-sun me-1"></i><span>Wake</span>
-                  </button>
-                {:else if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-warning btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
+                {#if stateStr === 'idle' || stateStr === 'busy'}
+                  <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
                     <i class="fas fa-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
-                      <button class="btn btn-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                      <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
                         <i class="fas fa-globe me-1"></i><span>Published</span>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
@@ -1218,7 +1214,7 @@
                       </ul>
                     </div>
                   {:else}
-                    <button class="btn btn-outline-primary btn-sm" on:click={publishAgent} aria-label="Publish content">
+                    <button class="btn btn-secondary btn-sm" on:click={publishAgent} aria-label="Publish content">
                       <i class="fas fa-cloud-arrow-up me-1"></i><span>Publish</span>
                     </button>
                   {/if}
@@ -1309,8 +1305,8 @@
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill px-2 py-2 rounded-0 shadow-none" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%; border: 0;">
-        <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
+      <div id="chat-body" class="flex-fill px-2 py-2 rounded-0 shadow-none" style="background: transparent; overflow-y: auto; min-height: 0; height: 100%;">
+          <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
         {#if chat && chat.length}
           {#each chat as m, i}
             {#if m.role === 'user'}
@@ -1595,7 +1591,7 @@
           </div>
         {/if}
         </div>
-      </div>
+        </div>
 
       <form class="pt-2" on:submit|preventDefault={sendMessage}>
         <div class="input-group chat-input-wrap">
@@ -1638,8 +1634,24 @@
   <style>
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
     /* Chat input container adopts border; textarea is borderless */
-    :global(.chat-input-wrap) { border: 0; background: transparent; box-shadow: none; }
-    :global(.chat-input-wrap:focus-within) { border: 0; box-shadow: none; }
+    /* Connected panel + composer borders (sharp, three-side split) */
+    :global(#chat-body) {
+      border-top: 1px solid var(--bs-border-color);
+      border-left: 1px solid var(--bs-border-color);
+      border-right: 1px solid var(--bs-border-color);
+      border-bottom: 0;
+      border-radius: 0;
+      background: var(--bs-body-bg);
+    }
+    :global(.chat-input-wrap) {
+      border-top: 0;
+      border-left: 1px solid var(--bs-border-color);
+      border-right: 1px solid var(--bs-border-color);
+      border-bottom: 1px solid var(--bs-border-color);
+      border-radius: 0;
+      background: var(--bs-body-bg);
+      box-shadow: none;
+    }
     :global(textarea.chat-input) {
       border: 0 !important;
       outline: 0 !important;
@@ -1666,6 +1678,26 @@
       background: rgba(0,0,0,0.06);
       padding: 0.1rem 0.25rem;
       border-radius: 0.2rem;
+    }
+    /* HUD-like chat bubbles via layout selectors (no markup change) */
+    :global(#chat-body .d-flex.mb-3.justify-content-end > div) {
+      background: var(--bs-theme);
+      color: var(--bs-theme-color);
+      padding: .5rem .75rem;
+      border-radius: .5rem;
+      max-width: 80%;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    :global(#chat-body .d-flex.mb-3.justify-content-start > .text-body) {
+      background: var(--bs-body-bg);
+      border: 1px solid var(--bs-border-color);
+      color: var(--bs-body-color);
+      padding: .5rem .75rem;
+      border-radius: .5rem;
+      display: inline-block;
+      max-width: 80%;
+      word-break: break-word;
     }
     :global(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
     :global(.markdown-body th), :global(.markdown-body td) { border: 1px solid var(--bs-border-color); padding: 0.375rem 0.5rem; }
