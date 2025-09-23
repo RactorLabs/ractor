@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{error, info, warn};
+const MAX_TOOL_OUTPUT_CHARS: usize = 8_000;
 
 pub struct ResponseHandler {
     api_client: Arc<RaworcClient>,
@@ -365,7 +366,7 @@ impl ResponseHandler {
                     });
 
                     // Execute tool and capture structured output
-                    let output_value: serde_json::Value = match self
+                    let mut output_value: serde_json::Value = match self
                         .tool_registry
                         .execute_tool(tool_name, args)
                         .await
@@ -375,6 +376,15 @@ impl ResponseHandler {
                             serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
                         }
                     };
+                    // Truncate large string fields proactively and mark truncation
+                    let mut was_truncated = false;
+                    output_value = truncate_output_json(output_value, MAX_TOOL_OUTPUT_CHARS, &mut was_truncated);
+                    if was_truncated {
+                        if let Some(obj) = output_value.as_object_mut() {
+                            let existing = obj.get("truncated").and_then(|v| v.as_bool()).unwrap_or(false);
+                            if !existing { obj.insert("truncated".into(), serde_json::Value::Bool(true)); }
+                        }
+                    }
                     // Append only the tool_result (avoid duplicating prior items)
                     let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
                     let _ = self
@@ -560,6 +570,19 @@ impl ResponseHandler {
                                 Err(e) => {
                                     serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
                                 }
+                            };
+                            // Truncate and mark truncation on salvaged execution as well
+                            let mut was_truncated = false;
+                            let output_value = {
+                                let v = truncate_output_json(output_value, MAX_TOOL_OUTPUT_CHARS, &mut was_truncated);
+                                let mut v = v;
+                                if was_truncated {
+                                    if let Some(obj) = v.as_object_mut() {
+                                        let existing = obj.get("truncated").and_then(|b| b.as_bool()).unwrap_or(false);
+                                        if !existing { obj.insert("truncated".into(), serde_json::Value::Bool(true)); }
+                                    }
+                                }
+                                v
                             };
                             let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
                             let _ = self
@@ -1319,6 +1342,46 @@ You have complete freedom to execute commands, install packages, and create solu
         }
 
         prompt
+    }
+}
+
+/// Recursively truncate string fields within a JSON value to a maximum length.
+/// Returns a possibly-modified Value and sets `truncated` to true if any field was shortened.
+fn truncate_output_json(v: serde_json::Value, max: usize, truncated: &mut bool) -> serde_json::Value {
+    use serde_json::Value;
+    match v {
+        Value::String(s) => {
+            if s.len() > max {
+                *truncated = true;
+                Value::String(s[..max].to_string())
+            } else {
+                Value::String(s)
+            }
+        }
+        Value::Array(arr) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for item in arr {
+                out.push(truncate_output_json(item, max, truncated));
+            }
+            Value::Array(out)
+        }
+        Value::Object(mut map) => {
+            for (_k, val) in map.clone().into_iter() {
+                let new_v = truncate_output_json(val, max, truncated);
+                // Insert back
+                // (We clone keys originally; here we reassign values)
+            }
+            // Need to mutate in-place; reconstruct
+            let keys: Vec<String> = map.keys().cloned().collect();
+            for k in keys {
+                if let Some(val) = map.remove(&k) {
+                    let new_v = truncate_output_json(val, max, truncated);
+                    map.insert(k, new_v);
+                }
+            }
+            Value::Object(map)
+        }
+        other => other,
     }
 }
 

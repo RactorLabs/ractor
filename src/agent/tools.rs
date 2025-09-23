@@ -7,7 +7,7 @@ use tokio::process::Command;
 use tracing::info;
 
 const AGENT_ROOT: &str = "/agent";
-const MAX_OUTPUT_BYTES: usize = 200_000; // cap tool outputs
+const MAX_OUTPUT_BYTES: usize = 8_000; // cap tool outputs (characters)
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -145,7 +145,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
                 let s0 = s.saturating_sub(1);
                 let e0 = e.min(lines.len());
                 let slice = if s0 < e0 { &lines[s0..e0] } else { &[][..] };
-                let out = slice.join("\n");
+                let out = truncate(slice.join("\n"));
                 let _ = save_text_editor_log(
                     "view",
                     &path,

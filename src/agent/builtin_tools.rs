@@ -159,7 +159,8 @@ impl Tool for OpenFileTool {
         match text_edit(action).await {
             Ok(s) => Ok(json!({
                 "status":"ok","tool":"open_file",
-                "content": s
+                "content": s,
+                "truncated": s.contains("[truncated]")
             })),
             Err(e) => Ok(json!({"status":"error","tool":"open_file","error":e.to_string()})),
         }
