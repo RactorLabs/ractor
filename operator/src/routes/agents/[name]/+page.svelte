@@ -2005,7 +2005,7 @@
                     <span class="vr"></span>
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
-                    <span class="vr mx-1"></span>
+                    <span class="vr"></span>
                     <div class="small text-body text-opacity-75">{fmtInt((fmEntries && fmEntries.length) || 0)} items</div>
                   {/if}
                 </div>
