@@ -685,6 +685,10 @@
       }
       chat = transformed;
       await tick();
+      // If user was already near the bottom before refresh, keep them stuck to bottom
+      if (shouldStick) {
+        scrollToBottom();
+      }
     }
   }
 
@@ -1603,13 +1607,13 @@
       <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
         <i class="fa fa-angle-double-up"></i>
       </button>
-      <div class="form-check form-switch ms-2 d-inline-flex align-items-center" title="Toggle display of thinking (analysis/commentary)">
+      <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-1" for="toggle-thinking"><i class="fas fa-brain"></i></label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-thinking"><i class="fas fa-brain"></i></label>
       </div>
-      <div class="form-check form-switch ms-2 d-inline-flex align-items-center" title="Toggle display of tool calls/results">
+      <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of tool calls/results">
         <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-1" for="toggle-tools"><i class="fas fa-screwdriver-wrench"></i></label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-tools"><i class="fas fa-screwdriver-wrench"></i></label>
       </div>
     </div>
 
