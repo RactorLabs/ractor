@@ -1971,7 +1971,7 @@
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
                   <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Agent is sleeping</div>
-                  <button class="btn btn-primary btn-sm" on:click={wakeAgent}><i class="bi bi-sun me-1"></i>Wake</button>
+                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent}><i class="bi bi-sun me-1"></i>Wake</button>
                 </div>
               </div>
             {:else if stateStr === 'init'}
