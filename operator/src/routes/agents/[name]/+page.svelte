@@ -2065,11 +2065,12 @@
     /* Remove any bottom gap inside the responses panel */
     :global(#chat-body > *:last-child) { margin-bottom: 0 !important; }
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-    /* Minimal code preview for file contents: monospace, no bg/border */
+    /* Minimal code preview for file contents: match HUD typography/hljs scale */
     :global(.preview-code) {
       font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
-      font-size: 0.875rem;
+      font-size: calc(var(--bs-body-font-size, 1rem) * .7);
       line-height: 1.4;
+      font-weight: 300;
       white-space: pre-wrap;
       word-break: break-word;
       overflow-wrap: anywhere;
