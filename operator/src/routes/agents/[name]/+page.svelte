@@ -2205,12 +2205,13 @@
       text-decoration: none !important;
     }
     /* Keep dropdown above chat content but below modals */
-    :global(.top-actions) { position: relative; z-index: 1996; }
-    :global(.top-actions .dropdown-menu) { z-index: 1999 !important; }
+    :global(.top-actions) { position: relative; z-index: 3001; }
+    :global(.top-actions .dropdown-menu) { z-index: 3002 !important; }
     /* Ensure modals always sit on top within this page */
     :global(.modal) { z-index: 2000; }
     :global(.modal-backdrop) { z-index: 1990; }
     :global(.card) { overflow: visible; }
+    :global(.chat-pane) { position: relative; z-index: 1; }
     /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
