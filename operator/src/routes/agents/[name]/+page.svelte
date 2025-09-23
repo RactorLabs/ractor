@@ -1970,9 +1970,15 @@
               <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
                 <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
                 <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0 && !fmPreviewName)}><i class="bi bi-arrow-90deg-up"></i></button>
-                <span class="vr mx-1"></span>
-                <!-- Move path to the left side with a separator before it -->
-                <div class="small text-body text-opacity-75">{currentFullPath}</div>
+                <!-- Path on the left with spacing and an icon -->
+                <div class="small text-body text-opacity-75 ms-2">
+                  {#if fmPreviewName}
+                    <i class="fa fa-file me-1"></i>
+                  {:else}
+                    <i class="fa fa-folder me-1"></i>
+                  {/if}
+                  {currentFullPath}
+                </div>
 
                 <div class="ms-auto d-flex align-items-center gap-2">
                   {#if fmLoading}
@@ -1980,7 +1986,6 @@
                   {/if}
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
-                    <span class="vr mx-1"></span>
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
                     <span class="vr mx-1"></span>
