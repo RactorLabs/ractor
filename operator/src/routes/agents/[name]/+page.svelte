@@ -1965,7 +1965,7 @@
         </div>
     <div class="col-12 col-lg-6 d-none d-lg-flex flex-column h-100" style="min-height: 0; min-width: 0;">
         <!-- Content (Files) side panel -->
-        <Card class="flex-fill d-flex flex-column" style="min-height: 0;">
+        <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
           <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
             {#if stateStr === 'slept'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
@@ -2021,9 +2021,9 @@
                       <div class="p-3 small text-danger">{fmPreviewError}</div>
                     {/if}
                     {#if fmPreviewType === 'image' && fmPreviewUrl}
-                      <div class="p-2"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
+                      <div class="p-3"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
                     {:else if fmPreviewType === 'text'}
-                      <div class="p-2"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
+                      <div class="p-3"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
                     {:else if fmPreviewType === 'binary'}
                       <div class="p-3 small text-body text-opacity-75">Binary file</div>
                     {:else if !fmPreviewError}
@@ -2224,5 +2224,14 @@
     /* Add a tiny extra space below tool accordions */
     :global(#chat-body .tool-accordion) {
       margin-bottom: 0.75rem; /* mb-2 (0.5rem) + ~0.25rem */
+    }
+    /* Disable all transitions/animations within Files pane */
+    :global(.files-pane),
+    :global(.files-pane *),
+    :global(.files-pane *::before),
+    :global(.files-pane *::after) {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
     }
   </style>
