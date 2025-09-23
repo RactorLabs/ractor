@@ -1655,7 +1655,7 @@
                         {/if}
                       {:else if isOutputSeg(s)}
                         <!-- Replace output box with accordion, one entry per item -->
-                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-seg-${j}`}>
+                        <div class="accordion mt-3 mb-2 tool-accordion" id={`acc-${m?.id || i}-seg-${j}`}>
                           {#each outputItemsOfSeg(s) as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-seg-${j}-${k}`}>
@@ -1832,7 +1832,7 @@
                         </div>
                       {/if}
                       {#if Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0}
-                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-top`}>
+                        <div class="accordion mt-3 mb-2 tool-accordion" id={`acc-${m?.id || i}-top`}>
                           {#each m.content_json.output_content as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-top-${k}`}>
@@ -1871,7 +1871,7 @@
                   {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'output')}
                     {#if m.content && m.content.trim()}
                       {#if parsedItemsFromTopCard(m).length > 0}
-                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-toolout`}>
+                        <div class="accordion mt-3 mb-2 tool-accordion" id={`acc-${m?.id || i}-toolout`}>
                           {#each parsedItemsFromTopCard(m) as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-toolout-${k}`}>
@@ -2210,4 +2210,8 @@
     }
     :global(#chat-body .accordion-button:not(.collapsed)) {
       box-shadow: none;
+    }
+    /* Add a tiny extra space below tool accordions */
+    :global(#chat-body .tool-accordion) {
+      margin-bottom: 0.75rem; /* mb-2 (0.5rem) + ~0.25rem */
     }
