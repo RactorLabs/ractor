@@ -1594,11 +1594,11 @@
       <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
         <i class="fa fa-angle-double-up"></i>
       </button>
-      <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
+      <div class="form-check form-switch ms-2" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
         <label class="form-check-label small" for="toggle-thinking">🧠</label>
       </div>
-      <div class="form-check form-switch" title="Toggle display of tool calls/results">
+      <div class="form-check form-switch ms-2" title="Toggle display of tool calls/results">
         <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
         <label class="form-check-label small" for="toggle-tools">🛠️</label>
       </div>
