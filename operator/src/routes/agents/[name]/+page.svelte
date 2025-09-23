@@ -2008,7 +2008,7 @@
                   {/if}
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
-                    <span class="vr mx-1"></span>
+                    <span class="vr"></span>
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
                     <span class="vr mx-1"></span>
@@ -2213,7 +2213,6 @@
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
     }
-  </style>
     /* Make tool preview headers (accordion buttons) slightly grayer in chat */
     :global(#chat-body .accordion-button) {
       background-color: transparent;
@@ -2226,3 +2225,4 @@
     :global(#chat-body .tool-accordion) {
       margin-bottom: 0.75rem; /* mb-2 (0.5rem) + ~0.25rem */
     }
+  </style>
