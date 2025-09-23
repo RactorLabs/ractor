@@ -250,8 +250,6 @@
       fmEntries = reset ? entries : fmEntries.concat(entries);
       // Ensure the path label reflects the current folder after list refresh
       currentFullPath = fmCurrentFullPath(fmSegments, fmPreviewName);
-      // Clear any prior file preview when (re)loading a folder
-      if (reset) { fmPreviewReset(); }
     } catch (e) {
       if (seq === fmListSeq) fmError = e.message || String(e);
     } finally {
@@ -368,7 +366,13 @@
     fmOffset = 0;
     refreshFilesPanel({ reset: true });
   }
-  function fmRefresh() { refreshFilesPanel({ reset: true }); }
+  function fmRefresh() {
+    if (fmPreviewName) {
+      fmShowPreview({ name: fmPreviewName, kind: 'file' });
+    } else {
+      refreshFilesPanel({ reset: true });
+    }
+  }
   function fmLoadMore() {
     if (fmNextOffset == null) return;
     fmOffset = Number(fmNextOffset);
