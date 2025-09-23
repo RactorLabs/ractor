@@ -198,6 +198,15 @@ $visibility-values: (none, initial);
 .bg-gradient-135 { background: linear-gradient(135deg, var(--#{$prefix}bg-gradient-from) 0%, var(--#{$prefix}bg-gradient-to) 100%); }
 .bg-blur-1 { backdrop-filter: blur(3px) !important; }
 .bg-blur-2 { backdrop-filter: blur(6px) !important; }
+
+/* Global pointer cursor for actionable controls */
+button,
+.btn,
+.btn-link,
+.dropdown-item,
+.list-group-item-action,
+[role="button"],
+a { cursor: pointer; }
 .bg-blur-3 { backdrop-filter: blur(9px) !important; }
 @include background-gradient('bg-gradient-orange-red', lighten($orange, 10%), lighten($red, 10%));
 @include background-gradient('bg-gradient-red-orange', lighten($red, 10%), lighten($orange, 10%));

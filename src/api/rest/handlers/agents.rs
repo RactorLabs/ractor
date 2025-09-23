@@ -8,6 +8,8 @@ use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use sqlx::query;
 use sqlx::Row;
 use std::sync::Arc;
+use axum::http::{StatusCode};
+use axum::response::Response;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -183,6 +185,384 @@ async fn find_agent_by_name(
     }
 
     Err(ApiError::NotFound("Agent not found".to_string()))
+}
+
+// -------- Agent Files (read-only) --------
+
+#[derive(Debug, Deserialize, Default)]
+pub struct ListFilesQuery {
+    pub offset: Option<u64>,
+    pub limit: Option<u64>,
+}
+
+fn is_safe_relative_path(p: &str) -> bool {
+    if p.is_empty() {
+        return true;
+    }
+    if p.starts_with('/') || p.contains('\0') {
+        return false;
+    }
+    !p.split('/')
+        .any(|seg| seg == ".." || seg.is_empty())
+}
+
+fn map_file_task_error(err: &str) -> ApiError {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("too large") {
+        ApiError::PayloadTooLarge(err.to_string())
+    } else if lower.contains("no such file") || lower.contains("not found") {
+        ApiError::NotFound("File or directory not found".to_string())
+    } else if lower.contains("is a directory") {
+        ApiError::BadRequest("Path is a directory".to_string())
+    } else if lower.contains("invalid path") {
+        ApiError::BadRequest("Invalid path".to_string())
+    } else if lower.contains("sleep") || lower.contains("not running") || lower.contains("container does not exist") {
+        ApiError::Conflict("Agent is sleeping".to_string())
+    } else if lower.contains("forbidden") || lower.contains("outside") {
+        ApiError::Forbidden(err.to_string())
+    } else {
+        ApiError::Internal(anyhow::anyhow!(err.to_string()))
+    }
+}
+
+pub async fn read_agent_file(
+    State(state): State<Arc<AppState>>,
+    Path((name, path)): Path<(String, String)>,
+    Extension(auth): Extension<AuthContext>,
+) -> Result<Response, ApiError> {
+    // Admins require explicit permission; owners can access their own agents
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to read files".to_string()))?;
+    }
+
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+
+    if !is_safe_relative_path(&path) {
+        return Err(ApiError::BadRequest("Invalid path".to_string()));
+    }
+
+    // Create file_read task
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "path": path,
+    });
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    sqlx::query(
+        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+            VALUES (?, ?, 'file_read', ?, ?, 'pending')"#,
+    )
+    .bind(&task_id)
+    .bind(&name)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_read task: {}", e)))?;
+
+    // Poll for completion up to 15s
+    let start = std::time::Instant::now();
+    loop {
+        let row = sqlx::query(
+            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                let content_b64 = res.get("content_base64").and_then(|v| v.as_str()).unwrap_or("");
+                let ct = res.get("content_type").and_then(|v| v.as_str()).unwrap_or("application/octet-stream");
+                let bytes = base64::decode(content_b64).unwrap_or_default();
+                let mut builder = Response::builder().status(StatusCode::OK);
+                builder = builder.header("content-type", ct);
+                builder = builder.header("cache-control", "no-store");
+                builder = builder.header("x-raworc-file-size", res.get("size").and_then(|v| v.as_u64()).unwrap_or(bytes.len() as u64).to_string());
+                let resp = builder
+                    .body(axum::body::Body::from(bytes))
+                    .map_err(|e| ApiError::Internal(anyhow::anyhow!(e.to_string())))?;
+                return Ok(resp);
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "file read failed".to_string());
+                return Err(map_file_task_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file read".to_string())); }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn get_agent_file_metadata(
+    State(state): State<Arc<AppState>>,
+    Path((name, path)): Path<(String, String)>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to read files".to_string()))?;
+    }
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    if !is_safe_relative_path(&path) {
+        return Err(ApiError::BadRequest("Invalid path".to_string()));
+    }
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({ "path": path });
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    sqlx::query(
+        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+            VALUES (?, ?, 'file_metadata', ?, ?, 'pending')"#,
+    )
+    .bind(&task_id)
+    .bind(&name)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_metadata task: {}", e)))?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row = sqlx::query(
+            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "metadata failed".to_string());
+                return Err(map_file_task_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file metadata".to_string())); }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn list_agent_files(
+    State(state): State<Arc<AppState>>,
+    Path((name, path)): Path<(String, String)>,
+    Query(paging): Query<ListFilesQuery>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list files".to_string()))?;
+    }
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    if !is_safe_relative_path(&path) && !path.is_empty() {
+        return Err(ApiError::BadRequest("Invalid path".to_string()));
+    }
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "path": path,
+        "offset": paging.offset.unwrap_or(0),
+        "limit": paging.limit.unwrap_or(100),
+    });
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    sqlx::query(
+        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+            VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
+    )
+    .bind(&task_id)
+    .bind(&name)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list task: {}", e)))?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row = sqlx::query(
+            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "list failed".to_string());
+                return Err(map_file_task_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file list".to_string())); }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+// List at root when no path segment provided
+pub async fn list_agent_files_root(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Query(paging): Query<ListFilesQuery>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list files".to_string()))?;
+    }
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "path": "",
+        "offset": paging.offset.unwrap_or(0),
+        "limit": paging.limit.unwrap_or(100),
+    });
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    sqlx::query(
+        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+            VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
+    )
+    .bind(&task_id)
+    .bind(&name)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list task: {}", e)))?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row = sqlx::query(
+            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row.try_get("error").unwrap_or_else(|_| "list failed".to_string());
+                return Err(ApiError::Internal(anyhow::anyhow!(err)));
+            }
+        }
+        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file list".to_string())); }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn delete_agent_file(
+    State(state): State<Arc<AppState>>,
+    Path((name, path)): Path<(String, String)>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+            .await
+            .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete files".to_string()))?;
+    }
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    if !is_safe_relative_path(&path) {
+        return Err(ApiError::BadRequest("Invalid path".to_string()));
+    }
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({ "path": path });
+    sqlx::query(
+        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+            VALUES (?, ?, 'file_delete', ?, ?, 'pending')"#,
+    )
+    .bind(&task_id)
+    .bind(&name)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_delete task: {}", e)))?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row = sqlx::query(
+            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
+        )
+        .bind(&task_id)
+        .fetch_optional(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({"deleted": true}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "delete failed".to_string());
+                return Err(map_file_task_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file delete".to_string())); }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
 }
 
 pub async fn list_agents(

@@ -1877,6 +1877,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
+ "base64",
  "bcrypt",
  "bollard",
  "chrono",

@@ -10,6 +10,7 @@ pub enum ApiError {
     BadRequest(String),
     NotFound(String),
     Conflict(String),
+    PayloadTooLarge(String),
     Timeout(String),
     Database(DatabaseError),
     Jwt(jsonwebtoken::errors::Error),
@@ -31,6 +32,7 @@ impl IntoResponse for ApiError {
             ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
+            ApiError::PayloadTooLarge(msg) => (StatusCode::PAYLOAD_TOO_LARGE, msg),
             ApiError::Timeout(msg) => (StatusCode::GATEWAY_TIMEOUT, msg),
             ApiError::Database(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

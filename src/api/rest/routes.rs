@@ -110,6 +110,27 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/agents/{name}/responses/count",
             get(handlers::responses::get_response_count),
         )
+        // Agent files (read-only)
+        .route(
+            "/agents/{name}/files/read/{*path}",
+            get(handlers::agents::read_agent_file),
+        )
+        .route(
+            "/agents/{name}/files/metadata/{*path}",
+            get(handlers::agents::get_agent_file_metadata),
+        )
+        .route(
+            "/agents/{name}/files/list/{*path}",
+            get(handlers::agents::list_agent_files),
+        )
+        .route(
+            "/agents/{name}/files/list",
+            get(handlers::agents::list_agent_files_root),
+        )
+        .route(
+            "/agents/{name}/files/delete/{*path}",
+            delete(handlers::agents::delete_agent_file),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

@@ -1,32 +1,45 @@
 .ps {
-	position: relative;
-	
-	& .ps__rail-x,
-	& .ps__rail-y {
-		z-index: 10;
-		
-		&.ps--clicking,
-		&:hover,
-		&:focus {
-			background: none;
-		}
-	}
-	& .ps__thumb-y {
-		border-radius: 0;
-		background: none;
-		
-		&:before {
-			content: '';
-			background: #aaa;
-			position: absolute;
-			top: rem(1px);
-			bottom: rem(1px);
-			inset-inline-end: 0;
-			inset-inline-start: 0;
-		}
-	}
+  position: relative;
+
+  & .ps__rail-x,
+  & .ps__rail-y {
+    z-index: 10;
+    background: transparent;
+    transition: opacity .2s ease;
+  }
+
+  & .ps__rail-y {
+    width: rem(10px);
+    inset-inline-end: 0;
+  }
+  & .ps__rail-x {
+    height: rem(10px);
+    bottom: 0;
+  }
+
+  & .ps__thumb-y,
+  & .ps__thumb-x {
+    background: rgba(var(--#{$prefix}theme-rgb), .55);
+    border-radius: rem(8px);
+    transition: background-color .15s ease;
+  }
+  & .ps__thumb-y {
+    inset-inline-start: rem(2px);
+    inset-inline-end: rem(2px);
+  }
+  & .ps__thumb-x {
+    top: rem(2px);
+    bottom: rem(2px);
+  }
+
+  &:hover .ps__thumb-y,
+  &:hover .ps__thumb-x,
+  & .ps__rail-y.ps--clicking .ps__thumb-y,
+  & .ps__rail-x.ps--clicking .ps__thumb-x {
+    background: rgba(var(--#{$prefix}theme-rgb), .8);
+  }
 }
 .app-sidebar .ps__rail-x,
 .app-sidebar .ps__rail-y {
-	display: none;
+    display: none;
 }

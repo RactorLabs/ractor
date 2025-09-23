@@ -36,6 +36,7 @@ url = "2.5"
 regex = "1.10"
 walkdir = "2.5"
 globset = "0.4"
+base64 = "0.22"
 
 [[bin]]
 name = "raworc-api"

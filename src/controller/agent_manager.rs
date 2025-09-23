@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bollard::Docker;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
@@ -100,6 +100,55 @@ impl AgentManager {
                 sleep(Duration::from_secs(10)).await;
             }
         }
+    }
+
+    /// Ensure the agent container is running and healthy; wake if needed and wait up to timeout_secs
+    pub async fn ensure_agent_running(&self, agent_name: &str, timeout_secs: u64) -> Result<()> {
+        // Quick healthy check
+        match self.docker_manager.is_container_healthy(agent_name).await {
+            Ok(true) => return Ok(()),
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!("health check error for {}: {}", agent_name, e);
+            }
+        }
+
+        // If DB says slept or container absent, wake
+        if let Some((state,)) = sqlx::query_as::<_, (String,)>(
+            r#"SELECT state FROM agents WHERE name = ?"#,
+        )
+        .bind(agent_name)
+        .fetch_optional(&self.pool)
+        .await? {
+            if state.to_lowercase() == "slept" {
+                tracing::info!("Agent {} is slept; waking container", agent_name);
+                let _ = self.docker_manager.wake_container(agent_name).await?;
+            }
+        } else {
+            // No row; nothing we can do
+            tracing::warn!("Agent {} not found in DB during ensure_agent_running", agent_name);
+        }
+
+        // Wait for healthy
+        let mut waited = 0u64;
+        let step = 500u64; // ms
+        while waited / 1000 < timeout_secs {
+            if let Ok(true) = self.docker_manager.is_container_healthy(agent_name).await {
+                return Ok(());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(step)).await;
+            waited += step;
+        }
+        Err(anyhow::anyhow!("agent {} not ready in {}s", agent_name, timeout_secs))
+    }
+
+    /// Proxy exec with stdout/stderr collection
+    pub async fn exec_collect(
+        &self,
+        agent_name: &str,
+        cmd: Vec<String>,
+    ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
+        self.docker_manager.exec_collect(agent_name, cmd).await
     }
 
     // No external API key required for local Ollama
@@ -277,6 +326,10 @@ impl AgentManager {
             "publish_agent" => self.handle_publish_agent(task.clone()).await,
             "unpublish_agent" => self.handle_unpublish_agent(task.clone()).await,
             "create_response" => self.handle_create_response(task.clone()).await,
+            "file_read" => self.handle_file_read(task.clone()).await,
+            "file_metadata" => self.handle_file_metadata(task.clone()).await,
+            "file_list" => self.handle_file_list(task.clone()).await,
+            "file_delete" => self.handle_file_delete(task.clone()).await,
             _ => {
                 warn!("Unknown task type: {}", task.task_type);
                 Err(anyhow::anyhow!("Unknown task type"))
@@ -1231,4 +1284,177 @@ impl AgentManager {
 
         Ok(recovered_count)
     }
+
+    fn sanitize_relative_path(&self, p: &str) -> Result<String> {
+        let p = p.trim();
+        if p.is_empty() { return Ok(String::new()); }
+        if p.starts_with('/') || p.contains('\0') { return Err(anyhow::anyhow!("invalid path")); }
+        let mut parts = Vec::new();
+        for seg in p.split('/') {
+            if seg.is_empty() || seg == "." || seg == ".." {
+                return Err(anyhow::anyhow!("invalid path"));
+            }
+            parts.push(seg);
+        }
+        Ok(parts.join("/"))
+    }
+
+    async fn task_update_result(&self, task_id: &str, mut payload: serde_json::Value, result: serde_json::Value) -> Result<()> {
+        if let serde_json::Value::Object(ref mut map) = payload { map.insert("result".into(), result); }
+        sqlx::query(
+            r#"UPDATE agent_tasks SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
+        )
+        .bind(&payload)
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn task_fail(&self, task_id: &str, msg: String) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE agent_tasks SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
+        )
+        .bind(&msg)
+        .bind(task_id)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn handle_file_read(&self, task: AgentTask) -> Result<()> {
+        let path = task.payload.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let safe = self.sanitize_relative_path(path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        // Do not auto-wake for file APIs; require running container
+        match self.docker_manager.is_container_healthy(&task.agent_name).await {
+            Ok(true) => {}
+            _ => { return self.task_fail(&task.id, "agent is sleeping".to_string()).await; }
+        }
+        let full_path = format!("/agent/{}", safe);
+        // Get size and content type
+        let (stat_code, stat_out, _stat_err) = self.docker_manager.exec_collect(&task.agent_name, vec!["/usr/bin/stat".into(), "-c".into(), "%s".into(), full_path.clone()]).await?;
+        if stat_code != 0 { return self.task_fail(&task.id, "not found or invalid".to_string()).await; }
+        let size: u64 = String::from_utf8_lossy(&stat_out).trim().parse().unwrap_or(0);
+        // Cap at 25MB
+        const MAX_BYTES: u64 = 25 * 1024 * 1024;
+        if size > MAX_BYTES {
+            return self
+                .task_fail(&task.id, format!("file too large ({} bytes > 25MB)", size))
+                .await;
+        }
+        let (code, stdout, stderr) = self.docker_manager.exec_collect(&task.agent_name, vec!["/bin/cat".into(), full_path.clone()]).await?;
+        if code != 0 { return self.task_fail(&task.id, String::from_utf8_lossy(&stderr).to_string()).await; }
+        let ct = guess_content_type(&safe);
+        let content_b64 = base64::encode(&stdout);
+        let result = serde_json::json!({
+            "content_base64": content_b64,
+            "content_type": ct,
+            "size": size,
+        });
+        self.task_update_result(&task.id, task.payload.clone(), result).await
+    }
+
+    pub async fn handle_file_metadata(&self, task: AgentTask) -> Result<()> {
+        let path = task.payload.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let safe = self.sanitize_relative_path(path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        match self.docker_manager.is_container_healthy(&task.agent_name).await {
+            Ok(true) => {}
+            _ => { return self.task_fail(&task.id, "agent is sleeping".to_string()).await; }
+        }
+        let full_path = format!("/agent/{}", safe);
+        let fmt = "%F|%s|%a|%Y|%N";
+        let (code, stdout, stderr) = self.docker_manager.exec_collect(&task.agent_name, vec!["/usr/bin/stat".into(), "-c".into(), fmt.into(), full_path.clone()]).await?;
+        if code != 0 { return self.task_fail(&task.id, String::from_utf8_lossy(&stderr).to_string()).await; }
+        let line = String::from_utf8_lossy(&stdout);
+        let parts: Vec<&str> = line.trim().split('|').collect();
+        if parts.len() < 4 { return self.task_fail(&task.id, "unexpected stat output".into()).await; }
+        let kind_raw = parts[0].to_ascii_lowercase();
+        let kind = if kind_raw.contains("regular") { "file" } else if kind_raw.contains("directory") { "dir" } else if kind_raw.contains("symbolic link") { "symlink" } else { &kind_raw };
+        let size: u64 = parts[1].parse().unwrap_or(0);
+        let mode = format!("{:0>4}", parts[2]);
+        let mtime_epoch: i64 = parts[3].parse().unwrap_or(0);
+        let mtime = chrono::Utc.timestamp_opt(mtime_epoch, 0).single().unwrap_or_else(|| chrono::Utc.timestamp_opt(0,0).unwrap());
+        let mut obj = serde_json::json!({ "kind": kind, "size": size, "mode": mode, "mtime": mtime.to_rfc3339() });
+        if parts.len() >= 5 && kind == "symlink" {
+            if let Some(idx) = parts[4].find("->") { let target = parts[4][idx+2..].trim().trim_matches('\''); obj["link_target"] = serde_json::Value::String(target.to_string()); }
+        }
+        self.task_update_result(&task.id, task.payload.clone(), obj).await
+    }
+
+    pub async fn handle_file_list(&self, task: AgentTask) -> Result<()> {
+        let path = task.payload.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let offset = task.payload.get("offset").and_then(|v| v.as_u64()).unwrap_or(0);
+        let limit = task.payload.get("limit").and_then(|v| v.as_u64()).unwrap_or(100).min(500);
+        let safe = if path.is_empty() { String::new() } else { self.sanitize_relative_path(path).map_err(|e| anyhow::anyhow!(e.to_string()))? };
+        match self.docker_manager.is_container_healthy(&task.agent_name).await {
+            Ok(true) => {}
+            _ => { return self.task_fail(&task.id, "agent is sleeping".to_string()).await; }
+        }
+        let base = if safe.is_empty() { "/agent".to_string() } else { format!("/agent/{}", safe) };
+
+        // Print one record per line so parser can split by lines()
+        let fmt = "%f|%y|%s|%m|%T@\n";
+        let (code, stdout, stderr) = self.docker_manager.exec_collect(&task.agent_name, vec!["/usr/bin/find".into(), base.clone(), "-maxdepth".into(), "1".into(), "-mindepth".into(), "1".into(), "-printf".into(), fmt.into(), "-name".into(), "*".into()]).await?;
+        if code != 0 { return self.task_fail(&task.id, String::from_utf8_lossy(&stderr).to_string()).await; }
+        let mut entries: Vec<(String,String,u64,String,i64)> = Vec::new();
+        for line in String::from_utf8_lossy(&stdout).lines() {
+            let parts: Vec<&str> = line.trim().split('|').collect();
+            if parts.len() < 5 { continue; }
+            let name = parts[0].to_string(); if name == "." || name == ".." { continue; }
+            let kind = match parts[1] { "f"=>"file", "d"=>"dir", "l"=>"symlink", other=>other } .to_string();
+            let size: u64 = parts[2].parse().unwrap_or(0);
+            let mode = format!("{:0>4}", parts[3]);
+            let mtime_secs: i64 = parts[4].split('.').next().unwrap_or("0").parse().unwrap_or(0);
+            entries.push((name, kind, size, mode, mtime_secs));
+        }
+        entries.sort_by(|a,b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+        let total = entries.len() as u64;
+        let slice_start = offset as usize;
+        let slice_end = (offset+limit).min(total) as usize;
+        let mut list: Vec<serde_json::Value> = Vec::new();
+        if slice_start < entries.len() {
+            for (name, kind, size, mode, mtime_secs) in entries[slice_start..slice_end].iter() {
+                let mtime = chrono::Utc.timestamp_opt(*mtime_secs, 0).single().unwrap_or_else(|| chrono::Utc.timestamp_opt(0,0).unwrap());
+                list.push(serde_json::json!({"name": name, "kind": kind, "size": size, "mode": mode, "mtime": mtime.to_rfc3339()}));
+            }
+        }
+        let next_offset = if (offset+limit) < total { Some(offset+limit) } else { None };
+        let result = serde_json::json!({ "entries": list, "offset": offset, "limit": limit, "next_offset": next_offset, "total": total });
+        self.task_update_result(&task.id, task.payload.clone(), result).await
+    }
+
+    pub async fn handle_file_delete(&self, task: AgentTask) -> Result<()> {
+        let path = task.payload.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let safe = self.sanitize_relative_path(path).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        match self.docker_manager.is_container_healthy(&task.agent_name).await {
+            Ok(true) => {}
+            _ => { return self.task_fail(&task.id, "agent is sleeping".to_string()).await; }
+        }
+        let full_path = format!("/agent/{}", safe);
+        // Ensure it's a regular file
+        let (stat_code, stat_out, _stat_err) = self.docker_manager.exec_collect(&task.agent_name, vec!["/usr/bin/stat".into(), "-c".into(), "%F".into(), full_path.clone()]).await?;
+        if stat_code != 0 { return self.task_fail(&task.id, "not found".to_string()).await; }
+        let kind = String::from_utf8_lossy(&stat_out).to_ascii_lowercase();
+        if !kind.contains("regular file") {
+            return self.task_fail(&task.id, "Path is not a file".to_string()).await;
+        }
+        let (rm_code, _out, err) = self.docker_manager.exec_collect(&task.agent_name, vec!["/bin/rm".into(), "-f".into(), full_path.clone()]).await?;
+        if rm_code != 0 { return self.task_fail(&task.id, String::from_utf8_lossy(&err).to_string()).await; }
+        let result = serde_json::json!({ "deleted": true, "path": safe });
+        self.task_update_result(&task.id, task.payload.clone(), result).await
+    }
+}
+
+fn guess_content_type(path: &str) -> &'static str {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".html") || lower.ends_with(".htm") { "text/html; charset=utf-8" }
+    else if lower.ends_with(".css") { "text/css; charset=utf-8" }
+    else if lower.ends_with(".js") { "application/javascript" }
+    else if lower.ends_with(".json") { "application/json" }
+    else if lower.ends_with(".md") || lower.ends_with(".txt") || lower.ends_with(".rs") || lower.ends_with(".py") || lower.ends_with(".ts") || lower.ends_with(".sh") || lower.ends_with(".yml") || lower.ends_with(".yaml") || lower.ends_with(".toml") { "text/plain; charset=utf-8" }
+    else if lower.ends_with(".svg") { "image/svg+xml" }
+    else if lower.ends_with(".png") { "image/png" }
+    else if lower.ends_with(".jpg") || lower.ends_with(".jpeg") { "image/jpeg" }
+    else if lower.ends_with(".gif") { "image/gif" }
+    else { "application/octet-stream" }
 }

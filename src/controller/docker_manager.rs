@@ -1559,6 +1559,46 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         Ok(output_str)
     }
 
+    // Execute a command and collect stdout/stderr bytes with exit code
+    pub async fn exec_collect(
+        &self,
+        agent_name: &str,
+        cmd: Vec<String>,
+    ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
+        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let exec_config = CreateExecOptions {
+            cmd: Some(cmd),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        };
+
+        let exec = self.docker.create_exec(&container_name, exec_config).await?;
+        let mut out_buf: Vec<u8> = Vec::new();
+        let mut err_buf: Vec<u8> = Vec::new();
+        if let StartExecResults::Attached { mut output, .. } =
+            self.docker.start_exec(&exec.id, None).await?
+        {
+            while let Some(Ok(frame)) = output.next().await {
+                use bollard::container::LogOutput;
+                match frame {
+                    LogOutput::StdOut { message } => out_buf.extend_from_slice(&message),
+                    LogOutput::StdErr { message } => err_buf.extend_from_slice(&message),
+                    LogOutput::Console { message } => out_buf.extend_from_slice(&message),
+                    other => {
+                        let bytes = other.into_bytes();
+                        out_buf.extend_from_slice(&bytes);
+                    }
+                }
+            }
+        }
+        // Inspect for exit code
+        let inspect = self.docker.inspect_exec(&exec.id).await?;
+        let code_i64 = inspect.exit_code.unwrap_or(0);
+        let code = i32::try_from(code_i64).unwrap_or_else(|_| if code_i64 == 0 { 0 } else { 1 });
+        Ok((code, out_buf, err_buf))
+    }
+
     pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
         let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
         let public_path = format!("/content/{}", agent_name);
