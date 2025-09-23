@@ -368,6 +368,8 @@
   }
   function fmRefresh() {
     if (fmPreviewName) {
+      // Refresh the folder list in the background and re-fetch the open file
+      try { fetchFiles(true); } catch (_) {}
       fmShowPreview({ name: fmPreviewName, kind: 'file' });
     } else {
       refreshFilesPanel({ reset: true });
@@ -2072,7 +2074,7 @@
     /* Minimal code preview for file contents: match HUD typography/hljs scale */
     :global(.preview-code) {
       font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
-      font-size: calc(var(--bs-body-font-size, 1rem) * .7);
+      font-size: calc(var(--bs-body-font-size, 1rem) * .8);
       line-height: 1.4;
       font-weight: 300;
       white-space: pre-wrap;
