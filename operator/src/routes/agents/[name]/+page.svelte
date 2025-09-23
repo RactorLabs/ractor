@@ -284,7 +284,8 @@
       try { fmPreviewAbort && fmPreviewAbort.abort(); } catch (_) {}
       const seq = ++fmPreviewSeq;
       fmPreviewAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-      fmPreviewError = null; fmPreviewLoading = true; fmPreviewText=''; fmPreviewUrl=''; fmPreviewType='';
+      // Keep existing preview content visible while loading new content
+      fmPreviewError = null; fmPreviewLoading = true;
       fmPreviewName = entry?.name || '';
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
@@ -298,12 +299,14 @@
         if (ct.startsWith('image/')) {
           const blob = await res.blob();
           if (seq !== fmPreviewSeq) return; // outdated
-          fmRevokePreviewUrl();
-          fmPreviewUrl = URL.createObjectURL(blob);
+          const newUrl = URL.createObjectURL(blob);
+          const oldUrl = fmPreviewUrl;
+          fmPreviewUrl = newUrl;
           fmPreviewType = 'image';
+          try { if (oldUrl) URL.revokeObjectURL(oldUrl); } catch (_) {}
         } else if (ct.startsWith('text/') || ct.includes('json') || ct.includes('javascript') || ct.includes('xml') || ct.includes('yaml') || ct.includes('toml') || ct.includes('html')) {
-          // Stream text content progressively for responsiveness
-          fmPreviewType = 'text';
+          // Read text content fully, then swap to avoid flicker during load
+          let acc = '';
           const reader = res.body && res.body.getReader ? res.body.getReader() : null;
           if (reader) {
             const decoder = new TextDecoder('utf-8');
@@ -313,15 +316,18 @@
               if (seq !== fmPreviewSeq) { try { reader.cancel && reader.cancel(); } catch (_) {} return; }
               done = r.done;
               if (r.value && r.value.length) {
-                fmPreviewText += decoder.decode(r.value, { stream: !done });
+                acc += decoder.decode(r.value, { stream: !done });
               }
             }
           } else {
             // Fallback: read all at once
             const text = await res.text();
             if (seq !== fmPreviewSeq) return;
-            fmPreviewText = text;
+            acc = text;
           }
+          // Commit new text after fully loaded
+          fmPreviewText = acc;
+          fmPreviewType = 'text';
         } else {
           // Try as text anyway up to a cap
           try { const t = await res.text(); if (seq !== fmPreviewSeq) return; fmPreviewText = t; fmPreviewType = 'text'; }
@@ -375,6 +381,17 @@
       refreshFilesPanel({ reset: true });
     }
   }
+
+  // Auto-refresh the Files panel periodically (equivalent to pressing Refresh)
+  let fmRefreshHandle = null;
+  onMount(() => {
+    try {
+      fmRefreshHandle = setInterval(() => { try { fmRefresh(); } catch (_) {} }, 2000);
+    } catch (_) {}
+  });
+  onDestroy(() => {
+    try { if (fmRefreshHandle) { clearInterval(fmRefreshHandle); fmRefreshHandle = null; } } catch (_) {}
+  });
   function fmLoadMore() {
     if (fmNextOffset == null) return;
     fmOffset = Number(fmNextOffset);
@@ -1900,7 +1917,7 @@
         <div class="input-group chat-input-wrap rounded-0 shadow-none">
           <textarea
             aria-label="Message input"
-            class="form-control form-control-lg shadow-none rounded-0 chat-input chat-no-zoom"
+            class="form-control shadow-none rounded-0 chat-input chat-no-zoom"
             disabled={isCompacting || stateStr === 'busy'}
             placeholder="Type a message…"
             rows="2"
@@ -1958,18 +1975,21 @@
               <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
                 <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
                 <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0 && !fmPreviewName)}><i class="bi bi-arrow-90deg-up"></i></button>
-                <button class="btn btn-sm border-0" aria-label="Refresh" title="Refresh" on:click={fmRefresh}><i class="bi bi-arrow-repeat"></i></button>
                 <span class="vr mx-1"></span>
-                {#if fmPreviewName}
-                  <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
-                  <button class="btn btn-sm border-0 text-danger" aria-label="Delete" title="Delete" on:click={() => openDeleteEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-trash"></i></button>
-                  <span class="vr mx-1"></span>
-                {/if}
-                {#if !fmPreviewName}
-                  <div class="small text-body text-opacity-75">{fmtInt((fmEntries && fmEntries.length) || 0)} items</div>
-                {/if}
+                <!-- Move path to the left side with a separator before it -->
+                <div class="small text-body text-opacity-75">{currentFullPath}</div>
+
                 <div class="ms-auto d-flex align-items-center gap-2">
-                  <div class="small text-body text-opacity-75">{currentFullPath}</div>
+                  {#if fmLoading}
+                    <span class="spinner-border spinner-border-sm text-body text-opacity-75" role="status" aria-label="Loading"></span>
+                  {/if}
+                  <!-- Move items count and download/delete to the right side -->
+                  {#if fmPreviewName}
+                    <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
+                  {:else}
+                    <span class="vr mx-1"></span>
+                    <div class="small text-body text-opacity-75">{fmtInt((fmEntries && fmEntries.length) || 0)} items</div>
+                  {/if}
                 </div>
               </div>
               <!-- List + Details scroll region -->
@@ -1979,25 +1999,23 @@
               <div class="d-flex flex-column flex-fill" style="min-height: 0;">
                 <PerfectScrollbar class="flex-fill">
                   {#if fmPreviewName}
-                    {#if fmPreviewLoading}
-                      <div class="d-flex align-items-center justify-content-center p-3 text-body text-opacity-75"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
-                    {:else if fmPreviewError}
+                    {#if fmPreviewError}
                       <div class="p-3 small text-danger">{fmPreviewError}</div>
-                    {:else if fmPreviewType === 'image' && fmPreviewUrl}
+                    {/if}
+                    {#if fmPreviewType === 'image' && fmPreviewUrl}
                       <div class="p-2"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
                     {:else if fmPreviewType === 'text'}
                       <div class="p-2"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
-                    {:else}
+                    {:else if fmPreviewType === 'binary'}
                       <div class="p-3 small text-body text-opacity-75">Binary file</div>
+                    {:else if !fmPreviewError}
+                      <!-- Keep showing previous content until new content is ready; no loading indicator here. -->
                     {/if}
                   {:else}
-                    {#if fmLoading}
-                      <div class="d-flex align-items-center justify-content-center p-3 text-body text-opacity-75">
-                        <div class="spinner-border spinner-border-sm me-2"></div>
-                        <div>Loading…</div>
-                      </div>
-                    {:else if !fmEntries || fmEntries.length === 0}
-                      <div class="p-3 small text-body text-opacity-75">Empty</div>
+                    {#if !fmEntries || fmEntries.length === 0}
+                      {#if !fmLoading}
+                        <div class="p-3 small text-body text-opacity-75">Empty</div>
+                      {/if}
                     {:else}
                       <div class="list-group list-group-flush">
                         {#each fmEntries as e}
@@ -2119,6 +2137,7 @@
       background: var(--bs-theme);
       color: var(--bs-theme-color);
       padding: .5rem .75rem;
+      font-size: 0.9rem;
       border-radius: .5rem;
       max-width: 80%;
       white-space: pre-wrap;
