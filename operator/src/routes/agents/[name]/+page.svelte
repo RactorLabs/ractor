@@ -1991,6 +1991,7 @@
               <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
                 <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
                 <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0 && !fmPreviewName)}><i class="bi bi-arrow-90deg-up"></i></button>
+                <span class="vr mx-1"></span>
                 <!-- Path on the left with spacing and an icon -->
                 <div class="small text-body text-opacity-75 ms-2">
                   {#if fmPreviewName}
@@ -2007,6 +2008,7 @@
                   {/if}
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
+                    <span class="vr mx-1"></span>
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
                     <span class="vr mx-1"></span>
