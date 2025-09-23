@@ -1700,7 +1700,7 @@
                         {/if}
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-3 justify-content-start">
                             <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
@@ -1724,7 +1724,7 @@
                           </div>
                         {:else}
                           <!-- Unpaired tool call -->
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-3 justify-content-start">
                             <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
@@ -1739,7 +1739,7 @@
                         {#if showTools}
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
-                          <div class="d-flex mb-2 justify-content-start">
+                          <div class="d-flex mb-3 justify-content-start">
                             <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
@@ -2233,5 +2233,10 @@
       transition: none !important;
       animation: none !important;
       scroll-behavior: auto !important;
+    }
+    /* Normalize vertical rule height in Files header */
+    :global(.files-pane .border-bottom .vr) {
+      align-self: center;
+      height: 1.25rem;
     }
   </style>
