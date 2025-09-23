@@ -12,6 +12,8 @@
   import { getHostUrl } from '$lib/branding.js';
   import { auth } from '$lib/auth.js';
   import Card from '/src/components/bootstrap/Card.svelte';
+  import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
+  import { getToken } from '$lib/auth.js';
 
   let md;
   try {
@@ -106,9 +108,9 @@
     toolsPrefLoaded = true;
   });
   onMount(async () => {
-    try {
-      await fetchContextUsage();
-    } catch (_) {}
+    try { await fetchContextUsage(); } catch (_) {}
+    try { await fetchFiles(true); } catch (_) {}
+    // layout handles equal heights; no JS equalizer
   });
   $: if (browser && thinkingPrefLoaded) {
     setCookie(SHOW_THINKING_COOKIE, showThinking ? '1' : '0', 365);
@@ -116,6 +118,18 @@
   $: if (browser && toolsPrefLoaded) {
     setCookie(SHOW_TOOLS_COOKIE, showTools ? '1' : '0', 365);
   }
+  onMount(() => {
+    try {
+      if (typeof ResizeObserver !== 'undefined' && chatFooterEl) {
+        _footerRO = new ResizeObserver(() => { _updateDetailsPaneHeight(); });
+        _footerRO.observe(chatFooterEl);
+      }
+      if (typeof window !== 'undefined') {
+        window.addEventListener('resize', _updateDetailsPaneHeight);
+      }
+      _updateDetailsPaneHeight();
+    } catch (_) {}
+  });
   let loading = true;
   let error = null;
   let input = '';
@@ -123,6 +137,217 @@
   let pollHandle = null;
   let runtimeSeconds = 0;
   let currentSessionSeconds = 0;
+  // Equalize top card heights (left Agent card and right Info card)
+  // No JS equal-height logic; use layout-based alignment
+
+  // ---------------- File panel state (right side) ----------------
+  // Start at /agent/ (represented as empty relative path "")
+  let fmLoading = false;
+  let fmError = null;
+  let fmEntries = [];
+  let fmOffset = 0;
+  let fmLimit = 100;
+  let fmNextOffset = null;
+  let fmTotal = 0;
+  // Maintain relative path segments under /agent
+  let fmSegments = [];
+  // Reactive full path label for toolbar (current folder only; no selection state)
+  let currentFullPath = '';
+  // Delete modal state (supports file or directory)
+  let showDeleteFile = false;
+  let deleteFileError = '';
+  let fmDeleteEntry = null; // { name, kind, segs }
+  function openDeleteEntry(entry) { try { deleteFileError=''; fmDeleteEntry = entry ? { name: entry.name, kind: String(entry.kind||'').toLowerCase(), segs: [...fmSegments] } : null; showDeleteFile = true; } catch(_) { showDeleteFile = true; } }
+  function closeDeleteFile() { showDeleteFile = false; fmDeleteEntry = null; }
+  async function confirmDeleteFile() {
+    try {
+      deleteFileError = '';
+      const target = fmDeleteEntry || null;
+      if (!target) { showDeleteFile=false; return; }
+      const segs = [...(target.segs || []), target.name].filter(Boolean);
+      const relEnc = segs.map(encodeURIComponent).join('/');
+      // Attempt delete (not supported in read-only API; will likely fail)
+      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/files/delete/${relEnc}`, { method: 'DELETE' });
+      if (!res.ok) {
+        throw new Error(res?.data?.message || res?.data?.error || 'Delete not supported');
+      }
+      showDeleteFile = false;
+      await refreshFilesPanel({ reset: true });
+    } catch (e) {
+      deleteFileError = e.message || String(e);
+    }
+  }
+  // Height sync for Files details pane
+  let chatFooterEl = null;
+  let detailsPaneHeight = 260;
+  let _footerRO = null;
+  function _updateDetailsPaneHeight() {
+    try { detailsPaneHeight = chatFooterEl ? chatFooterEl.offsetHeight : detailsPaneHeight; } catch (_) {}
+  }
+
+  function fmPathStr() {
+    try { return (fmSegments || []).map(encodeURIComponent).join('/'); } catch (_) { return ''; }
+  }
+  function fmDisplayPath() {
+    try { return ['/agent'].concat(fmSegments || []).join('/'); } catch (_) { return '/agent'; }
+  }
+  function fmDisplayPathShort() {
+    try { return (fmSegments && fmSegments.length) ? ('/' + (fmSegments || []).join('/')) : '/'; } catch (_) { return '/'; }
+  }
+  function fmCurrentFullPath(segs, fileName) {
+    try {
+      const base = ['/agent'].concat(segs || []);
+      if (fileName) return base.concat([fileName]).join('/');
+      return base.join('/');
+    } catch (_) { return fmDisplayPath(); }
+  }
+  $: currentFullPath = fmCurrentFullPath(fmSegments, fmPreviewName);
+  function fmIconFor(entry) {
+    const k = String(entry?.kind || '').toLowerCase();
+    if (k === 'dir' || k === 'directory') return 'bi bi-folder text-warning';
+    if (k === 'symlink') return 'bi bi-link-45deg text-secondary';
+    return 'bi bi-file-earmark text-body text-opacity-50';
+  }
+  function fmHumanSize(n) {
+    try {
+      const v = Number(n);
+      if (!Number.isFinite(v)) return String(n);
+      const units = ['B','KB','MB','GB'];
+      let s = v; let i = 0;
+      while (s >= 1024 && i < units.length-1) { s /= 1024; i++; }
+      return `${s.toFixed(s >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
+    } catch(_) { return String(n); }
+  }
+
+  // Unified Files panel updater: list + (optional) file details in one call
+  async function refreshFilesPanel(opts = {}) {
+    const { reset = true } = opts || {};
+    try { await fetchFiles(!!reset); } catch (_) {}
+  }
+  // Guard concurrent list loads as well, to avoid stale folder/file lists
+  let fmListSeq = 0;
+  async function fetchFiles(reset = true) {
+    const seq = ++fmListSeq;
+    fmLoading = true; fmError = null;
+    try {
+      let path = fmPathStr();
+      let url;
+      if (!path) url = `/agents/${encodeURIComponent(name)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      else url = `/agents/${encodeURIComponent(name)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      const res = await apiFetch(url);
+      if (seq !== fmListSeq) return; // outdated
+      if (!res.ok) {
+        fmError = res?.data?.message || res?.data?.error || `Failed to list (HTTP ${res.status})`;
+        fmLoading = false;
+        return;
+      }
+      const data = res.data || {};
+      const entries = Array.isArray(data.entries) ? data.entries : [];
+      fmTotal = Number(data.total || entries.length || 0);
+      fmLimit = Number(data.limit || fmLimit);
+      fmOffset = Number(data.offset || 0);
+      fmNextOffset = (data.next_offset == null) ? null : Number(data.next_offset);
+      fmEntries = reset ? entries : fmEntries.concat(entries);
+      // Ensure the path label reflects the current folder after list refresh
+      currentFullPath = fmCurrentFullPath(fmSegments, fmPreviewName);
+      // Clear any prior file preview when (re)loading a folder
+      if (reset) { fmPreviewReset(); }
+    } catch (e) {
+      if (seq === fmListSeq) fmError = e.message || String(e);
+    } finally {
+      if (seq === fmListSeq) fmLoading = false;
+    }
+  }
+  function fmOpen(entry) {
+    if (!entry) return;
+    const k = String(entry.kind || '').toLowerCase();
+    if (k === 'dir' || k === 'directory') {
+      fmSegments = [...fmSegments, entry.name];
+      fmOffset = 0;
+      fetchFiles(true);
+    } else {
+      fmShowPreview(entry);
+    }
+  }
+  // Lightweight preview state (no selection/highlight)
+  let fmPreviewName = '';
+  let fmPreviewType = '';
+  let fmPreviewText = '';
+  let fmPreviewUrl = '';
+  let fmPreviewLoading = false;
+  let fmPreviewError = null;
+  function fmRevokePreviewUrl() { try { if (fmPreviewUrl) { URL.revokeObjectURL(fmPreviewUrl); } } catch (_) {} }
+  function fmPreviewReset() { fmRevokePreviewUrl(); fmPreviewName=''; fmPreviewType=''; fmPreviewText=''; fmPreviewUrl=''; fmPreviewLoading=false; fmPreviewError=null; }
+  async function fmShowPreview(entry) {
+    try {
+      fmPreviewError = null; fmPreviewLoading = true; fmPreviewText=''; fmPreviewUrl=''; fmPreviewType='';
+      fmPreviewName = entry?.name || '';
+      const segs = [...fmSegments, fmPreviewName].filter(Boolean);
+      const relEnc = segs.map(encodeURIComponent).join('/');
+      const token = getToken();
+      const url = `/api/v0/agents/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+      if (!res.ok) {
+        fmPreviewError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Open failed (HTTP ${res.status})`));
+      } else {
+        const ct = (res.headers.get('content-type') || '').toLowerCase();
+        if (ct.startsWith('image/')) {
+          fmRevokePreviewUrl();
+          const blob = await res.blob();
+          fmPreviewUrl = URL.createObjectURL(blob);
+          fmPreviewType = 'image';
+        } else if (ct.startsWith('text/') || ct.includes('json') || ct.includes('javascript') || ct.includes('xml') || ct.includes('yaml') || ct.includes('toml') || ct.includes('html')) {
+          fmPreviewText = await res.text();
+          fmPreviewType = 'text';
+        } else {
+          // Try as text anyway up to a cap
+          try { const t = await res.text(); fmPreviewText = t; fmPreviewType = 'text'; }
+          catch (_) { fmPreviewType = 'binary'; fmPreviewError = 'Preview not available for this type'; }
+        }
+      }
+    } catch (e) {
+      fmPreviewError = e.message || String(e);
+    } finally {
+      fmPreviewLoading = false;
+    }
+  }
+
+  async function fmDownloadEntry(entry) {
+    try {
+      const segs = [...fmSegments, entry?.name].filter(Boolean);
+      const relEnc = segs.map(encodeURIComponent).join('/');
+      const token = getToken();
+      const url = `/api/v0/agents/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+      if (!res.ok) { fmError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Download failed (HTTP ${res.status})`)); return; }
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      const href = URL.createObjectURL(blob);
+      a.href = href; a.download = entry?.name || 'download';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => { try { URL.revokeObjectURL(href); } catch (_) {} }, 1000);
+    } catch (e) { fmError = e.message || String(e); }
+  }
+  function fmGoUp() {
+    // If a file is open, just close the preview and stay in the same folder
+    if (fmPreviewName) { fmPreviewReset(); return; }
+    if (fmSegments.length === 0) return; // at root; nothing to go up to
+    fmSegments = fmSegments.slice(0, -1);
+    fmOffset = 0;
+    refreshFilesPanel({ reset: true });
+  }
+  function fmGoRoot() {
+    fmPreviewReset();
+    fmSegments = [];
+    fmOffset = 0;
+    refreshFilesPanel({ reset: true });
+  }
+  function fmRefresh() { refreshFilesPanel({ reset: true }); }
+  function fmLoadMore() {
+    if (fmNextOffset == null) return;
+    fmOffset = Number(fmNextOffset);
+    fetchFiles(false);
+  }
 
   // Context usage state
   let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
@@ -136,6 +361,13 @@
   function fmtPct(n) {
     try { const v = Number(n); return Number.isFinite(v) ? `${v.toFixed(1)}%` : '-'; } catch (_) { return '-'; }
   }
+  // File list kind counters for folder details
+  function countKind(kind) {
+    try { const k = String(kind || '').toLowerCase(); return (fmEntries || []).filter(e => String(e?.kind || '').toLowerCase() === k).length; } catch (_) { return 0; }
+  }
+  function countFiles() { return countKind('file'); }
+  function countDirs() { try { return (fmEntries || []).filter(e => { const k = String(e?.kind || '').toLowerCase(); return k === 'dir' || k === 'directory'; }).length; } catch (_) { return 0; } }
+  function countSymlinks() { return countKind('symlink'); }
   async function fetchContextUsage() {
     try {
       ctxLoading = true;
@@ -220,6 +452,9 @@
   function isSlept() { return stateStr === 'slept'; }
   function isAwake() { return stateStr === 'idle' || stateStr === 'busy'; }
   function isInitOrDeleted() { return stateStr === 'init'; }
+
+  // Do not auto-refresh files on state changes; user triggers Refresh manually
+  let _lastStateStr = '';
 
   // Edit tags modal state and helpers
   let showTagsModal = false;
@@ -401,7 +636,6 @@
       }
       chat = transformed;
       await tick();
-      if (shouldStick) scrollToBottom();
     }
   }
 
@@ -879,14 +1113,23 @@
     try {
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Wake failed (HTTP ${res.status})`);
-      // Optimistic UI update: reflect server semantics (state becomes 'init' first)
+      // Optimistically set to init; controller will flip to idle/busy
       if (agent) agent = { ...(agent || {}), state: 'init' };
-      // Give the controller a moment to recreate the container before fetching
-      await new Promise((r) => setTimeout(r, 600));
-      await fetchAgent();
+      const deadline = Date.now() + 120000; // wait up to 2 minutes
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1000));
+        await fetchAgent();
+        const s = normState(agent?.state);
+        if (s && s !== 'init') break;
+      }
+      // If we progressed past init, refresh files once now
+      if (normState(agent?.state) !== 'init') {
+        await fetchFiles(true);
+      }
       error = null;
     } catch (e) {
       error = e.message || String(e);
+    } finally {
     }
   }
 
@@ -983,14 +1226,18 @@
   onMount(async () => {
     if (!isAuthenticated()) { goto('/login'); return; }
     $appOptions.appContentClass = 'p-3';
+    // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
     try {
       await fetchAgent();
       await fetchRuntime(true);
       await fetchResponses();
+      // Render the chat before attempting to scroll
+      loading = false;
+      await tick();
+      try { updateTopCardsHeight(); } catch (_) {}
       await tick();
       scrollToBottom();
-      loading = false;
       startPolling();
     } catch (e) {
       error = e.message || String(e);
@@ -998,6 +1245,7 @@
     }
   });
   onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
+  onDestroy(() => { try { _footerRO && _footerRO.disconnect(); } catch (_) {} try { if (typeof window !== 'undefined') window.removeEventListener('resize', _updateDetailsPaneHeight); } catch (_) {} fmRevokePreviewUrl(); });
 </script>
 
 <!-- Edit Tags Modal -->
@@ -1146,12 +1394,12 @@
   </div>
 {/if}
 
-<div class="row g-3 h-100">
-  <!-- No page overlay during compaction; only disable action controls -->
-  <div class="col-12 d-flex flex-column h-100" style="min-height: 0;">
-    <!-- Header: Agent details on the left, info box on the right -->
-    <div class="row g-3 mb-2">
-      <div class="col-12 col-lg-7">
+<!-- Two-row layout: top cards align via align-items-stretch; bottom panels flex-fill -->
+<div class="d-flex flex-column h-100" style="min-height: 0;">
+  <!-- Top row: equal heights via align-items-stretch and h-100 cards -->
+  <div class="col-12">
+    <div class="row g-3 align-items-stretch">
+      <div class="col-12 col-lg-6">
         <Card class="h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
@@ -1170,17 +1418,9 @@
             {/if}
             <!-- Public URL in main card -->
             
-            <div class="mt-2 d-flex flex-wrap gap-1">
-              {#if Array.isArray(agent?.tags) && agent.tags.length}
-                {#each agent.tags as t}
-                  <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
-                {/each}
-              {:else}
-                <span class="text-body-secondary small">No tags</span>
-              {/if}
-            </div>
+            <!-- Tags removed from detail page -->
             <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
-            <div class="mt-2 d-flex align-items-center flex-wrap">
+            <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
                 {#if agent}
@@ -1192,43 +1432,43 @@
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
                   <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
-                    <i class="bi bi-moon me-1"></i><span>Sleep</span>
+                    <i class="fa fa-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
                 {#if agent}
                   {#if agent.is_published || agent.isPublished}
                     <div class="dropdown">
                       <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                        <i class="bi bi-globe me-1"></i><span>Published</span>
+                        <i class="fa fa-globe me-1"></i><span>Published</span>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li>
-                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-2"></i>Open Public URL</a>
+                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link-alt me-2"></i>Open Public URL</a>
                         </li>
                         <li>
-                          <button class="dropdown-item" on:click={publishAgent}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
+                          <button class="dropdown-item" on:click={publishAgent}><i class="fa fa-cloud-upload-alt me-2"></i>Publish New Version</button>
                         </li>
                         <li>
-                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
+                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="fa fa-eye-slash me-2"></i>Unpublish</button>
                         </li>
                       </ul>
                     </div>
                 {:else}
                   <button type="button" class="btn btn-outline-secondary btn-sm" on:click={publishAgent} aria-label="Publish content">
-                    <i class="bi bi-cloud-arrow-up me-1"></i><span>Publish</span>
+                    <i class="fa fa-cloud-upload-alt me-1"></i><span>Publish</span>
                   </button>
                 {/if}
                 {/if}
                 <div class="dropdown">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-                    <i class="bi bi-three-dots"></i>
+                    <i class="fa fa-ellipsis-h"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={remixAgent}><i class="bi bi-shuffle me-2"></i>Remix</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
+                    <li><button class="dropdown-item" on:click={remixAgent}><i class="fa fa-random me-2"></i>Remix</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTags}><i class="fa fa-tags me-2"></i>Edit Tags</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fa fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="bi bi-trash me-2"></i>Delete</button></li>
+                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="fa fa-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>
@@ -1236,7 +1476,7 @@
           </div>
         </Card>
       </div>
-      <div class="col-12 col-lg-5 d-none d-lg-block">
+      <div class="col-12 col-lg-6 d-none d-lg-block">
         {#if agent}
           <Card class="h-100">
             <div class="card-body small">
@@ -1247,31 +1487,63 @@
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 100000)} ({fmtPct(ctx?.used_percent || 0)})</div>
-                  <!-- Clear moved to toolbar next to Compact -->
                 </div>
                 <div class="progress mt-1" role="progressbar" aria-valuenow={Number(ctx?.used_percent || 0)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
                   <div class="progress-bar {Number(ctx?.used_percent || 0) >= 90 ? 'bg-danger' : 'bg-theme'}" style={`width: ${Math.min(100, Number(ctx?.used_percent || 0)).toFixed(1)}%;`}></div>
                 </div>
-                <!-- Removed 'Since' line for context cutoff display -->
-              </div>
-              <div class="mt-2">
-                <!-- Public URL moved to main card -->
               </div>
             </div>
           </Card>
         {/if}
       </div>
     </div>
+  </div>
 
+  <!-- Delete File Modal -->
+  {#if showDeleteFile}
+    <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Delete File</h5>
+            <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteFile}></button>
+          </div>
+          <div class="modal-body">
+            {#if deleteFileError}
+              <div class="alert alert-warning py-1 mb-2 small">{deleteFileError}</div>
+            {/if}
+            <div class="small">Are you sure you want to delete <span class="font-monospace">{(fmDeleteEntry && fmDeleteEntry.name) || '-'}</span>{#if fmDeleteEntry && fmDeleteEntry.kind === 'dir'} (folder){/if}?</div>
+            <div class="text-body-secondary small mt-2">This action cannot be undone.</div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline-secondary" on:click={closeDeleteFile}>Cancel</button>
+            <button class="btn btn-danger" on:click={confirmDeleteFile}><i class="bi bi-trash me-1"></i>Delete</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Bottom row: chat and files panels (2x2) -->
+  <div class="row gx-3 flex-fill mt-3" style="min-height: 0; flex: 1 1 0;">
+    <div class="col-12 col-lg-6 d-flex flex-column h-100" style="min-height: 0; min-width: 0;">
+        <!-- Chat & actions -->
+    <Card class="flex-fill d-flex flex-column" style="min-height: 0;">
+      <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
     <!-- Toolbar -->
-    <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-      <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context with LLM summary">Compact</button>
-      <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear</button>
-      <button class="btn btn-sm btn-outline-secondary" title="Expand all details" on:click={expandAllDetails} aria-label="Expand all">
-        <i class="bi bi-chevron-double-down"></i>
+    <div class="d-flex align-items-center flex-wrap gap-1 border-bottom px-2 py-1 small">
+      <button class="btn btn-sm border-0" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context" aria-label="Compact">
+        <i class="bi bi-arrows-collapse"></i>
       </button>
-      <button class="btn btn-sm btn-outline-secondary" title="Collapse all details" on:click={collapseAllDetails} aria-label="Collapse all">
-        <i class="bi bi-chevron-double-up"></i>
+      <button class="btn btn-sm border-0" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context" aria-label="Clear">
+        <i class="bi bi-eraser"></i>
+      </button>
+      <span class="vr mx-1"></span>
+      <button class="btn btn-sm border-0" title="Expand all" on:click={expandAllDetails} aria-label="Expand all">
+        <i class="fa fa-angle-double-down"></i>
+      </button>
+      <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
+        <i class="fa fa-angle-double-up"></i>
       </button>
       <div class="form-check form-switch" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
@@ -1284,28 +1556,28 @@
     </div>
 
     {#if error}
-      <div class="alert alert-danger py-2 small mb-2">{error}</div>
+      <div class="alert alert-danger py-2 small m-2">{error}</div>
     {/if}
     {#if contextFull}
-      <div class="alert alert-warning py-2 small mb-2 d-flex align-items-center justify-content-between" role="alert">
-        <div>
-          <i class="bi bi-exclamation-triangle me-2"></i>
+          <div class="alert alert-warning py-2 small m-2 d-flex align-items-center justify-content-between" role="alert">
+            <div>
+          <i class="fa fa-exclamation-triangle me-2"></i>
           Context is full — clear it to continue.
-        </div>
+            </div>
         <div class="ms-2">
           <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear Context</button>
         </div>
       </div>
     {/if}
     {#if loading}
-      <div class="flex-fill d-flex align-items-center justify-content-center border rounded-2 bg-body">
+      <div class="flex-fill d-flex align-items-center justify-content-center">
         <div class="text-body text-opacity-75 text-center p-3">
           <div class="spinner-border text-theme mb-3"></div>
           <div>Loading…</div>
         </div>
       </div>
     {:else}
-      <div id="chat-body" class="flex-fill px-3 pt-3 pb-0 rounded-0 shadow-none border border-bottom-0 bg-transparent" style="overflow-y: auto; min-height: 0; height: 100%;">
+      <div id="chat-body" class="flex-fill px-3 pt-3 pb-0" style="flex: 1 1 0; overflow-y: auto; min-height: 0;">
           <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
           {#each (chat || []) as m, i}
             {#if m.role === 'user'}
@@ -1332,7 +1604,34 @@
                             <div class="markdown-body">{@html renderMarkdown(segContent(s))}</div>
                           </div>
                         {/if}
-                      
+                      {:else if isOutputSeg(s)}
+                        <!-- Always render output_* content inline during processing -->
+                        <Card class="mt-2 mb-2">
+                          <div class="card-body py-2">
+                            {#each outputItemsOfSeg(s) as it, k}
+                              <details class="mb-2" open={true}>
+                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
+                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
+                                </summary>
+                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <div class="markdown-wrap mt-1 mb-2">
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                    </div>
+                                  {/if}
+                                {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                  {#if typeof it?.content === 'string' && it.content.trim()}
+                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                  {/if}
+                                {/if}
+                              </details>
+                            {/each}
+                          </div>
+                        </Card>
+
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
                         <!-- Optional commentary from args.commentary -->
@@ -1399,37 +1698,8 @@
                           </div>
                         {/if}
                         {/if}
-                      {:else if segType(s) === 'slept'}
-                        <!-- handled below as a full-width marker -->
+                      
                       {/if}
-                    <!-- Always render output_* content inline during processing -->
-                    {#if isOutputSeg(s)}
-                      <Card class="mt-2 mb-2">
-                        <div class="card-body py-2">
-                          {#each outputItemsOfSeg(s) as it, k}
-                            <details class="mb-2" open={true}>
-                              <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
-                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
-                                {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                              </summary>
-                              {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                {#if typeof it?.content === 'string' && it.content.trim()}
-                                  <div class="markdown-wrap mt-1 mb-2">
-                                    <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                  </div>
-                                {/if}
-                              {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                              {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                {#if typeof it?.content === 'string' && it.content.trim()}
-                                  <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                {/if}
-                              {/if}
-                            </details>
-                          {/each}
-                        </div>
-                      </Card>
-                    {/if}
                     {/each}
                     </div>
                   </div>
@@ -1498,6 +1768,9 @@
                     </details>
                   </div>
                 {:else}
+                  {#if ((showThinking && typeof metaOf(m)?.thinking === 'string' && metaOf(m).thinking.trim())
+                        || (m.content && m.content.trim())
+                        || (Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0))}
                   <div class="d-flex mb-3 justify-content-start">
                     <div class="text-body" style="max-width: 80%; word-break: break-word;">
                       {#if metaOf(m)?.thinking}
@@ -1539,6 +1812,7 @@
                       {/if}
                     </div>
                   </div>
+                  {/if}
                 {/if}
                 <!-- If this is an output_* tool result card, render content inline during processing regardless of showTools -->
                 {#if isToolResult(m)}
@@ -1575,9 +1849,9 @@
                   {/if}
                   
                 {/if}
+                {/if}
               {/if}
-            {/if}
-            {/if}
+              {/if}
           {/each}
         {#if stateStr === 'busy'}
           <div class="d-flex mb-2 justify-content-start">
@@ -1589,8 +1863,9 @@
               {/if}
             </div>
           </div>
+      <div class="border-top p-2" bind:this={chatFooterEl}>
       <form class="pt-0" on:submit|preventDefault={sendMessage}>
-        <div class="input-group chat-input-wrap rounded-0 shadow-none border border-top-0 bg-transparent">
+        <div class="input-group chat-input-wrap rounded-0 shadow-none">
           <textarea
             aria-label="Message input"
             class="form-control form-control-lg shadow-none rounded-0 chat-input chat-no-zoom"
@@ -1610,27 +1885,173 @@
             on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
           ></textarea>
           {#if stateStr === 'busy'}
-            <button type="button" class="btn btn-outline-danger" aria-label="Cancel active" on:click={cancelActive}>
-              <i class="bi bi-stop"></i>
+            <button type="button" class="btn btn-outline-danger rounded-0 shadow-none chat-action-btn" aria-label="Cancel active" on:click={cancelActive}>
+              <i class="fa fa-stop"></i>
             </button>
           {:else}
-            <button class="btn btn-outline-theme rounded-0 shadow-none" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
+            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
-                <i class="bi bi-send"></i>
+                <i class="fa fa-paper-plane"></i>
               {/if}
             </button>
           {/if}
         </div>
       </form>
+      </div>
     {/if}
+      </div>
+    </Card>
+        </div>
+    <div class="col-12 col-lg-6 d-none d-lg-flex flex-column h-100" style="min-height: 0; min-width: 0;">
+        <!-- Content (Files) side panel -->
+        <Card class="flex-fill d-flex flex-column" style="min-height: 0;">
+          <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
+            {#if stateStr === 'slept'}
+              <div class="flex-fill d-flex align-items-center justify-content-center p-3">
+                <div class="text-center text-body text-opacity-75">
+                  <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Agent is sleeping</div>
+                  <button class="btn btn-primary btn-sm" on:click={wakeAgent}><i class="bi bi-sun me-1"></i>Wake</button>
+                </div>
+              </div>
+            {:else if stateStr === 'init'}
+              <div class="flex-fill d-flex align-items-center justify-content-center p-3">
+                <div class="text-center text-body text-opacity-75">
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2"></span>Waiting for agent to wake up</div>
+                </div>
+              </div>
+            {:else}
+              <!-- Action bar (read-only) -->
+              <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
+                <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
+                <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0 && !fmPreviewName)}><i class="bi bi-arrow-90deg-up"></i></button>
+                <button class="btn btn-sm border-0" aria-label="Refresh" title="Refresh" on:click={fmRefresh}><i class="bi bi-arrow-repeat"></i></button>
+                <span class="vr mx-1"></span>
+                {#if fmPreviewName}
+                  <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
+                  <button class="btn btn-sm border-0 text-danger" aria-label="Delete" title="Delete" on:click={() => openDeleteEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-trash"></i></button>
+                  <span class="vr mx-1"></span>
+                {/if}
+                {#if !fmPreviewName}
+                  <div class="small text-body text-opacity-75">{fmtInt((fmEntries && fmEntries.length) || 0)} items</div>
+                {/if}
+                <div class="ms-auto d-flex align-items-center gap-2">
+                  <div class="small text-body text-opacity-75">{currentFullPath}</div>
+                </div>
+              </div>
+              <!-- List + Details scroll region -->
+              {#if fmError}
+                <div class="alert alert-danger small m-2 py-1">{fmError}</div>
+              {/if}
+              <div class="d-flex flex-column flex-fill" style="min-height: 0;">
+                <PerfectScrollbar class="flex-fill">
+                  {#if fmPreviewName}
+                    {#if fmPreviewLoading}
+                      <div class="d-flex align-items-center justify-content-center p-3 text-body text-opacity-75"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+                    {:else if fmPreviewError}
+                      <div class="p-3 small text-danger">{fmPreviewError}</div>
+                    {:else if fmPreviewType === 'image' && fmPreviewUrl}
+                      <div class="p-2"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
+                    {:else if fmPreviewType === 'text'}
+                      <div class="p-2"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
+                    {:else}
+                      <div class="p-3 small text-body text-opacity-75">Binary file</div>
+                    {/if}
+                  {:else}
+                    {#if fmLoading}
+                      <div class="d-flex align-items-center justify-content-center p-3 text-body text-opacity-75">
+                        <div class="spinner-border spinner-border-sm me-2"></div>
+                        <div>Loading…</div>
+                      </div>
+                    {:else if !fmEntries || fmEntries.length === 0}
+                      <div class="p-3 small text-body text-opacity-75">Empty</div>
+                    {:else}
+                      <div class="list-group list-group-flush">
+                        {#each fmEntries as e}
+                          <div class="list-group-item d-flex align-items-center">
+                            <button type="button" class="btn btn-link text-reset text-decoration-none text-start flex-grow-1 d-flex align-items-center p-0 file-entry-btn"
+                            on:click={() => fmOpen(e)}
+                            title={`${e.name} • ${e.kind} • ${e.mtime}`}
+                          >
+                            <i class={`${fmIconFor(e)} me-2`}></i>
+                            <span class="text-truncate">{e.name}</span>
+                            </button>
+                            {#if String(e?.kind || '').toLowerCase() !== 'dir' && String(e?.kind || '').toLowerCase() !== 'directory'}
+                              <button class="btn btn-sm btn-link text-body ms-2 p-0" title="Download" aria-label="Download" on:click|stopPropagation={() => fmDownloadEntry(e)}>
+                                <i class="bi bi-download"></i>
+                              </button>
+                            {/if}
+                            <button class="btn btn-sm btn-link text-danger ms-2 p-0" title="Delete" aria-label="Delete" on:click|stopPropagation={() => openDeleteEntry(e)}>
+                              <i class="bi bi-trash"></i>
+                            </button>
+                          </div>
+                        {/each}
+                      </div>
+                      {#if fmNextOffset != null}
+                        <div class="border-top p-2 d-flex align-items-center justify-content-center">
+                          <button class="btn btn-sm btn-outline-secondary" on:click={fmLoadMore} disabled={fmLoading}>
+                            {#if fmLoading}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
+                            Load more
+                          </button>
+                        </div>
+                      {/if}
+                    {/if}
+                  {/if}
+                </PerfectScrollbar>
+                <!-- Details & Preview bottom pane (fixed height) -->
+                <!-- Preview/Details bottom pane -->
+                <!-- No separate details pane; counts are shown in the action bar -->
+              </div>
+              {/if}
+          </div>
+        </Card>
+      </div>
+    </div>
   </div>
 
   <style>
+    /* Stabilize native scrollbars in chat */
+    :global(#chat-body) {
+      scrollbar-gutter: stable both-edges;
+      overscroll-behavior: contain;
+    }
+    /* Pretty native scrollbar for chat (desktop) */
+    :global(#chat-body) { scrollbar-width: thin; scrollbar-color: rgba(var(--bs-theme-rgb), .6) transparent; }
+    :global(#chat-body::-webkit-scrollbar) { width: 10px; height: 10px; }
+    :global(#chat-body::-webkit-scrollbar-track) { background: transparent; }
+    :global(#chat-body::-webkit-scrollbar-thumb) {
+      background-color: rgba(var(--bs-theme-rgb), .6);
+      border-radius: 8px;
+      border: 2px solid transparent;
+      background-clip: content-box;
+    }
+    :global(#chat-body:hover::-webkit-scrollbar-thumb) { background-color: rgba(var(--bs-theme-rgb), .85); }
+
+    /* Equal-size action buttons (Send / Cancel) */
+    :global(.chat-action-btn) {
+      width: 3rem;
+      min-width: 3rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
     /* Remove any bottom gap inside the responses panel */
     :global(#chat-body > *:last-child) { margin-bottom: 0 !important; }
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+    /* Minimal code preview for file contents: monospace, no bg/border */
+    :global(.preview-code) {
+      font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
+      font-size: 0.875rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      background: transparent !important;
+      color: var(--bs-body-color);
+      border: 0;
+      padding: 0;
+    }
     /* Chat input container adopts border; textarea is borderless */
     /* Borders handled via Bootstrap classes on containers */
     :global(textarea.chat-input) {
@@ -1698,12 +2119,22 @@
       border-left-width: 0.5em;
       margin-left: 0.4rem;
     }
-    /* Ensure dropdown menus overlay adjacent buttons and are not clipped */
-    :global(.dropdown-menu) { z-index: 5000; }
+    /* File/Folder names should not be blue like links */
+    :global(.file-entry-btn),
+    :global(.file-entry-btn:hover),
+    :global(.file-entry-btn:focus) {
+      color: var(--bs-body-color) !important;
+      text-decoration: none !important;
+    }
+    /* Keep dropdown above chat content but below modals */
+    :global(.top-actions) { position: relative; z-index: 1988; }
+    :global(.dropdown-menu) { z-index: 1985; }
+    /* Ensure modals always sit on top within this page */
+    :global(.modal) { z-index: 2000; }
+    :global(.modal-backdrop) { z-index: 1990; }
     :global(.card) { overflow: visible; }
     /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
     }
   </style>
- </div>
