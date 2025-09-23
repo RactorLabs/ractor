@@ -1767,31 +1767,31 @@
                   </div>
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasCancelledSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextClearedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Context Cleared</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Context Cleared</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextCompactedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Context Compacted</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Context Compacted</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
@@ -2187,6 +2187,10 @@
     :global(#chat-body .chat-marker-hr) {
       border: 0;
       border-top: 2px dotted rgba(var(--bs-body-color-rgb), 1);
+    }
+    /* Smaller marker text size */
+    :global(#chat-body .chat-marker-text) {
+      font-size: 0.7rem;
     }
     /* Make the Published dropdown caret arrow a bit bigger */
     :global(.published-toggle.dropdown-toggle::after) {
