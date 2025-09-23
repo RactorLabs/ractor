@@ -149,6 +149,7 @@
   let fmLimit = 100;
   let fmNextOffset = null;
   let fmTotal = 0;
+  let fmListKey = 0; // force remount of scroll area after list refresh
   // Maintain relative path segments under /agent
   let fmSegments = [];
   // Reactive full path label for toolbar (current folder only; no selection state)
@@ -253,7 +254,7 @@
     } catch (e) {
       if (seq === fmListSeq) fmError = e.message || String(e);
     } finally {
-      if (seq === fmListSeq) fmLoading = false;
+      if (seq === fmListSeq) { fmLoading = false; try { fmListKey++; } catch (_) {} }
     }
   }
   function fmOpen(entry) {
@@ -2019,6 +2020,7 @@
                 <div class="alert alert-danger small m-2 py-1">{fmError}</div>
               {/if}
               <div class="d-flex flex-column flex-fill" style="min-height: 0;">
+                {#key fmListKey}
                 <PerfectScrollbar class="flex-fill">
                   {#if fmPreviewName}
                     {#if fmPreviewError}
@@ -2071,6 +2073,7 @@
                     {/if}
                   {/if}
                 </PerfectScrollbar>
+                {/key}
                 <!-- Details & Preview bottom pane (fixed height) -->
                 <!-- Preview/Details bottom pane -->
                 <!-- No separate details pane; counts are shown in the action bar -->
