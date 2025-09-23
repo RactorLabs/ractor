@@ -1668,7 +1668,7 @@
                           {#each outputItemsOfSeg(s) as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-seg-${j}-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-seg-${j}-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-seg-${j}-${k}`}>
                                   <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
@@ -1843,7 +1843,7 @@
                           {#each m.content_json.output_content as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-top-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-top-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-top-${k}`}>
                                   <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
@@ -1880,7 +1880,7 @@
                           {#each parsedItemsFromTopCard(m) as it, k}
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-toolout-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-toolout-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-toolout-${k}`}>
                                   <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
@@ -2211,12 +2211,14 @@
     @media (max-width: 576px) {
       :global(textarea.chat-no-zoom) { font-size: 16px; }
     }
-    /* Make tool preview headers (accordion buttons) slightly grayer in chat */
+    /* Tool preview headers in chat should mirror HUD theme subtle active bg */
     :global(#chat-body .accordion-button) {
-      background-color: transparent;
-      color: rgba(var(--bs-body-color-rgb), .65);
+      background-color: var(--bs-accordion-btn-bg);
+      color: var(--bs-accordion-btn-color);
     }
     :global(#chat-body .accordion-button:not(.collapsed)) {
+      background-color: var(--bs-accordion-active-bg);
+      color: var(--bs-accordion-active-color);
       box-shadow: none;
     }
     /* Add a tiny extra space below tool accordions */
