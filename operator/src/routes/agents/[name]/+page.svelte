@@ -762,6 +762,15 @@
       return n;
     } catch (_) { return String(t || ''); }
   }
+  function typeIconClass(t) {
+    try {
+      const n = String(t || '').toLowerCase();
+      if (n === 'markdown') return 'fa fa-file-alt';
+      if (n === 'json') return 'fa fa-code';
+      if (n === 'url') return 'fa fa-link';
+      return 'fa fa-file';
+    } catch (_) { return 'fa fa-file'; }
+  }
 
   // Parse helpers for rare top-level tool_result card content
   function parseJsonSafe(s) {
@@ -1660,7 +1669,7 @@
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-seg-${j}-${k}`}>
                                 <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-seg-${j}-${k}`}>
-                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
+                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
                               </h2>
@@ -1837,7 +1846,7 @@
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-top-${k}`}>
                                 <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-top-${k}`}>
-                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
+                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
                               </h2>
@@ -1876,7 +1885,7 @@
                             <div class="accordion-item">
                               <h2 class="accordion-header" id={`acc-h-${m?.id || i}-toolout-${k}`}>
                                 <button class={`accordion-button ${k === 0 ? '' : 'collapsed'} text-body text-opacity-75`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-toolout-${k}`}>
-                                  <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
+                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
                                 </button>
                               </h2>
