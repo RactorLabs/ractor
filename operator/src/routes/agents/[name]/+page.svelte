@@ -1758,31 +1758,31 @@
                   </div>
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 small text-body text-opacity-75 fst-italic">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasCancelledSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 small text-body text-opacity-75 fst-italic">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 small text-body text-opacity-75 fst-italic">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextClearedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 small text-body text-opacity-75 fst-italic">Context Cleared</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Context Cleared</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextCompactedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 small text-body text-opacity-75 fst-italic">Context Compacted</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 fs-6">Context Compacted</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
