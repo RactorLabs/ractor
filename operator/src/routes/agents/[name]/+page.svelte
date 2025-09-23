@@ -2239,6 +2239,13 @@
       align-self: center;
       height: 1.25rem;
     }
+    /* Re-enable spinners inside Files pane (animation was globally disabled) */
+    :global(.files-pane .spinner-border) {
+      animation: .75s linear infinite spinner-border !important;
+    }
+    :global(.files-pane .spinner-grow) {
+      animation: .75s linear infinite spinner-grow !important;
+    }
     /* Normalize vertical rule height in Chat header */
     :global(.chat-pane .border-bottom .vr) {
       align-self: center;
