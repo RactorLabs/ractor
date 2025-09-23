@@ -1586,7 +1586,7 @@
   <div class="row gx-3 flex-fill mt-3" style="min-height: 0; flex: 1 1 0;">
     <div class="col-12 col-lg-6 d-flex flex-column h-100" style="min-height: 0; min-width: 0;">
         <!-- Chat & actions -->
-    <Card class="flex-fill d-flex flex-column" style="min-height: 0;">
+    <Card class="flex-fill d-flex flex-column chat-pane" style="min-height: 0;">
       <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
     <!-- Toolbar -->
     <div class="d-flex align-items-center flex-wrap gap-1 border-bottom px-2 py-1 small">
@@ -2236,6 +2236,11 @@
     }
     /* Normalize vertical rule height in Files header */
     :global(.files-pane .border-bottom .vr) {
+      align-self: center;
+      height: 1.25rem;
+    }
+    /* Normalize vertical rule height in Chat header */
+    :global(.chat-pane .border-bottom .vr) {
       align-self: center;
       height: 1.25rem;
     }
