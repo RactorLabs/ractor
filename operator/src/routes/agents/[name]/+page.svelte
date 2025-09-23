@@ -107,7 +107,32 @@
     thinkingPrefLoaded = true;
     toolsPrefLoaded = true;
   });
+  // Sync file path with URL (?file=seg1/seg2)
+  function _getPathFromUrl() {
+    try {
+      if (typeof window === 'undefined') return [];
+      const u = new URL(window.location.href);
+      const p = u.searchParams.get('file');
+      if (!p) return [];
+      return p.split('/').filter(Boolean).map(decodeURIComponent);
+    } catch (_) { return []; }
+  }
+  function _setPathInUrl(segs) {
+    try {
+      if (typeof window === 'undefined') return;
+      const u = new URL(window.location.href);
+      const val = (Array.isArray(segs) ? segs : []).map(encodeURIComponent).join('/');
+      if (val) u.searchParams.set('file', val);
+      else u.searchParams.delete('file');
+      window.history.replaceState({}, '', u.toString());
+    } catch (_) {}
+  }
   onMount(async () => {
+    try {
+      // Initialize folder path from URL before first fetch
+      const initSegs = _getPathFromUrl();
+      if (initSegs && initSegs.length) fmSegments = initSegs;
+    } catch (_) {}
     try { await fetchContextUsage(); } catch (_) {}
     try { await fetchFiles(true); } catch (_) {}
     // layout handles equal heights; no JS equalizer
@@ -263,6 +288,7 @@
     if (k === 'dir' || k === 'directory') {
       fmSegments = [...fmSegments, entry.name];
       fmOffset = 0;
+      try { _setPathInUrl(fmSegments); } catch (_) {}
       fetchFiles(true);
     } else {
       fmShowPreview(entry);
@@ -365,12 +391,14 @@
     if (fmSegments.length === 0) return; // at root; nothing to go up to
     fmSegments = fmSegments.slice(0, -1);
     fmOffset = 0;
+    try { _setPathInUrl(fmSegments); } catch (_) {}
     refreshFilesPanel({ reset: true });
   }
   function fmGoRoot() {
     fmPreviewReset();
     fmSegments = [];
     fmOffset = 0;
+    try { _setPathInUrl(fmSegments); } catch (_) {}
     refreshFilesPanel({ reset: true });
   }
   function fmRefresh() {
@@ -2011,7 +2039,13 @@
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
                     <span class="vr"></span>
-                    <div class="small text-body text-opacity-75">{fmtInt((fmEntries && fmEntries.length) || 0)} items</div>
+                    <div class="small text-body text-opacity-75">
+                      {#if Number(fmTotal || 0) > Number((fmEntries && fmEntries.length) || 0)}
+                        {fmtInt((fmEntries && fmEntries.length) || 0)} of {fmtInt(fmTotal)} items
+                      {:else}
+                        {fmtInt(fmTotal || ((fmEntries && fmEntries.length) || 0))} items
+                      {/if}
+                    </div>
                   {/if}
                 </div>
               </div>
