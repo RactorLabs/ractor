@@ -1654,32 +1654,36 @@
                           </div>
                         {/if}
                       {:else if isOutputSeg(s)}
-                        <!-- Always render output_* content inline during processing -->
-                        <Card class="mt-3 mb-2">
-                          <div class="card-body py-2">
-                            {#each outputItemsOfSeg(s) as it, k}
-                              <details class="mb-2" open={true}>
-                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                        <!-- Replace output box with accordion, one entry per item -->
+                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-seg-${j}`}>
+                          {#each outputItemsOfSeg(s) as it, k}
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-seg-${j}-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-seg-${j}-${k}`}>
                                   <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </summary>
-                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <div class="markdown-wrap mt-1 mb-2">
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    </div>
+                                </button>
+                              </h2>
+                              <div id={`acc-c-${m?.id || i}-seg-${j}-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-seg-${j}`}>
+                                <div class="accordion-body">
+                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <div class="markdown-wrap mt-1 mb-2">
+                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                      </div>
+                                    {/if}
+                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                    {/if}
                                   {/if}
-                                {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                  {/if}
-                                {/if}
-                              </details>
-                            {/each}
-                          </div>
-                        </Card>
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
 
                       {:else if segType(s) === 'tool_call'}
                         {#if showTools}
@@ -1828,31 +1832,35 @@
                         </div>
                       {/if}
                       {#if Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0}
-                        <Card class="mt-3 mb-2">
-                          <div class="card-body py-2">
-                            {#each m.content_json.output_content as it}
-                              <details class="mb-2" open={expandAll}>
-                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-top`}>
+                          {#each m.content_json.output_content as it, k}
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-top-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-top-${k}`}>
                                   <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </summary>
-                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <div class="markdown-wrap mt-1 mb-2">
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    </div>
+                                </button>
+                              </h2>
+                              <div id={`acc-c-${m?.id || i}-top-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-top`}>
+                                <div class="accordion-body">
+                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <div class="markdown-wrap mt-1 mb-2">
+                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                      </div>
+                                    {/if}
+                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
+                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                    {/if}
                                   {/if}
-                                {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                  {/if}
-                                {/if}
-                              </details>
-                            {/each}
-                          </div>
-                        </Card>
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
                       {/if}
                     </div>
                   </div>
@@ -1863,31 +1871,35 @@
                   {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'output')}
                     {#if m.content && m.content.trim()}
                       {#if parsedItemsFromTopCard(m).length > 0}
-                        <Card class="mt-3 mb-2">
-                          <div class="card-body py-2">
-                            {#each parsedItemsFromTopCard(m) as it}
-                              <details class="mb-2" open={expandAll}>
-                                <summary class="small fw-500 text-body mb-1" style="cursor: pointer;">
+                        <div class="accordion mt-3 mb-2" id={`acc-${m?.id || i}-toolout`}>
+                          {#each parsedItemsFromTopCard(m) as it, k}
+                            <div class="accordion-item">
+                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-toolout-${k}`}>
+                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-toolout-${k}`}>
                                   <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{typeBadge(it?.type)}</span>
                                   {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </summary>
-                                {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <div class="markdown-wrap mt-1 mb-2">
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    </div>
+                                </button>
+                              </h2>
+                              <div id={`acc-c-${m?.id || i}-toolout-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-toolout`}>
+                                <div class="accordion-body">
+                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <div class="markdown-wrap mt-1 mb-2">
+                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
+                                      </div>
+                                    {/if}
+                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
+                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
+                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
+                                    {#if typeof it?.content === 'string' && it.content.trim()}
+                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
+                                    {/if}
                                   {/if}
-                                {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                  <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                  {#if typeof it?.content === 'string' && it.content.trim()}
-                                    <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                  {/if}
-                                {/if}
-                              </details>
-                            {/each}
-                          </div>
-                        </Card>
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
                       {/if}
                     {/if}
                   {/if}
