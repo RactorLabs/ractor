@@ -1754,37 +1754,32 @@
                   </div>
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                    <span class="px-2 small text-body text-opacity-75">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 small text-body text-opacity-75 fst-italic">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasCancelledSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small text-body text-opacity-75">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small text-body text-opacity-75 fst-italic">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                    <span class="px-2 small text-body text-opacity-75">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <span class="px-2 small text-body text-opacity-75 fst-italic">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextClearedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small text-body text-opacity-75">Context Cleared</span>
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small text-body text-opacity-75 fst-italic">Context Cleared</span>
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextCompactedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small text-body text-opacity-75">Context Compacted</span>
-                    <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
+                    <span class="px-2 small text-body text-opacity-75 fst-italic">Context Compacted</span>
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if !hasFinalSeg(m) && m.content && m.content.trim()}
