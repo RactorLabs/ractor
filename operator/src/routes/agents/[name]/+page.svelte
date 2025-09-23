@@ -276,37 +276,63 @@
   let fmPreviewUrl = '';
   let fmPreviewLoading = false;
   let fmPreviewError = null;
+  let fmPreviewSeq = 0;
+  let fmPreviewAbort = null;
   function fmRevokePreviewUrl() { try { if (fmPreviewUrl) { URL.revokeObjectURL(fmPreviewUrl); } } catch (_) {} }
   function fmPreviewReset() { fmRevokePreviewUrl(); fmPreviewName=''; fmPreviewType=''; fmPreviewText=''; fmPreviewUrl=''; fmPreviewLoading=false; fmPreviewError=null; }
   async function fmShowPreview(entry) {
     try {
+      // Cancel any in-flight preview load
+      try { fmPreviewAbort && fmPreviewAbort.abort(); } catch (_) {}
+      const seq = ++fmPreviewSeq;
+      fmPreviewAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
       fmPreviewError = null; fmPreviewLoading = true; fmPreviewText=''; fmPreviewUrl=''; fmPreviewType='';
       fmPreviewName = entry?.name || '';
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
       const url = `/api/v0/agents/${encodeURIComponent(name)}/files/read/${relEnc}`;
-      const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+      const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: fmPreviewAbort ? fmPreviewAbort.signal : undefined });
       if (!res.ok) {
         fmPreviewError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Open failed (HTTP ${res.status})`));
       } else {
         const ct = (res.headers.get('content-type') || '').toLowerCase();
         if (ct.startsWith('image/')) {
-          fmRevokePreviewUrl();
           const blob = await res.blob();
+          if (seq !== fmPreviewSeq) return; // outdated
+          fmRevokePreviewUrl();
           fmPreviewUrl = URL.createObjectURL(blob);
           fmPreviewType = 'image';
         } else if (ct.startsWith('text/') || ct.includes('json') || ct.includes('javascript') || ct.includes('xml') || ct.includes('yaml') || ct.includes('toml') || ct.includes('html')) {
-          fmPreviewText = await res.text();
+          // Stream text content progressively for responsiveness
           fmPreviewType = 'text';
+          const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+          if (reader) {
+            const decoder = new TextDecoder('utf-8');
+            let done = false;
+            while (!done) {
+              const r = await reader.read();
+              if (seq !== fmPreviewSeq) { try { reader.cancel && reader.cancel(); } catch (_) {} return; }
+              done = r.done;
+              if (r.value && r.value.length) {
+                fmPreviewText += decoder.decode(r.value, { stream: !done });
+              }
+            }
+          } else {
+            // Fallback: read all at once
+            const text = await res.text();
+            if (seq !== fmPreviewSeq) return;
+            fmPreviewText = text;
+          }
         } else {
           // Try as text anyway up to a cap
-          try { const t = await res.text(); fmPreviewText = t; fmPreviewType = 'text'; }
+          try { const t = await res.text(); if (seq !== fmPreviewSeq) return; fmPreviewText = t; fmPreviewType = 'text'; }
           catch (_) { fmPreviewType = 'binary'; fmPreviewError = 'Preview not available for this type'; }
         }
       }
     } catch (e) {
-      fmPreviewError = e.message || String(e);
+      if (e && String(e.name || '') === 'AbortError') { /* ignore abort */ }
+      else fmPreviewError = e.message || String(e);
     } finally {
       fmPreviewLoading = false;
     }
