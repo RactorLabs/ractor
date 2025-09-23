@@ -107,7 +107,7 @@
     thinkingPrefLoaded = true;
     toolsPrefLoaded = true;
   });
-  // Sync file path with URL (?file=seg1/seg2)
+  // Sync file path with URL (?file=seg1/seg2[/file.ext])
   function _getPathFromUrl() {
     try {
       if (typeof window === 'undefined') return [];
@@ -117,21 +117,26 @@
       return p.split('/').filter(Boolean).map(decodeURIComponent);
     } catch (_) { return []; }
   }
-  function _setPathInUrl(segs) {
+  function _setPathInUrl(segs, fileName = '') {
     try {
       if (typeof window === 'undefined') return;
       const u = new URL(window.location.href);
-      const val = (Array.isArray(segs) ? segs : []).map(encodeURIComponent).join('/');
+      const parts = (Array.isArray(segs) ? segs : []).map(encodeURIComponent);
+      const val = fileName ? parts.concat([encodeURIComponent(fileName)]).join('/') : parts.join('/');
       if (val) u.searchParams.set('file', val);
       else u.searchParams.delete('file');
       window.history.replaceState({}, '', u.toString());
     } catch (_) {}
   }
+  let fmPendingOpenFile = '';
   onMount(async () => {
     try {
-      // Initialize folder path from URL before first fetch
-      const initSegs = _getPathFromUrl();
-      if (initSegs && initSegs.length) fmSegments = initSegs;
+      // Initialize folder/file path from URL before first fetch
+      const init = _getPathFromUrl();
+      if (init && init.length) {
+        fmSegments = init.slice(0, -1);
+        fmPendingOpenFile = init[init.length - 1] || '';
+      }
     } catch (_) {}
     try { await fetchContextUsage(); } catch (_) {}
     try { await fetchFiles(true); } catch (_) {}
@@ -276,6 +281,26 @@
       fmEntries = reset ? entries : fmEntries.concat(entries);
       // Ensure the path label reflects the current folder after list refresh
       currentFullPath = fmCurrentFullPath(fmSegments, fmPreviewName);
+      // If there's a pending URL segment to resolve, try once after initial list
+      if (reset && fmPendingOpenFile) {
+        try {
+          const name = String(fmPendingOpenFile);
+          const match = (fmEntries || []).find(e => String(e?.name || '') === name);
+          const kind = String(match?.kind || '').toLowerCase();
+          if (match && (kind === 'dir' || kind === 'directory')) {
+            // It's a folder segment; descend into it and refresh
+            fmSegments = [...fmSegments, name];
+            fmOffset = 0;
+            try { _setPathInUrl(fmSegments); } catch (_) {}
+            fmPendingOpenFile = '';
+            fetchFiles(true);
+            return;
+          }
+          // Otherwise try to open as a file in the current folder
+          if (name) fmShowPreview({ name, kind: 'file' });
+        } catch (_) {}
+        finally { fmPendingOpenFile = ''; }
+      }
     } catch (e) {
       if (seq === fmListSeq) fmError = e.message || String(e);
     } finally {
@@ -304,7 +329,7 @@
   let fmPreviewSeq = 0;
   let fmPreviewAbort = null;
   function fmRevokePreviewUrl() { try { if (fmPreviewUrl) { URL.revokeObjectURL(fmPreviewUrl); } } catch (_) {} }
-  function fmPreviewReset() { fmRevokePreviewUrl(); fmPreviewName=''; fmPreviewType=''; fmPreviewText=''; fmPreviewUrl=''; fmPreviewLoading=false; fmPreviewError=null; }
+  function fmPreviewReset() { fmRevokePreviewUrl(); fmPreviewName=''; fmPreviewType=''; fmPreviewText=''; fmPreviewUrl=''; fmPreviewLoading=false; fmPreviewError=null; try { _setPathInUrl(fmSegments); } catch (_) {} }
   async function fmShowPreview(entry) {
     try {
       // Cancel any in-flight preview load
@@ -314,6 +339,7 @@
       // Keep existing preview content visible while loading new content
       fmPreviewError = null; fmPreviewLoading = true;
       fmPreviewName = entry?.name || '';
+      try { _setPathInUrl(fmSegments, fmPreviewName); } catch (_) {}
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();

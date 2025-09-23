@@ -94,6 +94,27 @@ export function getCommonSchemas() {
       { name: 'measured_at', type: 'string (RFC3339)', desc: 'Measurement timestamp' },
       { name: 'total_messages_considered', type: 'int', desc: 'Messages scanned to compute estimate' },
     ],
+    FileEntry: [
+      { name: 'name', type: 'string', desc: 'Entry name (no path)' },
+      { name: 'kind', type: 'string', desc: "'file' | 'dir' | 'symlink'" },
+      { name: 'size', type: 'int', desc: 'Size in bytes' },
+      { name: 'mode', type: 'string', desc: 'Permissions in chmod-style octal (e.g., 0755)' },
+      { name: 'mtime', type: 'string (RFC3339)', desc: 'Last modified time' },
+    ],
+    FileListResult: [
+      { name: 'entries', type: 'FileEntry[]', desc: 'Entries for the requested folder' },
+      { name: 'offset', type: 'int', desc: 'Offset of this page' },
+      { name: 'limit', type: 'int', desc: 'Page size' },
+      { name: 'next_offset', type: 'int|null', desc: 'Offset for the next page, or null if end' },
+      { name: 'total', type: 'int', desc: 'Total number of entries' },
+    ],
+    FileMetadata: [
+      { name: 'kind', type: 'string', desc: "'file' | 'dir' | 'symlink'" },
+      { name: 'size', type: 'int', desc: 'Size in bytes' },
+      { name: 'mode', type: 'string', desc: 'Permissions in chmod-style octal (e.g., 0644)' },
+      { name: 'mtime', type: 'string (RFC3339)', desc: 'Last modified time' },
+      { name: 'link_target', type: 'string (symlink only)', desc: 'Target path for symlink', optional: true },
+    ],
     CancelAck: [
       { name: 'status', type: 'string', desc: "Always 'ok' on success" },
       { name: 'agent', type: 'string', desc: 'Agent name' },
@@ -131,6 +152,9 @@ export function getApiDocs(base) {
       }
     ]
   },
+  
+  
+  
   {
     id: 'auth',
     title: 'Authentication',
@@ -436,6 +460,91 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/agents/{name}/responses/count', auth: 'bearer', desc: 'Get response count for agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s ${BASE}/api/v0/agents/<name>/responses/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"agent_name":"demo"}` }] }
+    ]
+  },
+  {
+    id: 'files',
+    title: 'Agent Files',
+    description: 'Read-only file browsing and download for an agent\'s /agent workspace (protected). Paths are relative to /agent.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/v0/agents/{name}/files/list',
+        auth: 'bearer',
+        desc: 'List entries at /agent (root). Supports pagination.',
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+          { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0)' },
+          { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500)' },
+        ],
+        example: `curl -s ${BASE}/api/v0/agents/<name>/files/list -H "Authorization: Bearer <token>"`,
+        resp: { schema: 'FileListResult' },
+        responses: [
+          { status: 200, body: `{"entries":[{"name":"code","kind":"dir","size":0,"mode":"0755","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":100,"next_offset":null,"total":1}` }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/v0/agents/{name}/files/list/{path...}',
+        auth: 'bearer',
+        desc: 'List entries under a relative path (e.g., code/src). Supports pagination.',
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' },
+          { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0)' },
+          { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500)' },
+        ],
+        example: `curl -s ${BASE}/api/v0/agents/<name>/files/list/code -H "Authorization: Bearer <token>"`,
+        resp: { schema: 'FileListResult' },
+        responses: [
+          { status: 200, body: `{"entries":[{"name":"main.rs","kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":100,"next_offset":null,"total":1}` }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/v0/agents/{name}/files/metadata/{path...}',
+        auth: 'bearer',
+        desc: 'Get metadata for a file or directory.',
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' }
+        ],
+        example: `curl -s ${BASE}/api/v0/agents/<name>/files/metadata/code/src/main.rs -H "Authorization: Bearer <token>"`,
+        resp: { schema: 'FileMetadata' },
+        responses: [
+          { status: 200, body: `{"kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}` }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/v0/agents/{name}/files/read/{path...}',
+        auth: 'bearer',
+        desc: 'Read a file and return its bytes. Sets content-type and x-raworc-file-size headers.',
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' }
+        ],
+        example: `curl -s -OJ ${BASE}/api/v0/agents/<name>/files/read/content/index.html -H "Authorization: Bearer <token>" -D -`,
+        resp: { schema: 'Empty' },
+        responses: [
+          { status: 200 }
+        ]
+      },
+      {
+        method: 'DELETE',
+        path: '/api/v0/agents/{name}/files/delete/{path...}',
+        auth: 'bearer',
+        desc: 'Delete a file or empty directory. Returns { deleted: true } on success. May be disabled in some environments.',
+        params: [
+          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' }
+        ],
+        example: `curl -s -X DELETE ${BASE}/api/v0/agents/<name>/files/delete/code/tmp.txt -H "Authorization: Bearer <token>"`,
+        resp: { schema: 'Empty' },
+        responses: [
+          { status: 200, body: `{"deleted":true}` }
+        ]
+      }
     ]
   },
   {
