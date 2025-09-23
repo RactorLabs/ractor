@@ -765,7 +765,7 @@
   function typeIconClass(t) {
     try {
       const n = String(t || '').toLowerCase();
-      if (n === 'markdown') return 'fa fa-file-alt';
+      if (n === 'markdown') return 'fa-brands fa-markdown';
       if (n === 'json') return 'fa fa-code';
       if (n === 'url') return 'fa fa-link';
       return 'fa fa-file';
@@ -1677,9 +1677,7 @@
                                 <div class="accordion-body">
                                   {#if String(it?.type || '').toLowerCase() === 'markdown'}
                                     {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-wrap mt-1 mb-2">
-                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                      </div>
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
                                     {/if}
                                   {:else if String(it?.type || '').toLowerCase() === 'json'}
                                     <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
@@ -1854,9 +1852,7 @@
                                 <div class="accordion-body">
                                   {#if String(it?.type || '').toLowerCase() === 'markdown'}
                                     {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-wrap mt-1 mb-2">
-                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                      </div>
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
                                     {/if}
                                   {:else if String(it?.type || '').toLowerCase() === 'json'}
                                     <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
@@ -1893,9 +1889,7 @@
                                 <div class="accordion-body">
                                   {#if String(it?.type || '').toLowerCase() === 'markdown'}
                                     {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-wrap mt-1 mb-2">
-                                        <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                      </div>
+                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
                                     {/if}
                                   {:else if String(it?.type || '').toLowerCase() === 'json'}
                                     <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
