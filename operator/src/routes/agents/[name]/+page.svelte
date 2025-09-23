@@ -359,12 +359,16 @@
     } catch (e) { fmError = e.message || String(e); }
   }
   function fmGoUp() {
-    // If a file is open, just close the preview and stay in the same folder
-    if (fmPreviewName) { fmPreviewReset(); return; }
-    if (fmSegments.length === 0) return; // at root; nothing to go up to
-    fmSegments = fmSegments.slice(0, -1);
-    fmOffset = 0;
-    refreshFilesPanel({ reset: true });
+    // Navigate up a folder when possible; close any preview
+    if (fmSegments.length > 0) {
+      fmPreviewReset();
+      fmSegments = fmSegments.slice(0, -1);
+      fmOffset = 0;
+      refreshFilesPanel({ reset: true });
+    } else {
+      // At root: just close preview if open
+      if (fmPreviewName) fmPreviewReset();
+    }
   }
   function fmGoRoot() {
     fmPreviewReset();
@@ -1974,7 +1978,7 @@
               <!-- Action bar (read-only) -->
               <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
                 <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
-                <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0 && !fmPreviewName)}><i class="bi bi-arrow-90deg-up"></i></button>
+                <button class="btn btn-sm border-0" aria-label="Up" title="Up" on:click={fmGoUp} disabled={(fmSegments.length === 0)}><i class="bi bi-arrow-90deg-up"></i></button>
                 <span class="vr mx-1"></span>
                 <!-- Move path to the left side with a separator before it -->
                 <div class="small text-body text-opacity-75">{currentFullPath}</div>
