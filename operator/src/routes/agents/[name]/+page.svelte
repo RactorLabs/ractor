@@ -2180,8 +2180,8 @@
       text-decoration: none !important;
     }
     /* Keep dropdown above chat content but below modals */
-    :global(.top-actions) { position: relative; z-index: 1988; }
-    :global(.dropdown-menu) { z-index: 1985; }
+    :global(.top-actions) { position: relative; z-index: 1996; }
+    :global(.top-actions .dropdown-menu) { z-index: 1999 !important; }
     /* Ensure modals always sit on top within this page */
     :global(.modal) { z-index: 2000; }
     :global(.modal-backdrop) { z-index: 1990; }
