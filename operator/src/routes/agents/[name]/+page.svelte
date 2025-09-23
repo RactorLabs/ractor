@@ -1655,7 +1655,7 @@
                         {/if}
                       {:else if isOutputSeg(s)}
                         <!-- Always render output_* content inline during processing -->
-                        <Card class="mt-2 mb-2">
+                        <Card class="mt-3 mb-2">
                           <div class="card-body py-2">
                             {#each outputItemsOfSeg(s) as it, k}
                               <details class="mb-2" open={true}>
@@ -1755,35 +1755,35 @@
                   {#if hasSleptSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                    <span class="px-2 small">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 small text-body text-opacity-75">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasCancelledSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
+                    <span class="px-2 small text-body text-opacity-75">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
                   {#if hasWokeSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                    <span class="px-2 small">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <span class="px-2 small text-body text-opacity-75">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
                   {#if hasContextClearedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small">Context Cleared</span>
+                    <span class="px-2 small text-body text-opacity-75">Context Cleared</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
                   {#if hasContextCompactedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
-                    <span class="px-2 small">Context Compacted</span>
+                    <span class="px-2 small text-body text-opacity-75">Context Compacted</span>
                     <hr class="flex-grow-1 my-0" style="border-top: 2px dotted currentColor;" />
                   </div>
                   {/if}
@@ -1833,7 +1833,7 @@
                         </div>
                       {/if}
                       {#if Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0}
-                        <Card class="mt-2 mb-2">
+                        <Card class="mt-3 mb-2">
                           <div class="card-body py-2">
                             {#each m.content_json.output_content as it}
                               <details class="mb-2" open={expandAll}>
@@ -1868,7 +1868,7 @@
                   {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'output')}
                     {#if m.content && m.content.trim()}
                       {#if parsedItemsFromTopCard(m).length > 0}
-                        <Card class="mt-2 mb-2">
+                        <Card class="mt-3 mb-2">
                           <div class="card-body py-2">
                             {#each parsedItemsFromTopCard(m) as it}
                               <details class="mb-2" open={expandAll}>
@@ -1985,6 +1985,7 @@
                   {/if}
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
+                    <span class="vr mx-1"></span>
                     <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
                   {:else}
                     <span class="vr mx-1"></span>
