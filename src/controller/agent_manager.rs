@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc, TimeZone};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 
@@ -67,8 +67,11 @@ impl AgentManager {
             "Agent Manager started, polling for tasks, auto-sleep monitoring, and health checks..."
         );
 
+        // Run frequent task polling; run heavier maintenance on a slower cadence
+        let mut last_auto_sleep = Instant::now() - Duration::from_secs(60);
+        let mut last_health = Instant::now() - Duration::from_secs(60);
         loop {
-            // Process pending tasks
+            // Process pending tasks (fast path)
             let tasks_processed = match self.process_pending_tasks().await {
                 Ok(processed) => processed,
                 Err(e) => {
@@ -77,27 +80,35 @@ impl AgentManager {
                 }
             };
 
-            // Process auto-close monitoring
-            let agents_slept = match self.process_auto_sleep().await {
-                Ok(slept) => slept,
-                Err(e) => {
-                    error!("Error processing auto-sleep: {}", e);
-                    0
-                }
-            };
+            // Process auto-sleep every 10s
+            let mut agents_slept = 0;
+            if last_auto_sleep.elapsed() >= Duration::from_secs(10) {
+                agents_slept = match self.process_auto_sleep().await {
+                    Ok(slept) => slept,
+                    Err(e) => {
+                        error!("Error processing auto-sleep: {}", e);
+                        0
+                    }
+                };
+                last_auto_sleep = Instant::now();
+            }
 
-            // Check health of active agents
-            let agents_recovered = match self.check_agent_health().await {
-                Ok(recovered) => recovered,
-                Err(e) => {
-                    error!("Error checking agent health: {}", e);
-                    0
-                }
-            };
+            // Check health every 10s
+            let mut agents_recovered = 0;
+            if last_health.elapsed() >= Duration::from_secs(10) {
+                agents_recovered = match self.check_agent_health().await {
+                    Ok(recovered) => recovered,
+                    Err(e) => {
+                        error!("Error checking agent health: {}", e);
+                        0
+                    }
+                };
+                last_health = Instant::now();
+            }
 
-            // If no work was done, sleep before next iteration
+            // If no work was done, short sleep before next poll (improves responsiveness)
             if tasks_processed == 0 && agents_slept == 0 && agents_recovered == 0 {
-                sleep(Duration::from_secs(10)).await;
+                sleep(Duration::from_millis(250)).await;
             }
         }
     }
