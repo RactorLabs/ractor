@@ -1603,13 +1603,13 @@
       <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
         <i class="fa fa-angle-double-up"></i>
       </button>
-      <div class="form-check form-switch ms-2" title="Toggle display of thinking (analysis/commentary)">
+      <div class="form-check form-switch ms-2 d-inline-flex align-items-center" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-        <label class="form-check-label small" for="toggle-thinking">🧠</label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-1" for="toggle-thinking"><i class="fas fa-brain"></i></label>
       </div>
-      <div class="form-check form-switch ms-2" title="Toggle display of tool calls/results">
+      <div class="form-check form-switch ms-2 d-inline-flex align-items-center" title="Toggle display of tool calls/results">
         <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
-        <label class="form-check-label small" for="toggle-tools">🛠️</label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-1" for="toggle-tools"><i class="fas fa-screwdriver-wrench"></i></label>
       </div>
     </div>
 
@@ -1977,7 +1977,7 @@
             {:else if stateStr === 'init'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2"></span>Waiting for agent to wake up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for agent to wake up</div>
                 </div>
               </div>
             {:else}
@@ -2246,9 +2246,29 @@
     :global(.files-pane .spinner-grow) {
       animation: .75s linear infinite spinner-grow !important;
     }
+    :global(.files-pane .overlay-spin) {
+      animation: .75s linear infinite spinner-border !important;
+    }
     /* Normalize vertical rule height in Chat header */
     :global(.chat-pane .border-bottom .vr) {
       align-self: center;
       height: 1.25rem;
+    }
+    /* Center toggle switches + icons in chat header */
+    :global(.chat-pane .form-check.form-switch) {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    :global(.chat-pane .form-check.form-switch .form-check-input) {
+      margin-top: 0;
+    }
+    :global(.chat-pane .form-check.form-switch .form-check-label) {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 0;
+      line-height: 1;
     }
   </style>
