@@ -72,7 +72,9 @@ impl Tool for ShellTool {
             .filter(|s| !s.is_empty())
             .is_some();
         if !commentary_present {
-            return Ok(json!({"status":"error","tool":"run_bash","error":"commentary is required"}));
+            return Ok(
+                json!({"status":"error","tool":"run_bash","error":"commentary is required"}),
+            );
         }
         let exec_dir = args
             .get("exec_dir")
@@ -138,8 +140,16 @@ impl Tool for OpenFileTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"open_file","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"open_file","error":"commentary is required"}),
+            );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let start_line = args
@@ -194,8 +204,16 @@ impl Tool for CreateFileTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"create_file","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"create_file","error":"commentary is required"}),
+            );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -243,8 +261,16 @@ impl Tool for StrReplaceTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"str_replace","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"str_replace","error":"commentary is required"}),
+            );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let old_str = args.get("old_str").and_then(|v| v.as_str()).unwrap_or("");
@@ -301,7 +327,13 @@ impl Tool for InsertTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
             return Ok(json!({"status":"error","tool":"insert","error":"commentary is required"}));
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
@@ -351,8 +383,16 @@ impl Tool for RemoveStrTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"remove_str","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"remove_str","error":"commentary is required"}),
+            );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
@@ -405,8 +445,16 @@ impl Tool for FindFilecontentTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"find_filecontent","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"find_filecontent","error":"commentary is required"}),
+            );
         }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let pattern = args.get("regex").and_then(|v| v.as_str()).unwrap_or("");
@@ -472,8 +520,16 @@ impl Tool for FindFilenameTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"find_filename","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"find_filename","error":"commentary is required"}),
+            );
         }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let glob_str = args.get("glob").and_then(|v| v.as_str()).unwrap_or("");
@@ -540,8 +596,16 @@ impl Tool for PublishTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"publish_agent","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"publish_agent","error":"commentary is required"}),
+            );
         }
         match self.api.publish_agent().await {
             Ok(_) => Ok(
@@ -586,8 +650,16 @@ impl Tool for SleepTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"sleep_agent","error":"commentary is required"}));
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"sleep_agent","error":"commentary is required"}),
+            );
         }
         let mut delay = args
             .get("delay_seconds")
@@ -689,7 +761,13 @@ impl Tool for OutputTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
             return Ok(json!({"status":"error","tool":"output","error":"commentary is required"}));
         }
         let items_in = args
@@ -791,7 +869,13 @@ impl Tool for ReviewTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
             return Ok(json!({"status":"error","tool":"review","error":"commentary is required"}));
         }
 

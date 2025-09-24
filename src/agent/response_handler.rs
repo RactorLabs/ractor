@@ -343,7 +343,8 @@ impl ResponseHandler {
                     if !model_resp.content.trim().is_empty() {
                         segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
                     }
-                    let seg_tool_call = serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
+                    let seg_tool_call =
+                        serde_json::json!({"type":"tool_call","tool":tool_name,"args":args});
                     segs.push(seg_tool_call.clone());
                     let _ = self
                         .api_client
@@ -357,7 +358,9 @@ impl ResponseHandler {
                     _items_sent += segs.len();
 
                     // Also add an assistant message for the tool call into the in-memory conversation
-                    let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
+                    let call_summary =
+                        serde_json::json!({"tool_call": {"tool": tool_name, "args": args }})
+                            .to_string();
                     conversation.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: call_summary,
@@ -378,11 +381,20 @@ impl ResponseHandler {
                     };
                     // Truncate large string fields proactively and mark truncation
                     let mut was_truncated = false;
-                    output_value = truncate_output_json(output_value, MAX_TOOL_OUTPUT_CHARS, &mut was_truncated);
+                    output_value = truncate_output_json(
+                        output_value,
+                        MAX_TOOL_OUTPUT_CHARS,
+                        &mut was_truncated,
+                    );
                     if was_truncated {
                         if let Some(obj) = output_value.as_object_mut() {
-                            let existing = obj.get("truncated").and_then(|v| v.as_bool()).unwrap_or(false);
-                            if !existing { obj.insert("truncated".into(), serde_json::Value::Bool(true)); }
+                            let existing = obj
+                                .get("truncated")
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            if !existing {
+                                obj.insert("truncated".into(), serde_json::Value::Bool(true));
+                            }
                         }
                     }
                     // Append only the tool_result (avoid duplicating prior items)
@@ -574,12 +586,24 @@ impl ResponseHandler {
                             // Truncate and mark truncation on salvaged execution as well
                             let mut was_truncated = false;
                             let output_value = {
-                                let v = truncate_output_json(output_value, MAX_TOOL_OUTPUT_CHARS, &mut was_truncated);
+                                let v = truncate_output_json(
+                                    output_value,
+                                    MAX_TOOL_OUTPUT_CHARS,
+                                    &mut was_truncated,
+                                );
                                 let mut v = v;
                                 if was_truncated {
                                     if let Some(obj) = v.as_object_mut() {
-                                        let existing = obj.get("truncated").and_then(|b| b.as_bool()).unwrap_or(false);
-                                        if !existing { obj.insert("truncated".into(), serde_json::Value::Bool(true)); }
+                                        let existing = obj
+                                            .get("truncated")
+                                            .and_then(|b| b.as_bool())
+                                            .unwrap_or(false);
+                                        if !existing {
+                                            obj.insert(
+                                                "truncated".into(),
+                                                serde_json::Value::Bool(true),
+                                            );
+                                        }
                                     }
                                 }
                                 v
@@ -1014,7 +1038,7 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 ```
 
 ```json
-{"tool_call": {"tool": "output", "args": {"commentary": "Presenting results to the user.", "items": [{"type":"markdown","title":"Summary","content":"All tasks completed."}]}}}
+{"tool_call": {"tool": "output", "args": {"commentary": "Presenting results to the user.", "content": [{"type":"markdown","title":"Summary","content":"All tasks completed."}]}}}
 ```
 "#;
 
@@ -1373,7 +1397,11 @@ You have complete freedom to execute commands, install packages, and create solu
 
 /// Recursively truncate string fields within a JSON value to a maximum length.
 /// Returns a possibly-modified Value and sets `truncated` to true if any field was shortened.
-fn truncate_output_json(v: serde_json::Value, max: usize, truncated: &mut bool) -> serde_json::Value {
+fn truncate_output_json(
+    v: serde_json::Value,
+    max: usize,
+    truncated: &mut bool,
+) -> serde_json::Value {
     use serde_json::Value;
     match v {
         Value::String(s) => {

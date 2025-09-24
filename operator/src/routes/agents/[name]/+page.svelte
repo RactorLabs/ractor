@@ -926,94 +926,199 @@
   function hasFinalSeg(m) {
     try { return segmentsOf(m).some((x) => segType(x) === 'final'); } catch(_) { return false; }
   }
-  function segToolTitle(s) {
+  function workspaceRelativePath(p) {
     try {
-      const t = segTool(s).toLowerCase();
-      const a = segArgs(s) || {};
-      const shortPath = (p) => { try { const s = String(p || '').trim(); return s.startsWith('/agent/') ? s.slice(7) : s; } catch(_) { return ''; } };
-      if (t === 'run_bash') {
-        const cmd = a.commands || a.command || a.cmd || '';
-        const cwd = a.exec_dir || a.cwd || a.workdir || '';
-        const title = [cmd ? truncate(String(cmd), 80) : '', cwd ? shortPath(cwd) : ''].filter(Boolean).join(' • ');
-        return title || '(run_bash)';
-      }
-      if (t === 'open_file') {
-        const p = a.path || '';
-        const sl = a.start_line != null ? Number(a.start_line) : null;
-        const el = a.end_line != null ? Number(a.end_line) : null;
-        const range = (sl || el) ? ` [${sl || ''}${el ? ':' + el : ''}]` : '';
-        return `${shortPath(p)}${range}` || '(open_file)';
-      }
-      if (t === 'create_file') {
-        const p = a.path || '';
-        const bytes = (a.content && typeof a.content === 'string') ? a.content.length : null;
-        const meta = bytes != null ? ` (${bytes} bytes)` : '';
-        return `${shortPath(p)}${meta}` || '(create_file)';
-      }
-      if (t === 'str_replace') {
-        const p = a.path || '';
-        const oldStr = typeof a.old_str === 'string' ? truncate(a.old_str, 30) : '';
-        const newStr = typeof a.new_str === 'string' ? truncate(a.new_str, 30) : '';
-        const many = a.many ? ' (all)' : '';
-        const pair = (oldStr || newStr) ? ` ${oldStr} → ${newStr}` : '';
-        return `${shortPath(p)}${pair}${many}` || '(str_replace)';
-      }
-      if (t === 'insert') {
-        const p = a.path || '';
-        const line = a.insert_line != null ? `:${a.insert_line}` : '';
-        const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
-        const meta = len != null ? ` (+${len})` : '';
-        return `${shortPath(p)}${line}${meta}` || '(insert)';
-      }
-      if (t === 'remove_str') {
-        const p = a.path || '';
-        const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
-        const many = a.many ? ' (all)' : '';
-        const meta = len != null ? ` (-${len})` : '';
-        return `${shortPath(p)}${meta}${many}` || '(remove_str)';
-      }
-      if (t === 'find_filecontent') {
-        const p = a.path || '';
-        const rgx = typeof a.regex === 'string' ? ` /${truncate(a.regex, 40)}/` : '';
-        return `${shortPath(p)}${rgx}` || '(find_filecontent)';
-      }
-      if (t === 'find_filename') {
-        const p = a.path || '';
-        const glob = typeof a.glob === 'string' ? ` ${truncate(a.glob, 40)}` : '';
-        return `${shortPath(p)}${glob}` || '(find_filename)';
-      }
-      if (t === 'publish_agent') {
-        const note = typeof a.note === 'string' && a.note.trim() ? ` (${truncate(a.note, 50)})` : '';
-        return `publish${note}`;
-      }
-      if (t === 'sleep_agent') {
-        const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
-        const note = typeof a.note === 'string' && a.note.trim() ? ` (${truncate(a.note, 50)})` : '';
-        return `sleep${d ? ` in ${d}s` : ''}${note}`;
-      }
-      if (t === 'create_plan') {
-        const title = typeof a.title === 'string' ? a.title : '';
-        const n = Array.isArray(a.tasks) ? a.tasks.length : 0;
-        const label = title ? ` ${truncate(title, 50)}` : '';
-        return `create_plan${label}${n ? ` (${n} tasks)` : ''}`;
-      }
-      if (t === 'add_task') {
-        const task = typeof a.task === 'string' ? ` ${truncate(a.task, 60)}` : '';
-        return `add_task${task}`;
-      }
-      if (t === 'complete_task') {
-        const id = a.task_id != null ? ` #${a.task_id}` : '';
-        const vp = Array.isArray(a.verify_paths) ? ` (verify ${a.verify_paths.length})` : '';
-        const vu = typeof a.verify_url === 'string' && a.verify_url ? ' (verify url)' : '';
-        const force = a.force ? ' [force]' : '';
-        return `complete${id}${vp || vu ? `${vp}${vu}` : ''}${force}`;
-      }
-      if (t === 'clear_plan') {
-        return 'clear_plan';
-      }
-      const json = JSON.stringify(a);
-      return json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
+      let raw = String(p ?? '').trim();
+      if (!raw) return '';
+      raw = raw.split('\\').join('/');
+      if (raw.startsWith('/agent/')) raw = raw.slice('/agent/'.length);
+      else if (raw === '/agent' || raw === '/agent/') raw = '';
+      else if (raw.startsWith('/')) raw = raw.slice(1);
+      raw = raw.replace(/^\.\/+/, '');
+      raw = raw.replace(/\/+/g, '/');
+      raw = raw.replace(/\/+$/, '');
+      if (raw === '.') raw = '';
+      return raw;
     } catch (_) { return ''; }
+  }
+  function normalizedPathSegments(p) {
+    try {
+      const rel = workspaceRelativePath(p);
+      return rel ? rel.split('/').map((seg) => seg.trim()).filter(Boolean) : [];
+    } catch (_) { return []; }
+  }
+  function filePanelHrefFromSegments(segs) {
+    try {
+      const encoded = (Array.isArray(segs) ? segs : []).map((s) => encodeURIComponent(s)).join('/');
+      return `?file=${encoded}`;
+    } catch (_) { return '?file='; }
+  }
+  function toolSummaryForArgs(toolName, args) {
+    const t = String(toolName || '').toLowerCase();
+    const a = args || {};
+    const parts = [];
+    const addLinkPart = (path, { isDir = false, label } = {}) => {
+      try {
+        const rel = workspaceRelativePath(path);
+        const display = String(label || rel || '/');
+        if (!display) return false;
+        const segs = normalizedPathSegments(path);
+        const href = filePanelHrefFromSegments(segs);
+        parts.push({ type: 'link', text: display, href, isDir: !!isDir, segments: segs });
+        return true;
+      } catch (_) { return false; }
+    };
+    const addTextPart = (text) => {
+      try {
+        const str = String(text ?? '').trim();
+        if (!str) return false;
+        parts.push({ type: 'text', text: str });
+        return true;
+      } catch (_) { return false; }
+    };
+
+    if (t === 'run_bash') {
+      const cwd = a.exec_dir || a.cwd || a.workdir || '';
+      const cmd = a.commands || a.command || a.cmd || '';
+      if (cwd) addLinkPart(cwd, { isDir: true });
+      if (cmd) addTextPart(truncate(String(cmd), 80));
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(run_bash)' };
+    }
+    if (t === 'open_file') {
+      const p = a.path || '';
+      const sl = a.start_line != null ? Number(a.start_line) : null;
+      const el = a.end_line != null ? Number(a.end_line) : null;
+      const range = (sl || el) ? `[${sl || ''}${el ? ':' + el : ''}]` : '';
+      if (p) addLinkPart(p, { isDir: false });
+      if (range) addTextPart(range);
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(open_file)' };
+    }
+    if (t === 'create_file') {
+      const p = a.path || '';
+      const bytes = (a.content && typeof a.content === 'string') ? a.content.length : null;
+      if (p) addLinkPart(p, { isDir: false });
+      if (bytes != null) addTextPart(`(${bytes} bytes)`);
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(create_file)' };
+    }
+    if (t === 'str_replace') {
+      const p = a.path || '';
+      const oldStr = typeof a.old_str === 'string' ? truncate(a.old_str, 30) : '';
+      const newStr = typeof a.new_str === 'string' ? truncate(a.new_str, 30) : '';
+      const pair = (oldStr || newStr) ? `${oldStr} → ${newStr}` : '';
+      const many = a.many ? ' (all)' : '';
+      if (p) addLinkPart(p, { isDir: false });
+      if (pair || many) addTextPart(`${pair}${many}`.trim());
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(str_replace)' };
+    }
+    if (t === 'insert') {
+      const p = a.path || '';
+      const line = a.insert_line != null ? `:${a.insert_line}` : '';
+      const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
+      const meta = len != null ? `(+${len})` : '';
+      if (p) addLinkPart(p, { isDir: false });
+      if (line || meta) addTextPart(`${line}${line && meta ? ' ' : ''}${meta}`.trim());
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(insert)' };
+    }
+    if (t === 'remove_str') {
+      const p = a.path || '';
+      const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
+      const many = a.many ? '(all)' : '';
+      if (p) addLinkPart(p, { isDir: false });
+      if (len != null || many) {
+        const meta = `${len != null ? `(-${len})` : ''}${len != null && many ? ' ' : ''}${many}`.trim();
+        if (meta) addTextPart(meta);
+      }
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(remove_str)' };
+    }
+    if (t === 'find_filecontent') {
+      const p = a.path || '';
+      const rgx = typeof a.regex === 'string' ? `/${truncate(a.regex, 40)}/` : '';
+      if (p) addLinkPart(p, { isDir: false });
+      if (rgx) addTextPart(rgx);
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filecontent)' };
+    }
+    if (t === 'find_filename') {
+      const p = a.path || '';
+      const glob = typeof a.glob === 'string' ? truncate(a.glob, 40) : '';
+      if (p) addLinkPart(p, { isDir: true });
+      if (glob) addTextPart(glob);
+      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filename)' };
+    }
+    if (t === 'publish_agent') {
+      const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
+      if (note) addTextPart(`publish ${note}`.trim());
+      else addTextPart('publish');
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'publish' };
+    }
+    if (t === 'sleep_agent') {
+      const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
+      const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
+      const label = [`sleep${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
+      addTextPart(label || 'sleep');
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'sleep' };
+    }
+    if (t === 'create_plan') {
+      const title = typeof a.title === 'string' ? a.title : '';
+      const n = Array.isArray(a.tasks) ? a.tasks.length : 0;
+      const label = `create_plan${title ? ` ${truncate(title, 50)}` : ''}${n ? ` (${n} tasks)` : ''}`;
+      addTextPart(label);
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'create_plan' };
+    }
+    if (t === 'add_task') {
+      const task = typeof a.task === 'string' ? truncate(a.task, 60) : '';
+      const label = `add_task${task ? ` ${task}` : ''}`;
+      addTextPart(label);
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'add_task' };
+    }
+    if (t === 'complete_task') {
+      const id = a.task_id != null ? `#${a.task_id}` : '';
+      const vp = Array.isArray(a.verify_paths) ? `verify ${a.verify_paths.length}` : '';
+      const vu = typeof a.verify_url === 'string' && a.verify_url ? 'verify url' : '';
+      const force = a.force ? '[force]' : '';
+      const extras = [vp, vu, force].filter(Boolean).join(' · ');
+      const label = `complete${id ? ` ${id}` : ''}${extras ? ` (${extras})` : ''}`;
+      addTextPart(label);
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'complete' };
+    }
+    if (t === 'clear_plan') {
+      addTextPart('clear_plan');
+      return { parts, text: 'clear_plan' };
+    }
+    try {
+      const json = JSON.stringify(a);
+      const short = json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
+      addTextPart(short);
+    } catch (_) {
+      addTextPart('(args)');
+    }
+    return { parts, text: parts.map((p) => p.text).join(' > ') || '' };
+  }
+  function segToolSummaryParts(s) {
+    try { return toolSummaryForArgs(segTool(s), segArgs(s)).parts || []; } catch (_) { return []; }
+  }
+  function segToolTitle(s) {
+    try { return toolSummaryForArgs(segTool(s), segArgs(s)).text || ''; } catch (_) { return ''; }
+  }
+  function openToolSummaryPath(part) {
+    try {
+      if (!part || !Array.isArray(part.segments)) return;
+      const segs = part.segments.filter(Boolean);
+      if (part.isDir || segs.length === 0) {
+        fmSegments = [...segs];
+        fmPendingOpenFile = '';
+        try { fmPreviewReset(); } catch (_) {}
+        try { _setPathInUrl(fmSegments); } catch (_) {}
+        try { fetchFiles(true); } catch (_) {}
+      } else {
+        const parent = segs.slice(0, -1);
+        const fileName = segs[segs.length - 1] || '';
+        fmSegments = parent;
+        fmPendingOpenFile = fileName;
+        try { fmPreviewReset(); } catch (_) {}
+        try { _setPathInUrl(parent, fileName); } catch (_) {}
+        try { fetchFiles(true); } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   // In-progress helpers
@@ -1153,13 +1258,9 @@
       const a = m?.metadata?.args;
       if (!a || typeof a !== 'object') return '';
       if (t === 'run_bash') {
-        const cmd = a.commands || a.command || a.cmd || '';
-        const cwd = a.exec_dir || a.cwd || a.workdir || '';
-        const parts = [];
-        if (cmd) parts.push(String(cmd).trim().slice(0, 80));
-        if (cwd) parts.push(String(cwd).trim());
-        if (!parts.length) return '';
-        return `(${parts.join(' • ')})`;
+        const summary = toolSummaryForArgs(t, a);
+        const text = summary?.text || '';
+        return text ? `(${text})` : '';
       }
       const json = JSON.stringify(a);
       if (!json) return '';
@@ -1763,7 +1864,29 @@
                             <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
-                                <span class="text-body-secondary">{segToolTitle(s)}</span>
+                                <span class="text-body-secondary">
+                                  {#if segToolSummaryParts(s).length}
+                                    {#each segToolSummaryParts(s) as part, idx}
+                                      {#if idx > 0}
+                                        <span class="mx-1" aria-hidden="true">&gt;</span>
+                                      {/if}
+                                      {#if part.type === 'link'}
+                                        <a
+                                          href={part.href}
+                                          class="link-offset-2 text-decoration-underline"
+                                          style="color: inherit;"
+                                          on:click|preventDefault={() => openToolSummaryPath(part)}
+                                        >
+                                          {part.text}
+                                        </a>
+                                      {:else}
+                                        {part.text}
+                                      {/if}
+                                    {/each}
+                                  {:else}
+                                    {segToolTitle(s)}
+                                  {/if}
+                                </span>
                               </summary>
                               <div class="small text-body">
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
@@ -1787,7 +1910,29 @@
                             <details class="mt-0" open={expandAll}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
-                                <span class="text-body-secondary">{segToolTitle(s)}</span>
+                                <span class="text-body-secondary">
+                                  {#if segToolSummaryParts(s).length}
+                                    {#each segToolSummaryParts(s) as part, idx}
+                                      {#if idx > 0}
+                                        <span class="mx-1" aria-hidden="true">&gt;</span>
+                                      {/if}
+                                      {#if part.type === 'link'}
+                                        <a
+                                          href={part.href}
+                                          class="link-offset-2 text-decoration-underline"
+                                          style="color: inherit;"
+                                          on:click|preventDefault={() => openToolSummaryPath(part)}
+                                        >
+                                          {part.text}
+                                        </a>
+                                      {:else}
+                                        {part.text}
+                                      {/if}
+                                    {/each}
+                                  {:else}
+                                    {segToolTitle(s)}
+                                  {/if}
+                                </span>
                               </summary>
                               <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
                             </details>
@@ -2030,6 +2175,7 @@
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
                   <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Agent is sleeping</div>
+                  <p class="small mb-3 text-body-secondary">Wake the agent to browse its workspace files.</p>
                   <button class="btn btn-outline-success btn-sm" on:click={wakeAgent}><i class="bi bi-sun me-1"></i>Wake</button>
                 </div>
               </div>
