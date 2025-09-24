@@ -518,13 +518,13 @@ export function getApiDocs(base) {
   {
     id: 'files',
     title: 'Agent Files',
-    description: 'Read-only file browsing and download for an agent\'s /agent workspace (protected). Paths are relative to /agent.',
+    description: 'Read-only browsing of an agent\'s /agent workspace (protected). Paths are relative to /agent.',
     endpoints: [
       {
         method: 'GET',
         path: '/api/v0/agents/{name}/files/list',
         auth: 'bearer',
-        desc: 'List entries at /agent (root). Supports pagination.',
+        desc: 'List immediate children at /agent (root). Sorted by name (case-insensitive). Supports pagination with offset+limit and returns total and next_offset.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
           { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0)' },
@@ -540,7 +540,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/agents/{name}/files/list/{path...}',
         auth: 'bearer',
-        desc: 'List entries under a relative path (e.g., code/src). Supports pagination.',
+        desc: 'List immediate children under a relative path (e.g., code/src). Sorted by name (case-insensitive). Supports pagination with offset+limit and returns total and next_offset. Path must be safe (no leading \'/\', no ..).',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' },
@@ -557,7 +557,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/agents/{name}/files/metadata/{path...}',
         auth: 'bearer',
-        desc: 'Get metadata for a file or directory.',
+        desc: 'Get metadata for a file or directory. For symlinks, includes link_target. Returns 409 if the agent is sleeping; 400 for invalid paths; 404 if not found.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' }
@@ -572,7 +572,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/agents/{name}/files/read/{path...}',
         auth: 'bearer',
-        desc: 'Read a file and return its bytes. Sets content-type and x-raworc-file-size headers.',
+        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-Raworc-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if agent is sleeping; 404 if not found; 400 for invalid paths.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /agent (no leading slash)' }

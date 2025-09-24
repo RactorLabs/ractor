@@ -1821,17 +1821,11 @@ pub async fn wake_agent(
     let is_admin = is_admin_principal(&auth, &state).await;
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
 
-    // Check ownership: Even admins cannot wake other users' agents (only remix)
-    if agent.created_by != *username {
-        if is_admin {
-            return Err(ApiError::Forbidden(
-                "Admins cannot wake other users' agents. Use remix instead.".to_string(),
-            ));
-        } else {
-            return Err(ApiError::Forbidden(
-                "You can only wake your own agents.".to_string(),
-            ));
-        }
+    // Ownership: owners can wake their own agents; admins (with AGENT_UPDATE) may wake any agent
+    if agent.created_by != *username && !is_admin {
+        return Err(ApiError::Forbidden(
+            "You can only wake your own agents.".to_string(),
+        ));
     }
 
     // Check current state - can only wake if sleeping

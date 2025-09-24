@@ -2244,14 +2244,15 @@
     :global(.markdown-body ul) { padding-left: 1.25rem; }
     :global(.markdown-body li) { margin: 0.125rem 0; }
     :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
-    /* Darker, dotted separator lines for sleep/wake markers */
+    /* Lighter, subtle dotted separators for markers */
     :global(#chat-body .chat-marker-hr) {
       border: 0;
-      border-top: 2px dotted rgba(var(--bs-body-color-rgb), 1);
+      border-top: 1px dotted rgba(var(--bs-body-color-rgb), .35);
     }
-    /* Smaller marker text size */
+    /* Slightly larger but still light marker text */
     :global(#chat-body .chat-marker-text) {
-      font-size: 0.7rem;
+      font-size: 0.75rem;
+      color: rgba(var(--bs-body-color-rgb), .6);
     }
     /* Make the Published dropdown caret arrow a bit bigger */
     :global(.published-toggle.dropdown-toggle::after) {

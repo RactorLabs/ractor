@@ -47,8 +47,7 @@
   // Leave empty by default; show samples in the sidebar instead
   let instructions = '';
   let setup = '';
-  const sampleInstructions = `# Agent Instructions\n\n- Greet the user and explain your purpose.\n- You can run shell commands and edit files via tools when asked.\n- Ask clarifying questions before taking destructive actions.\n- Keep responses concise unless the user requests more detail.`;
-  const sampleSetup = `#!/usr/bin/env bash\n# Optional setup script\n# Install packages or prepare files needed by your agent\nset -euo pipefail\n\n# examples:\n# apt-get update && apt-get install -y jq ripgrep\n# echo \"Hello from setup\" > /agent/content/hello.txt`;
+  // (Samples removed with About section)
   let prompt = '';
   let description = '';
 
@@ -118,7 +117,7 @@
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
 <div class="row g-3">
-  <div class="col-xl-8">
+  <div class="col-xl-12">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
         <div class="fw-bold fs-20px">Create Agent</div>
@@ -217,22 +216,7 @@
       </div>
     </Card>
   </div>
-  <div class="col-xl-4">
-    <Card>
-      <div class="card-header fw-bold">About</div>
-      <div class="card-body small text-body text-opacity-75">
-        <ul class="ps-3">
-          <li>Adjust name and timeout; other fields are optional.</li>
-          <li>Instructions and setup are not prefilled; see samples below.</li>
-          <li>Secrets are saved to the agent volume and injected at runtime.</li>
-        </ul>
-        <div class="fw-500 mt-3">Sample Instructions</div>
-        <pre class="small bg-dark text-white p-2 rounded code-wrap"><code>{sampleInstructions}</code></pre>
-        <div class="fw-500 mt-3">Sample Setup Script</div>
-        <pre class="small bg-dark text-white p-2 rounded code-wrap"><code>{sampleSetup}</code></pre>
-      </div>
-    </Card>
-  </div>
+  
 
   <style>
     .font-monospace { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
