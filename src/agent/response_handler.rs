@@ -867,7 +867,56 @@ impl ResponseHandler {
                     }
                 }
             }
-            // Do not include tool_call/tool_result segments from past responses to keep context lean
+            // Include prior tool calls/results with truncated payloads for context
+            if let Some(seg_items) = r.segments.as_ref() {
+                for seg in seg_items {
+                    let seg_type = seg
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_lowercase();
+                    if seg_type == "tool_call" {
+                        let tool = seg.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = seg.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                        let content = serde_json::json!({
+                            "tool_call": { "tool": tool, "args": args }
+                        })
+                        .to_string();
+                        convo.push(ChatMessage {
+                            role: "assistant".to_string(),
+                            content,
+                            name: None,
+                            tool_call_id: None,
+                        });
+                    } else if seg_type == "tool_result" {
+                        let tool = seg
+                            .get("tool")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        if let Some(output_val) = seg.get("output") {
+                            let mut text = if let Some(s) = output_val.as_str() {
+                                s.to_string()
+                            } else {
+                                output_val.to_string()
+                            };
+                            const TOOL_RESULT_PREVIEW_MAX: usize = 100;
+                            if text.len() > TOOL_RESULT_PREVIEW_MAX {
+                                text.truncate(TOOL_RESULT_PREVIEW_MAX);
+                                text.push_str("…");
+                            }
+                            if !text.trim().is_empty() {
+                                convo.push(ChatMessage {
+                                    role: "tool".to_string(),
+                                    content: text,
+                                    name: Some(tool),
+                                    tool_call_id: None,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
 
             // For completed responses, include a compact assistant message synthesized from output_content
             if r.status.to_lowercase() == "completed" {
