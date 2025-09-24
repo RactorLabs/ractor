@@ -92,7 +92,7 @@ impl ResponseHandler {
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
                         .await;
                     registry
-                        .register_tool(Box::new(super::builtin_tools::ValidateResponseTool::new(
+                        .register_tool(Box::new(super::builtin_tools::ReviewTool::new(
                             api_client_clone.clone(),
                         )))
                         .await;
@@ -306,7 +306,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'validate_response'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'review', 'output'.",
                             tool_name
                         );
                         let items = vec![
@@ -504,7 +504,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output', 'validate_response'.",
+                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'review', 'output'.",
                                 tool_name
                             );
                             let items = vec![
@@ -769,7 +769,8 @@ impl ResponseHandler {
                 // If exceeded retries, fall through to finalize with an explicit fallback note
             }
 
-            // Planning is managed via /agent/plan.md; no special enforcement in runtime
+            // Planning is managed via /agent/plan.md. For multi-step tasks,
+            // the agent MUST create and maintain /agent/plan.md before proceeding.
 
             // Final answer (no tool_call in this turn)
             // Enforce: final content must be sent via the 'output' tool.
@@ -1007,6 +1008,14 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 ```json
 {"tool_call": {"tool": "create_file", "args": {"path": "/agent/content/report/index.html", "content": "<html>...</html>", "commentary": "Creating a publishable HTML report under /agent/content/report/."}}}
 ```
+
+```json
+{"tool_call": {"tool": "review", "args": {"commentary": "Reviewing plan status and env readiness before final output."}}}
+```
+
+```json
+{"tool_call": {"tool": "output", "args": {"commentary": "Presenting results to the user.", "items": [{"type":"markdown","title":"Summary","content":"All tasks completed."}]}}}
+```
 "#;
 
         // Planning is managed via /agent/plan.md (no tool example needed)
@@ -1033,17 +1042,24 @@ You are running as an Agent in the {host_name} system.
 
 ### Content and Publishing
 - Your working content lives under /agent/content/.
-- Default HTML template: Use `/agent/template/simple.html` as the starting point for new HTML files under `/agent/content/` unless the user explicitly requests a different layout. Copy it and adapt content/sections as needed.
+- Before creating any new file under /agent/content/, inspect `/agent/template/` and choose the closest matching template. Only start from scratch if nothing in `/agent/template/` fits.
+- When producing HTML, copy `/agent/template/simple.html` (or another template from `/agent/template/`) into `/agent/content/` and adapt it instead of starting with an empty file, unless the user explicitly requests a different layout.
 - There is no live preview server. When the user wants to view content, publish it.
 - Publishing creates a public, stable snapshot of /agent/content/ and makes it available at the Published Content URL: {published_url}.
 - Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include secrets or sensitive data in /agent/content/.
 - The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
 
+### Secrets & Env Vars
+- Store environment variables in `/agent/secrets/` as files named `[ENV_NAME].env` (e.g., `/agent/secrets/JWT_SECRET.env`).
+- Any env var the user shares in chat must be written to `/agent/secrets/[ENV_NAME].env` before use.
+- When running bash commands, always rely on envs from `/agent/secrets/`; `run_bash` auto-sources all `*.env` files in that folder before executing commands.
+- Check for required env variables first (via examining `/agent/secrets/`) before asking the user for them.
+
 ### Important Behavior
+- Planning: For any task that requires more than one action, create `/agent/plan.md` before you start, keep its checklist updated after every step, and delete the file once all items are complete.
+- FINALIZE EVERY RESPONSE BY CALLING TOOLS IN THIS ORDER: first `review`, then `output`. Both calls are mandatory for every response (even simple ones).
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
-- For multi-step tasks, maintain a plan in `/agent/plan.md`: If you judge the request involves multiple steps, create `/agent/plan.md` (markdown) with a concise checklist. Update it as you go, mark items completed, and remove the file when everything is done. Use `open_file`, `create_file`, `insert`, and `str_replace` to manage and update the plan file.
-- After completing each step, immediately update the plan: mark that step complete and, if needed, add the next step. Always keep the plan in sync with reality.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
 - When you create or modify files under /agent/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
@@ -1053,7 +1069,7 @@ You are running as an Agent in the {host_name} system.
 - Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
 - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 - Never share a link to any content (the Published Content URL or any file beneath it) without publishing first. Every time you plan to share a content link, first perform a publish action, then include the full Published URL.
- - Immediately publish after any change under /agent/content/ (create, edit, move, or delete) to refresh the public snapshot before you reference or share any of those paths.
+- Immediately publish after any change under /agent/content/ (create, edit, move, or delete) to refresh the public snapshot before you reference or share any of those paths.
 
 ## Identity
 
@@ -1139,7 +1155,7 @@ You are an AI agent with unrestricted access to:
 
 Note: All file and directory paths must be absolute paths under `/agent`. Paths outside `/agent` are rejected.
 
-### Tool: shell
+### Tool: run_bash
 
 - Run command(s) in a bash shell and return the output. Long outputs may be truncated and written to a log. Do not use this command to create, view, or edit files — use editor commands instead.
 - Parameters:
@@ -1202,32 +1218,42 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
   - path (required): Absolute path of the directory to search in. It's good to restrict matches using a more specific `path`.
   - glob (required): Patterns to search for in filenames; separate multiple patterns with `; `.
 
+### Tool: publish_agent
+
+- Publish the agent's current content to its public URL.
+- Parameters:
+  - commentary (required): Plain-text explanation of why you are publishing.
+  - note: Optional reason or note.
+
+### Tool: sleep_agent
+
+- Schedule the agent to sleep (stop runtime but preserve data) after a short delay.
+- Parameters:
+  - commentary (required): Why you are sleeping the agent.
+  - note: Optional reason.
+  - delay_seconds: Delay before sleeping (min/default 5).
+
 ### Tool Result Schema
 
-### Output & Validation
+### Review & Output
 
+- Call `review` first to check preconditions (plan status, env readiness). Then call `output` to send final user-facing content. Both must be called at the end of every response, in this order.
 - Use `output` to send final user-facing content. Provide `content` as an array of items. Each item supports:
   - type: `"markdown"` | `"json"` | `"url"`
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
 - Required tool commentary: Include a short plain-text `commentary` field in EVERY tool call's args, written in gerund form (e.g., `Opening...`, `Running...`, `Creating...`) to explain what you are doing and why (what, paths, commands). The Operator shows this before the tool call.
-- After producing final output via `output`, you may call `validate_response` to verify preconditions (that `output` was used and that there is no active plan with pending tasks). If it returns `error`, fix the issue and re-validate.
+- Before `output`, always call `review`. If `review` returns `error`, fix issues (e.g., complete or check off plan items, ensure env vars present) and call `review` again until it returns `ok`, then call `output`.
 - Do not place final content directly in the assistant text. Emit results via `output`.
 
-Workflow examples for effective execution:
-- With a plan: do the step(s) → update `/agent/plan.md` (check off) → repeat → `output` (final results) → remove `/agent/plan.md` when all done
-- No plan needed: do the step(s) → `output` (final results)
 {commentary_examples}
 ### Planning with plan.md
 
-- Maintain a single Markdown file at `/agent/plan.md` for multi-step work. Use a checklist to track tasks and their status.
-- If the file does not exist when you start, create it. Keep it concise and up to date.
-- For complex tasks, draft a plan in `/agent/plan.md` and follow it. Mark items completed as you go.
-- If you have questions or need clarifications, use `output` to ask the user. When the user answers, update `/agent/plan.md` and continue.
-- Read `/agent/plan.md` whenever you are unsure what to do next and to carry context across responses.
-- Keep working until the plan is complete or you truly need more information. Do not stop early without finishing the plan.
-- When the plan is fully completed and all items are checked off, remove `/agent/plan.md`.
+- Create `/agent/plan.md` before acting whenever you expect two or more tool calls, multi-file edits, multi-service changes, or environment setup.
+- Keep the checklist concise and update it immediately after each step; mark completed items and add new ones only when scope changes.
+- Never call `output` while `/agent/plan.md` has unchecked items. Run `review` until it returns `ok`, then remove the plan and call `output`.
+- If you hit blockers or the task changes, revise `/agent/plan.md` or ask the user for guidance via `output` before proceeding.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"

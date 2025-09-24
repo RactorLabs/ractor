@@ -87,7 +87,7 @@ impl Tool for ShellTool {
         }
         // emulate working dir via cd then run
         let cmd = format!(
-            "export PATH=\"/agent/bin:$PATH\"; cd '{}' && {}",
+            "export PATH=\"/agent/bin:$PATH\"; set -a; for f in /agent/secrets/*.env; do [ -f \"$f\" ] && . \"$f\"; done; set +a; cd '{}' && {}",
             exec_dir.replace("'", "'\\''"),
             commands
         );
@@ -758,33 +758,33 @@ impl Tool for OutputTool {
 
 // (ShowAndTellTool removed) — tools may include an optional 'commentary' field in their args.
 
-/// Validation tool: validate_response
-/// Checks the current response used the 'output' tool at least once.
-pub struct ValidateResponseTool {
+/// Review tool: review
+/// Checks preconditions and readiness before final output (plan status, envs). Should be called before `output`.
+pub struct ReviewTool {
     api: Arc<RaworcClient>,
 }
 
-impl ValidateResponseTool {
+impl ReviewTool {
     pub fn new(api: Arc<RaworcClient>) -> Self {
         Self { api }
     }
 }
 
 #[async_trait]
-impl Tool for ValidateResponseTool {
+impl Tool for ReviewTool {
     fn name(&self) -> &str {
-        "validate_response"
+        "review"
     }
 
     fn description(&self) -> &str {
-        "Validate the current response: ensure an 'output' tool was called."
+        "Review preconditions and readiness before final output (plan status, env availability). Must be called before 'output'."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type":"object",
             "properties":{
-                "commentary": {"type":"string","description":"Plain-text explanation of what you validated"}
+                "commentary": {"type":"string","description":"Plain-text explanation of what you reviewed and why"}
             },
             "required":["commentary"]
         })
@@ -792,56 +792,47 @@ impl Tool for ValidateResponseTool {
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
         if args.get("commentary").and_then(|v| v.as_str()).map(|s| s.trim()).filter(|s| !s.is_empty()).is_none() {
-            return Ok(json!({"status":"error","tool":"validate_response","error":"commentary is required"}));
-        }
-        // Heuristic: pick the most recent response with status 'processing' (this flow),
-        // otherwise fall back to the most recent response.
-        let list = self.api.get_responses(None, None).await.unwrap_or_default();
-        let mut current: Option<super::api::ResponseView> = None;
-        for r in list.iter().rev() {
-            let s = r.status.to_lowercase();
-            if s == "processing" {
-                current = Some(r.clone());
-                break;
-            }
-        }
-        if current.is_none() {
-            current = list.last().cloned();
+            return Ok(json!({"status":"error","tool":"review","error":"commentary is required"}));
         }
 
-        let mut has_output = false;
-        let mut last_output_tool: Option<String> = None;
-        if let Some(r) = &current {
-            if let Some(items) = r.segments.as_ref() {
-                for it in items {
-                    let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                    if t == "tool_result" {
-                        let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                        if tool == "output" {
-                            has_output = true;
-                            last_output_tool = Some(tool.to_string());
+        // Inspect plan file if present and detect unchecked tasks
+        let plan_path = std::path::Path::new("/agent/plan.md");
+        let mut has_plan = false;
+        let mut open_tasks: Vec<String> = Vec::new();
+        if plan_path.exists() {
+            has_plan = true;
+            if let Ok(content) = tokio::fs::read_to_string(plan_path).await {
+                for line in content.lines() {
+                    let l = line.trim();
+                    if l.contains("[ ]") || l.starts_with("- [ ]") || l.starts_with("* [ ]") {
+                        open_tasks.push(l.to_string());
+                        if open_tasks.len() >= 10 {
+                            break;
                         }
                     }
                 }
             }
         }
 
-        if !has_output {
+        // Check for presence of secrets directory (env files stored here)
+        let secrets_present = std::path::Path::new("/agent/secrets").exists();
+
+        if has_plan && !open_tasks.is_empty() {
             return Ok(json!({
-                "status": "error",
-                "tool": "validate_response",
-                "has_output": has_output,
-                "last_output_tool": last_output_tool,
-                "response_id": current.as_ref().map(|r| r.id.clone())
+                "status":"error",
+                "tool":"review",
+                "message":"Plan has unchecked items. Complete or check them off before final output.",
+                "has_plan": true,
+                "open_tasks": open_tasks
             }));
         }
 
         Ok(json!({
-            "status": "ok",
-            "tool": "validate_response",
-            "has_output": true,
-            "last_output_tool": last_output_tool,
-            "response_id": current.as_ref().map(|r| r.id.clone())
+            "status":"ok",
+            "tool":"review",
+            "has_plan": has_plan,
+            "open_tasks": open_tasks,
+            "secrets_dir_present": secrets_present
         }))
     }
 }
