@@ -30,6 +30,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let protected_routes = Router::new()
         .route("/auth", get(auth::me))
         .route("/auth/token", post(auth::create_token))
+        // Security / Blocklist (admin only)
+        .route("/blocklist", get(handlers::security::list_blocked))
+        .route(
+            "/blocklist/block",
+            post(handlers::security::block_principal),
+        )
+        .route(
+            "/blocklist/unblock",
+            post(handlers::security::unblock_principal),
+        )
         // Operator endpoints
         .route("/operators", get(handlers::operators::list_operators))
         .route("/operators", post(handlers::operators::create_operator))

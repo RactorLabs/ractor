@@ -166,3 +166,11 @@ impl RbacAuthz {
         false
     }
 }
+
+// Blocked principal record
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockedPrincipal {
+    pub principal: String,
+    pub principal_type: SubjectType,
+    pub created_at: String,
+}

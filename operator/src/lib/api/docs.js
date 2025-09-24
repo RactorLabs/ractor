@@ -66,6 +66,11 @@ export function getCommonSchemas() {
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
     ],
+    BlockedPrincipal: [
+      { name: 'principal', type: 'string', desc: 'Principal name' },
+      { name: 'principal_type', type: 'string', desc: "'User' or 'Admin'" },
+      { name: 'created_at', type: 'string (RFC3339)', desc: 'When the principal was blocked' },
+    ],
     Count: [
       { name: 'count', type: 'int', desc: 'Count value' },
       { name: 'agent_name', type: 'string', desc: 'Agent identifier' },
@@ -155,6 +160,54 @@ export function getApiDocs(base) {
   
   
   
+  {
+    id: 'admin',
+    title: 'Admin / Security',
+    description: 'Administrative endpoints (blocklist management).',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/v0/blocklist',
+        auth: 'bearer',
+        adminOnly: true,
+        desc: 'List blocked principals.',
+        params: [],
+        example: `curl -s ${BASE}/api/v0/blocklist -H "Authorization: Bearer <token>"`,
+        resp: { schema: 'BlockedPrincipal', array: true },
+        responses: [
+          { status: 200, body: `[{"principal":"user1","principal_type":"User","created_at":"2025-01-01T00:00:00Z"}]` }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/v0/blocklist/block',
+        auth: 'bearer',
+        adminOnly: true,
+        desc: "Block a principal by name. Defaults to type 'User'.",
+        params: [
+          { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name' },
+          { in: 'body', name: 'type', type: 'string', required: false, desc: "Optional. Principal type: 'User' or 'Admin' (default: 'User')" }
+        ],
+        example: `curl -s -X POST ${BASE}/api/v0/blocklist/block -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"user1"}'`,
+        resp: { schema: 'Empty' },
+        responses: [ { status: 200, body: `{"blocked":true,"created":true}` } ]
+      },
+      {
+        method: 'POST',
+        path: '/api/v0/blocklist/unblock',
+        auth: 'bearer',
+        adminOnly: true,
+        desc: "Unblock a principal by name. Defaults to type 'User'.",
+        params: [
+          { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name' },
+          { in: 'body', name: 'type', type: 'string', required: false, desc: "Optional. Principal type: 'User' or 'Admin' (default: 'User')" }
+        ],
+        example: `curl -s -X POST ${BASE}/api/v0/blocklist/unblock -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"user1"}'`,
+        resp: { schema: 'Empty' },
+        responses: [ { status: 200, body: `{"blocked":false,"deleted":true}` } ]
+      }
+    ]
+  },
   {
     id: 'auth',
     title: 'Authentication',

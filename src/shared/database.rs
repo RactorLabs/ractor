@@ -463,6 +463,113 @@ impl AppState {
 
         Ok(result.rows_affected() > 0)
     }
+
+    // Blocklist operations
+    pub async fn is_principal_blocked(
+        &self,
+        principal: &str,
+        subject_type: SubjectType,
+    ) -> Result<bool, DatabaseError> {
+        let principal_type_str = match subject_type {
+            SubjectType::Admin => "Admin",
+            SubjectType::Subject => "User",
+        };
+
+        let count: i64 = query(
+            r#"
+            SELECT COUNT(*) as c
+            FROM blocked_principals
+            WHERE principal = ? AND principal_type = ?
+            "#,
+        )
+        .bind(principal)
+        .bind(principal_type_str)
+        .fetch_one(&*self.db)
+        .await?
+        .get::<i64, _>("c");
+
+        Ok(count > 0)
+    }
+
+    pub async fn block_principal(
+        &self,
+        principal: &str,
+        subject_type: SubjectType,
+    ) -> Result<bool, DatabaseError> {
+        let principal_type_str = match subject_type {
+            SubjectType::Admin => "Admin",
+            SubjectType::Subject => "User",
+        };
+
+        let result = query(
+            r#"
+            INSERT IGNORE INTO blocked_principals (principal, principal_type)
+            VALUES (?, ?)
+            "#,
+        )
+        .bind(principal)
+        .bind(principal_type_str)
+        .execute(&*self.db)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn unblock_principal(
+        &self,
+        principal: &str,
+        subject_type: SubjectType,
+    ) -> Result<bool, DatabaseError> {
+        let principal_type_str = match subject_type {
+            SubjectType::Admin => "Admin",
+            SubjectType::Subject => "User",
+        };
+
+        let result = query(
+            r#"
+            DELETE FROM blocked_principals
+            WHERE principal = ? AND principal_type = ?
+            "#,
+        )
+        .bind(principal)
+        .bind(principal_type_str)
+        .execute(&*self.db)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn list_blocked_principals(
+        &self,
+    ) -> Result<Vec<crate::shared::rbac::BlockedPrincipal>, DatabaseError> {
+        let rows = query(
+            r#"
+            SELECT principal, principal_type, created_at
+            FROM blocked_principals
+            ORDER BY created_at DESC
+            "#,
+        )
+        .fetch_all(&*self.db)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| {
+                let principal_type_str: String = r.get("principal_type");
+                let principal_type = match principal_type_str.as_str() {
+                    "Admin" => SubjectType::Admin,
+                    _ => SubjectType::Subject,
+                };
+                crate::shared::rbac::BlockedPrincipal {
+                    principal: r.get("principal"),
+                    principal_type,
+                    created_at: r
+                        .get::<chrono::DateTime<chrono::Utc>, _>("created_at")
+                        .to_rfc3339(),
+                }
+            })
+            .collect())
+    }
 }
 
 // Database connection utilities
