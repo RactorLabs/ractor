@@ -53,7 +53,11 @@ pub async fn list_responses(
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
-    let ctx = PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() };
+    let ctx = PermissionContext {
+        api_group: "api".into(),
+        resource: "*".into(),
+        verb: "*".into(),
+    };
     match crate::api::auth::check_permission(&auth.principal, state, &ctx).await {
         Ok(true) => true,
         _ => false,
@@ -161,7 +165,8 @@ pub async fn create_response(
             match AgentResponse::find_by_id(&state.db, &response_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
-                    if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled" {
+                    if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled"
+                    {
                         return Ok(Json(ResponseView {
                             id: cur.id,
                             agent_name: cur.agent_name,
@@ -297,8 +302,18 @@ async fn estimate_history_tokens_since(
                 })
                 .unwrap_or(false);
             if include_tools {
-                // For the response being worked on, include tool_call and tool_result outputs
                 if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                    let total_tool_results = items
+                        .iter()
+                        .filter(|it| {
+                            it.get("type")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .eq_ignore_ascii_case("tool_result")
+                        })
+                        .count();
+                    let large_start = total_tool_results.saturating_sub(10);
+                    let mut tool_idx = 0usize;
                     for it in items {
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                             let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
@@ -306,50 +321,52 @@ async fn estimate_history_tokens_since(
                             let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
                                 .to_string();
                             total_chars += s.len() as i64;
-                        }
-                        if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                        } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
                             if let Some(out) = it.get("output") {
                                 let text = out
                                     .as_str()
                                     .map(|x| x.to_string())
                                     .unwrap_or_else(|| out.to_string());
                                 if !text.is_empty() {
-                                    let len = if text.len() > TOOL_RESULT_PREVIEW_MAX {
-                                        (TOOL_RESULT_PREVIEW_MAX + 1) as i64
+                                    let limit = if tool_idx >= large_start {
+                                        8000usize
+                                    } else {
+                                        100usize
+                                    };
+                                    let len = if text.len() > limit {
+                                        (limit + 1) as i64
                                     } else {
                                         text.len() as i64
                                     };
                                     total_chars += len;
                                 }
+                                tool_idx += 1;
                             }
                         }
                     }
                 }
             }
-        }
-        if status_lc != "processing" {
-            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-                for it in items {
-                    if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
-                        let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                        let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                        let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
-                            .to_string();
-                        total_chars += s.len() as i64;
-                    } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
-                        if let Some(out) = it.get("output") {
-                            let text = out
-                                .as_str()
-                                .map(|x| x.to_string())
-                                .unwrap_or_else(|| out.to_string());
-                            if !text.is_empty() {
-                                let len = if text.len() > TOOL_RESULT_PREVIEW_MAX {
-                                    (TOOL_RESULT_PREVIEW_MAX + 1) as i64
-                                } else {
-                                    text.len() as i64
-                                };
-                                total_chars += len;
-                            }
+        } else if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+            for it in items {
+                if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
+                    let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                    let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                    let s =
+                        serde_json::json!({"tool_call": {"tool": tool, "args": args}}).to_string();
+                    total_chars += s.len() as i64;
+                } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                    if let Some(out) = it.get("output") {
+                        let text = out
+                            .as_str()
+                            .map(|x| x.to_string())
+                            .unwrap_or_else(|| out.to_string());
+                        if !text.is_empty() {
+                            let len = if text.len() > TOOL_RESULT_PREVIEW_MAX {
+                                (TOOL_RESULT_PREVIEW_MAX + 1) as i64
+                            } else {
+                                text.len() as i64
+                            };
+                            total_chars += len;
                         }
                     }
                 }

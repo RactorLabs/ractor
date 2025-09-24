@@ -369,7 +369,7 @@ impl ResponseHandler {
                     });
 
                     // Execute tool and capture structured output
-                    let mut output_value: serde_json::Value = match self
+                    let output_value_raw: serde_json::Value = match self
                         .tool_registry
                         .execute_tool(tool_name, args)
                         .await
@@ -379,26 +379,20 @@ impl ResponseHandler {
                             serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
                         }
                     };
-                    // Truncate large string fields proactively and mark truncation
-                    let mut was_truncated = false;
-                    output_value = truncate_output_json(
-                        output_value,
+                    // Preserve full output for storage, and generate a truncated preview for the in-flight conversation
+                    let output_value_full = output_value_raw.clone();
+                    let mut preview_truncated = false;
+                    let output_value_preview = truncate_output_json(
+                        output_value_raw,
                         MAX_TOOL_OUTPUT_CHARS,
-                        &mut was_truncated,
+                        &mut preview_truncated,
                     );
-                    if was_truncated {
-                        if let Some(obj) = output_value.as_object_mut() {
-                            let existing = obj
-                                .get("truncated")
-                                .and_then(|v| v.as_bool())
-                                .unwrap_or(false);
-                            if !existing {
-                                obj.insert("truncated".into(), serde_json::Value::Bool(true));
-                            }
-                        }
-                    }
                     // Append only the tool_result (avoid duplicating prior items)
-                    let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
+                    let seg_tool_result = serde_json::json!({
+                        "type": "tool_result",
+                        "tool": tool_name,
+                        "output": output_value_full,
+                    });
                     let _ = self
                         .api_client
                         .update_response(
@@ -411,7 +405,7 @@ impl ResponseHandler {
                     _items_sent += 1;
                     // Special case: after successful sleep, proactively inform the user and finalize
                     if tool_name == "sleep_agent" {
-                        let delay = output_value
+                        let delay = output_value_preview
                             .get("delay_seconds")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(5);
@@ -490,10 +484,10 @@ impl ResponseHandler {
                     }
                     // If the tool reported an error, let the model handle next step; do not mark failed
                     // Add tool result to conversation
-                    let tool_content_str = if let Some(s) = output_value.as_str() {
+                    let tool_content_str = if let Some(s) = output_value_preview.as_str() {
                         s.to_string()
                     } else {
-                        output_value.to_string()
+                        output_value_preview.to_string()
                     };
                     conversation.push(ChatMessage {
                         role: "tool".to_string(),
@@ -573,7 +567,7 @@ impl ResponseHandler {
                                 tool_call_id: None,
                             });
 
-                            let output_value: serde_json::Value = match self
+                            let output_value_raw: serde_json::Value = match self
                                 .tool_registry
                                 .execute_tool(tool_name, &args)
                                 .await
@@ -583,32 +577,18 @@ impl ResponseHandler {
                                     serde_json::json!({"status":"error","tool":tool_name,"error": e.to_string()})
                                 }
                             };
-                            // Truncate and mark truncation on salvaged execution as well
-                            let mut was_truncated = false;
-                            let output_value = {
-                                let v = truncate_output_json(
-                                    output_value,
-                                    MAX_TOOL_OUTPUT_CHARS,
-                                    &mut was_truncated,
-                                );
-                                let mut v = v;
-                                if was_truncated {
-                                    if let Some(obj) = v.as_object_mut() {
-                                        let existing = obj
-                                            .get("truncated")
-                                            .and_then(|b| b.as_bool())
-                                            .unwrap_or(false);
-                                        if !existing {
-                                            obj.insert(
-                                                "truncated".into(),
-                                                serde_json::Value::Bool(true),
-                                            );
-                                        }
-                                    }
-                                }
-                                v
-                            };
-                            let seg_tool_result = serde_json::json!({"type":"tool_result","tool":tool_name,"output":output_value});
+                            let output_value_full = output_value_raw.clone();
+                            let mut preview_truncated = false;
+                            let output_value_preview = truncate_output_json(
+                                output_value_raw,
+                                MAX_TOOL_OUTPUT_CHARS,
+                                &mut preview_truncated,
+                            );
+                            let seg_tool_result = serde_json::json!({
+                                "type": "tool_result",
+                                "tool": tool_name,
+                                "output": output_value_full,
+                            });
                             let _ = self
                                 .api_client
                                 .update_response(
@@ -684,7 +664,7 @@ impl ResponseHandler {
                                 return Ok(());
                             }
                             if tool_name == "sleep_agent" {
-                                let delay = output_value
+                                let delay = output_value_preview
                                     .get("delay_seconds")
                                     .and_then(|v| v.as_u64())
                                     .unwrap_or(5);
@@ -702,10 +682,10 @@ impl ResponseHandler {
                                     .await;
                                 return Ok(());
                             }
-                            let tool_content_str = if let Some(s) = output_value.as_str() {
+                            let tool_content_str = if let Some(s) = output_value_preview.as_str() {
                                 s.to_string()
                             } else {
-                                output_value.to_string()
+                                output_value_preview.to_string()
                             };
                             conversation.push(ChatMessage {
                                 role: "tool".to_string(),
@@ -849,6 +829,8 @@ impl ResponseHandler {
                     }
                 }
             }
+            let status_lc = r.status.to_lowercase();
+
             // Input content
             if let Some(arr) = r.input_content.as_ref() {
                 for it in arr {
@@ -869,6 +851,22 @@ impl ResponseHandler {
             }
             // Include prior tool calls/results with truncated payloads for context
             if let Some(seg_items) = r.segments.as_ref() {
+                let total_tool_results = seg_items
+                    .iter()
+                    .filter(|seg| {
+                        seg.get("type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .eq_ignore_ascii_case("tool_result")
+                    })
+                    .count();
+                let large_start = if status_lc == "processing" {
+                    total_tool_results.saturating_sub(10)
+                } else {
+                    total_tool_results
+                };
+                let mut tool_result_idx = 0usize;
+
                 for seg in seg_items {
                     let seg_type = seg
                         .get("type")
@@ -900,10 +898,15 @@ impl ResponseHandler {
                             } else {
                                 output_val.to_string()
                             };
-                            const TOOL_RESULT_PREVIEW_MAX: usize = 100;
-                            if text.len() > TOOL_RESULT_PREVIEW_MAX {
-                                text.truncate(TOOL_RESULT_PREVIEW_MAX);
-                                text.push_str("…");
+                            let limit =
+                                if status_lc == "processing" && tool_result_idx >= large_start {
+                                    8000usize
+                                } else {
+                                    100usize
+                                };
+                            if text.len() > limit {
+                                text.truncate(limit);
+                                text.push('…');
                             }
                             if !text.trim().is_empty() {
                                 convo.push(ChatMessage {
@@ -913,13 +916,14 @@ impl ResponseHandler {
                                     tool_call_id: None,
                                 });
                             }
+                            tool_result_idx += 1;
                         }
                     }
                 }
             }
 
             // For completed responses, include a compact assistant message synthesized from output_content
-            if r.status.to_lowercase() == "completed" {
+            if status_lc == "completed" {
                 if let Some(arr) = r.output_content.as_ref() {
                     if !arr.is_empty() {
                         // Build a concise assistant content from output items
