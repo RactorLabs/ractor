@@ -152,7 +152,18 @@
 
             <div class="col-12">
               <label class="form-label" for="prompt">Starting Prompt (optional)</label>
-              <textarea id="prompt" class="form-control" rows="3" bind:value={prompt}></textarea>
+              <textarea
+                id="prompt"
+                class="form-control"
+                rows="3"
+                bind:value={prompt}
+                on:keydown={(event) => {
+                  if (event.key === 'Enter' && event.ctrlKey && !loading) {
+                    submit(event);
+                  }
+                }}
+              ></textarea>
+              <div class="form-text">Press Ctrl+Enter to create the agent.</div>
             </div>
 
             <div class="col-12 col-md-6">
