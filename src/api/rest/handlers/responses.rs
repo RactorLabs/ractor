@@ -244,6 +244,7 @@ async fn estimate_history_tokens_since(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     let mut total_chars: i64 = 0;
+    const TOOL_RESULT_PREVIEW_MAX: usize = 100;
 
     // Determine the single latest 'processing' response by created_at
     let mut latest_proc: Option<DateTime<Utc>> = None;
@@ -308,19 +309,53 @@ async fn estimate_history_tokens_since(
                         }
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
                             if let Some(out) = it.get("output") {
-                                let s = out
+                                let text = out
                                     .as_str()
                                     .map(|x| x.to_string())
                                     .unwrap_or_else(|| out.to_string());
-                                if !s.is_empty() {
-                                    total_chars += s.len() as i64;
+                                if !text.is_empty() {
+                                    let len = if text.len() > TOOL_RESULT_PREVIEW_MAX {
+                                        (TOOL_RESULT_PREVIEW_MAX + 1) as i64
+                                    } else {
+                                        text.len() as i64
+                                    };
+                                    total_chars += len;
                                 }
                             }
                         }
                     }
                 }
             }
-        } else if status_lc == "completed" {
+        }
+        if status_lc != "processing" {
+            if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+                for it in items {
+                    if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
+                        let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                        let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                            .to_string();
+                        total_chars += s.len() as i64;
+                    } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
+                        if let Some(out) = it.get("output") {
+                            let text = out
+                                .as_str()
+                                .map(|x| x.to_string())
+                                .unwrap_or_else(|| out.to_string());
+                            if !text.is_empty() {
+                                let len = if text.len() > TOOL_RESULT_PREVIEW_MAX {
+                                    (TOOL_RESULT_PREVIEW_MAX + 1) as i64
+                                } else {
+                                    text.len() as i64
+                                };
+                                total_chars += len;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if status_lc == "completed" {
             // Build compact assistant content from 'output' items or compact_summary
             const MAX_TOTAL: usize = 3000;
             const MAX_ITEM: usize = 1200;
