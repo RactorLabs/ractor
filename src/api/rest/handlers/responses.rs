@@ -12,6 +12,7 @@ use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::{
     AgentResponse, AppState, CreateResponseRequest, ResponseView, UpdateResponseRequest,
 };
+use crate::shared::rbac::PermissionContext;
 
 #[derive(Debug, serde::Deserialize)]
 pub struct ListQuery {
@@ -50,6 +51,15 @@ pub async fn list_responses(
     Ok(Json(result))
 }
 
+// Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
+async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
+    let ctx = PermissionContext { api_group: "api".into(), resource: "*".into(), verb: "*".into() };
+    match crate::api::auth::check_permission(&auth.principal, state, &ctx).await {
+        Ok(true) => true,
+        _ => false,
+    }
+}
+
 pub async fn create_response(
     State(state): State<Arc<AppState>>,
     Path(agent_name): Path<String>,
@@ -85,8 +95,10 @@ pub async fn create_response(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // If agent is sleeping, only owner can implicitly wake via this path
+    // If agent is sleeping, only owner or admin can implicitly wake via this path
+    let is_admin = is_admin_principal(&auth, &state).await;
     if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT
+        && !is_admin
         && agent.created_by != *created_by
     {
         return Err(ApiError::Forbidden(
