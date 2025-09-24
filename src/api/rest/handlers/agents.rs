@@ -1886,33 +1886,6 @@ pub async fn wake_agent(
 
     tracing::info!("Created resume task for agent {}", agent.name);
 
-    // Insert a history marker indicating wake request
-    if let Ok(created) = resp_model::AgentResponse::create(
-        &state.db,
-        &agent.name,
-        username,
-        resp_model::CreateResponseRequest {
-            input: serde_json::json!({ "content": [] }),
-            background: None,
-        },
-    )
-    .await
-    {
-        let _ = resp_model::AgentResponse::update_by_id(
-            &state.db,
-            &created.id,
-            resp_model::UpdateResponseRequest {
-                status: Some("completed".to_string()),
-                input: None,
-                output: Some(serde_json::json!({
-                    "text": "",
-                    "items": [ { "type": "woke", "note": "Wake requested" } ]
-                })),
-            },
-        )
-        .await;
-    }
-
     // Fetch updated agent
     let updated_agent = Agent::find_by_name(&state.db, &agent.name)
         .await
