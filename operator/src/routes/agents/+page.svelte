@@ -293,7 +293,7 @@ import { getHostUrl } from '$lib/branding.js';
                         {/if}
                         {#if a.is_published}
                           <div class="dropdown">
-                          <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
+                          <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" aria-label="Published options">
                               <i class="bi bi-globe me-1"></i><span>Published</span>
                           </button>
                             <ul class="dropdown-menu dropdown-menu-end">
@@ -314,7 +314,7 @@ import { getHostUrl } from '$lib/branding.js';
                           </button>
                         {/if}
                         <div class="dropdown">
-                          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
+                          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" aria-label="More actions">
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
