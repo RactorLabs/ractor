@@ -99,8 +99,8 @@
                   <span>ADMIN APIs</span>
                   <i class="bi bi-shield-lock text-theme fs-16px my-n1"></i>
                 </a>
-                <a aria-label="Tokens" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/tokens">
-                  <span>TOKENS</span>
+                <a aria-label="Create Tokens" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/tokens">
+                  <span>CREATE TOKENS</span>
                   <i class="bi bi-key text-theme fs-16px my-n1"></i>
                 </a>
                 <a aria-label="Change Password" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/profile/password">

@@ -6,7 +6,7 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
 
-  setPageTitle('Tokens');
+  setPageTitle('Create Tokens');
 
   let operatorName = '';
   let username = '';
