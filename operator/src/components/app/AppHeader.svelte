@@ -113,12 +113,16 @@
             </a>
             <div class="dropdown-menu dropdown-menu-end me-lg-3 fs-11px mt-1">
               {#if isAdmin}
-                <a aria-label="Change Password" class="dropdown-item d-flex align-items-center" href="/profile/password">
-                  CHANGE PASSWORD <i class="bi bi-key ms-auto text-theme fs-16px my-n1"></i>
+                <a aria-label="Change Password" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/profile/password">
+                  <span>CHANGE PASSWORD</span>
+                  <i class="bi bi-key text-theme fs-16px my-n1"></i>
                 </a>
                 <div class="dropdown-divider"></div>
               {/if}
-              <a aria-label="link" class="dropdown-item d-flex align-items-center" href="/logout" data-sveltekit-reload onclick={() => { import('$lib/auth.js').then(m => m.logoutClientSide()).catch(()=>{}); }}>LOGOUT <i class="bi bi-toggle-off ms-auto text-theme fs-16px my-n1"></i></a>
+              <a aria-label="link" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/logout" data-sveltekit-reload onclick={() => { import('$lib/auth.js').then(m => m.logoutClientSide()).catch(()=>{}); }}>
+                <span>LOGOUT</span>
+                <i class="bi bi-toggle-off text-theme fs-16px my-n1"></i>
+              </a>
             </div>
           {:else}
             <a href="/login" aria-label="link" class="menu-link">
