@@ -111,36 +111,6 @@
     <div class="col-12 col-xxl-8">
       <Card class="mb-3">
         <div class="card-header fw-bold d-flex align-items-center">
-          <div class="fs-20px">Generate Operator Token</div>
-          <span class="ms-auto small text-muted">{operatorName}</span>
-        </div>
-        <div class="card-body">
-          <div class="alert alert-info small">Create an Admin token for <strong>{operatorName || 'admin'}</strong>. Use with caution.</div>
-          {#if opError}
-            <div class="alert alert-danger py-2 small">{opError}</div>
-          {/if}
-          <div class="d-flex gap-2 align-items-center">
-            <button class="btn btn-outline-theme" on:click|preventDefault={generateOperatorToken} disabled={opLoading}>
-              {#if opLoading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Operator Token{/if}
-            </button>
-          </div>
-
-          {#if opToken}
-            <div class="mt-3">
-              <label class="form-label" for="op-token-output">Operator Token</label>
-              <div class="input-group">
-                <input id="op-token-output" class="form-control" readonly value={opToken} />
-                <button class="btn btn-outline-secondary" on:click={copyOperatorToken}>Copy</button>
-              </div>
-              {#if opCopyStatus}
-                <div class="small mt-1 {opCopyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{opCopyStatus}</div>
-              {/if}
-            </div>
-          {/if}
-        </div>
-      </Card>
-      <Card>
-        <div class="card-header fw-bold d-flex align-items-center">
           <div class="fs-20px">Generate User Token</div>
         </div>
         <div class="card-body">
@@ -174,6 +144,36 @@
           <div class="mt-3">
             <button class="btn btn-outline-danger" on:click|preventDefault={doLogout}>Logout</button>
           </div>
+        </div>
+      </Card>
+      <Card>
+        <div class="card-header fw-bold d-flex align-items-center">
+          <div class="fs-20px">Generate Operator Token</div>
+          <span class="ms-auto small text-muted">{operatorName}</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info small">Create an Admin token for <strong>{operatorName || 'admin'}</strong>. Use with caution.</div>
+          {#if opError}
+            <div class="alert alert-danger py-2 small">{opError}</div>
+          {/if}
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-outline-theme" on:click|preventDefault={generateOperatorToken} disabled={opLoading}>
+              {#if opLoading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Operator Token{/if}
+            </button>
+          </div>
+
+          {#if opToken}
+            <div class="mt-3">
+              <label class="form-label" for="op-token-output">Operator Token</label>
+              <div class="input-group">
+                <input id="op-token-output" class="form-control" readonly value={opToken} />
+                <button class="btn btn-outline-secondary" on:click={copyOperatorToken}>Copy</button>
+              </div>
+              {#if opCopyStatus}
+                <div class="small mt-1 {opCopyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{opCopyStatus}</div>
+              {/if}
+            </div>
+          {/if}
         </div>
       </Card>
     </div>
