@@ -47,6 +47,29 @@ function formatCommentary(commentary) {
   return `${cleaned.slice(0, 137)}…`;
 }
 
+// Find the commentary closest to the last tool_result
+function extractCommentaryNearLastTool(segments) {
+  if (!Array.isArray(segments) || segments.length === 0) return null;
+  let lastToolIdx = -1;
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const it = segments[i];
+    const t = (it?.type || '').toLowerCase();
+    if (t === 'tool_result') { lastToolIdx = i; break; }
+  }
+  if (lastToolIdx < 0) return extractLatestCommentary(segments);
+  // Search backwards from the last tool_result for a commentary segment
+  for (let j = lastToolIdx - 1; j >= 0; j -= 1) {
+    const it = segments[j];
+    const t = (it?.type || '').toLowerCase();
+    if (t === 'commentary') {
+      const text = it?.text || it?.content || '';
+      if (typeof text === 'string' && text.trim()) return text;
+    }
+  }
+  // Fallback to any latest commentary if none found before
+  return extractLatestCommentary(segments);
+}
+
 function renderOutputItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return (
@@ -157,15 +180,7 @@ export default function RepoPage({
   const [isPolling, setIsPolling] = useState(() => Boolean(derivedResponseId && !isTerminal((normalizedInitial?.status) || 'pending')));
   const [pollError, setPollError] = useState(null);
 
-  useEffect(() => {
-    if (!router.isReady || !derivedResponseId) return;
-    const slug = router.query.slug;
-    const parts = Array.isArray(slug) ? slug : [];
-    const hasResponseSegment = parts.length >= 3;
-    if (!hasResponseSegment) {
-      router.replace(`/${owner}/${name}/${derivedResponseId}`, undefined, { shallow: true });
-    }
-  }, [router, owner, name, derivedResponseId]);
+  // Single-route mode: keep URL as /owner/repo; no response id in URL
 
   useEffect(() => {
     if (!derivedAgentName || !derivedResponseId || !isPolling) {
@@ -212,7 +227,17 @@ export default function RepoPage({
     ? `Roast completed for ${owner}/${name}`
     : formatCommentary(commentary) || `Roasting ${owner}/${name}…`;
 
- const outputItems = useMemo(() => (isTerminal(status) ? response?.output_content || [] : []), [response?.output_content, status]);
+ const outputItems = useMemo(() => {
+   if (!isTerminal(status)) return [];
+   const items = Array.isArray(response?.output_content) ? response.output_content : [];
+   if (items.length > 0) return items;
+   // Fallback: show commentary nearest to last tool item
+   const near = extractCommentaryNearLastTool(response?.segments);
+   if (near && typeof near === 'string' && near.trim().length > 0) {
+     return [{ type: 'markdown', title: 'Result', content: near }];
+   }
+   return [];
+ }, [response?.output_content, response?.segments, status]);
 
   const isFailed = status === 'failed';
   const isCancelled = status === 'cancelled';
@@ -284,7 +309,7 @@ export async function getServerSideProps(context) {
     };
   }
 
-  const [owner, name, responseId] = slug;
+  const [owner, name] = slug;
   const repoUrl = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 
   try {
@@ -324,7 +349,7 @@ export async function getServerSideProps(context) {
         repoUrl,
         agentName: null,
         response: null,
-        responseId: responseId || null,
+        responseId: null,
         setupError: 'Required Raworc credentials are missing.'
       }
     };
@@ -340,14 +365,10 @@ export async function getServerSideProps(context) {
 
   // No local storage; rely on Raworc API for response resolution
 
-  // If responseId is provided, fetch existing response
-  if (responseId) {
-    // Legacy 3-segment path no longer supported
-    return { notFound: true };
-  }
+  // No response id in URL — resolve or create response internally
 
-  // Otherwise: either reuse an existing agent by tag or create a fresh one,
-  // then create a response and redirect to /agent/{responseId}
+  // Either reuse an existing agent by tag or create a fresh one,
+  // then resolve/create a response and render on this page
   const tagValue = `${owner}/${name}`;
   // Try to find existing agent by tag
   try {
@@ -356,19 +377,38 @@ export async function getServerSideProps(context) {
       const page = await listRes.json();
       const found = Array.isArray(page.items) && page.items.length ? page.items[0] : null;
       if (found && found.name) {
-        // Try to use the first response (oldest); if none, create a new one
-        const firstRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=1&offset=0`, { headers });
-        if (firstRes.ok) {
-          const list = await firstRes.json();
-          if (Array.isArray(list) && list.length > 0) {
-            const first = list[0];
-            return {
-              redirect: {
-                destination: `/agent/${encodeURIComponent(first.id)}`,
-                permanent: false
+        // Try to use the most recent response; if none, create a new one
+        let latest = null;
+        try {
+          const cntRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses/count`, { headers });
+          if (cntRes.ok) {
+            const cntObj = await cntRes.json();
+            const total = Number(cntObj?.count || 0);
+            if (total > 0) {
+              const offset = Math.max(0, total - 1);
+              const lastRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=1&offset=${offset}`, { headers });
+              if (lastRes.ok) {
+                const list = await lastRes.json();
+                if (Array.isArray(list) && list.length > 0) latest = list[0];
               }
-            };
+            }
           }
+        } catch (_) {}
+        if (latest) {
+          const resp = await fetch(`${base}/api/v0/responses/${encodeURIComponent(latest.id)}`, { headers });
+          if (!resp.ok) return { notFound: true };
+          const responseView = await resp.json();
+          return {
+            props: {
+              owner,
+              name,
+              repoUrl,
+              agentName: found.name,
+              response: responseView,
+              responseId: responseView.id,
+              setupError: null
+            }
+          };
         }
         // No responses found; create a new response for the existing agent
         const messageBody = {
@@ -382,9 +422,14 @@ export async function getServerSideProps(context) {
         if (!responseRes.ok) throw new Error('Failed to enqueue response');
         const response = await responseRes.json();
         return {
-          redirect: {
-            destination: `/agent/${encodeURIComponent(response.id)}`,
-            permanent: false
+          props: {
+            owner,
+            name,
+            repoUrl,
+            agentName: found.name,
+            response,
+            responseId: response.id,
+            setupError: null
           }
         };
       }
@@ -448,14 +493,15 @@ export async function getServerSideProps(context) {
     }
 
     const response = await responseRes.json();
-    const runMap = await readRuns();
-    runMap[response.id] = agentName;
-    await writeRuns(runMap);
-
     return {
-      redirect: {
-        destination: `/agent/${encodeURIComponent(response.id)}`,
-        permanent: false
+      props: {
+        owner,
+        name,
+        repoUrl,
+        agentName,
+        response,
+        responseId: response.id,
+        setupError: null
       }
     };
   } catch (error) {
