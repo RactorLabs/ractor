@@ -176,7 +176,49 @@ export async function getServerSideProps(context) {
     agentName = null;
   }
 
+  // Helper: attempt to locate the agent by scanning GitHex-tagged agents
+  async function probeAgentsForResponse() {
+    let page = 1;
+    const pageSize = 200;
+    const maxPages = 10; // scan up to ~2000 agents
+    while (page <= maxPages) {
+      const url = `${base}/api/v0/agents?tags=githex&limit=${pageSize}&page=${page}`;
+      const list = await fetch(url, { headers });
+      if (!list.ok) break;
+      const data = await list.json();
+      const items = Array.isArray(data?.items) ? data.items : [];
+      for (const a of items) {
+        const name = a?.name;
+        if (!name) continue;
+        const r = await fetch(`${base}/api/v0/agents/${encodeURIComponent(name)}/responses/${encodeURIComponent(responseId)}`, { headers });
+        if (r.ok) {
+          const responseView = await r.json();
+          return { agent: name, responseView };
+        }
+      }
+      const totalPages = Number(data?.pages || 1);
+      if (page >= totalPages) break;
+      page += 1;
+    }
+    return null;
+  }
+
   if (!agentName) {
+    try {
+      const found = await probeAgentsForResponse();
+      if (found && found.agent && found.responseView) {
+        agentName = found.agent;
+        // persist mapping
+        try {
+          const raw = await fs.readFile(runsPath, 'utf8').catch(() => '{}');
+          const map = JSON.parse(raw || '{}');
+          map[responseId] = agentName;
+          await fs.mkdir(storageDir, { recursive: true });
+          await fs.writeFile(runsPath, JSON.stringify(map, null, 2), 'utf8');
+        } catch (_) {}
+        return { props: { agentName, response: found.responseView, responseId, setupError: null } };
+      }
+    } catch (_) {}
     return { props: { agentName: null, response: null, responseId, setupError: 'Unknown response id' } };
   }
 
@@ -197,4 +239,3 @@ export async function getServerSideProps(context) {
     return { props: { agentName, response: null, responseId, setupError: 'Failed to load response' } };
   }
 }
-
