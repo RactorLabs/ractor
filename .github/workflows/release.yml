@@ -26,11 +26,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
+      - name: Install doctl (DigitalOcean CLI)
+        uses: digitalocean/action-doctl@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Login to DigitalOcean Container Registry (DOCR)
+        run: doctl registry login --expiry-seconds 600
           
       - name: Set up Node.js (LTS)
         uses: actions/setup-node@v4
@@ -50,10 +52,10 @@ jobs:
           chmod +x ./scripts/build.sh
           ./scripts/build.sh
           
-      - name: Push Docker images to Docker Hub
+      - name: Push Docker images to DigitalOcean Container Registry
         run: |
           chmod +x ./scripts/push.sh
-          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry raworc
+          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/raworc
           
       - name: Publish CLI to npm
         working-directory: ./cli
@@ -70,7 +72,13 @@ jobs:
             --notes "## Raworc ${{ steps.get_version.outputs.VERSION }}
           
           ### Published Packages
-          - **Docker Images**: \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
+          - **Docker Images (DOCR)**:
+            - \`registry.digitalocean.com/raworc/raworc_api:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_controller:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_operator:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_content:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_gateway:${{ steps.get_version.outputs.VERSION }}\`
           - **npm Package**: \`@raworc/cli@${{ steps.get_version.outputs.VERSION }}\`
           
           ### Installation
@@ -79,11 +87,6 @@ jobs:
           raworc start
           \`\`\`
           
-          ### Docker Hub Images
-          - \`raworc/raworc_server:${{ steps.get_version.outputs.VERSION }}\`
-          - \`raworc/raworc_controller:${{ steps.get_version.outputs.VERSION }}\`
-          - \`raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
-          
-          All images are also tagged as \`:latest\`"
+          All images are also tagged as \`:latest\` at DOCR"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
