@@ -11,6 +11,11 @@
   let operatorName = '';
   let username = '';
   let token = '';
+  // Operator token section state
+  let opToken = '';
+  let opLoading = false;
+  let opError = null;
+  let opCopyStatus = '';
   let loading = false;
   let error = null;
   let copyStatus = '';
@@ -34,6 +39,37 @@
     if (!res.ok) { error = res?.data?.message || res?.data?.error || `Failed to create token (HTTP ${res.status})`; return; }
     token = res?.data?.token || '';
     copyStatus = '';
+  }
+
+  async function generateOperatorToken() {
+    if (opLoading) return;
+    opError = null; opToken = '';
+    opLoading = true;
+    const body = { principal: operatorName, type: 'Admin' };
+    const res = await apiFetch('/auth/token', { method: 'POST', body: JSON.stringify(body) }, { noAutoLogout: true });
+    opLoading = false;
+    if (!res.ok) { opError = res?.data?.message || res?.data?.error || `Failed to create operator token (HTTP ${res.status})`; return; }
+    opToken = res?.data?.token || '';
+    opCopyStatus = '';
+  }
+
+  async function copyOperatorToken() {
+    opCopyStatus = '';
+    const text = opToken || '';
+    let ok = false;
+    if (text) {
+      try { await navigator.clipboard.writeText(text); ok = true; }
+      catch (_) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.focus(); ta.select();
+          ok = document.execCommand('copy'); document.body.removeChild(ta);
+        } catch (_) { ok = false; }
+      }
+    }
+    opCopyStatus = ok ? 'Copied!' : 'Copy failed';
+    try { if (ok) setTimeout(() => { opCopyStatus = ''; }, 1500); } catch (_) {}
   }
 
   async function copyToken() {
@@ -73,6 +109,36 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-8">
+      <Card class="mb-3">
+        <div class="card-header fw-bold d-flex align-items-center">
+          <div class="fs-20px">Generate Operator Token</div>
+          <span class="ms-auto small text-muted">{operatorName}</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info small">Create an Admin token for <strong>{operatorName || 'admin'}</strong>. Use with caution.</div>
+          {#if opError}
+            <div class="alert alert-danger py-2 small">{opError}</div>
+          {/if}
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-outline-theme" on:click|preventDefault={generateOperatorToken} disabled={opLoading}>
+              {#if opLoading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Operator Token{/if}
+            </button>
+          </div>
+
+          {#if opToken}
+            <div class="mt-3">
+              <label class="form-label" for="op-token-output">Operator Token</label>
+              <div class="input-group">
+                <input id="op-token-output" class="form-control" readonly value={opToken} />
+                <button class="btn btn-outline-secondary" on:click={copyOperatorToken}>Copy</button>
+              </div>
+              {#if opCopyStatus}
+                <div class="small mt-1 {opCopyStatus === 'Copied!' ? 'text-success' : 'text-danger'}">{opCopyStatus}</div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </Card>
       <Card>
         <div class="card-header fw-bold d-flex align-items-center">
           <div class="fs-20px">Generate User Token</div>
