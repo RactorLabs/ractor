@@ -10,12 +10,14 @@
 
   let operatorName = '';
   let username = '';
+  let userTtlHours = '';
   let token = '';
   // Operator token section state
   let opToken = '';
   let opLoading = false;
   let opError = null;
   let opCopyStatus = '';
+  let opTtlHours = '';
   let loading = false;
   let error = null;
   let copyStatus = '';
@@ -34,6 +36,8 @@
     if (!username || username.trim().length === 0) { error = 'User is required'; return; }
     loading = true;
     const body = { principal: username.trim(), type: 'User' };
+    const ttlNum = Number(userTtlHours);
+    if (Number.isFinite(ttlNum) && ttlNum > 0) body.ttl_hours = ttlNum;
     const res = await apiFetch('/auth/token', { method: 'POST', body: JSON.stringify(body) }, { noAutoLogout: true });
     loading = false;
     if (!res.ok) { error = res?.data?.message || res?.data?.error || `Failed to create token (HTTP ${res.status})`; return; }
@@ -46,6 +50,8 @@
     opError = null; opToken = '';
     opLoading = true;
     const body = { principal: operatorName, type: 'Admin' };
+    const ttlNum = Number(opTtlHours);
+    if (Number.isFinite(ttlNum) && ttlNum > 0) body.ttl_hours = ttlNum;
     const res = await apiFetch('/auth/token', { method: 'POST', body: JSON.stringify(body) }, { noAutoLogout: true });
     opLoading = false;
     if (!res.ok) { opError = res?.data?.message || res?.data?.error || `Failed to create operator token (HTTP ${res.status})`; return; }
@@ -122,6 +128,11 @@
             <label class="form-label" for="user">User:</label>
             <input id="user" class="form-control" bind:value={username} placeholder="e.g., alice" />
           </div>
+          <div class="mb-3">
+            <label class="form-label" for="user-ttl">TTL (hours, optional)</label>
+            <input id="user-ttl" type="number" min="0" step="1" class="form-control" bind:value={userTtlHours} placeholder="e.g., 24" />
+            <div class="form-text">Leave blank or 0 for no expiry.</div>
+          </div>
           <div class="d-flex gap-2 align-items-center">
             <button class="btn btn-outline-theme" on:click|preventDefault={generateToken} disabled={loading}>
               {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create User Token{/if}
@@ -156,6 +167,11 @@
           {#if opError}
             <div class="alert alert-danger py-2 small">{opError}</div>
           {/if}
+          <div class="mb-3">
+            <label class="form-label" for="op-ttl">TTL (hours, optional)</label>
+            <input id="op-ttl" type="number" min="0" step="1" class="form-control" bind:value={opTtlHours} placeholder="e.g., 24" />
+            <div class="form-text">Leave blank or 0 for no expiry.</div>
+          </div>
           <div class="d-flex gap-2 align-items-center">
             <button class="btn btn-outline-theme" on:click|preventDefault={generateOperatorToken} disabled={opLoading}>
               {#if opLoading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Operator Token{/if}
