@@ -45,13 +45,6 @@ section {
   transform: translateY(-6vh);
 }
 
-.hero h1 {
-  font-size: clamp(2.75rem, 5vw, 4rem);
-  letter-spacing: 0.04em;
-  margin-bottom: 0;
-  font-weight: 600;
-}
-
 .button {
   display: inline-flex;
   align-items: center;
@@ -173,21 +166,16 @@ section {
 }
 
 
+
 .output-panel {
   width: min(90vw, 960px);
-  margin: 0 auto;
-  padding: 1.75rem 2rem;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(10, 16, 24, 0.78);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  margin: 6vh auto 4vh;
+  padding: 2rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 16, 24, 0.85);
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.45);
   text-align: left;
-}
-
-.output-panel__repo {
-  margin: 0 0 1.25rem;
-  font-size: 1.3rem;
-  font-weight: 600;
 }
 
 .output-panel__item + .output-panel__item {
@@ -203,9 +191,6 @@ section {
 .output-panel__markdown {
   font-size: 0.98rem;
   line-height: 1.65;
-  background: rgba(13, 20, 33, 0.4);
-  border-radius: 6px;
-  padding: 1.1rem 1.25rem;
   word-break: break-word;
 }
 

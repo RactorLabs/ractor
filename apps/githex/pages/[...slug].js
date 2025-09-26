@@ -80,7 +80,6 @@ function renderOutputItems(items) {
       const html = marked.parse(markdown || '');
       return (
         <section className="output-panel__item" key={`out-${index}`}>
-          <h3 className="output-panel__title">{title}</h3>
           <div
             className="output-panel__markdown"
             dangerouslySetInnerHTML={{ __html: html }}
@@ -216,7 +215,7 @@ export default function RepoPage({
     ? `Roast completed for ${owner}/${name}`
     : formatCommentary(commentary) || `Roasting ${owner}/${name}…`;
 
-  const outputItems = useMemo(() => (isTerminal(status) ? response?.output_content || [] : []), [response?.output_content, status]);
+ const outputItems = useMemo(() => (isTerminal(status) ? response?.output_content || [] : []), [response?.output_content, status]);
 
   const isFailed = status === 'failed';
   const isCancelled = status === 'cancelled';
@@ -245,32 +244,32 @@ export default function RepoPage({
       <Head>
         <title>{`${owner}/${name} · GitHex`}</title>
       </Head>
-      <section className="hero repo-hero">
-        <p className="clone-banner" aria-live="polite">
-          <span className="clone-text">{bannerText}</span>
-        </p>
+      {!isTerminal(status) && (
+        <section className="hero repo-hero">
+          <p className="clone-banner" aria-live="polite">
+            <span className="clone-text">{bannerText}</span>
+          </p>
+          {pollError && (
+            <p className="poll-error" aria-live="polite">{pollError}</p>
+          )}
+        </section>
+      )}
 
-        {!isTerminal(status) && pollError && (
-          <p className="poll-error" aria-live="polite">{pollError}</p>
-        )}
-
-        {isTerminal(status) && (
-          <div className="output-panel" aria-live="polite">
-            <h2 className="output-panel__repo">Roast for {owner}/{name}</h2>
-            {isFailed && (
-              <p className="output-panel__error">
-                The agent reported a failure while roasting {owner}/{name}. Check Raworc logs for more detail.
-              </p>
-            )}
-            {isCancelled && (
-              <p className="output-panel__error">
-                The agent cancelled the request before completion. Try again later.
-              </p>
-            )}
-            {!isFailed && !isCancelled && renderOutputItems(outputItems)}
-          </div>
-        )}
-      </section>
+      {isTerminal(status) && (
+        <section className="output-panel" aria-live="polite">
+          {isFailed && (
+            <p className="output-panel__error">
+              The agent reported a failure while roasting {owner}/{name}. Check Raworc logs for more detail.
+            </p>
+          )}
+          {isCancelled && (
+            <p className="output-panel__error">
+              The agent cancelled the request before completion. Try again later.
+            </p>
+          )}
+          {!isFailed && !isCancelled && renderOutputItems(outputItems)}
+        </section>
+      )}
     </main>
   );
 }
