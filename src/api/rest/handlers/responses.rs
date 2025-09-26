@@ -51,6 +51,31 @@ pub async fn list_responses(
     Ok(Json(result))
 }
 
+pub async fn get_response_global_by_id(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    _auth: Extension<AuthContext>,
+) -> ApiResult<Json<ResponseView>> {
+    // Look up response directly by id (no agent required)
+    if let Some(cur) = AgentResponse::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    {
+        let view = ResponseView {
+            id: cur.id,
+            agent_name: cur.agent_name,
+            status: cur.status,
+            input_content: extract_input_content(&cur.input),
+            output_content: extract_output_content(&cur.output),
+            segments: extract_segments(&cur.output),
+            created_at: cur.created_at.to_rfc3339(),
+            updated_at: cur.updated_at.to_rfc3339(),
+        };
+        return Ok(Json(view));
+    }
+    Err(ApiError::NotFound("Response not found".to_string()))
+}
+
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
     let ctx = PermissionContext {
@@ -575,6 +600,20 @@ fn extract_output_content(output: &Value) -> Vec<Value> {
                 if let Some(arr) = it
                     .get("output")
                     .and_then(|v| v.get("items"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+        // Fallback: some models may record only the tool_call('output') with args.content
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("args")
+                    .and_then(|v| v.get("content"))
                     .and_then(|v| v.as_array())
                 {
                     return arr.clone();
