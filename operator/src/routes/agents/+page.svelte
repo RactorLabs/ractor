@@ -332,7 +332,12 @@ import { getHostUrl } from '$lib/branding.js';
   /* Ensure dropdown menus overlay adjacent cards */
   :global(.card) { overflow: visible; }
   :global(.list-actions) { position: relative; z-index: 3001; }
-  :global(.list-actions .dropdown-menu) { z-index: 3002 !important; }
+  :global(.list-actions .dropdown-menu) {
+    z-index: 3002 !important;
+    /* Ensure menu obscures underlying card text on dark/light themes */
+    background-color: var(--bs-dropdown-bg, var(--bs-body-bg, #fff));
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+  }
   /* Prevent decorative card arrow from overlapping dropdowns */
   :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
   .text-truncate { display: block; }
