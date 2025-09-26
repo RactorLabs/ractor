@@ -79,7 +79,7 @@ jobs:
             - \`registry.digitalocean.com/raworc/raworc_operator:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/raworc/raworc_content:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/raworc/raworc_gateway:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_apps_githex:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/raworc/raworc_app_githex:${{ steps.get_version.outputs.VERSION }}\`
           - **npm Package**: \`@raworc/cli@${{ steps.get_version.outputs.VERSION }}\`
           
           ### Installation

@@ -55,7 +55,7 @@ usage() {
   echo "  operator    Push the operator image"
   echo "  content     Push the content image"
   echo "  gateway     Push the gateway image"
-  echo "  githex      Push the GitHex apps image"
+  echo "  app_githex  Push the GitHex app image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -103,7 +103,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "githex")
+  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "app_githex")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -150,8 +150,8 @@ for component in "${COMPONENTS[@]}"; do
   gateway)
     image_name="${REGISTRY}/raworc_gateway:${TAG}"
     ;;
-  githex)
-    image_name="${REGISTRY}/raworc_apps_githex:${TAG}"
+  app_githex)
+    image_name="${REGISTRY}/raworc_app_githex:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -162,8 +162,8 @@ for component in "${COMPONENTS[@]}"; do
   print_status "Pushing $component ($image_name)..."
 
   # Check if local image exists (built by build.sh uses project version)
-  if [ "$component" = "githex" ]; then
-    local_image="raworc_apps_githex:${TAG}"
+  if [ "$component" = "app_githex" ]; then
+    local_image="raworc_app_githex:${TAG}"
   else
     local_image="raworc_${component}:${TAG}"
   fi
@@ -181,8 +181,8 @@ for component in "${COMPONENTS[@]}"; do
   fi
 
   # Also tag as 'latest' if we're pushing a version tag
-  if [ "$component" = "githex" ]; then
-    latest_image="${REGISTRY}/raworc_apps_githex:latest"
+  if [ "$component" = "app_githex" ]; then
+    latest_image="${REGISTRY}/raworc_app_githex:latest"
   else
     latest_image="${REGISTRY}/raworc_${component}:latest"
   fi
@@ -229,10 +229,10 @@ for component in "${COMPONENTS[@]}"; do
       echo "  ${REGISTRY}/raworc_${component}:latest"
     fi
     ;;
-  githex)
-    echo "  ${REGISTRY}/raworc_apps_githex:${TAG}"
+  app_githex)
+    echo "  ${REGISTRY}/raworc_app_githex:${TAG}"
     if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/raworc_apps_githex:latest"
+      echo "  ${REGISTRY}/raworc_app_githex:latest"
     fi
     ;;
   esac

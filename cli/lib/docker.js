@@ -13,7 +13,7 @@ class DockerManager {
       operator: 'registry.digitalocean.com/raworc/raworc_operator:latest',
       gateway: 'registry.digitalocean.com/raworc/raworc_gateway:latest',
       content: 'registry.digitalocean.com/raworc/raworc_content:latest',
-      githex: 'registry.digitalocean.com/raworc/raworc_apps_githex:latest'
+      app_githex: 'registry.digitalocean.com/raworc/raworc_app_githex:latest'
     };
   }
 

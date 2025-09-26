@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api agent controller operator content gateway githex)
-DEFAULT_SET=(api agent controller operator content gateway githex)
+BUILDABLE_SET=(api agent controller operator content gateway app_githex)
+DEFAULT_SET=(api agent controller operator content gateway app_githex)
 
 process_args() {
   local input=("$@")
@@ -60,7 +60,7 @@ for COMPONENT in "${ORDERED[@]}"; do
   bash "$(dirname "$0")/build.sh" "$COMPONENT"
 
   # 2) Stop the running container (when applicable)
-  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != "githex" ]]; then
+  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Stopping $COMPONENT..."
     if command -v raworc >/dev/null 2>&1; then
       raworc stop "$COMPONENT" || true
@@ -71,12 +71,12 @@ for COMPONENT in "${ORDERED[@]}"; do
     if [[ "$COMPONENT" == "agent" ]]; then
       echo "[INFO] Skipping stop for agent (no standalone agent container)"
     else
-      echo "[INFO] Skipping stop for githex (not auto-managed)"
+      echo "[INFO] Skipping stop for app component ($COMPONENT is not auto-managed)"
     fi
   fi
 
   # 3) Start the container so it picks up the freshly built image
-  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != "githex" ]]; then
+  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Starting $COMPONENT..."
     if command -v raworc >/dev/null 2>&1; then
       raworc start "$COMPONENT" || true
@@ -87,7 +87,7 @@ for COMPONENT in "${ORDERED[@]}"; do
     if [[ "$COMPONENT" == "agent" ]]; then
       echo "[INFO] Skipping start for agent (controller uses agent image)"
     else
-      echo "[INFO] Skipping start for githex (never auto-started)"
+      echo "[INFO] Skipping start for app component ($COMPONENT is never auto-started)"
     fi
   fi
 

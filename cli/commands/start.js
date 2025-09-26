@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_apps_githex']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_app_githex']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, githex (GitHex starts only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, app_githex (apps start only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -128,7 +128,7 @@ module.exports = (program) => {
       '  $ raworc start                                # Start full stack\n' +
       '  $ raworc start api controller                 # Start API + controller\n' +
       '  $ raworc start mysql                          # Ensure MySQL is up\n' +
-      '  $ raworc start githex                         # Start the GitHex apps container\n')
+      '  $ raworc start app_githex                     # Start the GitHex app container\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
     .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
@@ -201,7 +201,7 @@ module.exports = (program) => {
 
         // Enforce startup order: mysql → ollama → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'githex'];
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'app_githex'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -670,11 +670,11 @@ module.exports = (program) => {
               break;
             }
 
-            case 'githex': {
-              const containerName = 'raworc_apps_githex';
+            case 'app_githex': {
+              const containerName = 'raworc_app_githex';
               console.log(chalk.blue('[INFO] ') + 'Ensuring GitHex app is running (opt-in component)...');
 
-              const imageRef = await resolveRaworcImage('githex', 'raworc_apps_githex', 'registry.digitalocean.com/raworc/raworc_apps_githex', tag);
+              const imageRef = await resolveRaworcImage('app_githex', 'raworc_app_githex', 'registry.digitalocean.com/raworc/raworc_app_githex', tag);
               const desiredId = await imageId(imageRef);
 
               if (await containerExists(containerName)) {
@@ -717,7 +717,7 @@ module.exports = (program) => {
                 '--name', containerName,
                 '--network', 'raworc_network',
                 '-p', `${githexHostPort}:8001`,
-                '-v', 'raworc_apps_githex:/app/storage',
+                '-v', 'raworc_app_githex:/app/storage',
                 '-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`,
                 '-e', `RAWORC_APPS_GITHEX_ADMIN_TOKEN=${process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN}`
               );
@@ -760,7 +760,7 @@ module.exports = (program) => {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
           } catch(_) {}
-          if (components.includes('githex')) {
+          if (components.includes('app_githex')) {
             console.log(`  • GitHex: http://localhost:${githexHostPort}`);
           }
           try {

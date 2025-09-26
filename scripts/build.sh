@@ -51,18 +51,18 @@ usage() {
   echo "  operator    Build the operator UI image"
   echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
-  echo "  githex      Build the GitHex apps image"
-  echo "  all         Build all components (api, agent, controller, operator, content, gateway, githex)"
+  echo "  app_githex  Build the GitHex app image"
+  echo "  all         Build all components (api, agent, controller, operator, content, gateway, app_githex)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
   echo "  -h, --help              Show this help message"
   echo ""
   echo "Examples:"
-  echo "  $0                      Build all core components"
-  echo "  $0 api controller       Build only api and controller"
-  echo "  $0 githex               Build only the GitHex apps image"
-  echo "  $0 --no-cache api       Build api without cache"
+  echo "  $0                            Build all components"
+  echo "  $0 api controller             Build only api and controller"
+  echo "  $0 app_githex                 Build only the GitHex app image"
+  echo "  $0 --no-cache api             Build api without cache"
 }
 
 # Parse command line arguments
@@ -98,7 +98,7 @@ fi
 
 # Expand 'all' to actual components (ensure agent precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "githex")
+  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "app_githex")
 fi
 
 print_status "Building Raworc Docker images"
@@ -176,8 +176,8 @@ for component in "${COMPONENTS[@]}"; do
     image_name="raworc_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
     ;;
-  githex)
-    image_name="raworc_apps_githex:${TAG}"
+  app_githex)
+    image_name="raworc_app_githex:${TAG}"
     dockerfile="Dockerfile.githex"
     ;;
   *)
@@ -221,8 +221,8 @@ for component in "${COMPONENTS[@]}"; do
   api | controller | agent | operator | content | gateway)
     echo "  raworc_${component}:${TAG}"
     ;;
-  githex)
-    echo "  raworc_apps_githex:${TAG}"
+  app_githex)
+    echo "  raworc_app_githex:${TAG}"
     ;;
   esac
 done
@@ -232,6 +232,6 @@ print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
 echo "  raworc start"
-if [[ " ${COMPONENTS[*]} " =~ " githex " ]]; then
-  echo "  raworc start githex  # GitHex is opt-in and never starts automatically"
+if [[ " ${COMPONENTS[*]} " =~ " app_githex " ]]; then
+  echo "  raworc start app_githex  # GitHex app is opt-in and never starts automatically"
 fi
