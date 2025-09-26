@@ -186,7 +186,7 @@ export async function getServerSideProps(context) {
   const raworcHost = process.env.RAWORC_HOST_URL;
 
   if (!responseId || !adminToken || !raworcHost) {
-    return { props: { agentName: null, response: null, responseId: responseId || null, setupError: 'Missing context or credentials' } };
+    return { notFound: true };
   }
 
   const base = raworcHost.endsWith('/') ? raworcHost.slice(0, -1) : raworcHost;
@@ -202,22 +202,22 @@ export async function getServerSideProps(context) {
   // First, prefer Raworc global response lookup
   try {
     const r = await fetch(`${base}/api/v0/responses/${encodeURIComponent(responseId)}`, { headers });
-    if (r.ok) {
-      const responseView = await r.json();
-      const agentName = responseView?.agent_name || null;
-      // Enrich with agent metadata (owner/repo) if available
-      let enriched = responseView;
-      if (agentName) {
-        try {
-          const a = await fetch(`${base}/api/v0/agents/${encodeURIComponent(agentName)}`, { headers });
-          if (a.ok) {
-            const agentObj = await a.json();
-            enriched = { ...responseView, agent_metadata: agentObj?.metadata || {} };
-          }
-        } catch (_) {}
-      }
-      return { props: { agentName, response: enriched, responseId, setupError: null } };
+    if (!r.ok) return { notFound: true };
+    const responseView = await r.json();
+    const agentName = responseView?.agent_name || null;
+    // Enrich with agent metadata (owner/repo) if available
+    let enriched = responseView;
+    if (agentName) {
+      try {
+        const a = await fetch(`${base}/api/v0/agents/${encodeURIComponent(agentName)}`, { headers });
+        if (a.ok) {
+          const agentObj = await a.json();
+          enriched = { ...responseView, agent_metadata: agentObj?.metadata || {} };
+        }
+      } catch (_) {}
     }
-  } catch (_) {}
-  return { props: { agentName: null, response: null, responseId, setupError: 'Unknown response id' } };
+    return { props: { agentName, response: enriched, responseId, setupError: null } };
+  } catch (_) {
+    return { notFound: true };
+  }
 }

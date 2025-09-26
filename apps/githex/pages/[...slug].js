@@ -345,12 +345,8 @@ export async function getServerSideProps(context) {
 
   // If responseId is provided, fetch existing response
   if (responseId) {
-    return {
-      redirect: {
-        destination: `/agent/${encodeURIComponent(responseId)}`,
-        permanent: false
-      }
-    };
+    // Legacy 3-segment path no longer supported
+    return { notFound: true };
   }
 
   // Otherwise: either reuse an existing agent by tag or create a fresh one,
