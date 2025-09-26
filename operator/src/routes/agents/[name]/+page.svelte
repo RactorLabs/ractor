@@ -571,9 +571,9 @@
   function closeEditTags() { showTagsModal = false; }
   function parseTagsInput() {
     const parts = tagsInput.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    const re = /^[A-Za-z0-9]+$/;
+    const re = /^[A-Za-z0-9_\/\.\-]+$/;
     for (const t of parts) {
-      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Tags must be alphanumeric.`);
+      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Allowed: letters, digits, '/', '-', '_', '.'.`);
     }
     return parts;
   }

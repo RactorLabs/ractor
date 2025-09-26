@@ -340,7 +340,7 @@
                 <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
                 <tr><td class="font-monospace">last_activity_at</td><td>string|null (RFC3339)</td><td>Last activity timestamp</td></tr>
                 <tr><td class="font-monospace">metadata</td><td>object</td><td>Arbitrary JSON metadata</td></tr>
-                <tr><td class="font-monospace">tags</td><td>string[]</td><td>Array of alphanumeric tags</td></tr>
+                <tr><td class="font-monospace">tags</td><td>string[]</td><td>Array of tags (letters, digits, '/', '-', '_', '.' only; stored lowercase)</td></tr>
                 <tr><td class="font-monospace">is_published</td><td>boolean</td><td>Published state</td></tr>
                 <tr><td class="font-monospace">published_at</td><td>string|null (RFC3339)</td><td>When published</td></tr>
                 <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>

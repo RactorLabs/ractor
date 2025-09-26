@@ -34,13 +34,13 @@
   let idleTimeoutSeconds = 300; // default 5 minutes
   let busyTimeoutSeconds = 3600; // default 1 hour
   let metadataText = '{}';
-  // Tags input (comma-separated, alphanumeric only per tag)
+  // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
   let tagsInput = '';
   function parseTags() {
     const parts = tagsInput.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
-    const re = /^[A-Za-z0-9]+$/;
+    const re = /^[A-Za-z0-9_\/\.\-]+$/;
     for (const t of parts) {
-      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Tags must be alphanumeric.`);
+      if (!re.test(t)) throw new Error(`Invalid tag '${t}'. Allowed: letters, digits, '/', '-', '_', '.'.`);
     }
     return parts;
   }
@@ -209,7 +209,7 @@
             <div class="col-12">
               <label class="form-label" for="tags">Tags (comma-separated)</label>
               <input id="tags" class="form-control" bind:value={tagsInput} placeholder="e.g. Alpha,Internal,Beta" />
-              <div class="form-text">Tags must be alphanumeric only; no spaces or symbols.</div>
+              <div class="form-text">Allowed characters in tags: letters, digits, '/', '-', '_', '.'. No spaces.</div>
             </div>
 
             <!-- Metadata moved to the bottom of the form -->

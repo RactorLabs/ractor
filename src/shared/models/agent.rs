@@ -296,9 +296,12 @@ where
     deserializer.deserialize_any(StrictOptionI32Visitor)
 }
 
-// Validation helpers for tags: alphanumeric only, no spaces or special chars
+// Validation helpers for tags: allow alphanumeric and '/', '-', '_', '.'; no spaces
 fn validate_tag_str(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric())
+    !s.is_empty()
+        && s
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_' || c == '.')
 }
 
 fn deserialize_tags_vec<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
@@ -313,7 +316,7 @@ where
         type Value = Vec<String>;
 
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("an array of alphanumeric tag strings")
+            f.write_str("an array of tag strings (letters, digits, '/', '-', '_', '.'; no spaces)")
         }
 
         fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
@@ -325,7 +328,7 @@ where
                 let t = item.trim();
                 if !validate_tag_str(t) {
                     return Err(A::Error::custom(
-                        "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
+                        "tags must be non-empty and contain only letters, digits, '/', '-', '_', '.'",
                     ));
                 }
                 out.push(t.to_lowercase());
@@ -349,7 +352,7 @@ where
         type Value = Option<Vec<String>>;
 
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("null or an array of alphanumeric tag strings")
+            f.write_str("null or an array of tag strings (letters, digits, '/', '-', '_', '.'; no spaces)")
         }
 
         fn visit_none<E>(self) -> Result<Self::Value, E>
@@ -375,7 +378,7 @@ where
                 let t = item.trim();
                 if !validate_tag_str(t) {
                     return Err(A::Error::custom(
-                        "tags must be non-empty alphanumeric strings (A-Za-z0-9)",
+                        "tags must be non-empty and contain only letters, digits, '/', '-', '_', '.'",
                     ));
                 }
                 out.push(t.to_lowercase());
