@@ -47,7 +47,7 @@ section {
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(3rem, 10vw, 6rem);
+  font-size: clamp(2.25rem, 8vw, 5.5rem);
   font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1.1;
@@ -57,6 +57,13 @@ section {
   -webkit-background-clip: text;
   background-clip: text;
   animation: clone-gradient 2.2s ease-in-out infinite;
+}
+
+@media (max-width: 576px) {
+  .hero { gap: 1.5rem; transform: translateY(-3vh); }
+  .input-row { gap: 0.5rem; }
+  .input-row input { width: 100%; }
+  .output-panel { width: 94vw; padding: 1.25rem; }
 }
 
 .button {

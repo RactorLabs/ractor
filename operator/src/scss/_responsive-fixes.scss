@@ -1,0 +1,33 @@
+// Mobile responsiveness fixes and small-screen optimizations
+
+// Reduce header menu text on small screens to save space
+@media (max-width: 576px) {
+  .app-header .menu .menu-text { display: none !important; }
+}
+
+// Ensure dropdown menus fit on screen and wrap content nicely
+@media (max-width: 576px) {
+  .dropdown-menu { max-width: 92vw; word-break: break-word; }
+}
+
+// Prevent card content from being clipped horizontally on small screens
+@media (max-width: 576px) {
+  .card .card-body { padding: 0.875rem; }
+  .card .table { display: block; width: 100%; overflow-x: auto; }
+}
+
+// Improve modal usability on mobile
+@media (max-width: 576px) {
+  .modal-dialog { margin: 0.5rem; }
+  .modal-content { border-radius: 0.5rem; }
+}
+
+// Make input groups wrap sensibly when space is tight
+@media (max-width: 576px) {
+  .input-group { flex-wrap: wrap; }
+  .input-group .form-control { min-width: 12rem; }
+}
+
+// Avoid dropdowns being obscured by decorative card arrows on small screens
+.card .card-arrow { pointer-events: none; }
+
