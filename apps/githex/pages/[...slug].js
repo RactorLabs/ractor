@@ -378,24 +378,28 @@ export async function getServerSideProps(context) {
       const found = Array.isArray(page.items) && page.items.length ? page.items[0] : null;
       if (found && found.name) {
         // Try to use the most recent response; if none, create a new one
-        let latest = null;
+        let chosen = null;
         try {
           const cntRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses/count`, { headers });
           if (cntRes.ok) {
             const cntObj = await cntRes.json();
             const total = Number(cntObj?.count || 0);
             if (total > 0) {
-              const offset = Math.max(0, total - 1);
-              const lastRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=1&offset=${offset}`, { headers });
-              if (lastRes.ok) {
-                const list = await lastRes.json();
-                if (Array.isArray(list) && list.length > 0) latest = list[0];
+              const batchOffset = Math.max(0, total - 10);
+              const lastBatch = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=10&offset=${batchOffset}`, { headers });
+              if (lastBatch.ok) {
+                const list = await lastBatch.json();
+                if (Array.isArray(list) && list.length > 0) {
+                  // Pick latest completed with content; else pick the absolute latest
+                  const completed = list.filter(r => String(r?.status||'').toLowerCase()==='completed' && Array.isArray(r?.output_content) && r.output_content.length>0);
+                  chosen = completed.length ? completed[completed.length-1] : list[list.length-1];
+                }
               }
             }
           }
         } catch (_) {}
-        if (latest) {
-          const resp = await fetch(`${base}/api/v0/responses/${encodeURIComponent(latest.id)}`, { headers });
+        if (chosen) {
+          const resp = await fetch(`${base}/api/v0/responses/${encodeURIComponent(chosen.id)}`, { headers });
           if (!resp.ok) return { notFound: true };
           const responseView = await resp.json();
           return {
