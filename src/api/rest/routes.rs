@@ -120,6 +120,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/agents/{name}/responses/count",
             get(handlers::responses::get_response_count),
         )
+        // Global response lookup by id
+        .route(
+            "/responses/{id}",
+            get(handlers::responses::get_response_global_by_id),
+        )
         // Agent files (read-only)
         .route(
             "/agents/{name}/files/read/{*path}",
