@@ -154,7 +154,7 @@
           </div>
           <div class="d-flex gap-2 align-items-center">
             <button class="btn btn-outline-theme" on:click|preventDefault={generateToken} disabled={loading}>
-              {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create Token{/if}
+              {#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Generating…{:else}Create User Token{/if}
             </button>
           </div>
 
