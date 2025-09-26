@@ -115,8 +115,7 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-8">
-      <!-- User token info outside the card -->
-      <div class="alert alert-info small mb-2">Enter any user name to mint a token for that user.</div>
+      <!-- User token info removed as requested -->
       <Card class="mb-3">
         <div class="card-header fw-bold d-flex align-items-center">
           <div class="fs-20px">Generate User Token</div>
@@ -159,7 +158,7 @@
         </div>
       </Card>
       <!-- Operator token info outside the card -->
-      <div class="alert alert-info small mb-2 mt-3">Create an Admin token for <strong>{operatorName || 'admin'}</strong>. Use with caution.</div>
+      <div class="alert alert-info small mb-2 mt-3">Use with caution.</div>
       <Card>
         <div class="card-header fw-bold d-flex align-items-center">
           <div class="fs-20px">Generate Operator Token</div>
