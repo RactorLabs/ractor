@@ -45,6 +45,20 @@ section {
   transform: translateY(-6vh);
 }
 
+.hero h1 {
+  margin: 0;
+  font-size: clamp(3rem, 10vw, 6rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  background: linear-gradient(120deg, #7fffd4, #61dafb, #7fffd4);
+  background-size: 220% 100%;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: clone-gradient 2.2s ease-in-out infinite;
+}
+
 .button {
   display: inline-flex;
   align-items: center;
