@@ -390,9 +390,15 @@ export async function getServerSideProps(context) {
               if (lastBatch.ok) {
                 const list = await lastBatch.json();
                 if (Array.isArray(list) && list.length > 0) {
-                  // Pick latest completed with content; else pick the absolute latest
-                  const completed = list.filter(r => String(r?.status||'').toLowerCase()==='completed' && Array.isArray(r?.output_content) && r.output_content.length>0);
-                  chosen = completed.length ? completed[completed.length-1] : list[list.length-1];
+                  // Prefer latest completed with output items;
+                  // otherwise latest with any commentary; else latest entry
+                  const completedWithItems = list.filter(r => String(r?.status||'').toLowerCase()==='completed' && Array.isArray(r?.output_content) && r.output_content.length>0);
+                  if (completedWithItems.length) {
+                    chosen = completedWithItems[completedWithItems.length-1];
+                  } else {
+                    const withCommentary = list.filter(r => Array.isArray(r?.segments) && r.segments.some(s => String(s?.type||'').toLowerCase()==='commentary' && typeof (s?.text ?? s?.content) === 'string' && String((s?.text ?? s?.content)).trim().length>0));
+                    chosen = withCommentary.length ? withCommentary[withCommentary.length-1] : list[list.length-1];
+                  }
                 }
               }
             }
