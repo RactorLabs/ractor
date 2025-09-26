@@ -341,81 +341,16 @@ export async function getServerSideProps(context) {
     'User-Agent': 'raworc-githex-app'
   };
 
-  const fs = await import('fs/promises');
-  const pathMod = await import('path');
-  const storageDir = pathMod.join(process.cwd(), 'storage');
-  const runsPath = pathMod.join(storageDir, 'runs.json');
-
-  const readRuns = async () => {
-    try {
-      const raw = await fs.readFile(runsPath, 'utf8');
-      return JSON.parse(raw);
-    } catch (_) {
-      return {};
-    }
-  };
-
-  const writeRuns = async (data) => {
-    try {
-      await fs.mkdir(storageDir, { recursive: true });
-      await fs.writeFile(runsPath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (err) {
-      console.warn('[GitHex] Failed to persist run mapping:', err);
-    }
-  };
+  // No local storage; rely on Raworc API for response resolution
 
   // If responseId is provided, fetch existing response
-  const agentQuery = Array.isArray(query?.agent) ? query.agent[0] : query?.agent;
-
   if (responseId) {
-    try {
-      const runMap = await readRuns();
-      const mappedAgent = agentQuery || runMap[responseId];
-
-      if (!mappedAgent) {
-        return {
-          props: {
-            owner,
-            name,
-            repoUrl,
-            agentName: null,
-            response: null,
-            responseId,
-            setupError: 'Roast metadata is unavailable. Start a new roast.'
-          }
-        };
+    return {
+      redirect: {
+        destination: `/agent/${encodeURIComponent(responseId)}`,
+        permanent: false
       }
-
-      const resp = await fetch(`${base}/api/v0/agents/${encodeURIComponent(mappedAgent)}/responses/${encodeURIComponent(responseId)}`, {
-        headers
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Response fetch failed: ${resp.status}`);
-      }
-
-      const responseView = await resp.json();
-      if (responseView?.agent_name) {
-        runMap[responseId] = responseView.agent_name;
-        await writeRuns(runMap);
-      }
-      // Prefer canonical agent/response page
-      return {
-        redirect: {
-          destination: `/agent/${encodeURIComponent(responseId)}`,
-          permanent: false
-        }
-      };
-    } catch (error) {
-      console.error('[GitHex] Failed to fetch existing response:', error);
-      const repoLabel = encodeURIComponent(`${owner}/${name}`);
-      return {
-        redirect: {
-          destination: `/?error=repo_inaccessible&repo=${repoLabel}`,
-          permanent: false
-        }
-      };
-    }
+    };
   }
 
   // Otherwise: either reuse an existing agent by tag or create a fresh one,
@@ -434,10 +369,6 @@ export async function getServerSideProps(context) {
           const list = await firstRes.json();
           if (Array.isArray(list) && list.length > 0) {
             const first = list[0];
-            // Record mapping and redirect to canonical page
-            const runMap = await readRuns();
-            runMap[first.id] = found.name;
-            await writeRuns(runMap);
             return {
               redirect: {
                 destination: `/agent/${encodeURIComponent(first.id)}`,
@@ -457,9 +388,6 @@ export async function getServerSideProps(context) {
         const responseRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses`, { method: 'POST', headers, body: JSON.stringify(messageBody) });
         if (!responseRes.ok) throw new Error('Failed to enqueue response');
         const response = await responseRes.json();
-        const runMap = await readRuns();
-        runMap[response.id] = found.name;
-        await writeRuns(runMap);
         return {
           redirect: {
             destination: `/agent/${encodeURIComponent(response.id)}`,

@@ -66,6 +66,35 @@ function renderOutputItems(items) {
   });
 }
 
+function extractLatestCommentary(segments) {
+  if (!Array.isArray(segments)) return null;
+  for (let idx = segments.length - 1; idx >= 0; idx -= 1) {
+    const entry = segments[idx];
+    if (!entry || typeof entry !== 'object') continue;
+    const type = (entry.type || '').toLowerCase();
+    if (type === 'tool_call') {
+      const commentary = entry?.args?.commentary || entry.commentary;
+      if (commentary && typeof commentary === 'string' && !commentary.trim().startsWith('{')) {
+        return commentary;
+      }
+    }
+  }
+  return null;
+}
+
+function formatCommentary(commentary) {
+  if (!commentary) return null;
+  const cleaned = String(commentary).replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+  if (cleaned.length <= 140) return cleaned;
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  if (sentences.length > 0) {
+    const lastSentence = sentences[sentences.length - 1];
+    if (lastSentence.length <= 140) return lastSentence;
+  }
+  return `${cleaned.slice(0, 137)}…`;
+}
+
 export default function ResponsePage({ agentName, response: initialResponse, responseId, setupError }) {
   const normalizedInitial = useMemo(() => normalizeResponse(initialResponse), [initialResponse]);
   const [response, setResponse] = useState(normalizedInitial);
@@ -121,15 +150,21 @@ export default function ResponsePage({ agentName, response: initialResponse, res
     );
   }
 
+  const repoOwner = response?.metadata?.repository?.owner || response?.agent_metadata?.repository?.owner || null;
+  const repoName = response?.metadata?.repository?.name || response?.agent_metadata?.repository?.name || null;
+  const bannerText = isTerminal(status)
+    ? (repoOwner && repoName ? `Roast completed for ${repoOwner}/${repoName}` : 'Roast completed')
+    : formatCommentary(extractLatestCommentary(response?.segments)) || (repoOwner && repoName ? `Roasting ${repoOwner}/${repoName}…` : 'Processing…');
+
   return (
     <main>
       <Head>
-        <title>GitHex · Response</title>
+        <title>{repoOwner && repoName ? `${repoOwner}/${repoName} · GitHex` : 'GitHex · Response'}</title>
       </Head>
       {!isTerminal(status) && (
         <section className="hero repo-hero">
           <p className="clone-banner" aria-live="polite">
-            <span className="clone-text">Processing…</span>
+            <span className="clone-text">{bannerText}</span>
           </p>
           {pollError && (<p className="poll-error" aria-live="polite">{pollError}</p>)}
         </section>
@@ -162,80 +197,27 @@ export async function getServerSideProps(context) {
     'User-Agent': 'raworc-githex-app'
   };
 
-  const fs = await import('fs/promises');
-  const pathMod = await import('path');
-  const storageDir = pathMod.join(process.cwd(), 'storage');
-  const runsPath = pathMod.join(storageDir, 'runs.json');
+  // No local mapping; rely on Raworc API
 
-  let agentName = null;
+  // First, prefer Raworc global response lookup
   try {
-    const raw = await fs.readFile(runsPath, 'utf8');
-    const map = JSON.parse(raw || '{}');
-    agentName = map[responseId] || null;
-  } catch (_) {
-    agentName = null;
-  }
-
-  // Helper: attempt to locate the agent by scanning GitHex-tagged agents
-  async function probeAgentsForResponse() {
-    let page = 1;
-    const pageSize = 200;
-    const maxPages = 10; // scan up to ~2000 agents
-    while (page <= maxPages) {
-      const url = `${base}/api/v0/agents?tags=githex&limit=${pageSize}&page=${page}`;
-      const list = await fetch(url, { headers });
-      if (!list.ok) break;
-      const data = await list.json();
-      const items = Array.isArray(data?.items) ? data.items : [];
-      for (const a of items) {
-        const name = a?.name;
-        if (!name) continue;
-        const r = await fetch(`${base}/api/v0/agents/${encodeURIComponent(name)}/responses/${encodeURIComponent(responseId)}`, { headers });
-        if (r.ok) {
-          const responseView = await r.json();
-          return { agent: name, responseView };
-        }
-      }
-      const totalPages = Number(data?.pages || 1);
-      if (page >= totalPages) break;
-      page += 1;
-    }
-    return null;
-  }
-
-  if (!agentName) {
-    try {
-      const found = await probeAgentsForResponse();
-      if (found && found.agent && found.responseView) {
-        agentName = found.agent;
-        // persist mapping
+    const r = await fetch(`${base}/api/v0/responses/${encodeURIComponent(responseId)}`, { headers });
+    if (r.ok) {
+      const responseView = await r.json();
+      const agentName = responseView?.agent_name || null;
+      // Enrich with agent metadata (owner/repo) if available
+      let enriched = responseView;
+      if (agentName) {
         try {
-          const raw = await fs.readFile(runsPath, 'utf8').catch(() => '{}');
-          const map = JSON.parse(raw || '{}');
-          map[responseId] = agentName;
-          await fs.mkdir(storageDir, { recursive: true });
-          await fs.writeFile(runsPath, JSON.stringify(map, null, 2), 'utf8');
+          const a = await fetch(`${base}/api/v0/agents/${encodeURIComponent(agentName)}`, { headers });
+          if (a.ok) {
+            const agentObj = await a.json();
+            enriched = { ...responseView, agent_metadata: agentObj?.metadata || {} };
+          }
         } catch (_) {}
-        return { props: { agentName, response: found.responseView, responseId, setupError: null } };
       }
-    } catch (_) {}
-    return { props: { agentName: null, response: null, responseId, setupError: 'Unknown response id' } };
-  }
-
-  try {
-    const resp = await fetch(`${base}/api/v0/agents/${encodeURIComponent(agentName)}/responses/${encodeURIComponent(responseId)}`, { headers });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const responseView = await resp.json();
-    // Refresh mapping if agent name is attached
-    try {
-      const raw = await fs.readFile(runsPath, 'utf8').catch(() => '{}');
-      const map = JSON.parse(raw || '{}');
-      map[responseId] = responseView.agent_name || agentName;
-      await fs.mkdir(storageDir, { recursive: true });
-      await fs.writeFile(runsPath, JSON.stringify(map, null, 2), 'utf8');
-    } catch (_) {}
-    return { props: { agentName: responseView.agent_name || agentName, response: responseView, responseId, setupError: null } };
-  } catch (e) {
-    return { props: { agentName, response: null, responseId, setupError: 'Failed to load response' } };
-  }
+      return { props: { agentName, response: enriched, responseId, setupError: null } };
+    }
+  } catch (_) {}
+  return { props: { agentName: null, response: null, responseId, setupError: 'Unknown response id' } };
 }
