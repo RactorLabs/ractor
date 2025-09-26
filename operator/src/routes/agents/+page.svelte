@@ -333,6 +333,8 @@ import { getHostUrl } from '$lib/branding.js';
   :global(.card) { overflow: visible; }
   :global(.list-actions) { position: relative; z-index: 3001; }
   :global(.list-actions .dropdown-menu) { z-index: 3002 !important; }
+  /* Prevent decorative card arrow from overlapping dropdowns */
+  :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
   .text-truncate { display: block; }
 </style>
                 </Card>
