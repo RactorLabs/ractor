@@ -1900,9 +1900,13 @@ pub async fn wake_agent(
     };
 
     // Add task to restart the container with optional prompt
+    // Include the agent owner as principal for token generation so the
+    // container can authenticate to the API even when an admin triggers wake.
     let restore_payload = serde_json::json!({
         "prompt": req.prompt,
-        "reason": "user_wake"
+        "reason": "user_wake",
+        "principal": agent.created_by,
+        "principal_type": "User"
     });
 
     sqlx::query(

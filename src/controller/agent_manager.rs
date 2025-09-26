@@ -845,14 +845,31 @@ impl AgentManager {
 
     pub async fn handle_wake_agent(&self, task: AgentTask) -> Result<()> {
         let agent_name = task.agent_name;
-        let principal = task.created_by.clone();
+        // Prefer explicitly provided principal/principal_type from payload (owner),
+        // fall back to task.created_by as a regular subject.
+        let effective_principal = task
+            .payload
+            .get("principal")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&task.created_by)
+            .to_string();
+        let effective_principal_type = task
+            .payload
+            .get("principal_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("User")
+            .to_string();
 
         info!("Waking container for agent {}", agent_name);
 
         // Generate fresh tokens for woken agent
         info!("Generating fresh tokens for woken agent {}", agent_name);
         let wake_token = self
-            .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
+            .generate_agent_token(
+                &effective_principal,
+                match effective_principal_type.as_str() { "Admin" => SubjectType::Admin, _ => SubjectType::Subject },
+                &agent_name,
+            )
             .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
 
         // All woken agents were slept (container destroyed), so recreate container
@@ -864,8 +881,8 @@ impl AgentManager {
             .wake_container_with_tokens(
                 &agent_name,
                 wake_token,
-                principal.clone(),
-                "User".to_string(),
+                effective_principal.clone(),
+                effective_principal_type.clone(),
                 task.created_at,
             )
             .await?;
@@ -885,7 +902,7 @@ impl AgentManager {
             info!("Sending prompt to woken agent {}: {}", agent_name, prompt);
 
             // Get the principal name from the task
-            let principal = task.created_by;
+            let principal = effective_principal.clone();
 
             // Create response record in database for woken agent
             let response_id = uuid::Uuid::new_v4().to_string();
@@ -925,7 +942,7 @@ impl AgentManager {
         };
         let output_json = serde_json::json!({
             "text": "",
-            "items": [ { "type": "woke", "note": note, "reason": reason, "by": principal, "at": now_text } ]
+            "items": [ { "type": "woke", "note": note, "reason": reason, "by": effective_principal, "at": now_text } ]
         });
         sqlx::query(
             r#"
