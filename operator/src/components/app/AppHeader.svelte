@@ -83,25 +83,7 @@
                 </a>
               </div>
             </div>
-            <!-- Bottom row (shows divider via .row-grid + .row-grid) -->
-            <div class="row row-grid gx-0">
-              {#if isAdmin}
-                <div class="col-4">
-                  <a href="/docs/admin" aria-label="Admin APIs" class="dropdown-item text-decoration-none p-3 bg-none">
-                    <div><i class="bi bi-shield-lock h2 opacity-5 d-block my-1"></i></div>
-                    <div class="fw-500 fs-10px text-inverse">ADMIN APIs</div>
-                  </a>
-                </div>
-              {/if}
-              {#if isAdmin}
-                <div class="col-4">
-                  <a href="/tokens" aria-label="Tokens" class="dropdown-item text-decoration-none p-3 bg-none">
-                    <div><i class="bi bi-key h2 opacity-5 d-block my-1"></i></div>
-                    <div class="fw-500 fs-10px text-inverse">TOKENS</div>
-                  </a>
-                </div>
-              {/if}
-            </div>
+            <!-- (admin items moved to profile menu) -->
           </div>
         </div>
 
@@ -113,6 +95,14 @@
             </a>
             <div class="dropdown-menu dropdown-menu-end me-lg-3 fs-11px mt-1">
               {#if isAdmin}
+                <a aria-label="Admin APIs" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/docs/admin">
+                  <span>ADMIN APIs</span>
+                  <i class="bi bi-shield-lock text-theme fs-16px my-n1"></i>
+                </a>
+                <a aria-label="Tokens" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/tokens">
+                  <span>TOKENS</span>
+                  <i class="bi bi-key text-theme fs-16px my-n1"></i>
+                </a>
                 <a aria-label="Change Password" class="dropdown-item d-flex align-items-center justify-content-between gap-2" href="/profile/password">
                   <span>CHANGE PASSWORD</span>
                   <i class="bi bi-key text-theme fs-16px my-n1"></i>
