@@ -54,6 +54,8 @@ jobs:
           
       - name: Push Docker images to DigitalOcean Container Registry
         run: |
+          # Re-login to DOCR to avoid short-lived token expiry during long builds
+          doctl registry login --expiry-seconds 1800
           chmod +x ./scripts/push.sh
           ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/raworc
           
