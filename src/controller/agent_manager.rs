@@ -952,7 +952,7 @@ impl AgentManager {
         )
         .bind(&response_id)
         .bind(&agent_name)
-        .bind(&principal)
+        .bind(&effective_principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
         .bind(&task.created_at)
