@@ -12,7 +12,8 @@ class DockerManager {
       agent: 'registry.digitalocean.com/raworc/raworc_agent:latest',
       operator: 'registry.digitalocean.com/raworc/raworc_operator:latest',
       gateway: 'registry.digitalocean.com/raworc/raworc_gateway:latest',
-      content: 'registry.digitalocean.com/raworc/raworc_content:latest'
+      content: 'registry.digitalocean.com/raworc/raworc_content:latest',
+      githex: 'registry.digitalocean.com/raworc/raworc_apps_githex:latest'
     };
   }
 

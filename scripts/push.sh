@@ -52,6 +52,10 @@ usage() {
   echo "  api         Push the api image"
   echo "  controller  Push the controller image"
   echo "  agent       Push the agent image"
+  echo "  operator    Push the operator image"
+  echo "  content     Push the content image"
+  echo "  gateway     Push the gateway image"
+  echo "  githex      Push the GitHex apps image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -99,7 +103,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway")
+  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "githex")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -146,6 +150,9 @@ for component in "${COMPONENTS[@]}"; do
   gateway)
     image_name="${REGISTRY}/raworc_gateway:${TAG}"
     ;;
+  githex)
+    image_name="${REGISTRY}/raworc_apps_githex:${TAG}"
+    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -155,7 +162,11 @@ for component in "${COMPONENTS[@]}"; do
   print_status "Pushing $component ($image_name)..."
 
   # Check if local image exists (built by build.sh uses project version)
-  local_image="raworc_${component}:${TAG}"
+  if [ "$component" = "githex" ]; then
+    local_image="raworc_apps_githex:${TAG}"
+  else
+    local_image="raworc_${component}:${TAG}"
+  fi
   if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${local_image}$"; then
     print_error "Local image $local_image not found. Build it first with:"
     print_error "  ./scripts/build.sh $component"
@@ -170,7 +181,11 @@ for component in "${COMPONENTS[@]}"; do
   fi
 
   # Also tag as 'latest' if we're pushing a version tag
-  latest_image="${REGISTRY}/raworc_${component}:latest"
+  if [ "$component" = "githex" ]; then
+    latest_image="${REGISTRY}/raworc_apps_githex:latest"
+  else
+    latest_image="${REGISTRY}/raworc_${component}:latest"
+  fi
   if [ "$TAG" != "latest" ]; then
     print_status "Tagging $local_image as $latest_image..."
     if ! docker tag "$local_image" "$latest_image"; then
@@ -212,6 +227,12 @@ for component in "${COMPONENTS[@]}"; do
     echo "  ${REGISTRY}/raworc_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_${component}:latest"
+    fi
+    ;;
+  githex)
+    echo "  ${REGISTRY}/raworc_apps_githex:${TAG}"
+    if [ "$TAG" != "latest" ]; then
+      echo "  ${REGISTRY}/raworc_apps_githex:latest"
     fi
     ;;
   esac

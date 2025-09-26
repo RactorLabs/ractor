@@ -51,8 +51,8 @@ usage() {
   echo "  operator    Build the operator UI image"
   echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
-  echo "  githex      Build the GitHex apps image (opt-in; not part of 'all')"
-  echo "  all         Build the core stack (api, agent, controller, operator, content, gateway)"
+  echo "  githex      Build the GitHex apps image"
+  echo "  all         Build all components (api, agent, controller, operator, content, gateway, githex)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -98,7 +98,7 @@ fi
 
 # Expand 'all' to actual components (ensure agent precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway")
+  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "githex")
 fi
 
 print_status "Building Raworc Docker images"
