@@ -487,7 +487,7 @@ module.exports = (program) => {
                 console.log();
                 break;
               }
-              const API_IMAGE = await resolveRaworcImage('api','raworc_api','raworc/raworc_api', tag);
+              const API_IMAGE = await resolveRaworcImage('api','raworc_api','registry.digitalocean.com/raworc/raworc_api', tag);
               const args = ['run','-d',
                 '--name','raworc_api',
                 '--network','raworc_network',
@@ -543,7 +543,7 @@ module.exports = (program) => {
               // Default OLLAMA_HOST to internal service always
               const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
-              const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','raworc/raworc_agent', tag);
+              const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','registry.digitalocean.com/raworc/raworc_agent', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
@@ -576,7 +576,7 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
-              args.push(await resolveRaworcImage('controller','raworc_controller','raworc/raworc_controller', tag));
+              args.push(await resolveRaworcImage('controller','raworc_controller','registry.digitalocean.com/raworc/raworc_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
@@ -595,7 +595,7 @@ module.exports = (program) => {
                 // If container exists, ensure it matches the desired image; recreate if not
                 const running = await containerRunning('raworc_operator');
                 const currentId = await containerImageId('raworc_operator');
-                const desiredId = await imageId(await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag));
+              const desiredId = await imageId(await resolveRaworcImage('operator','raworc_operator','registry.digitalocean.com/raworc/raworc_operator', tag));
                 if (currentId && desiredId && currentId !== desiredId) {
                   console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
                   try { await docker(['rm','-f','raworc_operator']); } catch (_) {}
@@ -622,7 +622,7 @@ module.exports = (program) => {
                 '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
                 '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`
               );
-              args.push(await resolveRaworcImage('operator','raworc_operator','raworc/raworc_operator', tag));
+              args.push(await resolveRaworcImage('operator','raworc_operator','registry.digitalocean.com/raworc/raworc_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
@@ -638,7 +638,7 @@ module.exports = (program) => {
                 console.log();
                 break;
               }
-              const CONTENT_IMAGE = await resolveRaworcImage('content','raworc_content','raworc/raworc_content', tag);
+              const CONTENT_IMAGE = await resolveRaworcImage('content','raworc_content','registry.digitalocean.com/raworc/raworc_content', tag);
               const args = ['run'];
               if (detached) args.push('-d');
               args.push('--name','raworc_content','--network','raworc_network','-v','raworc_content_data:/content', CONTENT_IMAGE);
@@ -663,7 +663,7 @@ module.exports = (program) => {
               const args = ['run'];
               if (detached) args.push('-d');
               args.push('--name','raworc_gateway','--network','raworc_network','-p','80:80');
-              args.push(await resolveRaworcImage('gateway','raworc_gateway','raworc/raworc_gateway', tag));
+              args.push(await resolveRaworcImage('gateway','raworc_gateway','registry.digitalocean.com/raworc/raworc_gateway', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Gateway container started (port 80)');
               console.log();
@@ -674,7 +674,7 @@ module.exports = (program) => {
               const containerName = 'raworc_apps_githex';
               console.log(chalk.blue('[INFO] ') + 'Ensuring GitHex app is running (opt-in component)...');
 
-              const imageRef = await resolveRaworcImage('githex', 'raworc_apps_githex', 'raworc/raworc_apps_githex', tag);
+              const imageRef = await resolveRaworcImage('githex', 'raworc_apps_githex', 'registry.digitalocean.com/raworc/raworc_apps_githex', tag);
               const desiredId = await imageId(imageRef);
 
               if (await containerExists(containerName)) {

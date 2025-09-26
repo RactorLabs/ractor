@@ -10,7 +10,7 @@ module.exports = (program) => {
     .addHelpText('after', '\n' +
       'Scope:\n' +
       '  • containers: names starting with raworc_\n' +
-      '  • images: repositories raworc/* or names starting raworc_\n' +
+      '  • images: repositories registry.digitalocean.com/raworc/* or raworc/*, or names starting raworc_\n' +
       '  • volumes: names starting raworc_\n' +
       '  • networks: raworc_network only\n' +
       '\nExamples:\n' +
@@ -53,7 +53,7 @@ module.exports = (program) => {
           const res = await docker.execDocker(['images', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}'], { silent: true });
           const lines = (res.stdout || '').trim().split('\n').filter(Boolean);
           const imgs = lines.map(l => ({ ref: l.split(' ')[0], id: l.split(' ')[1] }))
-            .filter(o => /^raworc\//.test(o.ref) || /^raworc_/.test(o.ref));
+            .filter(o => /^(registry\.digitalocean\.com\/raworc\/|raworc\/)/.test(o.ref) || /^raworc_/.test(o.ref));
           const ids = imgs.map(o => o.id);
           if (ids.length) {
             try { await docker.execDocker(['rmi', '-f', ...ids], { silent: true }); } catch(_) {}

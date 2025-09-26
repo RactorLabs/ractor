@@ -3,15 +3,16 @@ const path = require('path');
 
 class DockerManager {
   constructor() {
-    // Use published Docker images from Docker Hub
+    // Use published Docker images from DigitalOcean Container Registry
+    // Registry namespace: registry.digitalocean.com/raworc
     this.images = {
       mysql: 'mysql:8.0',
-      api: 'raworc/raworc_api:latest',
-      controller: 'raworc/raworc_controller:latest',
-      agent: 'raworc/raworc_agent:latest',
-      operator: 'raworc/raworc_operator:latest',
-      gateway: 'raworc/raworc_gateway:latest',
-      content: 'raworc/raworc_content:latest'
+      api: 'registry.digitalocean.com/raworc/raworc_api:latest',
+      controller: 'registry.digitalocean.com/raworc/raworc_controller:latest',
+      agent: 'registry.digitalocean.com/raworc/raworc_agent:latest',
+      operator: 'registry.digitalocean.com/raworc/raworc_operator:latest',
+      gateway: 'registry.digitalocean.com/raworc/raworc_gateway:latest',
+      content: 'registry.digitalocean.com/raworc/raworc_content:latest'
     };
   }
 
@@ -69,7 +70,7 @@ class DockerManager {
 
     // Pull images if requested
     if (pullImages) {
-      console.log('📦 Pulling latest images from Docker Hub...');
+      console.log('📦 Pulling latest images from registry...');
       for (const component of components) {
         if (this.images[component]) {
           try {
@@ -166,7 +167,7 @@ class DockerManager {
           '--name', 'raworc_content',
           '--network', 'raworc_network',
           '-v', 'raworc_content_data:/content',
-          this.images.content || 'raworc/raworc_content:latest'
+          this.images.content || 'registry.digitalocean.com/raworc/raworc_content:latest'
         ]);
         console.log('🚀 raworc_content started');
         break;
@@ -280,14 +281,14 @@ class DockerManager {
     }
   }
 
-  // Pull latest images from Docker Hub
+  // Pull latest images from registry
   async pull(version = 'latest') {
     // Create version-specific image names
     const versionedImages = {};
     for (const [component, image] of Object.entries(this.images)) {
       if (component !== 'mysql') {
         // For raworc images, use the specified version tag
-        if (image.startsWith('raworc/')) {
+        if (image.startsWith('registry.digitalocean.com/raworc/') || image.startsWith('raworc/')) {
           const [repo] = image.split(':');
           versionedImages[component] = `${repo}:${version}`;
         } else {
@@ -348,7 +349,7 @@ class DockerManager {
 
   // Check if required Docker images are available (either locally or can be pulled)
   async checkImages() {
-    // For published CLI, we can always pull from Docker Hub
+    // For published CLI, we can pull from the configured registry
     return true;
   }
 }

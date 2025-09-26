@@ -14,7 +14,9 @@ else
   DEFAULT_TAG="latest"
 fi
 
-DEFAULT_REGISTRY="raworc"
+# Default registry prefix (DigitalOcean Container Registry)
+# Example full image name: registry.digitalocean.com/raworc/raworc_api:TAG
+DEFAULT_REGISTRY="registry.digitalocean.com/raworc"
 
 # Colors for output
 RED='\033[0;31m'
@@ -54,14 +56,14 @@ usage() {
   echo ""
   echo "Options:"
   echo "  -t, --tag TAG           Docker image tag (default: $DEFAULT_TAG from Cargo.toml)"
-  echo "  -r, --registry REGISTRY Registry/user prefix (default: $DEFAULT_REGISTRY)"
+  echo "  -r, --registry REGISTRY Registry prefix (default: $DEFAULT_REGISTRY)"
   echo "  -h, --help              Show this help message"
   echo ""
   echo "Examples:"
   echo "  $0                      Push all components with version tag ($DEFAULT_TAG)"
   echo "  $0 api controller       Push only api and controller"
   echo "  $0 --tag latest         Push all components with 'latest' tag"
-  echo "  $0 --registry myuser    Push to myuser Docker Hub account"
+  echo "  $0 --registry my.registry.com/ns   Push to a custom registry namespace"
 }
 
 # Parse command line arguments
