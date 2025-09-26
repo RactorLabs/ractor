@@ -399,15 +399,11 @@ export async function getServerSideProps(context) {
         runMap[responseId] = responseView.agent_name;
         await writeRuns(runMap);
       }
+      // Prefer canonical agent/response page
       return {
-        props: {
-          owner,
-          name,
-          repoUrl,
-          agentName: responseView.agent_name || mappedAgent,
-          response: responseView,
-          responseId,
-          setupError: null
+        redirect: {
+          destination: `/agent/${encodeURIComponent(responseId)}`,
+          permanent: false
         }
       };
     } catch (error) {
@@ -422,14 +418,67 @@ export async function getServerSideProps(context) {
     }
   }
 
-  // Otherwise create a new agent and response, then redirect to the response URL
+  // Otherwise: either reuse an existing agent by tag or create a fresh one,
+  // then create a response and redirect to /agent/{responseId}
+  const tagValue = `${owner}/${name}`;
+  // Try to find existing agent by tag
+  try {
+    const listRes = await fetch(`${base}/api/v0/agents?tags=${encodeURIComponent(tagValue)}&limit=1`, { headers });
+    if (listRes.ok) {
+      const page = await listRes.json();
+      const found = Array.isArray(page.items) && page.items.length ? page.items[0] : null;
+      if (found && found.name) {
+        // Try to use the first response (oldest); if none, create a new one
+        const firstRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=1&offset=0`, { headers });
+        if (firstRes.ok) {
+          const list = await firstRes.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const first = list[0];
+            // Record mapping and redirect to canonical page
+            const runMap = await readRuns();
+            runMap[first.id] = found.name;
+            await writeRuns(runMap);
+            return {
+              redirect: {
+                destination: `/agent/${encodeURIComponent(first.id)}`,
+                permanent: false
+              }
+            };
+          }
+        }
+        // No responses found; create a new response for the existing agent
+        const messageBody = {
+          input: {
+            content: [
+              { type: 'text', content: `Clone ${repoUrl}. After cloning, produce an unfiltered roast of this repository: call out poor structure, questionable decisions, missing docs, flaky scripts, or any other red flags. Be witty but factual, cite evidence, and respond strictly in Markdown.` }
+            ]
+          }
+        };
+        const responseRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses`, { method: 'POST', headers, body: JSON.stringify(messageBody) });
+        if (!responseRes.ok) throw new Error('Failed to enqueue response');
+        const response = await responseRes.json();
+        const runMap = await readRuns();
+        runMap[response.id] = found.name;
+        await writeRuns(runMap);
+        return {
+          redirect: {
+            destination: `/agent/${encodeURIComponent(response.id)}`,
+            permanent: false
+          }
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[GitHex] Agent reuse check failed:', e);
+  }
+
   const agentName = createAgentName(owner, name);
 
   try {
     const agentPayload = {
       name: agentName,
       description: `GitHex roast agent for ${owner}/${name}`,
-      tags: ['githex', 'roast'],
+      tags: ['githex', 'roast', tagValue],
       metadata: {
         source: 'githex',
         repository: {
@@ -482,17 +531,12 @@ export async function getServerSideProps(context) {
     runMap[response.id] = agentName;
     await writeRuns(runMap);
 
-      return {
-        props: {
-          owner,
-          name,
-          repoUrl,
-          agentName,
-          response,
-          responseId: response.id,
-          setupError: null
-        }
-      };
+    return {
+      redirect: {
+        destination: `/agent/${encodeURIComponent(response.id)}`,
+        permanent: false
+      }
+    };
   } catch (error) {
     console.error('[GitHex] Error preparing agent workflow:', error);
     const repoLabel = encodeURIComponent(`${owner}/${name}`);
