@@ -7,6 +7,8 @@ RUN npm install --legacy-peer-deps
 
 FROM deps AS builder
 COPY apps/githex ./
+# Ensure optional public directory exists to avoid COPY failures later
+RUN mkdir -p public
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -19,6 +21,7 @@ RUN addgroup -g 1001 nodejs && adduser -S nextjs -u 1001 -G nodejs
 # Copy Next.js standalone output
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Public assets are optional in this app
 COPY --from=builder /app/public ./public
 
 # Prepare runtime storage directory and expose volume for persistence
