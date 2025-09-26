@@ -116,7 +116,7 @@
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-8">
       <!-- User token info outside the card -->
-      <div class="alert alert-info small mb-2">You are logged in as <strong>{operatorName || 'admin'}</strong>. Enter any user name to mint a token for that user.</div>
+      <div class="alert alert-info small mb-2">Enter any user name to mint a token for that user.</div>
       <Card class="mb-3">
         <div class="card-header fw-bold d-flex align-items-center">
           <div class="fs-20px">Generate User Token</div>
