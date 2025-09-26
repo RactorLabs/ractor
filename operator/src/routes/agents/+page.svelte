@@ -330,7 +330,7 @@ import { getHostUrl } from '$lib/branding.js';
 
 <style>
   /* Ensure dropdown menus overlay adjacent buttons on the list cards */
-  :global(.dropdown-menu) { z-index: 5000; }
+  :global(.dropdown-menu) { z-index: 11000; }
   :global(.card) { overflow: visible; }
   .text-truncate { display: block; }
 </style>

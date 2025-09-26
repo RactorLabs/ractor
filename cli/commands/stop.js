@@ -26,7 +26,7 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove Raworc component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, agents (all agent containers). If omitted, stops all Raworc components.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, githex, agents (all agent containers). If omitted, stops core Raworc components; stop githex explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only Raworc component containers.\n' +
@@ -36,6 +36,7 @@ module.exports = (program) => {
       '  $ raworc stop                     # stop all Raworc components\n' +
       '  $ raworc stop api controller      # stop specific components\n' +
       '  $ raworc stop operator content    # stop UI components\n' +
+      '  $ raworc stop githex              # stop the GitHex apps container\n' +
       '  $ raworc stop agents              # stop all agent containers\n')
     .action(async (components, _opts, cmd) => {
       try {
@@ -44,7 +45,7 @@ module.exports = (program) => {
           components = ['gateway','controller','operator','content','api'];
         }
         // Validate component names (only Raworc components)
-        const allowed = new Set(['api','controller','operator','content','gateway','agents']);
+        const allowed = new Set(['api','controller','operator','content','gateway','githex','agents']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
           console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, content, gateway, agents`);
@@ -56,9 +57,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { api: 'raworc_api', controller: 'raworc_controller', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway' };
+        const map = { api: 'raworc_api', controller: 'raworc_controller', operator: 'raworc_operator', content: 'raworc_content', gateway: 'raworc_gateway', githex: 'raworc_apps_githex' };
         const includeAgents = components.includes('agents');
-        const order = ['gateway','controller','operator','content','api'];
+        const order = ['gateway','githex','controller','operator','content','api'];
         const toStop = components.filter(c => c !== 'agents');
         const ordered = order.filter((c) => toStop.includes(c));
 

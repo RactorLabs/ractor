@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_apps_githex']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: all. Allowed: mysql, ollama, api, controller, operator, content, gateway', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, githex (GitHex starts only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -118,6 +118,7 @@ module.exports = (program) => {
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
     .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
+    .option('--githex-port <port>', 'Host port for GitHex (maps to 8001)', '8001')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
@@ -126,7 +127,8 @@ module.exports = (program) => {
       '\nExamples:\n' +
       '  $ raworc start                                # Start full stack\n' +
       '  $ raworc start api controller                 # Start API + controller\n' +
-      '  $ raworc start mysql                          # Ensure MySQL is up\n')
+      '  $ raworc start mysql                          # Ensure MySQL is up\n' +
+      '  $ raworc start githex                         # Start the GitHex apps container\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
     .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
@@ -199,7 +201,7 @@ module.exports = (program) => {
 
         // Enforce startup order: mysql → ollama → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'githex'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -254,6 +256,7 @@ module.exports = (program) => {
           }
           return fallback;
         };
+        const githexHostPort = String(preferEnv('githexPort', 'GITHEX_PORT', '8001'));
 
         // Helpers for container state
         async function containerRunning(name) {
@@ -582,6 +585,12 @@ module.exports = (program) => {
 
             case 'operator': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
+
+              if (!process.env.RAWORC_HOST_NAME || !process.env.RAWORC_HOST_URL) {
+                console.error(chalk.red('[ERROR] ') + 'RAWORC_HOST_NAME and RAWORC_HOST_URL must be set before starting raworc_operator.');
+                process.exit(1);
+              }
+
               if (await containerExists('raworc_operator')) {
                 // If container exists, ensure it matches the desired image; recreate if not
                 const running = await containerRunning('raworc_operator');
@@ -661,6 +670,65 @@ module.exports = (program) => {
               break;
             }
 
+            case 'githex': {
+              const containerName = 'raworc_apps_githex';
+              console.log(chalk.blue('[INFO] ') + 'Ensuring GitHex app is running (opt-in component)...');
+
+              const imageRef = await resolveRaworcImage('githex', 'raworc_apps_githex', 'raworc/raworc_apps_githex', tag);
+              const desiredId = await imageId(imageRef);
+
+              if (await containerExists(containerName)) {
+                const running = await containerRunning(containerName);
+                const currentId = await containerImageId(containerName);
+                if (currentId && desiredId && currentId !== desiredId) {
+                  console.log(chalk.blue('[INFO] ') + 'GitHex image changed; recreating container to apply updates...');
+                  try { await docker(['rm', '-f', containerName]); } catch (_) {}
+                } else {
+                  if (running) {
+                    console.log(chalk.green('[SUCCESS] ') + `GitHex already running on port ${githexHostPort}`);
+                    console.log();
+                    break;
+                  }
+                  await docker(['start', containerName]);
+                  console.log(chalk.green('[SUCCESS] ') + `GitHex started (http://localhost:${githexHostPort})`);
+                  console.log();
+                  break;
+                }
+              }
+
+              const portNumber = Number.parseInt(githexHostPort, 10);
+              if (!Number.isNaN(portNumber) && await portInUse(portNumber)) {
+                console.log(chalk.yellow('[WARNING] ') + `Port ${githexHostPort} is already in use on the host. GitHex may fail to bind.`);
+              }
+
+              if (!process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN) {
+                console.error(chalk.red('[ERROR] ') + 'RAWORC_APPS_GITHEX_ADMIN_TOKEN is required to start GitHex. Set the token in your environment and try again.');
+                process.exit(1);
+              }
+
+              if (!process.env.RAWORC_HOST_URL) {
+                console.error(chalk.red('[ERROR] ') + 'RAWORC_HOST_URL is required to start GitHex. Export it in your environment to match the Raworc API base URL.');
+                process.exit(1);
+              }
+
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push(
+                '--name', containerName,
+                '--network', 'raworc_network',
+                '-p', `${githexHostPort}:8001`,
+                '-v', 'raworc_apps_githex:/app/storage',
+                '-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`,
+                '-e', `RAWORC_APPS_GITHEX_ADMIN_TOKEN=${process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN}`
+              );
+
+              args.push(imageRef);
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + `GitHex app container started (http://localhost:${githexHostPort})`);
+              console.log();
+              break;
+            }
+
             default:
               console.log(chalk.yellow('[WARNING] ') + `Unknown component: ${comp}. Skipping...`);
           }
@@ -692,6 +760,9 @@ module.exports = (program) => {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
           } catch(_) {}
+          if (components.includes('githex')) {
+            console.log(`  • GitHex: http://localhost:${githexHostPort}`);
+          }
           try {
             const m = await docker(['ps','--filter','name=mysql','--format','{{.Names}}'], { silent: true });
             if (m.stdout.trim()) {

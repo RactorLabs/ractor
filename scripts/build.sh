@@ -48,16 +48,20 @@ usage() {
   echo "  api         Build the api image"
   echo "  controller  Build the controller image"
   echo "  agent       Build the agent image"
-  echo "  all         Build all components (default)"
+  echo "  operator    Build the operator UI image"
+  echo "  content     Build the content server image"
+  echo "  gateway     Build the gateway image"
+  echo "  githex      Build the GitHex apps image (opt-in; not part of 'all')"
+  echo "  all         Build the core stack (api, agent, controller, operator, content, gateway)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
   echo "  -h, --help              Show this help message"
   echo ""
   echo "Examples:"
-  echo "  $0                      Build all components"
+  echo "  $0                      Build all core components"
   echo "  $0 api controller       Build only api and controller"
-  echo "  $0 --no-cache           Build all components without cache"
+  echo "  $0 githex               Build only the GitHex apps image"
   echo "  $0 --no-cache api       Build api without cache"
 }
 
@@ -172,6 +176,10 @@ for component in "${COMPONENTS[@]}"; do
     image_name="raworc_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
     ;;
+  githex)
+    image_name="raworc_apps_githex:${TAG}"
+    dockerfile="Dockerfile.githex"
+    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -210,8 +218,11 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | agent)
+  api | controller | agent | operator | content | gateway)
     echo "  raworc_${component}:${TAG}"
+    ;;
+  githex)
+    echo "  raworc_apps_githex:${TAG}"
     ;;
   esac
 done
@@ -221,3 +232,6 @@ print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
 echo "  raworc start"
+if [[ " ${COMPONENTS[*]} " =~ " githex " ]]; then
+  echo "  raworc start githex  # GitHex is opt-in and never starts automatically"
+fi

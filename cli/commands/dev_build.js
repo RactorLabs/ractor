@@ -14,12 +14,13 @@ module.exports = (program) => {
   program
     .command('build')
     .description('[development only] Build Raworc images via ./scripts/build.sh')
-    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway. Flags are passed through (e.g., -n, --no-cache).')
-    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway\n' +
+    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway, githex (GitHex is opt-in). Flags are passed through (e.g., -n, --no-cache).')
+    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, githex\n' +
       '\nExamples:\n' +
       '  $ raworc build                       # builds all (script default)\n' +
       '  $ raworc build api controller        # build only api and controller\n' +
       '  $ raworc build operator content      # build Operator UI and Content\n' +
+      '  $ raworc build githex                # build the GitHex apps image\n' +
       '  $ raworc build -- -n --no-cache      # pass flags through to script')
     .action(async (args = []) => {
       try {
@@ -29,7 +30,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are Raworc components (or 'all')
-        const allowed = new Set(['api','controller','agent','operator','content','gateway','all']);
+        const allowed = new Set(['api','controller','agent','operator','content','gateway','githex','all']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
           console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);

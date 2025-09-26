@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api agent controller operator content gateway)
+BUILDABLE_SET=(api agent controller operator content gateway githex)
+DEFAULT_SET=(api agent controller operator content gateway)
 
 process_args() {
   local input=("$@")
@@ -35,7 +36,7 @@ process_args() {
 
 # If no components specified, rebuild all (like build.sh default)
 if [[ $# -eq 0 ]]; then
-  set -- "${BUILDABLE_SET[@]}"
+  set -- "${DEFAULT_SET[@]}"
 fi
 
 # Validate components and compute ordered list
