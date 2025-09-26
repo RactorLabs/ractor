@@ -331,12 +331,17 @@ import { getHostUrl } from '$lib/branding.js';
 <style>
   /* Ensure dropdown menus overlay adjacent cards */
   :global(.card) { overflow: visible; }
-  :global(.list-actions) { position: relative; z-index: 3001; }
+  :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
   :global(.list-actions .dropdown-menu) {
-    z-index: 3002 !important;
+    position: absolute;
+    z-index: 9999 !important;
     /* Ensure menu obscures underlying card text on dark/light themes */
-    background-color: var(--bs-dropdown-bg, var(--bs-body-bg, #fff));
-    box-shadow: 0 .5rem 1rem rgba(0,0,0,.15);
+    background-color: var(--bs-dropdown-bg, var(--bs-card-bg, var(--bs-body-bg, #fff)));
+    box-shadow: 0 .5rem 1rem rgba(0,0,0,.25);
+    backdrop-filter: none;
+  }
+  :global(.list-actions .dropdown-item) {
+    background-color: inherit;
   }
   /* Prevent decorative card arrow from overlapping dropdowns */
   :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
