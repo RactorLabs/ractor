@@ -162,13 +162,10 @@ export default function RepoPage({
     const slug = router.query.slug;
     const parts = Array.isArray(slug) ? slug : [];
     const hasResponseSegment = parts.length >= 3;
-    const currentAgent = Array.isArray(router.query.agent) ? router.query.agent[0] : router.query.agent;
-    const expectedAgent = derivedAgentName;
-    if (!hasResponseSegment || currentAgent !== expectedAgent) {
-      const agentParam = expectedAgent ? `?agent=${encodeURIComponent(expectedAgent)}` : '';
-      router.replace(`/${owner}/${name}/${derivedResponseId}${agentParam}`, undefined, { shallow: true });
+    if (!hasResponseSegment) {
+      router.replace(`/${owner}/${name}/${derivedResponseId}`, undefined, { shallow: true });
     }
-  }, [router, owner, name, derivedResponseId, derivedAgentName]);
+  }, [router, owner, name, derivedResponseId]);
 
   useEffect(() => {
     if (!derivedAgentName || !derivedResponseId || !isPolling) {
