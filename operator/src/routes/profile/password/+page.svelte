@@ -4,6 +4,7 @@
   import { setPageTitle } from '$lib/utils.js';
   import { isAuthenticated, getOperatorName, getPrincipalType } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
+  import Card from '/src/components/bootstrap/Card.svelte';
 
   let operatorName = '';
   let currentPassword = '';
@@ -49,12 +50,12 @@
 <div class="container py-4">
   <div class="row justify-content-center">
     <div class="col-lg-6 col-md-8">
-      <div class="card">
+      <Card class="mb-3">
         <div class="card-header fw-bold d-flex align-items-center">
           <i class="bi bi-key me-2"></i> Change Password
           <span class="ms-auto small text-muted">{operatorName}</span>
         </div>
-        <div class="card-body">
+        <div class="card-body p-3 p-sm-4">
           {#if error}
             <div class="alert alert-danger py-2 small">{error}</div>
           {/if}
@@ -86,9 +87,8 @@
             </div>
           </form>
         </div>
-      </div>
+      </Card>
     </div>
   </div>
   
 </div>
-
