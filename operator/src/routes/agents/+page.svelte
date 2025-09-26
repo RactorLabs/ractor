@@ -285,7 +285,7 @@ import { getHostUrl } from '$lib/branding.js';
                         <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
                         <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
                       </div>
-                      <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
+                      <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
                           <button class="btn btn-outline-primary btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
                             <i class="bi bi-moon me-1"></i><span>Sleep</span>
@@ -329,9 +329,10 @@ import { getHostUrl } from '$lib/branding.js';
 </div>
 
 <style>
-  /* Ensure dropdown menus overlay adjacent buttons on the list cards */
-  :global(.dropdown-menu) { z-index: 11000; }
+  /* Ensure dropdown menus overlay adjacent cards */
   :global(.card) { overflow: visible; }
+  :global(.list-actions) { position: relative; z-index: 3001; }
+  :global(.list-actions .dropdown-menu) { z-index: 3002 !important; }
   .text-truncate { display: block; }
 </style>
                 </Card>
