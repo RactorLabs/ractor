@@ -64,7 +64,7 @@ section {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.85rem;
 }
 
 .repo-brand {
@@ -77,17 +77,61 @@ section {
   display: inline-block;
 }
 
+.repo-description {
+  margin: 0 auto;
+  max-width: 720px;
+  text-align: center;
+  color: rgba(238, 243, 249, 0.78);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
 .repo-header {
   margin: 0;
   text-align: center;
 }
 
+
 .repo-title {
   font-size: clamp(1.75rem, 6vw, 3rem);
   font-weight: 700;
   letter-spacing: 0.015em;
-  line-height: 1.1;
-  color: #62f3d6;
+  color: #7fffd4;
+  text-decoration: none;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+
+.repo-title__segment {
+  white-space: nowrap;
+}
+
+.repo-title__slash {
+  white-space: nowrap;
+  color: rgba(127, 255, 212, 0.65);
+  flex-shrink: 0;
+}
+
+.repo-title__segment--repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.repo-title__arrow {
+  color: rgba(238, 243, 249, 0.85);
+  font-size: 0.9em;
+  transform: translateY(-1px);
+  text-decoration: none;
+  display: inline-flex;
+}
+
+.repo-title__arrow:hover {
+  color: #61dafb;
 }
 
 .repo-meta {
@@ -173,6 +217,18 @@ section {
   font-size: 0.95rem;
   font-weight: 500;
   color: rgba(238, 243, 249, 0.8);
+  gap: 0.25rem;
+}
+
+.repo-counts > span {
+  white-space: nowrap;
+}
+
+.repo-subline {
+  margin: 0.15rem auto 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: rgba(238, 243, 249, 0.7);
 }
 
 .response-status__message {
@@ -245,6 +301,23 @@ section {
   }
   .repo-brand {
     font-size: clamp(1.2rem, 6vw, 1.6rem);
+  }
+  .repo-description {
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+  }
+  .repo-meta {
+    display: none;
+  }
+  .repo-subline {
+    font-size: 0.85rem;
+    padding: 0 0.5rem;
+  }
+  .repo-meta__topics {
+    display: none;
+  }
+  .repo-link {
+    font-size: 0.9rem;
   }
   .repo-counts {
     font-size: 0.9rem;

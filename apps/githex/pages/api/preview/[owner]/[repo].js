@@ -22,8 +22,6 @@ export default function handler(req) {
   const language = toText(searchParams.get('language'), 'TypeScript');
   const statsLine = toText(searchParams.get('stats'), '');
 
-  const ownerLine = `${owner}/`;
-
   return new ImageResponse(
     (
       <div
@@ -54,15 +52,19 @@ export default function handler(req) {
           >
             GitHex
           </span>
-          <span style={{ color: 'rgba(238, 243, 249, 0.9)', fontSize: 34, fontWeight: 600 }}>GitHub Repo Explainer</span>
+          <span style={{ color: 'rgba(238, 243, 249, 0.9)', fontSize: 34, fontWeight: 600 }}>GitHub Repo Explorer</span>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <span style={{ color: '#62f3d6', fontSize: 63, fontWeight: 750 }}>{ownerLine}{repo}</span>
-          <span style={{ fontSize: 36, fontWeight: 650, color: '#eef3f9', letterSpacing: '0.02em' }}>Language: {language}</span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ color: '#62f3d6', fontSize: 63, fontWeight: 750, whiteSpace: 'nowrap' }}>{owner}</span>
+            <span style={{ color: '#88ffe2', fontSize: 63, fontWeight: 750, whiteSpace: 'nowrap' }}>/</span>
+            <span style={{ color: '#62f3d6', fontSize: 63, fontWeight: 750, whiteSpace: 'nowrap' }}>{repo}</span>
+          </div>
           {statsLine && (
-            <span style={{ fontSize: 30, fontWeight: 550, color: 'rgba(238, 243, 249, 0.88)' }}>{statsLine}</span>
+            <span style={{ fontSize: 36, fontWeight: 650, color: '#eef3f9', letterSpacing: '0.02em' }}>{statsLine}</span>
           )}
+          <span style={{ fontSize: 36, fontWeight: 650, color: 'rgba(238, 243, 249, 0.85)', letterSpacing: '0.02em' }}>Language: {language}</span>
         </div>
       </div>
     ),

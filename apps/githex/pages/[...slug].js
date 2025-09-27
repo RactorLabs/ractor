@@ -247,20 +247,6 @@ export default function RepoPage({
     }
 
     const meta = [];
-    if (repoStats.language) {
-      meta.push({ key: 'language', label: 'Language', value: repoStats.language });
-    }
-    if (repoStats.updated_at) {
-      const updated = new Date(repoStats.updated_at);
-      if (!Number.isNaN(updated.getTime())) {
-        const formatted = updated.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        });
-        meta.push({ key: 'updated', label: 'Last updated', value: formatted });
-      }
-    }
 
     const description = typeof repoStats.description === 'string' ? repoStats.description.trim() : '';
     const homepageRaw = typeof repoStats.homepage === 'string' ? repoStats.homepage.trim() : '';
@@ -299,12 +285,41 @@ export default function RepoPage({
     return parts.length ? parts.join(' · ') : null;
   }, [repoStats?.stars, repoStats?.forks, repoStats?.issues, repoStats?.contributors]);
 
+  const languageLine = useMemo(() => {
+    const parts = [];
+    if (repoStats?.language) {
+      parts.push(`Language: ${repoStats.language}`);
+    }
+    if (repoStats?.updated_at) {
+      const updated = new Date(repoStats.updated_at);
+      if (!Number.isNaN(updated.getTime())) {
+        const formatted = updated.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        parts.push(`Last updated ${formatted}`);
+      }
+    }
+    return parts.length ? parts.join(' · ') : null;
+  }, [repoStats?.language, repoStats?.updated_at]);
+
   const repoSummary = (
     <div className="repo-summary">
       <Link href="/" className="repo-brand">GitHex</Link>
       <header className="repo-header">
-        <h1 className="repo-title">{`${owner}/${name}`}</h1>
+        <div className="repo-title">
+          <span className="repo-title__segment">{owner}</span>
+          <span className="repo-title__slash">/</span>
+          <span className="repo-title__segment repo-title__segment--repo">
+            {name}
+            <a className="repo-title__arrow" href={repoUrl} target="_blank" rel="noreferrer" aria-label="View on GitHub">↗</a>
+          </span>
+        </div>
       </header>
+      {repoDetails?.description && (
+        <p className="repo-description">{repoDetails.description}</p>
+      )}
       {repoDetails && (repoDetails.meta.length > 0 || repoDetails.topics.length > 0) && (
         <section className="repo-meta" aria-label="Repository details">
           {!!repoDetails.meta.length && (
@@ -328,6 +343,9 @@ export default function RepoPage({
       )}
       {repositoryStatsLine && (
         <p className="repo-counts" aria-label="Repository statistics">{repositoryStatsLine}</p>
+      )}
+      {languageLine && (
+        <p className="repo-subline" aria-label="Repository language and updates">{languageLine}</p>
       )}
     </div>
   );
@@ -402,7 +420,7 @@ export default function RepoPage({
   }
   const previewImageUrl = `/api/preview/${encodeURIComponent(owner)}/${encodeURIComponent(name)}?${previewSearchParams.toString()}`;
   const ogTitle = `${owner}/${name} · GitHex`;
-  const ogDescription = 'GitHub Repo Explainer';
+  const ogDescription = 'GitHub Repo Explorer';
 
   if (missingSetup) {
     return (
@@ -679,7 +697,8 @@ export async function getServerSideProps(context) {
         }
       },
       instructions:
-        'You are a no-nonsense GitHex agent. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags. Never use the word "roast" in your responses.'
+        'You are GitHex, a GitHub Repo Explorer agent. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags. Never use the word "roast" in your responses.',
+      busy_timeout_seconds: 1800
     };
 
     const createAgentRes = await fetch(`${base}/api/v0/agents`, {
