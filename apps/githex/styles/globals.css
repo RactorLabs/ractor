@@ -167,6 +167,14 @@ section {
   letter-spacing: 0.02em;
 }
 
+.repo-counts {
+  margin: 0.25rem auto 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(238, 243, 249, 0.8);
+}
+
 .response-status__message {
   margin: 0 auto;
   width: min(100%, 960px);
@@ -237,6 +245,9 @@ section {
   }
   .repo-brand {
     font-size: clamp(1.2rem, 6vw, 1.6rem);
+  }
+  .repo-counts {
+    font-size: 0.9rem;
   }
   .repo-title { font-size: clamp(1.5rem, 7vw, 2.4rem); }
   .repo-meta__meta dd {

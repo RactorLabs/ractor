@@ -279,6 +279,26 @@ export default function RepoPage({
     };
   }, [repoStats]);
 
+  const repositoryStatsLine = useMemo(() => {
+    if (!repoStats) return null;
+    const parts = [];
+    const formatter = new Intl.NumberFormat('en-US');
+
+    const append = (label, value) => {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric >= 0) {
+        parts.push(`${label} ${formatter.format(numeric)}`);
+      }
+    };
+
+    append('Stars', repoStats.stars);
+    append('Forks', repoStats.forks);
+    append('Issues', repoStats.issues);
+    append('Contributors', repoStats.contributors);
+
+    return parts.length ? parts.join(' · ') : null;
+  }, [repoStats?.stars, repoStats?.forks, repoStats?.issues, repoStats?.contributors]);
+
   const repoSummary = (
     <div className="repo-summary">
       <Link href="/" className="repo-brand">GitHex</Link>
@@ -305,6 +325,9 @@ export default function RepoPage({
             </ul>
           )}
         </section>
+      )}
+      {repositoryStatsLine && (
+        <p className="repo-counts" aria-label="Repository statistics">{repositoryStatsLine}</p>
       )}
     </div>
   );
@@ -497,14 +520,36 @@ export async function getServerSideProps(context) {
     stars: typeof repoInfo?.stargazers_count === 'number' ? repoInfo.stargazers_count : null,
     forks: typeof repoInfo?.forks_count === 'number' ? repoInfo.forks_count : null,
     issues: typeof repoInfo?.open_issues_count === 'number' ? repoInfo.open_issues_count : null,
-    watchers: typeof repoInfo?.subscribers_count === 'number'
-      ? repoInfo.subscribers_count
-      : (typeof repoInfo?.watchers_count === 'number' ? repoInfo.watchers_count : null),
+    contributors: null,
     homepage: repoInfo?.homepage ?? null,
     updated_at: repoInfo?.updated_at ?? null,
-    default_branch: null,
     topics: Array.isArray(repoInfo?.topics) ? repoInfo.topics : []
   };
+
+  try {
+    const contributorsRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contributors?per_page=1&anon=1`, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'raworc-githex-app'
+      }
+    });
+    if (contributorsRes.ok) {
+      const linkHeader = contributorsRes.headers.get('link');
+      if (linkHeader) {
+        const match = linkHeader.match(/&page=(\d+)>;\s*rel="last"/i);
+        if (match) {
+          repoStats.contributors = Number(match[1]);
+        }
+      } else {
+        const contributorPayload = await contributorsRes.json();
+        if (Array.isArray(contributorPayload)) {
+          repoStats.contributors = contributorPayload.length;
+        }
+      }
+    }
+  } catch (contributorError) {
+    console.warn('[GitHex] Contributor lookup failed:', contributorError);
+  }
 
   const adminToken = process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN;
   const raworcHost = process.env.RAWORC_HOST_URL;
