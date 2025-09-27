@@ -266,6 +266,7 @@ impl ResponseHandler {
                     conversation.clone(),
                     Some(system_prompt),
                     Some(&*self.tool_registry),
+                    Some("medium"),
                 )
                 .await
             {

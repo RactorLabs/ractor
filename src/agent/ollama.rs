@@ -255,7 +255,7 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
     ) -> Result<ModelResponse> {
-        self.complete_with_registry(messages, system_prompt, None)
+        self.complete_with_registry(messages, system_prompt, None, None)
             .await
     }
 
@@ -264,9 +264,16 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
+        reasoning_effort_override: Option<&str>,
     ) -> Result<ModelResponse> {
-        self.complete_with_tool_execution(messages, system_prompt, tool_registry, false)
-            .await
+        self.complete_with_tool_execution(
+            messages,
+            system_prompt,
+            tool_registry,
+            false,
+            reasoning_effort_override,
+        )
+        .await
     }
 
     pub async fn complete_with_tool_execution(
@@ -275,6 +282,7 @@ impl OllamaClient {
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
         enable_tool_execution: bool,
+        reasoning_effort_override: Option<&str>,
     ) -> Result<ModelResponse> {
         const MAX_ITERATIONS: usize = 10; // Prevent infinite loops
         let mut iteration = 0;
@@ -288,7 +296,12 @@ impl OllamaClient {
             }
 
             let response = self
-                .complete_single_turn(messages.clone(), system_prompt.clone(), tool_registry)
+                .complete_single_turn(
+                    messages.clone(),
+                    system_prompt.clone(),
+                    tool_registry,
+                    reasoning_effort_override,
+                )
                 .await?;
 
             // If no tool calls or tool execution disabled, return response
@@ -350,6 +363,7 @@ impl OllamaClient {
         messages: Vec<ChatMessage>,
         system_prompt: Option<String>,
         tool_registry: Option<&ToolRegistry>,
+        reasoning_effort_override: Option<&str>,
     ) -> Result<ModelResponse> {
         // Build chat messages for Ollama
         let mut chat_messages: Vec<ChatRequestMessage> = Vec::new();
@@ -420,6 +434,10 @@ impl OllamaClient {
                 });
             }
 
+            let reasoning_effort_payload = reasoning_effort_override
+                .map(|effort| effort.to_lowercase())
+                .or_else(|| self.reasoning_effort.clone());
+
             let req = ChatRequest {
                 model: &model,
                 messages: attempt_messages,
@@ -429,9 +447,7 @@ impl OllamaClient {
                 } else {
                     Some(tools.clone())
                 },
-                reasoning: self.reasoning_effort.as_ref().map(|effort| Reasoning {
-                    effort: effort.clone(),
-                }),
+                reasoning: reasoning_effort_payload.map(|effort| Reasoning { effort }),
                 thinking: if include_thinking {
                     Some(Thinking {
                         typ: "enabled".to_string(),
