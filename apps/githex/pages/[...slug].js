@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import { marked } from 'marked';
@@ -280,6 +281,7 @@ export default function RepoPage({
 
   const repoSummary = (
     <div className="repo-summary">
+      <Link href="/" className="repo-brand">GitHex</Link>
       <header className="repo-header">
         <h1 className="repo-title">{`${owner}/${name}`}</h1>
       </header>
