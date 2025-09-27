@@ -389,7 +389,6 @@ export default function RepoPage({
 
   const languageMeta = repoDetails?.meta?.find((item) => item.key === 'language')?.value || repoStats?.language || 'Unknown';
   const updatedMeta = repoDetails?.meta?.find((item) => item.key === 'updated')?.value || 'Not available';
-  const topicsMeta = (repoDetails?.topics || []).join(',');
   const previewSearchParams = new URLSearchParams();
   const isActive = !isTerminal(status);
   const previewTitle = isActive
@@ -398,8 +397,8 @@ export default function RepoPage({
   previewSearchParams.set('title', previewTitle);
   previewSearchParams.set('language', languageMeta);
   previewSearchParams.set('updated', updatedMeta);
-  if (topicsMeta) {
-    previewSearchParams.set('topics', topicsMeta);
+  if (repositoryStatsLine) {
+    previewSearchParams.set('stats', repositoryStatsLine);
   }
   const previewImageUrl = `/api/preview/${encodeURIComponent(owner)}/${encodeURIComponent(name)}?${previewSearchParams.toString()}`;
   const ogTitle = `${owner}/${name} · GitHex`;
