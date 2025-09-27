@@ -74,7 +74,7 @@ function renderOutputItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return (
       <p className="output-panel__empty">
-        The agent did not return any roast content.
+        The agent did not return any analysis content.
       </p>
     );
   }
@@ -170,7 +170,8 @@ export default function RepoPage({
   agentName,
   response: initialResponse,
   responseId: initialResponseId,
-  setupError
+  setupError,
+  repoStats
 }) {
   const router = useRouter();
   const normalizedInitial = useMemo(() => normalizeResponse(initialResponse), [initialResponse]);
@@ -223,40 +224,179 @@ export default function RepoPage({
     return extractLatestCommentary(response?.segments);
   }, [status, response?.segments]);
 
-  const bannerText = isTerminal(status)
-    ? `Roast completed for ${owner}/${name}`
-    : formatCommentary(commentary) || `Roasting ${owner}/${name}…`;
-
- const outputItems = useMemo(() => {
-   if (!isTerminal(status)) return [];
-   const items = Array.isArray(response?.output_content) ? response.output_content : [];
-   if (items.length > 0) return items;
-   // Fallback: show commentary nearest to last tool item
-   const near = extractCommentaryNearLastTool(response?.segments);
-   if (near && typeof near === 'string' && near.trim().length > 0) {
-     return [{ type: 'markdown', title: 'Result', content: near }];
-   }
-   return [];
- }, [response?.output_content, response?.segments, status]);
+  const outputItems = useMemo(() => {
+    if (!isTerminal(status)) return [];
+    const items = Array.isArray(response?.output_content) ? response.output_content : [];
+    if (items.length > 0) return items;
+    // Fallback: show commentary nearest to last tool item
+    const near = extractCommentaryNearLastTool(response?.segments);
+    if (near && typeof near === 'string' && near.trim().length > 0) {
+      return [{ type: 'markdown', title: 'Result', content: near }];
+    }
+    return [];
+  }, [response?.output_content, response?.segments, status]);
 
   const isFailed = status === 'failed';
   const isCancelled = status === 'cancelled';
   const missingSetup = setupError || !derivedAgentName || !derivedResponseId;
+
+  const repoDetails = useMemo(() => {
+    if (!repoStats || typeof repoStats !== 'object') {
+      return null;
+    }
+
+    const meta = [];
+    if (repoStats.language) {
+      meta.push({ key: 'language', label: 'Language', value: repoStats.language });
+    }
+    if (repoStats.updated_at) {
+      const updated = new Date(repoStats.updated_at);
+      if (!Number.isNaN(updated.getTime())) {
+        const formatted = updated.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        });
+        meta.push({ key: 'updated', label: 'Last updated', value: formatted });
+      }
+    }
+
+    const description = typeof repoStats.description === 'string' ? repoStats.description.trim() : '';
+    const homepageRaw = typeof repoStats.homepage === 'string' ? repoStats.homepage.trim() : '';
+    const homepage = homepageRaw ? (homepageRaw.startsWith('http') ? homepageRaw : `https://${homepageRaw}`) : null;
+    const topics = Array.isArray(repoStats.topics) ? repoStats.topics.filter(Boolean).slice(0, 8) : [];
+
+    if (!meta.length && !description && !homepage && !topics.length) {
+      return null;
+    }
+
+    return {
+      description,
+      meta,
+      homepage,
+      topics
+    };
+  }, [repoStats]);
+
+  const repoSummary = (
+    <div className="repo-summary">
+      <header className="repo-header">
+        <h1 className="repo-title">{`${owner}/${name}`}</h1>
+      </header>
+      {repoDetails && (repoDetails.meta.length > 0 || repoDetails.topics.length > 0) && (
+        <section className="repo-meta" aria-label="Repository details">
+          {!!repoDetails.meta.length && (
+            <dl className="repo-meta__meta">
+              {repoDetails.meta.map((item) => (
+                <div key={item.key}>
+                  <dt>{item.label}</dt>
+                  <dd>{item.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {!!repoDetails.topics.length && (
+            <ul className="repo-meta__topics">
+              {repoDetails.topics.map((topic) => (
+                <li key={topic}>{topic}</li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </div>
+  );
+
+  const statusInfo = useMemo(() => {
+    if (missingSetup) {
+      return {
+        label: 'Setup required',
+        tone: 'warning',
+        message: setupError || 'Required Raworc credentials are missing. Set RAWORC_HOST_URL and RAWORC_APPS_GITHEX_ADMIN_TOKEN before using GitHex.'
+      };
+    }
+
+    const normalized = (status || 'pending').toLowerCase();
+
+    const toneMap = {
+      completed: 'success',
+      failed: 'error',
+      cancelled: 'warning',
+      busy: 'info',
+      running: 'info',
+      active: 'info'
+    };
+
+    const labelMap = {
+      completed: 'Completed',
+      failed: 'Failed',
+      cancelled: 'Cancelled',
+      busy: 'In progress',
+      running: 'In progress',
+      pending: 'Pending',
+      queued: 'Queued',
+      active: 'Active'
+    };
+
+    const effectiveTone = toneMap[normalized] || (isTerminal(normalized) ? 'success' : 'info');
+    const label = labelMap[normalized] || normalized.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase()) || 'Pending';
+
+    let message;
+    if (isTerminal(status)) {
+      if (isFailed) {
+        message = `The agent reported a failure while analyzing ${owner}/${name}. Check Raworc logs for more detail.`;
+      } else if (isCancelled) {
+        message = `The agent cancelled the request before completion. Try again later.`;
+      } else {
+        message = `Analysis completed for ${owner}/${name}.`;
+      }
+    } else {
+      message = formatCommentary(commentary) || `Analyzing ${owner}/${name}…`;
+    }
+
+    return {
+      label,
+      tone: effectiveTone,
+      message,
+      rawStatus: normalized
+    };
+  }, [commentary, isCancelled, isFailed, missingSetup, name, owner, setupError, status]);
+
+  const languageMeta = repoDetails?.meta?.find((item) => item.key === 'language')?.value || repoStats?.language || 'Unknown';
+  const updatedMeta = repoDetails?.meta?.find((item) => item.key === 'updated')?.value || 'Not available';
+  const topicsMeta = (repoDetails?.topics || []).join(',');
+  const previewSearchParams = new URLSearchParams();
+  const isActive = !isTerminal(status);
+  const previewTitle = isActive
+    ? statusInfo.message || `Analyzing ${owner}/${name}`
+    : `Insights for ${owner}/${name}`;
+  previewSearchParams.set('title', previewTitle);
+  previewSearchParams.set('language', languageMeta);
+  previewSearchParams.set('updated', updatedMeta);
+  if (topicsMeta) {
+    previewSearchParams.set('topics', topicsMeta);
+  }
+  const previewImageUrl = `/api/preview/${encodeURIComponent(owner)}/${encodeURIComponent(name)}?${previewSearchParams.toString()}`;
+  const ogTitle = `${owner}/${name} · GitHex`;
+  const ogDescription = 'GitHub Repo Explainer';
 
   if (missingSetup) {
     return (
       <main>
         <Head>
           <title>{`${owner}/${name} · GitHex`}</title>
+          <meta name="description" content={ogDescription} />
+          <meta property="og:title" content={ogTitle} />
+          <meta property="og:description" content={ogDescription} />
+          <meta property="og:image" content={previewImageUrl} />
+          <meta property="og:type" content="website" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={ogTitle} />
+          <meta name="twitter:description" content={ogDescription} />
+          <meta name="twitter:image" content={previewImageUrl} />
         </Head>
-        <section className="hero repo-hero">
-          <p className="clone-banner" aria-live="polite">
-            <span className="clone-text">GitHex configuration is incomplete</span>
-          </p>
-          <p className="poll-error">
-            {setupError || 'Required Raworc credentials are missing. Set RAWORC_HOST_URL and RAWORC_APPS_GITHEX_ADMIN_TOKEN before using GitHex.'}
-          </p>
-        </section>
+        {repoSummary}
+        <p className="response-status__message response-status__message--standalone" aria-live="polite">{statusInfo.message}</p>
       </main>
     );
   }
@@ -265,23 +405,32 @@ export default function RepoPage({
     <main>
       <Head>
         <title>{`${owner}/${name} · GitHex`}</title>
+        <meta name="description" content={ogDescription} />
+        <meta property="og:title" content={ogTitle} />
+        <meta property="og:description" content={ogDescription} />
+        <meta property="og:image" content={previewImageUrl} />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={ogTitle} />
+        <meta name="twitter:description" content={ogDescription} />
+        <meta name="twitter:image" content={previewImageUrl} />
       </Head>
+      {repoSummary}
       {!isTerminal(status) && (
-        <section className="hero repo-hero">
-          <p className="clone-banner" aria-live="polite">
-            <span className="clone-text">{bannerText}</span>
+        <section className="response-progress" aria-live="polite">
+          <p className="response-status__message response-status__message--active">
+            {statusInfo.message}
           </p>
           {pollError && (
-            <p className="poll-error" aria-live="polite">{pollError}</p>
+            <p className="response-status__note">{pollError}</p>
           )}
         </section>
       )}
-
       {isTerminal(status) && (
         <section className="output-panel" aria-live="polite">
           {isFailed && (
             <p className="output-panel__error">
-              The agent reported a failure while roasting {owner}/{name}. Check Raworc logs for more detail.
+              The agent reported a failure while analyzing {owner}/{name}. Check Raworc logs for more detail.
             </p>
           )}
           {isCancelled && (
@@ -312,6 +461,8 @@ export async function getServerSideProps(context) {
   const [owner, name] = slug;
   const repoUrl = `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
 
+  let repoInfo = null;
+
   try {
     const githubRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, {
       headers: {
@@ -324,7 +475,7 @@ export async function getServerSideProps(context) {
       throw new Error(`GitHub responded with ${githubRes.status}`);
     }
 
-    const repoInfo = await githubRes.json();
+    repoInfo = await githubRes.json();
     if (repoInfo?.private) {
       throw new Error('Repository is private');
     }
@@ -338,6 +489,21 @@ export async function getServerSideProps(context) {
     };
   }
 
+  const repoStats = {
+    description: repoInfo?.description ?? null,
+    language: repoInfo?.language ?? null,
+    stars: typeof repoInfo?.stargazers_count === 'number' ? repoInfo.stargazers_count : null,
+    forks: typeof repoInfo?.forks_count === 'number' ? repoInfo.forks_count : null,
+    issues: typeof repoInfo?.open_issues_count === 'number' ? repoInfo.open_issues_count : null,
+    watchers: typeof repoInfo?.subscribers_count === 'number'
+      ? repoInfo.subscribers_count
+      : (typeof repoInfo?.watchers_count === 'number' ? repoInfo.watchers_count : null),
+    homepage: repoInfo?.homepage ?? null,
+    updated_at: repoInfo?.updated_at ?? null,
+    default_branch: null,
+    topics: Array.isArray(repoInfo?.topics) ? repoInfo.topics : []
+  };
+
   const adminToken = process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN;
   const raworcHost = process.env.RAWORC_HOST_URL;
 
@@ -350,7 +516,8 @@ export async function getServerSideProps(context) {
         agentName: null,
         response: null,
         responseId: null,
-        setupError: 'Required Raworc credentials are missing.'
+        setupError: 'Required Raworc credentials are missing.',
+        repoStats
       }
     };
   }
@@ -416,7 +583,8 @@ export async function getServerSideProps(context) {
               agentName: found.name,
               response: responseView,
               responseId: responseView.id,
-              setupError: null
+              setupError: null,
+              repoStats
             }
           };
         }
@@ -424,7 +592,7 @@ export async function getServerSideProps(context) {
         const messageBody = {
           input: {
             content: [
-              { type: 'text', content: `Clone ${repoUrl}. After cloning, produce an unfiltered roast of this repository: call out poor structure, questionable decisions, missing docs, flaky scripts, or any other red flags. Be witty but factual, cite evidence, and respond strictly in Markdown.` }
+              { type: 'text', content: `Clone ${repoUrl}. After cloning, produce an unfiltered critique of this repository: call out poor structure, questionable decisions, missing docs, flaky scripts, or any other red flags. Be witty but factual, cite evidence, and respond strictly in Markdown. Give the output a witty title that does not include the repo name and never use the word "roast" anywhere in the response.` }
             ]
           }
         };
@@ -439,7 +607,8 @@ export async function getServerSideProps(context) {
             agentName: found.name,
             response,
             responseId: response.id,
-            setupError: null
+            setupError: null,
+            repoStats
           }
         };
       }
@@ -453,8 +622,8 @@ export async function getServerSideProps(context) {
   try {
     const agentPayload = {
       name: agentName,
-      description: `GitHex roast agent for ${owner}/${name}`,
-      tags: ['githex', 'roast', tagValue],
+      description: `GitHex agent for ${owner}/${name}`,
+      tags: ['githex', 'analysis', tagValue],
       metadata: {
         source: 'githex',
         repository: {
@@ -464,7 +633,7 @@ export async function getServerSideProps(context) {
         }
       },
       instructions:
-        'You are a no-nonsense repository roasting agent. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags.'
+        'You are a no-nonsense GitHex agent. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags. Never use the word "roast" in your responses.'
     };
 
     const createAgentRes = await fetch(`${base}/api/v0/agents`, {
@@ -484,7 +653,7 @@ export async function getServerSideProps(context) {
         content: [
           {
             type: 'text',
-            content: `Clone ${repoUrl}. After cloning, produce an unfiltered roast of this repository: call out poor structure, questionable decisions, missing docs, flaky scripts, or any other red flags. Be witty but factual, cite evidence, and respond strictly in Markdown.`
+            content: `Clone ${repoUrl}. After cloning, produce an unfiltered critique of this repository: call out poor structure, questionable decisions, missing docs, flaky scripts, or any other red flags. Be witty but factual, cite evidence, and respond strictly in Markdown. Give the output a witty title that does not include the repo name and never use the word "roast" anywhere in the response.`
           }
         ]
       }
@@ -511,7 +680,8 @@ export async function getServerSideProps(context) {
         agentName,
         response,
         responseId: response.id,
-        setupError: null
+        setupError: null,
+        repoStats
       }
     };
   } catch (error) {
