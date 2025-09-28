@@ -7,7 +7,7 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: radial-gradient(circle at top, #1b263b 0%, #0b0f16 65%);
+  background: #0b0f16;
 }
 
 a {
@@ -25,6 +25,67 @@ main {
   justify-content: center;
   min-height: 100vh;
   padding: 0 1.5rem 8vh;
+}
+
+main.repo-page {
+  justify-content: flex-start;
+  align-items: stretch;
+  padding: 0.75rem 0 1.25rem;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 0;
+  min-height: 100vh;
+}
+
+main.repo-page .response-progress {
+  min-height: 0;
+  padding-bottom: 0;
+  margin: 0;
+}
+
+.repo-card {
+  margin: 0.5rem;
+  padding: clamp(1.6rem, 4.5vw, 2.4rem);
+  background: rgba(10, 16, 26, 0.8);
+  border: 1px solid rgba(127, 255, 212, 0.22);
+  border-radius: 18px;
+  box-shadow: 0 20px 42px rgba(6, 12, 24, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.5rem, 4vw, 2rem);
+  flex: 1 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+}
+
+main.repo-page .repo-brand {
+  align-self: flex-start;
+  margin: 0.35rem 0 0.5rem clamp(1.6rem, 4.5vw, 2.4rem);
+}
+
+.repo-card .response-progress,
+.repo-card .output-panel {
+  margin: 0;
+  width: 100%;
+}
+
+.repo-footer {
+  margin: auto 0 0;
+  width: 100%;
+  text-align: center;
+  padding: 1rem 0 0.35rem;
+  color: rgba(238, 243, 249, 0.6);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.repo-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.repo-footer a:hover {
+  color: rgba(127, 255, 212, 0.85);
 }
 
 section {
@@ -58,13 +119,15 @@ section {
   animation: clone-gradient 2.2s ease-in-out infinite;
 }
 
+
 .repo-summary {
-  width: min(100%, 960px);
-  margin: 4vh auto 1.8vh;
+  width: 100%;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  align-items: center;
+  gap: 1rem;
 }
 
 .repo-brand {
@@ -93,7 +156,8 @@ section {
 
 
 .repo-title {
-  font-size: clamp(1.75rem, 6vw, 3rem);
+  margin: 0;
+  font-size: clamp(1.28rem, 4vw, 2.1rem);
   font-weight: 700;
   letter-spacing: 0.015em;
   color: #7fffd4;
@@ -112,7 +176,7 @@ section {
 
 .repo-title__slash {
   white-space: nowrap;
-  color: rgba(127, 255, 212, 0.65);
+  color: rgba(238, 243, 249, 0.85);
   flex-shrink: 0;
 }
 
@@ -199,6 +263,8 @@ section {
   margin: 0;
   padding: 0;
   list-style: none;
+  justify-content: center;
+  align-items: center;
 }
 
 .repo-meta__topics li {
@@ -253,16 +319,16 @@ section {
 }
 
 .response-progress {
-  width: min(100%, 960px);
-  margin: 0 auto 3vh;
-  padding: 0 1rem;
+  width: 100%;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 42vh;
   text-align: center;
   gap: 1rem;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .response-status__message--standalone {
@@ -293,11 +359,19 @@ section {
   .hero { gap: 1.5rem; transform: translateY(-3vh); }
   .input-row { gap: 0.5rem; }
   .input-row input { width: 100%; }
-  .output-panel { margin: 4vh auto 3vh; padding: 0; }
+  main.repo-page { padding: 0.6rem 0 1rem; gap: 0; }
+  .repo-card {
+    margin: 0.5rem;
+    padding: 1.35rem 0.85rem 1.6rem;
+    border-radius: 16px;
+    gap: 1.4rem;
+  }
+  main.repo-page .repo-brand {
+    margin: 0.3rem 0 0.45rem 0.85rem;
+  }
   .repo-summary {
-    margin: 3vh auto 1.5vh;
-    padding: 0;
-    gap: 0.85rem;
+    margin: 0;
+    gap: 0.75rem;
   }
   .repo-brand {
     font-size: clamp(1.2rem, 6vw, 1.6rem);
@@ -322,7 +396,7 @@ section {
   .repo-counts {
     font-size: 0.9rem;
   }
-  .repo-title { font-size: clamp(1.5rem, 7vw, 2.4rem); }
+  .repo-title { font-size: clamp(1.05rem, 5.5vw, 1.8rem); }
   .repo-meta__meta dd {
     font-size: 0.95rem;
   }
@@ -339,8 +413,9 @@ section {
     font-size: 0.9rem;
   }
   .response-progress {
-    min-height: 36vh;
-    margin: 0 auto 2.5vh;
+    min-height: 0;
+    margin: 0 auto;
+    flex: 1 1 auto;
   }
 }
 
@@ -468,7 +543,7 @@ section {
 
 .output-panel {
   width: min(100%, 960px);
-  margin: 6vh auto 4vh;
+  margin: 2.5vh auto 2.75vh;
   padding: 0;
   text-align: left;
 }
@@ -548,19 +623,7 @@ section {
   word-break: break-word;
   background: rgba(13, 20, 33, 0.55);
   border-radius: 6px;
-  padding: 1rem;
-  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.output-panel__json {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: rgba(13, 20, 33, 0.55);
-  border-radius: 6px;
-  padding: 1rem;
+  padding: 0.75rem 0;
   font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-size: 0.9rem;
   line-height: 1.5;

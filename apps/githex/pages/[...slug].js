@@ -304,9 +304,12 @@ export default function RepoPage({
     return parts.length ? parts.join(' · ') : null;
   }, [repoStats?.language, repoStats?.updated_at]);
 
+  const repoBrand = (
+    <Link href="/" className="repo-brand">GitHex</Link>
+  );
+
   const repoSummary = (
     <div className="repo-summary">
-      <Link href="/" className="repo-brand">GitHex</Link>
       <header className="repo-header">
         <div className="repo-title">
           <span className="repo-title__segment">{owner}</span>
@@ -424,7 +427,7 @@ export default function RepoPage({
 
   if (missingSetup) {
     return (
-      <main>
+      <main className="repo-page">
         <Head>
           <title>{`${owner}/${name} · GitHex`}</title>
           <meta name="description" content={ogDescription} />
@@ -437,14 +440,20 @@ export default function RepoPage({
           <meta name="twitter:description" content={ogDescription} />
           <meta name="twitter:image" content={previewImageUrl} />
         </Head>
-        {repoSummary}
-        <p className="response-status__message response-status__message--standalone" aria-live="polite">{statusInfo.message}</p>
+        {repoBrand}
+        <div className="repo-card">
+          {repoSummary}
+          <p className="response-status__message response-status__message--standalone" aria-live="polite">{statusInfo.message}</p>
+        </div>
+        <footer className="repo-footer">
+          runs on <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+        </footer>
       </main>
     );
   }
 
   return (
-    <main>
+    <main className="repo-page">
       <Head>
         <title>{`${owner}/${name} · GitHex`}</title>
         <meta name="description" content={ogDescription} />
@@ -457,32 +466,38 @@ export default function RepoPage({
         <meta name="twitter:description" content={ogDescription} />
         <meta name="twitter:image" content={previewImageUrl} />
       </Head>
-      {repoSummary}
-      {!isTerminal(status) && (
-        <section className="response-progress" aria-live="polite">
-          <p className="response-status__message response-status__message--active">
-            {statusInfo.message}
-          </p>
-          {pollError && (
-            <p className="response-status__note">{pollError}</p>
-          )}
-        </section>
-      )}
-      {isTerminal(status) && (
-        <section className="output-panel" aria-live="polite">
-          {isFailed && (
-            <p className="output-panel__error">
-              The agent reported a failure while analyzing {owner}/{name}. Check Raworc logs for more detail.
+      {repoBrand}
+      <div className="repo-card">
+        {repoSummary}
+        {!isTerminal(status) && (
+          <section className="response-progress" aria-live="polite">
+            <p className="response-status__message response-status__message--active">
+              {statusInfo.message}
             </p>
-          )}
-          {isCancelled && (
-            <p className="output-panel__error">
-              The agent cancelled the request before completion. Try again later.
-            </p>
-          )}
-          {!isFailed && !isCancelled && renderOutputItems(outputItems)}
-        </section>
-      )}
+            {pollError && (
+              <p className="response-status__note">{pollError}</p>
+            )}
+          </section>
+        )}
+        {isTerminal(status) && (
+          <section className="output-panel" aria-live="polite">
+            {isFailed && (
+              <p className="output-panel__error">
+                The agent reported a failure while analyzing {owner}/{name}. Check Raworc logs for more detail.
+              </p>
+            )}
+            {isCancelled && (
+              <p className="output-panel__error">
+                The agent cancelled the request before completion. Try again later.
+              </p>
+            )}
+            {!isFailed && !isCancelled && renderOutputItems(outputItems)}
+          </section>
+        )}
+      </div>
+      <footer className="repo-footer">
+        runs on <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+      </footer>
     </main>
   );
 }
