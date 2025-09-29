@@ -438,15 +438,48 @@
   }
 
   // Auto-refresh the Files panel periodically (equivalent to pressing Refresh)
+  let fmAutoRefresh = true;
   let fmRefreshHandle = null;
-  onMount(() => {
+  let fmAutoRefreshReady = false;
+
+  function fmStopAutoRefresh() {
     try {
-      fmRefreshHandle = setInterval(() => { try { fmRefresh(); } catch (_) {} }, 2000);
+      if (fmRefreshHandle) {
+        clearInterval(fmRefreshHandle);
+      }
     } catch (_) {}
+    fmRefreshHandle = null;
+  }
+
+  function fmRestartAutoRefresh() {
+    fmStopAutoRefresh();
+    if (!fmAutoRefresh) return;
+    try {
+      fmRefreshHandle = setInterval(() => {
+        try {
+          fmRefresh();
+        } catch (_) {}
+      }, 2000);
+    } catch (_) {}
+  }
+
+  onMount(() => {
+    fmAutoRefreshReady = true;
+    fmRestartAutoRefresh();
+    return () => {
+      fmAutoRefreshReady = false;
+      fmStopAutoRefresh();
+    };
   });
+
   onDestroy(() => {
-    try { if (fmRefreshHandle) { clearInterval(fmRefreshHandle); fmRefreshHandle = null; } } catch (_) {}
+    fmAutoRefreshReady = false;
+    fmStopAutoRefresh();
   });
+
+  $: if (fmAutoRefreshReady) {
+    fmRestartAutoRefresh();
+  }
   function fmLoadMore() {
     if (fmNextOffset == null) return;
     fmOffset = Number(fmNextOffset);
@@ -2205,6 +2238,20 @@
                   {#if fmLoading}
                     <span class="spinner-border spinner-border-sm text-body text-opacity-75" role="status" aria-label="Loading"></span>
                   {/if}
+                  <button class="btn btn-sm border-0" aria-label="Refresh files" title="Refresh files" on:click={fmRefresh}>
+                    <i class="bi bi-arrow-clockwise"></i>
+                  </button>
+                  <div class="form-check form-switch form-switch-sm m-0 d-flex align-items-center text-body-secondary">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="files-auto-refresh"
+                      bind:checked={fmAutoRefresh}
+                      on:change={fmRestartAutoRefresh}
+                      aria-label="Toggle auto-refresh"
+                    />
+                    <label class="form-check-label ms-1" for="files-auto-refresh">Auto</label>
+                  </div>
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
                     <span class="vr"></span>
