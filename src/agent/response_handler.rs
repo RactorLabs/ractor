@@ -727,21 +727,6 @@ impl ResponseHandler {
                 && !content_trimmed.starts_with("```");
             if looks_like_spillover_json {
                 spill_retry_attempts += 1;
-                let dev_note = "Developer note: Received raw JSON in assistant content without backticks. Treating as a failed tool-call parse. Please emit a proper tool_call with function name and arguments. Always wrap code/JSON in backticks and never wrap URLs.";
-                conversation.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: model_resp.content.clone(),
-                    name: None,
-                    tool_call_id: None,
-                });
-
-                conversation.push(ChatMessage {
-                    role: "user".to_string(),
-                    content: dev_note.to_string(),
-                    name: None,
-                    tool_call_id: None,
-                });
-
                 // Limit spillover retries to avoid infinite loops
                 if spill_retry_attempts < 10 {
                     continue;
