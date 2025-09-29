@@ -1454,6 +1454,14 @@ You have complete freedom to execute commands, install packages, and create solu
         if plan_path.exists() {
             match tokio::fs::read_to_string(plan_path).await {
                 Ok(plan_contents) => {
+                    let has_non_empty_content =
+                        plan_contents.lines().any(|line| !line.trim().is_empty());
+                    if !has_non_empty_content {
+                        prompt.push_str(
+                            "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/agent/plan.md` with the initial tasks.\n",
+                        );
+                        return prompt;
+                    }
                     let next_task = plan_contents
                         .lines()
                         .find_map(|line| {
@@ -1517,6 +1525,14 @@ You have complete freedom to execute commands, install packages, and create solu
 
         match tokio::fs::read_to_string(plan_path).await {
             Ok(content) => {
+                let has_non_empty_content = content.lines().any(|line| !line.trim().is_empty());
+                if !has_non_empty_content {
+                    return serde_json::json!({
+                        "type": "note",
+                        "level": "info",
+                        "text": "Plan Checklist:\n(no active plan). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
+                    });
+                }
                 let tasks: Vec<(bool, String)> = content
                     .lines()
                     .filter_map(Self::parse_plan_task_line)
