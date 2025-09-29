@@ -72,6 +72,9 @@ impl ResponseHandler {
                     registry
                         .register_tool(Box::new(super::builtin_tools::RemoveStrTool))
                         .await;
+                    registry
+                        .register_tool(Box::new(super::builtin_tools::UpdatePlanTool::new()))
+                        .await;
                     // Search tools
                     registry
                         .register_tool(Box::new(super::builtin_tools::FindFilecontentTool))
@@ -90,11 +93,6 @@ impl ResponseHandler {
                     // Unified Output tool + validation tool
                     registry
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
-                        .await;
-                    registry
-                        .register_tool(Box::new(super::builtin_tools::ReviewTool::new(
-                            api_client_clone.clone(),
-                        )))
                         .await;
                     // Removed deprecated output_* aliases
                     // Planner tools removed; planning now managed via /agent/plan.md file edits
@@ -307,7 +305,7 @@ impl ResponseHandler {
                     if !tool_known {
                         // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'review', 'output'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'.",
                             tool_name
                         );
                         let items = vec![
@@ -324,13 +322,7 @@ impl ResponseHandler {
                             )
                             .await;
 
-                        // Always inform the model in this turn (system nudge), but do not add to history later
-                        conversation.push(ChatMessage {
-                            role: "system".to_string(),
-                            content: dev_note,
-                            name: None,
-                            tool_call_id: None,
-                        });
+                        // Do not add developer notes to the model context.
                         continue;
                     }
 
@@ -359,9 +351,11 @@ impl ResponseHandler {
                     _items_sent += segs.len();
 
                     // Also add an assistant message for the tool call into the in-memory conversation
-                    let call_summary =
-                        serde_json::json!({"tool_call": {"tool": tool_name, "args": args }})
-                            .to_string();
+                    let call_summary = serde_json::json!({
+                        "tool_call": {"tool": tool_name, "args": args }
+                    })
+                    .to_string();
+                    let is_update_plan = tool_name == "update_plan";
                     conversation.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: call_summary,
@@ -394,13 +388,15 @@ impl ResponseHandler {
                         "tool": tool_name,
                         "output": output_value_full,
                     });
+                    let mut result_items = vec![seg_tool_result.clone()];
+                    result_items.push(self.plan_note_item().await);
                     let _ = self
                         .api_client
                         .update_response(
                             &response.id,
                             Some("processing".to_string()),
                             None,
-                            Some(vec![seg_tool_result.clone()]),
+                            Some(result_items),
                         )
                         .await;
                     _items_sent += 1;
@@ -490,6 +486,11 @@ impl ResponseHandler {
                     } else {
                         output_value_preview.to_string()
                     };
+                    if is_update_plan {
+                        conversation.retain(|msg| {
+                            !(msg.role == "tool" && msg.name.as_deref() == Some("update_plan"))
+                        });
+                    }
                     conversation.push(ChatMessage {
                         role: "tool".to_string(),
                         content: tool_content_str,
@@ -511,7 +512,7 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'review', 'output'.",
+                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'.",
                                 tool_name
                             );
                             let items = vec![
@@ -527,12 +528,6 @@ impl ResponseHandler {
                                     Some(items),
                                 )
                                 .await;
-                            conversation.push(ChatMessage {
-                                role: "system".to_string(),
-                                content: dev_note,
-                                name: None,
-                                tool_call_id: None,
-                            });
                             spill_retry_attempts += 1;
                             if spill_retry_attempts < 10 {
                                 continue;
@@ -560,13 +555,25 @@ impl ResponseHandler {
                                 )
                                 .await;
                             _items_sent += segs.len();
-                            let call_summary = serde_json::json!({"tool_call": {"tool": tool_name, "args": args }}).to_string();
-                            conversation.push(ChatMessage {
-                                role: "assistant".to_string(),
-                                content: call_summary,
-                                name: None,
-                                tool_call_id: None,
-                            });
+                            let is_update_plan = tool_name == "update_plan";
+                            if is_update_plan {
+                                conversation.retain(|msg| {
+                                    !(msg.role == "tool"
+                                        && msg.name.as_deref() == Some("update_plan"))
+                                });
+                            }
+                            if !is_update_plan {
+                                let call_summary = serde_json::json!({
+                                    "tool_call": {"tool": tool_name, "args": args }
+                                })
+                                .to_string();
+                                conversation.push(ChatMessage {
+                                    role: "assistant".to_string(),
+                                    content: call_summary,
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                            }
 
                             let output_value_raw: serde_json::Value = match self
                                 .tool_registry
@@ -590,13 +597,15 @@ impl ResponseHandler {
                                 "tool": tool_name,
                                 "output": output_value_full,
                             });
+                            let mut result_items = vec![seg_tool_result.clone()];
+                            result_items.push(self.plan_note_item().await);
                             let _ = self
                                 .api_client
                                 .update_response(
                                     &response.id,
                                     Some("processing".to_string()),
                                     None,
-                                    Some(vec![seg_tool_result.clone()]),
+                                    Some(result_items),
                                 )
                                 .await;
                             _items_sent += 1;
@@ -709,23 +718,15 @@ impl ResponseHandler {
             if looks_like_spillover_json {
                 spill_retry_attempts += 1;
                 let dev_note = "Developer note: Received raw JSON in assistant content without backticks. Treating as a failed tool-call parse. Please emit a proper tool_call with function name and arguments. Always wrap code/JSON in backticks and never wrap URLs.";
-                let items = vec![
-                    serde_json::json!({"type":"tool_call_invalid","tool":"(spillover)", "args": null, "raw": model_resp.content }),
-                    serde_json::json!({"type":"note","level":"warning","text": dev_note}),
-                ];
-                let _ = self
-                    .api_client
-                    .update_response(
-                        &response.id,
-                        Some("processing".to_string()),
-                        None,
-                        Some(items),
-                    )
-                    .await;
-
-                // Nudge the model; do not add the spillover JSON into conversation history
                 conversation.push(ChatMessage {
-                    role: "system".to_string(),
+                    role: "assistant".to_string(),
+                    content: model_resp.content.clone(),
+                    name: None,
+                    tool_call_id: None,
+                });
+
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
                     content: dev_note.to_string(),
                     name: None,
                     tool_call_id: None,
@@ -790,7 +791,7 @@ impl ResponseHandler {
                 segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
             }
             // Nudge note
-            let nudge = "Include a short plain-text 'commentary' string in EVERY tool call's args, written in gerund form (e.g., 'Opening...', 'Running...', 'Creating...'), to explain what you are doing and why (what, which paths, what command). Manage multi-step work via /agent/plan.md (create/update/read). Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
+            let nudge = "Include a short plain-text 'commentary' string in EVERY tool call's args, written in gerund form (e.g., 'Opening...', 'Running...', 'Creating...'), to explain what you are doing and why (what, which paths, what command). Manage multi-step work exclusively with the `update_plan` tool (which overwrites /agent/plan.md); never read or write that file directly. Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
             segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
             let _ = self
                 .api_client
@@ -1088,7 +1089,7 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 ```
 
 ```json
-{"tool_call": {"tool": "review", "args": {"commentary": "Reviewing plan status and env readiness before final output."}}}
+{"tool_call": {"tool": "update_plan", "args": {"commentary": "Updating the task checklist after finishing the schema migration.", "content": "- [x] Run migrations\n- [ ] Implement API handler"}}}
 ```
 
 ```json
@@ -1096,7 +1097,7 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 ```
 "#;
 
-        // Planning is managed via /agent/plan.md (no tool example needed)
+        // Planning is managed via /agent/plan.md using the update_plan tool
 
         // Start with System Context specific to Raworc runtime
         let mut prompt = String::from(format!(
@@ -1133,9 +1134,8 @@ You are running as an Agent in the {host_name} system.
 - When running bash commands, always rely on envs from `/agent/secrets/`; `run_bash` auto-sources all `*.env` files in that folder before executing commands.
 - Check for required env variables first (via examining `/agent/secrets/`) before asking the user for them.
 
-### Important Behavior
-- Planning: For any task that requires more than one action, create `/agent/plan.md` before you start, keep its checklist updated after every step, and delete the file once all items are complete.
-- FINALIZE EVERY RESPONSE BY CALLING TOOLS IN THIS ORDER: first `review`, then `output`. Both calls are mandatory for every response (even simple ones).
+- Planning: For any task that requires more than one action, immediately call the `update_plan` tool to create `/agent/plan.md`, then refresh it only after a step is fully completed (never before or during a step, and always replacing the full contents). Stay in execution mode—finish the current checklist item, then call `update_plan` before moving to the next one. Do not open or edit `/agent/plan.md` directly; when all work is complete, call `update_plan` with an empty checklist rather than deleting the file.
+- FINALIZE EVERY RESPONSE WITH A SINGLE `output` CALL containing the user-facing summary or results, and only once no active plan remains.
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - Do NOT return thinking-only responses. Always provide either a valid tool_call or a clear final assistant message. Thinking alone is not sufficient.
 - Do NOT ask the user to start an HTTP server for /agent/content.
@@ -1313,25 +1313,23 @@ Note: All file and directory paths must be absolute paths under `/agent`. Paths 
 
 ### Tool Result Schema
 
-### Review & Output
+### Output
 
-- Call `review` first to check preconditions (plan status, env readiness). Then call `output` to send final user-facing content. Both must be called at the end of every response, in this order.
 - Use `output` to send final user-facing content. Provide `content` as an array of items. Each item supports:
   - type: `"markdown"` | `"json"` | `"url"`
   - title: string (required), rendered as a heading or link text
   - content: string (for markdown), any JSON value (for json), or a full URL string (for url)
 - You may include multiple items in a single `output` call.
 - Required tool commentary: Include a short plain-text `commentary` field in EVERY tool call's args, written in gerund form (e.g., `Opening...`, `Running...`, `Creating...`) to explain what you are doing and why (what, paths, commands). The Operator shows this before the tool call.
-- Before `output`, always call `review`. If `review` returns `error`, fix issues (e.g., complete or check off plan items, ensure env vars present) and call `review` again until it returns `ok`, then call `output`.
 - Do not place final content directly in the assistant text. Emit results via `output`.
 
 {commentary_examples}
 ### Planning with plan.md
 
-- Create `/agent/plan.md` before acting whenever you expect two or more tool calls, multi-file edits, multi-service changes, or environment setup.
-- Keep the checklist concise and update it immediately after each step; mark completed items and add new ones only when scope changes.
-- Never call `output` while `/agent/plan.md` has unchecked items. Run `review` until it returns `ok`, then remove the plan and call `output`.
-- If you hit blockers or the task changes, revise `/agent/plan.md` or ask the user for guidance via `output` before proceeding.
+- Use the `update_plan` tool to create or refresh `/agent/plan.md` before acting whenever you expect two or more tool calls, multi-file edits, multi-service changes, or environment setup.
+- Keep the checklist concise and update it via `update_plan` immediately after each step; mark completed items and add new ones only when scope changes. Leave the file in place even when everything is complete.
+- Never call `output` while `/agent/plan.md` exists or has unchecked items. Update the plan, finish outstanding tasks, and use `update_plan` to rewrite it as an empty checklist once everything is complete before invoking `output`.
+- Do not open, read, or edit `/agent/plan.md` directly; rely on the embedded plan in this prompt and the `update_plan` tool. If you hit blockers or the task changes, revise the plan via `update_plan` or ask the user for guidance before proceeding.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"
@@ -1440,12 +1438,148 @@ You have complete freedom to execute commands, install packages, and create solu
             );
         }
 
-        // If an active plan file exists, add a short guidance note (do not inline the plan)
-        if std::path::Path::new("/agent/plan.md").exists() {
-            prompt.push_str("\n\nNote: An active plan file exists at /agent/plan.md. Do NOT create a new plan. If you are unclear about the tasks, use `open_file` to read it. Proceed task-by-task: complete a step, then include a short gerund-form 'commentary' in your next tool call to explain what you are doing, update /agent/plan.md (check off), and continue. When all items are complete, remove /agent/plan.md.\n");
+        // If an active plan file exists, embed its content directly into the prompt so the model
+        // never needs to open the file manually. Continue encouraging plan maintenance.
+        let plan_path = std::path::Path::new("/agent/plan.md");
+        if plan_path.exists() {
+            match tokio::fs::read_to_string(plan_path).await {
+                Ok(plan_contents) => {
+                    let next_task = plan_contents
+                        .lines()
+                        .find_map(|line| {
+                            let trimmed = line.trim_start();
+                            if trimmed.starts_with("- [ ]") {
+                                Some(trimmed.trim_start_matches("- [ ]").trim_start())
+                            } else if trimmed.starts_with("* [ ]") {
+                                Some(trimmed.trim_start_matches("* [ ]").trim_start())
+                            } else {
+                                None
+                            }
+                        })
+                        .filter(|s| !s.is_empty());
+                    prompt.push_str(
+                        "\n\n## Active Plan\n\nThe current task plan from /agent/plan.md is inlined below. Never open `/agent/plan.md` just to read it; rely on this embedded copy. Continue working the checklist via the `update_plan` tool after every completed step, and keep iterating until the list is finished.\n\n",
+                    );
+                    prompt.push_str("```plan\n");
+                    prompt.push_str(plan_contents.trim_end());
+                    prompt.push_str("\n```\n");
+                    if let Some(task) = next_task {
+                        prompt.push_str("\n### Next Task\n");
+                        prompt.push_str(
+                            "Focus on completing this next unchecked item before moving on: \n- ",
+                        );
+                        prompt.push_str(task);
+                        prompt.push_str("\n");
+                    }
+                    prompt.push_str(
+                        "Stay focused on the current task, call `update_plan` only after each step is fully finished (never mid-step), and when every item is complete, call `update_plan` with an empty checklist before invoking `output`.\n",
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to read active plan at {}: {}",
+                        plan_path.display(),
+                        e
+                    );
+                    prompt.push_str("\n\nWarning: /agent/plan.md exists but could not be read. Do not open it manually. Use the `update_plan` tool to recreate or adjust it if necessary.\n");
+                }
+            }
+        } else {
+            prompt.push_str(
+                "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/agent/plan.md` with the initial tasks.\n",
+            );
         }
 
         prompt
+    }
+
+    async fn plan_note_item(&self) -> serde_json::Value {
+        use std::path::Path;
+
+        let plan_path = Path::new("/agent/plan.md");
+        if !plan_path.exists() {
+            return serde_json::json!({
+                "type": "note",
+                "level": "info",
+                "text": "Plan Checklist:\n(no plan file). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
+            });
+        }
+
+        match tokio::fs::read_to_string(plan_path).await {
+            Ok(content) => {
+                let tasks: Vec<(bool, String)> = content
+                    .lines()
+                    .filter_map(Self::parse_plan_task_line)
+                    .collect();
+
+                if tasks.is_empty() {
+                    let summary = String::from(
+                        "Plan Checklist:\n(empty)\nFocus on NEXT TASK: none (plan cleared). Call `update_plan` with new tasks if further work remains, and only after a step is finished."
+                    );
+                    return serde_json::json!({
+                        "type": "note",
+                        "level": "info",
+                        "text": summary
+                    });
+                }
+
+                let mut summary = String::from("Plan Checklist:\n");
+                let mut next_idx: Option<usize> = None;
+                for (idx, (done, text)) in tasks.iter().enumerate() {
+                    if !*done && next_idx.is_none() {
+                        next_idx = Some(idx);
+                    }
+                    summary.push_str(&format!("- [{}] {}", if *done { "x" } else { " " }, text));
+                    if Some(idx) == next_idx {
+                        summary.push_str("   <= NEXT TASK");
+                    }
+                    summary.push('\n');
+                }
+
+                if let Some(idx) = next_idx {
+                    summary.push_str(&format!("Focus on NEXT TASK: {}", tasks[idx].1));
+                    summary.push_str(
+                        "\nCall `update_plan` after you fully complete this step (never mid-step).",
+                    );
+                } else {
+                    summary.push_str("Focus on NEXT TASK: none (all items complete). Call `update_plan` with an empty checklist to confirm completion if you have not already done so.");
+                }
+
+                let text = summary.trim_end().to_string();
+                serde_json::json!({
+                    "type": "note",
+                    "level": "info",
+                    "text": text
+                })
+            }
+            Err(e) => {
+                warn!("Failed to read plan for note: {}", e);
+                serde_json::json!({
+                    "type": "note",
+                    "level": "warning",
+                    "text": "Plan exists but could not be read. Use `update_plan` to regenerate it before continuing."
+                })
+            }
+        }
+    }
+
+    fn parse_plan_task_line(line: &str) -> Option<(bool, String)> {
+        let trimmed = line.trim_start();
+        let prefixes = ["- [", "* ["];
+        for prefix in prefixes.iter() {
+            if trimmed.starts_with(prefix) && trimmed.len() >= prefix.len() + 2 {
+                let after = &trimmed[prefix.len()..];
+                let mut chars = after.chars();
+                let status_char = chars.next()?;
+                if chars.next()? != ']' {
+                    continue;
+                }
+                let remainder = chars.as_str().trim_start();
+                let completed = matches!(status_char, 'x' | 'X');
+                return Some((completed, remainder.to_string()));
+            }
+        }
+        None
     }
 }
 

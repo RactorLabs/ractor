@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use std::path::{Component, Path, PathBuf};
 use tokio::fs;
@@ -7,6 +7,7 @@ use tokio::process::Command;
 use tracing::info;
 
 const AGENT_ROOT: &str = "/agent";
+pub const PLAN_PATH: &str = "/agent/plan.md";
 const MAX_OUTPUT_BYTES: usize = 8_000; // cap tool outputs (characters)
 
 #[derive(Debug, Clone, Deserialize)]
@@ -57,6 +58,15 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
         anyhow::bail!("Path escapes agent root");
     }
     Ok(full)
+}
+
+fn ensure_not_plan(full: &Path) -> Result<()> {
+    if full == Path::new(PLAN_PATH) {
+        return Err(anyhow!(
+            "direct access to /agent/plan.md is blocked; use the update_plan tool instead"
+        ));
+    }
+    Ok(())
 }
 
 fn truncate(mut s: String) -> String {
@@ -119,6 +129,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
         } => {
             info!(tool = "text_edit", action = "view", %path, start_line, end_line, "tool start");
             let full = normalize_path(&path)?;
+            ensure_not_plan(&full)?;
             if full.is_dir() {
                 let mut entries = fs::read_dir(&full).await?;
                 let mut names = Vec::new();
@@ -175,6 +186,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
         TextEditAction::Create { path, content } => {
             info!(tool = "text_edit", action = "create", %path, len = content.len(), "tool start");
             let full = normalize_path(&path)?;
+            ensure_not_plan(&full)?;
             if let Some(parent) = full.parent() {
                 fs::create_dir_all(parent).await?;
             }
@@ -200,6 +212,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
         } => {
             info!(tool = "text_edit", action = "str_replace", %path, target = target.as_str(), replacement_len = replacement.len(), "tool start");
             let full = normalize_path(&path)?;
+            ensure_not_plan(&full)?;
             let content = fs::read_to_string(&full).await?;
             let count = content.matches(&target).count();
             if count != 1 {
@@ -239,6 +252,7 @@ pub async fn text_edit(action: TextEditAction) -> Result<String> {
         } => {
             info!(tool = "text_edit", action = "insert", %path, line, len = content.len(), "tool start");
             let full = normalize_path(&path)?;
+            ensure_not_plan(&full)?;
             let existing = fs::read_to_string(&full).await.unwrap_or_default();
             let mut lines: Vec<&str> = existing.lines().collect();
             let idx = line.saturating_sub(1).min(lines.len());

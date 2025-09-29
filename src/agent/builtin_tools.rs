@@ -3,7 +3,7 @@ use async_trait::async_trait;
 
 use super::api::RaworcClient;
 use super::tool_registry::Tool;
-use super::tools::{run_bash, text_edit, TextEditAction};
+use super::tools::{run_bash, text_edit, TextEditAction, PLAN_PATH};
 use anyhow::anyhow;
 use globset::{GlobBuilder, GlobSetBuilder};
 use regex::Regex;
@@ -15,6 +15,22 @@ use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 
 const AGENT_ROOT: &str = "/agent";
+
+fn is_plan_path(path: &Path) -> bool {
+    path == Path::new(PLAN_PATH)
+}
+
+fn is_plan_path_str(path: &str) -> bool {
+    Path::new(path) == Path::new(PLAN_PATH)
+}
+
+fn plan_access_denied(tool: &str) -> serde_json::Value {
+    json!({
+        "status": "error",
+        "tool": tool,
+        "error": "plan.md is managed exclusively via the update_plan tool. Never read, edit, or delete it directly."
+    })
+}
 
 fn ensure_under_agent(path: &str) -> anyhow::Result<&Path> {
     let p = Path::new(path);
@@ -152,6 +168,9 @@ impl Tool for OpenFileTool {
             );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        if is_plan_path_str(path) {
+            return Ok(plan_access_denied("open_file"));
+        }
         let start_line = args
             .get("start_line")
             .and_then(|v| v.as_u64())
@@ -217,6 +236,9 @@ impl Tool for CreateFileTool {
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
+        if is_plan_path_str(path) {
+            return Ok(plan_access_denied("create_file"));
+        }
         let p = ensure_under_agent(path)?;
         if p.exists() {
             return Ok(
@@ -277,6 +299,9 @@ impl Tool for StrReplaceTool {
         let new_str = args.get("new_str").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
 
+        if is_plan_path_str(path) {
+            return Ok(plan_access_denied("str_replace"));
+        }
         let p = ensure_under_agent(path)?;
         let content = fs::read_to_string(p).await?;
         let count = content.matches(old_str).count();
@@ -337,6 +362,9 @@ impl Tool for InsertTool {
             return Ok(json!({"status":"error","tool":"insert","error":"commentary is required"}));
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        if is_plan_path_str(path) {
+            return Ok(plan_access_denied("insert"));
+        }
         let line = args
             .get("insert_line")
             .and_then(|v| v.as_u64())
@@ -395,6 +423,9 @@ impl Tool for RemoveStrTool {
             );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        if is_plan_path_str(path) {
+            return Ok(plan_access_denied("remove_str"));
+        }
         let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
         let p = ensure_under_agent(path)?;
@@ -416,6 +447,74 @@ impl Tool for RemoveStrTool {
         let mut f = fs::File::create(p).await?;
         f.write_all(new_content.as_bytes()).await?;
         Ok(json!({"status":"ok","tool":"remove_str","removed": if many {count} else {1}}))
+    }
+}
+
+/// Planning: update_plan
+pub struct UpdatePlanTool;
+
+impl UpdatePlanTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Tool for UpdatePlanTool {
+    fn name(&self) -> &str {
+        "update_plan"
+    }
+
+    fn description(&self) -> &str {
+        "Replace the entire contents of /agent/plan.md with the provided text. Use this after every step to keep the plan current, and call it with an empty checklist once all work is complete."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "commentary": {"type":"string","description":"Plain-text explanation of why you are updating the plan"},
+                "content": {"type":"string","description":"Complete markdown checklist to write to /agent/plan.md"}
+            },
+            "required":["commentary","content"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(json!({
+                "status":"error",
+                "tool":"update_plan",
+                "error":"commentary is required"
+            }));
+        }
+        let content = match args.get("content").and_then(|v| v.as_str()) {
+            Some(s) => s,
+            None => {
+                return Ok(json!({
+                    "status":"error",
+                    "tool":"update_plan",
+                    "error":"content is required"
+                }))
+            }
+        };
+
+        let existed = fs::metadata(PLAN_PATH).await.is_ok();
+        if let Some(parent) = Path::new(PLAN_PATH).parent() {
+            fs::create_dir_all(parent).await.ok();
+        }
+        let mut file = fs::File::create(PLAN_PATH).await?;
+        file.write_all(content.as_bytes()).await?;
+        Ok(json!({
+            "status":"ok",
+            "tool":"update_plan"
+        }))
     }
 }
 
@@ -458,6 +557,9 @@ impl Tool for FindFilecontentTool {
         }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let pattern = args.get("regex").and_then(|v| v.as_str()).unwrap_or("");
+        if is_plan_path_str(root) {
+            return Ok(plan_access_denied("find_filecontent"));
+        }
         let re = Regex::new(pattern).map_err(|e| anyhow::anyhow!(e))?;
         let mut hits = Vec::new();
         let _ = ensure_under_agent(root)?;
@@ -474,8 +576,12 @@ impl Tool for FindFilecontentTool {
                 }
             });
             for entry in walker.filter_map(|e| e.ok()) {
-                if entry.file_type().is_file() && !matches_default_ignored_file(entry.path()) {
-                    scan_file(entry.path(), &re, &mut hits).await.ok();
+                let entry_path = entry.path();
+                if entry.file_type().is_file()
+                    && !matches_default_ignored_file(entry_path)
+                    && !is_plan_path(entry_path)
+                {
+                    scan_file(entry_path, &re, &mut hits).await.ok();
                 }
             }
         }
@@ -484,6 +590,9 @@ impl Tool for FindFilecontentTool {
 }
 
 async fn scan_file(path: &Path, re: &Regex, out: &mut Vec<String>) -> Result<()> {
+    if is_plan_path(path) {
+        return Ok(());
+    }
     let content = fs::read_to_string(path).await?;
     for (i, line) in content.lines().enumerate() {
         if re.is_match(line) {
@@ -835,92 +944,6 @@ impl Tool for OutputTool {
 }
 
 // (ShowAndTellTool removed) — tools may include an optional 'commentary' field in their args.
-
-/// Review tool: review
-/// Checks preconditions and readiness before final output (plan status, envs). Should be called before `output`.
-pub struct ReviewTool {
-    api: Arc<RaworcClient>,
-}
-
-impl ReviewTool {
-    pub fn new(api: Arc<RaworcClient>) -> Self {
-        Self { api }
-    }
-}
-
-#[async_trait]
-impl Tool for ReviewTool {
-    fn name(&self) -> &str {
-        "review"
-    }
-
-    fn description(&self) -> &str {
-        "Review preconditions and readiness before final output (plan status, env availability). Must be called before 'output'."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{
-                "commentary": {"type":"string","description":"Plain-text explanation of what you reviewed and why"}
-            },
-            "required":["commentary"]
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args
-            .get("commentary")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .is_none()
-        {
-            return Ok(json!({"status":"error","tool":"review","error":"commentary is required"}));
-        }
-
-        // Inspect plan file if present and detect unchecked tasks
-        let plan_path = std::path::Path::new("/agent/plan.md");
-        let mut has_plan = false;
-        let mut open_tasks: Vec<String> = Vec::new();
-        if plan_path.exists() {
-            has_plan = true;
-            if let Ok(content) = tokio::fs::read_to_string(plan_path).await {
-                for line in content.lines() {
-                    let l = line.trim();
-                    if l.contains("[ ]") || l.starts_with("- [ ]") || l.starts_with("* [ ]") {
-                        open_tasks.push(l.to_string());
-                        if open_tasks.len() >= 10 {
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Check for presence of secrets directory (env files stored here)
-        let secrets_present = std::path::Path::new("/agent/secrets").exists();
-
-        if has_plan && !open_tasks.is_empty() {
-            return Ok(json!({
-                "status":"error",
-                "tool":"review",
-                "message":"Plan has unchecked items. Complete or check them off before final output.",
-                "has_plan": true,
-                "open_tasks": open_tasks
-            }));
-        }
-
-        Ok(json!({
-            "status":"ok",
-            "tool":"review",
-            "has_plan": has_plan,
-            "open_tasks": open_tasks,
-            "secrets_dir_present": secrets_present
-        }))
-    }
-}
-
 // (planner tools removed)
 
 // Normalize a task title for comparison so we can detect duplicates even if
