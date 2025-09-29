@@ -287,6 +287,16 @@ impl ResponseHandler {
                 }
             };
 
+            if let Some(total_tokens) = model_resp.total_tokens {
+                if let Err(e) = self
+                    .api_client
+                    .update_agent_context_length(total_tokens)
+                    .await
+                {
+                    warn!("Failed to update agent context length: {}", e);
+                }
+            }
+
             // Check for external cancellation between model calls
             if let Ok(cur) = self.api_client.get_response_by_id(&response.id).await {
                 let sl = cur.status.to_lowercase();

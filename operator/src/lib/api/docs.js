@@ -605,15 +605,18 @@ export function getApiDocs(base) {
     title: 'Agent Context',
     description: 'Context usage and management (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/agents/{name}/context', auth: 'bearer', desc: 'Get estimated context usage since the current cutoff (if any).', params: [
+      { method: 'GET', path: '/api/v0/agents/{name}/context', auth: 'bearer', desc: 'Get the latest reported context usage from the agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name>/context -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":12345,"used_percent":12.3,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":42}` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents/<name>/context -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":128000,"used_tokens_estimated":12345,"used_percent":9.6,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/context/clear', auth: 'bearer', desc: 'Clear context by setting a new cutoff at now. Adds a "Context Cleared" marker response.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/clear -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/clear -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/context/compact', auth: 'bearer', desc: 'Compact context by summarizing recent conversation via LLM and setting a new cutoff. Adds a "Context Compacted" marker response with the summary in output.text.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":100000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"estimated_from_history_chars","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'AgentContextUsage' }, responses: [{ status: 200, body: `{"agent":"demo","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] },
+      { method: 'POST', path: '/api/v0/agents/{name}/context/usage', auth: 'bearer', desc: 'Report the latest context length (tokens) after an LLM call.', params: [
+        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/context/usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"tokens": 4096}'`, resp: { schema: 'Empty' }, responses: [{ status: 200, body: `{"success":true,"last_context_length":4096}` }] }
     ]
   },
   {

@@ -23,6 +23,7 @@ pub struct Agent {
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
     pub context_cutoff_at: Option<DateTime<Utc>>,
+    pub last_context_length: i64,
     // Removed: id, container_id, persistent_volume_id (derived from name)
 }
 
@@ -299,8 +300,7 @@ where
 // Validation helpers for tags: allow alphanumeric and '/', '-', '_', '.'; no spaces
 fn validate_tag_str(s: &str) -> bool {
     !s.is_empty()
-        && s
-            .chars()
+        && s.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '-' || c == '_' || c == '.')
 }
 
@@ -352,7 +352,9 @@ where
         type Value = Option<Vec<String>>;
 
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("null or an array of tag strings (letters, digits, '/', '-', '_', '.'; no spaces)")
+            f.write_str(
+                "null or an array of tag strings (letters, digits, '/', '-', '_', '.'; no spaces)",
+            )
         }
 
         fn visit_none<E>(self) -> Result<Self::Value, E>
@@ -566,7 +568,8 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   last_context_length
             FROM agents
             ORDER BY created_at DESC
             "#,
@@ -584,7 +587,8 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   last_context_length
             FROM agents
             WHERE name = ?
             "#,
@@ -662,16 +666,18 @@ impl Agent {
         .bind(&parent.description)
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
-        .bind(
-            &match &parent.tags {
-                serde_json::Value::Array(arr) => serde_json::Value::Array(
-                    arr.iter()
-                        .map(|v| v.as_str().map(|s| serde_json::Value::String(s.to_lowercase())).unwrap_or_else(|| v.clone()))
-                        .collect(),
-                ),
-                v => v.clone(),
-            },
-        )
+        .bind(&match &parent.tags {
+            serde_json::Value::Array(arr) => serde_json::Value::Array(
+                arr.iter()
+                    .map(|v| {
+                        v.as_str()
+                            .map(|s| serde_json::Value::String(s.to_lowercase()))
+                            .unwrap_or_else(|| v.clone())
+                    })
+                    .collect(),
+            ),
+            v => v.clone(),
+        })
         .bind(parent.idle_timeout_seconds) // Inherit idle timeout from parent
         .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
         .bind(idle_from)
@@ -865,7 +871,8 @@ impl Agent {
             SELECT name, created_by, state, description, parent_agent_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
+                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   last_context_length
             FROM agents
             WHERE is_published = true
             ORDER BY published_at DESC
@@ -882,10 +889,32 @@ impl Agent {
         sqlx::query(
             r#"
             UPDATE agents
-            SET context_cutoff_at = NOW()
+            SET context_cutoff_at = NOW(),
+                last_context_length = 0
             WHERE name = ?
             "#,
         )
+        .bind(name)
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn update_last_context_length(
+        pool: &sqlx::MySqlPool,
+        name: &str,
+        tokens: i64,
+    ) -> Result<(), sqlx::Error> {
+        let clamped = if tokens < 0 { 0 } else { tokens };
+        sqlx::query(
+            r#"
+            UPDATE agents
+            SET last_context_length = ?
+            WHERE name = ?
+            "#,
+        )
+        .bind(clamped)
         .bind(name)
         .execute(pool)
         .await?;

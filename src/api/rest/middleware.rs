@@ -1,6 +1,6 @@
 use crate::api::auth::decode_jwt;
-use crate::shared::models::AppState;
 use crate::api::rest::error::ApiError;
+use crate::shared::models::AppState;
 use crate::shared::rbac::{AuthPrincipal, Subject, SubjectType};
 use axum::{
     extract::{Request, State},

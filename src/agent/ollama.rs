@@ -129,6 +129,9 @@ pub struct ModelResponse {
     // Optional model-provided commentary/thinking text, when present
     pub commentary: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
+    pub total_tokens: Option<i64>,
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -511,12 +514,37 @@ impl OllamaClient {
                     parsed.message.tool_calls.as_ref().map_or(0, |tc| tc.len())
                 );
 
+                let prompt_tokens = parsed
+                    .extra
+                    .get("prompt_eval_count")
+                    .and_then(|v| v.as_i64());
+                let completion_tokens = parsed.extra.get("eval_count").and_then(|v| v.as_i64());
+                let total_tokens = parsed
+                    .extra
+                    .get("total_tokens")
+                    .and_then(|v| v.as_i64())
+                    .or_else(|| {
+                        parsed
+                            .extra
+                            .get("metrics")
+                            .and_then(|m| m.get("total_tokens").and_then(|v| v.as_i64()))
+                    })
+                    .or_else(|| match (prompt_tokens, completion_tokens) {
+                        (Some(p), Some(c)) => Some(p + c),
+                        (Some(p), None) => Some(p),
+                        (None, Some(c)) => Some(c),
+                        _ => None,
+                    });
+
                 // Build structured response for caller (no legacy channel parsing)
                 let model_resp = ModelResponse {
                     content: parsed.message.content.clone(),
                     thinking: parsed.message.thinking.clone(),
                     commentary: None,
                     tool_calls: parsed.message.tool_calls.clone(),
+                    total_tokens,
+                    prompt_tokens,
+                    completion_tokens,
                 };
                 return Ok(model_resp);
             } else {

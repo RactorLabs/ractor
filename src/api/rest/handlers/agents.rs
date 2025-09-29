@@ -1,15 +1,15 @@
+use axum::http::StatusCode;
+use axum::response::Response;
 use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
+use serde::{Deserialize, Serialize};
 use sqlx::query;
 use sqlx::Row;
 use std::sync::Arc;
-use axum::http::{StatusCode};
-use axum::response::Response;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -55,6 +55,7 @@ pub struct AgentResponse {
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
+    pub last_context_length: i64,
     // Removed: id, container_id, persistent_volume_id
 }
 
@@ -66,7 +67,7 @@ pub struct ListAgentsQuery {
     #[serde(default, deserialize_with = "deserialize_opt_string_or_seq")]
     pub tags: Option<Vec<String>>,
     pub limit: Option<i64>,
-    pub page: Option<i64>, // 1-based
+    pub page: Option<i64>,   // 1-based
     pub offset: Option<i64>, // takes precedence over page when provided
 }
 
@@ -158,6 +159,7 @@ impl AgentResponse {
             idle_from: agent.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: agent.busy_from.map(|dt| dt.to_rfc3339()),
             context_cutoff_at: agent.context_cutoff_at.map(|dt| dt.to_rfc3339()),
+            last_context_length: agent.last_context_length,
         })
     }
 }
@@ -202,8 +204,7 @@ fn is_safe_relative_path(p: &str) -> bool {
     if p.starts_with('/') || p.contains('\0') {
         return false;
     }
-    !p.split('/')
-        .any(|seg| seg == ".." || seg.is_empty())
+    !p.split('/').any(|seg| seg == ".." || seg.is_empty())
 }
 
 fn map_file_task_error(err: &str) -> ApiError {
@@ -216,7 +217,10 @@ fn map_file_task_error(err: &str) -> ApiError {
         ApiError::BadRequest("Path is a directory".to_string())
     } else if lower.contains("invalid path") {
         ApiError::BadRequest("Invalid path".to_string())
-    } else if lower.contains("sleep") || lower.contains("not running") || lower.contains("container does not exist") {
+    } else if lower.contains("sleep")
+        || lower.contains("not running")
+        || lower.contains("container does not exist")
+    {
         ApiError::Conflict("Agent is sleeping".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
@@ -235,7 +239,9 @@ pub async fn read_agent_file(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to read files".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to read files".to_string())
+            })?;
     }
 
     let username = match &auth.principal {
@@ -272,25 +278,39 @@ pub async fn read_agent_file(
     // Poll for completion up to 15s
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(
-            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
-        )
-        .bind(&task_id)
-        .fetch_optional(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
-                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
-                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
-                let content_b64 = res.get("content_base64").and_then(|v| v.as_str()).unwrap_or("");
-                let ct = res.get("content_type").and_then(|v| v.as_str()).unwrap_or("application/octet-stream");
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                let content_b64 = res
+                    .get("content_base64")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let ct = res
+                    .get("content_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("application/octet-stream");
                 let bytes = base64::decode(content_b64).unwrap_or_default();
                 let mut builder = Response::builder().status(StatusCode::OK);
                 builder = builder.header("content-type", ct);
                 builder = builder.header("cache-control", "no-store");
-                builder = builder.header("x-raworc-file-size", res.get("size").and_then(|v| v.as_u64()).unwrap_or(bytes.len() as u64).to_string());
+                builder = builder.header(
+                    "x-raworc-file-size",
+                    res.get("size")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(bytes.len() as u64)
+                        .to_string(),
+                );
                 let resp = builder
                     .body(axum::body::Body::from(bytes))
                     .map_err(|e| ApiError::Internal(anyhow::anyhow!(e.to_string())))?;
@@ -302,7 +322,11 @@ pub async fn read_agent_file(
                 return Err(map_file_task_error(&err));
             }
         }
-        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file read".to_string())); }
+        if start.elapsed().as_secs() >= 15 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file read".to_string(),
+            ));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 }
@@ -316,7 +340,9 @@ pub async fn get_agent_file_metadata(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to read files".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to read files".to_string())
+            })?;
     }
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -342,22 +368,29 @@ pub async fn get_agent_file_metadata(
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_metadata task: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to create file_metadata task: {}",
+            e
+        ))
+    })?;
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(
-            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
-        )
-        .bind(&task_id)
-        .fetch_optional(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
-                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
-                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
                 return Ok(Json(res));
             } else if status == "failed" {
                 let err: String = row
@@ -366,7 +399,11 @@ pub async fn get_agent_file_metadata(
                 return Err(map_file_task_error(&err));
             }
         }
-        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file metadata".to_string())); }
+        if start.elapsed().as_secs() >= 15 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file metadata".to_string(),
+            ));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 }
@@ -381,7 +418,9 @@ pub async fn list_agent_files(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list files".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to list files".to_string())
+            })?;
     }
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -415,18 +454,20 @@ pub async fn list_agent_files(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(
-            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
-        )
-        .bind(&task_id)
-        .fetch_optional(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
-                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
-                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
                 return Ok(Json(res));
             } else if status == "failed" {
                 let err: String = row
@@ -435,7 +476,11 @@ pub async fn list_agent_files(
                 return Err(map_file_task_error(&err));
             }
         }
-        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file list".to_string())); }
+        if start.elapsed().as_secs() >= 15 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file list".to_string(),
+            ));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 }
@@ -451,7 +496,9 @@ pub async fn list_agent_files_root(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to list files".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to list files".to_string())
+            })?;
     }
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -482,25 +529,33 @@ pub async fn list_agent_files_root(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(
-            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
-        )
-        .bind(&task_id)
-        .fetch_optional(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
-                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
-                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({}));
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
                 return Ok(Json(res));
             } else if status == "failed" {
-                let err: String = row.try_get("error").unwrap_or_else(|_| "list failed".to_string());
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "list failed".to_string());
                 return Err(ApiError::Internal(anyhow::anyhow!(err)));
             }
         }
-        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file list".to_string())); }
+        if start.elapsed().as_secs() >= 15 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file list".to_string(),
+            ));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 }
@@ -514,7 +569,9 @@ pub async fn delete_agent_file(
     if is_admin {
         check_api_permission(&auth, &state, &permissions::AGENT_GET)
             .await
-            .map_err(|_| ApiError::Forbidden("Insufficient permissions to delete files".to_string()))?;
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to delete files".to_string())
+            })?;
     }
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -540,18 +597,20 @@ pub async fn delete_agent_file(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(
-            r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#,
-        )
-        .bind(&task_id)
-        .fetch_optional(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+            .bind(&task_id)
+            .fetch_optional(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
-                let payload_val: serde_json::Value = row.try_get("payload").unwrap_or(serde_json::json!({}));
-                let res = payload_val.get("result").cloned().unwrap_or(serde_json::json!({"deleted": true}));
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({"deleted": true}));
                 return Ok(Json(res));
             } else if status == "failed" {
                 let err: String = row
@@ -560,7 +619,11 @@ pub async fn delete_agent_file(
                 return Err(map_file_task_error(&err));
             }
         }
-        if start.elapsed().as_secs() >= 15 { return Err(ApiError::Timeout("Timed out waiting for file delete".to_string())); }
+        if start.elapsed().as_secs() >= 15 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file delete".to_string(),
+            ));
+        }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
     }
 }
@@ -624,7 +687,11 @@ pub async fn list_agents(
     if let Some(tags) = query.tags.clone() {
         let list: Vec<String> = tags
             .into_iter()
-            .flat_map(|s| s.split(',').map(|t| t.trim().to_lowercase()).collect::<Vec<_>>())
+            .flat_map(|s| {
+                s.split(',')
+                    .map(|t| t.trim().to_lowercase())
+                    .collect::<Vec<_>>()
+            })
             .filter(|t| !t.is_empty())
             .collect();
         for _t in list {
@@ -634,10 +701,7 @@ pub async fn list_agents(
     }
 
     // Count total
-    let count_sql = format!(
-        "SELECT COUNT(*) as cnt FROM agents {}",
-        where_sql
-    );
+    let count_sql = format!("SELECT COUNT(*) as cnt FROM agents {}", where_sql);
     let mut q_count = sqlx::query_scalar::<_, i64>(&count_sql);
     for b in binds.iter() {
         if let Some(s) = b.as_str() {
@@ -657,7 +721,8 @@ pub async fn list_agents(
         SELECT name, created_by, state, description, parent_agent_name,
                created_at, last_activity_at, metadata, tags,
                is_published, published_at, published_by, publish_permissions,
-               idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at
+               idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+               last_context_length
         FROM agents
         {} 
         ORDER BY created_at DESC
@@ -667,7 +732,9 @@ pub async fn list_agents(
     );
     let mut q_items = sqlx::query_as::<_, Agent>(&select_sql);
     for b in binds.iter() {
-        if let Some(s) = b.as_str() { q_items = q_items.bind(s); }
+        if let Some(s) = b.as_str() {
+            q_items = q_items.bind(s);
+        }
     }
     q_items = q_items.bind(limit).bind(offset);
 
@@ -681,9 +748,20 @@ pub async fn list_agents(
         items.push(AgentResponse::from_agent(agent, &state.db).await?);
     }
     let page = if limit > 0 { (offset / limit) + 1 } else { 1 };
-    let pages = if limit > 0 { ((total + limit - 1) / limit).max(1) } else { 1 };
+    let pages = if limit > 0 {
+        ((total + limit - 1) / limit).max(1)
+    } else {
+        1
+    };
 
-    Ok(Json(PaginatedAgents { items, total, limit, offset, page, pages }))
+    Ok(Json(PaginatedAgents {
+        items,
+        total,
+        limit,
+        offset,
+        page,
+        pages,
+    }))
 }
 
 pub async fn get_agent(
@@ -822,7 +900,9 @@ pub async fn cancel_active_response(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent: {}", e)))?;
 
-    Ok(Json(serde_json::json!({"status":"ok", "agent": agent.name, "cancelled": cancelled})))
+    Ok(Json(
+        serde_json::json!({"status":"ok", "agent": agent.name, "cancelled": cancelled}),
+    ))
 }
 
 #[derive(Debug, Serialize)]
@@ -837,14 +917,20 @@ pub struct AgentContextUsageResponse {
     pub total_messages_considered: u32,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateContextUsageRequest {
+    pub tokens: i64,
+}
+
 fn soft_limit_tokens() -> i64 {
     std::env::var("CONTEXT_SOFT_LIMIT_TOKENS")
         .ok()
         .and_then(|s| s.parse::<i64>().ok())
         .filter(|v| *v > 0)
-        .unwrap_or(100_000)
+        .unwrap_or(128_000)
 }
 
+#[allow(dead_code)]
 fn avg_chars_per_token() -> f64 {
     std::env::var("AVG_CHARS_PER_TOKEN")
         .ok()
@@ -853,6 +939,7 @@ fn avg_chars_per_token() -> f64 {
         .unwrap_or(4.0)
 }
 
+#[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
     agent_name: &str,
@@ -1124,9 +1211,7 @@ pub async fn get_agent_context(
     };
 
     let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
-    let cutoff = agent.context_cutoff_at;
-
-    let (used, considered) = estimate_history_tokens_since(&state.db, &agent.name, cutoff).await?;
+    let used = agent.last_context_length;
     let limit = soft_limit_tokens();
     let used_percent = if limit > 0 {
         (used as f64 * 100.0) / (limit as f64)
@@ -1139,10 +1224,10 @@ pub async fn get_agent_context(
         soft_limit_tokens: limit,
         used_tokens_estimated: used,
         used_percent,
-        basis: "estimated_from_history_chars".to_string(),
-        cutoff_at: cutoff.map(|dt| dt.to_rfc3339()),
+        basis: "ollama_last_context_length".to_string(),
+        cutoff_at: agent.context_cutoff_at.map(|dt| dt.to_rfc3339()),
         measured_at: Utc::now().to_rfc3339(),
-        total_messages_considered: considered,
+        total_messages_considered: 0,
     };
 
     Ok(Json(resp))
@@ -1205,24 +1290,18 @@ pub async fn clear_agent_context(
         .await;
     }
 
-    // Return fresh measurement (should be near zero immediately after clear)
-    let (used, considered) =
-        estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now())).await?;
+    // Return fresh measurement (reset to zero)
     let limit = soft_limit_tokens();
-    let used_percent = if limit > 0 {
-        (used as f64 * 100.0) / (limit as f64)
-    } else {
-        0.0
-    };
+    let now = Utc::now().to_rfc3339();
     let resp = AgentContextUsageResponse {
         agent: agent.name,
         soft_limit_tokens: limit,
-        used_tokens_estimated: used,
-        used_percent,
-        basis: "estimated_from_history_chars".to_string(),
-        cutoff_at: Some(Utc::now().to_rfc3339()),
-        measured_at: Utc::now().to_rfc3339(),
-        total_messages_considered: considered,
+        used_tokens_estimated: 0,
+        used_percent: 0.0,
+        basis: "ollama_last_context_length".to_string(),
+        cutoff_at: Some(now.clone()),
+        measured_at: now,
+        total_messages_considered: 0,
     };
     Ok(Json(resp))
 }
@@ -1468,26 +1547,47 @@ pub async fn compact_agent_context(
         .await;
     }
 
-    // Return fresh measurement (post-compaction, with new cutoff at now)
-    let (used, considered) =
-        estimate_history_tokens_since(&state.db, &agent.name, Some(Utc::now())).await?;
+    // Return fresh measurement (post-compaction, reset to zero)
     let limit = soft_limit_tokens();
-    let used_percent = if limit > 0 {
-        (used as f64 * 100.0) / (limit as f64)
-    } else {
-        0.0
-    };
+    let now = Utc::now().to_rfc3339();
     let resp = AgentContextUsageResponse {
         agent: agent.name,
         soft_limit_tokens: limit,
-        used_tokens_estimated: used,
-        used_percent,
-        basis: "estimated_from_history_chars".to_string(),
-        cutoff_at: Some(Utc::now().to_rfc3339()),
-        measured_at: Utc::now().to_rfc3339(),
-        total_messages_considered: considered,
+        used_tokens_estimated: 0,
+        used_percent: 0.0,
+        basis: "ollama_last_context_length".to_string(),
+        cutoff_at: Some(now.clone()),
+        measured_at: now,
+        total_messages_considered: 0,
     };
     Ok(Json(resp))
+}
+
+pub async fn update_agent_context_usage(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<UpdateContextUsageRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    let is_admin = is_admin_principal(&auth, &state).await;
+    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+
+    let tokens = req.tokens.max(0);
+    Agent::update_last_context_length(&state.db, &agent.name, tokens)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to update context length: {}", e))
+        })?;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "last_context_length": tokens
+    })))
 }
 
 pub async fn create_agent(

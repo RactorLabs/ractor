@@ -104,8 +104,7 @@ pub async fn create_response(
 
     // Soft limit guard: block when history usage since cutoff meets/exceeds limit
     let limit_tokens = soft_limit_tokens();
-    let cutoff = agent.context_cutoff_at;
-    let used_tokens = estimate_history_tokens_since(&state.db, &agent_name, cutoff).await?;
+    let used_tokens = agent.last_context_length;
     if used_tokens >= limit_tokens {
         return Err(ApiError::Conflict(format!(
             "Context is full ({} / {} tokens). Clear context via POST /api/v0/agents/{}/context/clear and try again.",
@@ -238,9 +237,10 @@ fn soft_limit_tokens() -> i64 {
         .ok()
         .and_then(|s| s.parse::<i64>().ok())
         .filter(|v| *v > 0)
-        .unwrap_or(100_000)
+        .unwrap_or(128_000)
 }
 
+#[allow(dead_code)]
 fn avg_chars_per_token() -> f64 {
     std::env::var("AVG_CHARS_PER_TOKEN")
         .ok()
@@ -249,6 +249,7 @@ fn avg_chars_per_token() -> f64 {
         .unwrap_or(4.0)
 }
 
+#[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
     agent_name: &str,

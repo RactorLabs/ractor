@@ -1,11 +1,14 @@
-use axum::{extract::{State, Extension}, Json};
+use axum::{
+    extract::{Extension, State},
+    Json,
+};
 use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::AppState;
-use crate::shared::rbac::{BlockedPrincipal, SubjectType, AuthPrincipal};
+use crate::shared::rbac::{AuthPrincipal, BlockedPrincipal, SubjectType};
 
 #[derive(Debug, Deserialize)]
 pub struct BlockRequest {
@@ -18,7 +21,9 @@ pub struct BlockRequest {
 fn ensure_admin_only(auth: &AuthContext) -> Result<(), ApiError> {
     match &auth.principal {
         AuthPrincipal::Operator(op) if op.user == "admin" => Ok(()),
-        _ => Err(ApiError::Forbidden("Only admin can perform this action".to_string())),
+        _ => Err(ApiError::Forbidden(
+            "Only admin can perform this action".to_string(),
+        )),
     }
 }
 
@@ -50,7 +55,9 @@ pub async fn block_principal(
     ensure_admin_only(&auth)?;
     let t = parse_subject_type_opt(&req.principal_type)?;
     let created = state.block_principal(&req.principal, t).await?;
-    Ok(Json(serde_json::json!({ "blocked": true, "created": created })))
+    Ok(Json(
+        serde_json::json!({ "blocked": true, "created": created }),
+    ))
 }
 
 pub async fn unblock_principal(
@@ -61,5 +68,7 @@ pub async fn unblock_principal(
     ensure_admin_only(&auth)?;
     let t = parse_subject_type_opt(&req.principal_type)?;
     let deleted = state.unblock_principal(&req.principal, t).await?;
-    Ok(Json(serde_json::json!({ "blocked": false, "deleted": deleted })))
+    Ok(Json(
+        serde_json::json!({ "blocked": false, "deleted": deleted }),
+    ))
 }

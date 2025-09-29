@@ -480,7 +480,7 @@
         ctx = res.data || null;
         // Update banner flag if over soft limit
         const used = Number(ctx?.used_tokens_estimated || 0);
-        const limit = Number(ctx?.soft_limit_tokens || 100000);
+        const limit = Number(ctx?.soft_limit_tokens || 128000);
         contextFull = used >= limit;
       }
     } catch (_) { /* ignore */ }
@@ -1704,7 +1704,7 @@
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
-                  <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 100000)} ({fmtPct(ctx?.used_percent || 0)})</div>
+                  <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 128000)} ({fmtPct(ctx?.used_percent || 0)})</div>
                 </div>
                 <div class="progress mt-1" role="progressbar" aria-valuenow={Number(ctx?.used_percent || 0)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
                   <div class="progress-bar {Number(ctx?.used_percent || 0) >= 90 ? 'bg-danger' : 'bg-theme'}" style={`width: ${Math.min(100, Number(ctx?.used_percent || 0)).toFixed(1)}%;`}></div>

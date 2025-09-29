@@ -74,7 +74,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::agents::update_agent_to_idle),
         )
         .route("/agents/{name}/sleep", post(handlers::agents::sleep_agent))
-        .route("/agents/{name}/cancel", post(handlers::agents::cancel_active_response))
+        .route(
+            "/agents/{name}/cancel",
+            post(handlers::agents::cancel_active_response),
+        )
         .route("/agents/{name}/wake", post(handlers::agents::wake_agent))
         .route(
             "/agents/{name}/runtime",
@@ -92,6 +95,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/agents/{name}/context/compact",
             post(handlers::agents::compact_agent_context),
+        )
+        .route(
+            "/agents/{name}/context/usage",
+            post(handlers::agents::update_agent_context_usage),
         )
         .route(
             "/agents/{name}/publish",

@@ -1573,7 +1573,10 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             ..Default::default()
         };
 
-        let exec = self.docker.create_exec(&container_name, exec_config).await?;
+        let exec = self
+            .docker
+            .create_exec(&container_name, exec_config)
+            .await?;
         let mut out_buf: Vec<u8> = Vec::new();
         let mut err_buf: Vec<u8> = Vec::new();
         if let StartExecResults::Attached { mut output, .. } =
