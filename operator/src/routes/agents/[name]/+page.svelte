@@ -77,6 +77,7 @@
   // Toggle display of tool calls/results; persisted via cookie
   let showTools = true;
   const SHOW_TOOLS_COOKIE = 'raworc_showTools';
+  const FM_AUTO_REFRESH_COOKIE = 'raworc_filesAutoRefresh';
   let toolsPrefLoaded = false;
   function getCookie(name) {
     try {
@@ -464,6 +465,14 @@
   }
 
   onMount(() => {
+    try {
+      if (browser) {
+        const autoPref = getCookie(FM_AUTO_REFRESH_COOKIE);
+        if (autoPref !== null) {
+          fmAutoRefresh = autoPref === '1' || autoPref === 'true';
+        }
+      }
+    } catch (_) {}
     fmAutoRefreshReady = true;
     fmRestartAutoRefresh();
     return () => {
@@ -478,6 +487,7 @@
   });
 
   $: if (fmAutoRefreshReady) {
+    try { setCookie(FM_AUTO_REFRESH_COOKIE, fmAutoRefresh ? '1' : '0', 365); } catch (_) {}
     fmRestartAutoRefresh();
   }
   function fmLoadMore() {
