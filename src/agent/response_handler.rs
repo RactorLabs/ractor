@@ -1079,9 +1079,7 @@ You are running as an Agent in the {host_name} system.
 
 - All assistant messages MUST consist of a single `tool_call` object that conforms to this template. Strictly follow it every turn:
 
-```json
-{"tool_call":{"tool":"output","args":{"commentary":"Summarizing progress.","content":[{"type":"markdown","title":"Summary","content":"..."}]}}}
-```
+{{"tool_call":{{"tool":"output","args":{{"commentary":"Summarizing progress.","content":[{{"type":"markdown","title":"Summary","content":"..."}}]}}}}}}
 
 - When invoking a different tool, change only the `tool` field and its `args`, preserving the single `tool_call` wrapper.
 - Never emit free-form assistant text outside the tool call payload; the Operator will drop any response that deviates from this structure.
