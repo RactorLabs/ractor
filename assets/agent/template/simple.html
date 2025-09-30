@@ -4,23 +4,178 @@
     <meta charset="UTF-8">
     <title></title>
     <style>
-        body {font-family: Arial, sans-serif; margin: 2rem; line-height: 1.6;}
-        h1 {color: #2c3e50;}
-        .section {margin-top: 2rem;}
-        .item {margin-bottom: 1.5rem;}
-        .item a {text-decoration: none; color: #2980b9; font-weight: bold;}
-        .snippet {color: #555;}
+        :root {
+            color-scheme: light;
+            --border-color: #dcdfe3;
+            --accent-color: #3d5a80;
+            --text-color: #1f2933;
+            --muted-text: #52606d;
+            --bg-color: #f9fafb;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            font-family: "Inter", "Segoe UI", Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem 4rem;
+            width: 100%;
+        }
+
+        header.page-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin: 0 0 0.5rem;
+        }
+
+        .page-subtitle {
+            font-size: 1rem;
+            color: var(--muted-text);
+            margin: 0;
+        }
+
+        main.content-area {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+        }
+
+        .section-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin: 0 0 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section {
+            margin-bottom: 2.5rem;
+        }
+
+        .section:last-of-type {
+            margin-bottom: 0;
+        }
+
+        .item {
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .item:last-child {
+            border-bottom: none;
+        }
+
+        .item-title {
+            font-weight: 600;
+            margin: 0 0 0.4rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .item-title a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+
+        .item-title a:hover,
+        .item-title a:focus {
+            text-decoration: underline;
+        }
+
+        .item-meta {
+            font-size: 0.875rem;
+            color: var(--muted-text);
+            margin-bottom: 0.5rem;
+        }
+
+        .item-body {
+            margin: 0;
+            color: var(--text-color);
+        }
+
+        .tag-list {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .tag-list li {
+            border: 1px solid var(--border-color);
+            padding: 0.2rem 0.65rem;
+            font-size: 0.75rem;
+            border-radius: 999px;
+            color: var(--muted-text);
+            background: #fff;
+        }
+
+        footer.page-footer {
+            border-top: 1px solid var(--border-color);
+            margin-top: 3rem;
+            padding-top: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--muted-text);
+        }
+
+        footer.page-footer a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        footer.page-footer a:hover,
+        footer.page-footer a:focus {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 640px) {
+            .page {
+                padding: 2rem 1rem 3rem;
+            }
+
+            main.content-area {
+                padding: 1.5rem;
+            }
+
+            .page-title {
+                font-size: 1.65rem;
+            }
+
+            .item {
+                padding: 0.85rem 0;
+            }
+        }
     </style>
     
 </head>
 <body>
-    <h1></h1>
-    <div class="section" id="web-results">
-        <h2></h2>
-    </div>
-    <div class="section" id="video-results">
-        <h2></h2>
-    </div>
-    <footer></footer>
+
 </body>
 </html>

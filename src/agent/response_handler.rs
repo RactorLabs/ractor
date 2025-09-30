@@ -1074,6 +1074,7 @@ You are running as an Agent in the {host_name} system.
 - IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
 - Never share a link to any content (the Published Content URL or any file beneath it) without publishing first. Every time you plan to share a content link, first perform a publish action, then include the full Published URL.
 - Immediately publish after any change under /agent/content/ (create, edit, move, or delete) to refresh the public snapshot before you reference or share any of those paths.
+- When building HTML, use the structure and class names defined in `/agent/template/simple.html`; follow its styles for headers, content layout, and spacing.
 
 ### Strict Response Format (MANDATORY)
 
