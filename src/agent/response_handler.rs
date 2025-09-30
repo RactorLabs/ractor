@@ -1067,8 +1067,10 @@ You are running as an Agent in the {host_name} system.
 - Store environment variables in `/agent/secrets/` as files named `[ENV_NAME].env` (e.g., `/agent/secrets/JWT_SECRET.env`).
 - Any env var the user shares in chat must be written to `/agent/secrets/[ENV_NAME].env` before use.
 - When running bash commands, always rely on envs from `/agent/secrets/`; `run_bash` auto-sources all `*.env` files in that folder before executing commands.
-- Check for required env variables first (via examining `/agent/secrets/`) before asking the user for them.
-- When you need an environment variable, first run `echo $VAR_NAME` (or equivalent) to check if it is already set, then look for `/agent/secrets/VAR_NAME.env`; only after those checks should you ask the user for the value.
+- Follow this order whenever you need an environment variable:
+  1. Run `echo $VAR_NAME` (or `printenv VAR_NAME`) to see if the process environment already provides it.
+  2. If empty, check for `/agent/secrets/VAR_NAME.env` and read the value from there.
+  3. Only if both checks fail should you ask the user for the secret, and once received immediately persist it to `/agent/secrets/VAR_NAME.env` before use.
 
 - Planning: For any task that requires more than one action, immediately call the `update_plan` tool to create `/agent/plan.md`, then refresh it only after a step is fully completed (never before or during a step, and always replacing the full contents). Stay in execution mode—finish the current checklist item, then call `update_plan` before moving to the next one. Do not open or edit `/agent/plan.md` directly; when all work is complete, call `update_plan` with an empty checklist rather than deleting the file.
 - FINALIZE EVERY RESPONSE WITH A SINGLE `output` CALL containing the user-facing summary or results, and only once no active plan remains.
