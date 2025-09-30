@@ -446,7 +446,7 @@ export default function RepoPage({
           <p className="response-status__message response-status__message--standalone" aria-live="polite">{statusInfo.message}</p>
         </div>
         <footer className="repo-footer">
-          runs on <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+          powered by <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
         </footer>
       </main>
     );
@@ -496,7 +496,7 @@ export default function RepoPage({
         )}
       </div>
       <footer className="repo-footer">
-        runs on <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+        powered by <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
       </footer>
     </main>
   );

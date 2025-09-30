@@ -313,26 +313,11 @@ impl ResponseHandler {
                     // If tool is unknown, do not append any items; instead, nudge model and retry
                     let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
                     if !tool_known {
-                        // Create a developer note and store both the invalid call and note in items for audit
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                             tool_name
                         );
-                        let items = vec![
-                            serde_json::json!({"type":"tool_call_invalid","tool":tool_name, "args": args}),
-                            serde_json::json!({"type":"note","level":"warning","text": dev_note}),
-                        ];
-                        let _ = self
-                            .api_client
-                            .update_response(
-                                &response.id,
-                                Some("processing".to_string()),
-                                None,
-                                Some(items),
-                            )
-                            .await;
-
-                        // Do not add developer notes to the model context.
+                        Self::push_system_note(&mut conversation, dev_note);
                         continue;
                     }
 
@@ -522,22 +507,10 @@ impl ResponseHandler {
                         if !tool_known {
                             // Unknown tool even after salvage: warn and retry as invalid
                             let dev_note = format!(
-                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'.",
+                                "Developer note: Unknown tool '{}' (salvaged from JSON). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_agent', 'sleep_agent', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                                 tool_name
                             );
-                            let items = vec![
-                                serde_json::json!({"type":"tool_call_invalid","tool":tool_name, "args": args}),
-                                serde_json::json!({"type":"note","level":"warning","text": dev_note}),
-                            ];
-                            let _ = self
-                                .api_client
-                                .update_response(
-                                    &response.id,
-                                    Some("processing".to_string()),
-                                    None,
-                                    Some(items),
-                                )
-                                .await;
+                            Self::push_system_note(&mut conversation, dev_note);
                             spill_retry_attempts += 1;
                             if spill_retry_attempts < 10 {
                                 continue;
@@ -726,6 +699,8 @@ impl ResponseHandler {
                 || content_trimmed.starts_with('['))
                 && !content_trimmed.starts_with("```");
             if looks_like_spillover_json {
+                let dev_note = "Developer note: Received raw JSON without backticks or tool metadata. Emit a proper tool_call with function name and arguments. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.";
+                Self::push_system_note(&mut conversation, dev_note);
                 spill_retry_attempts += 1;
                 // Limit spillover retries to avoid infinite loops
                 if spill_retry_attempts < 10 {
@@ -742,27 +717,8 @@ impl ResponseHandler {
             let has_no_final_text = model_resp.content.trim().is_empty();
             if no_tool_calls && has_no_final_text {
                 empty_retry_attempts += 1;
-                let dev_note = "Developer note: Model returned only thinking without a tool_call or final text. Treating as a parse failure. Please emit either a proper tool_call or a clear final assistant message. Remember: wrap code/JSON in backticks, never wrap URLs.";
-                let items = vec![
-                    serde_json::json!({"type":"tool_call_invalid","tool":"(empty)", "args": null }),
-                    serde_json::json!({"type":"note","level":"warning","text": dev_note}),
-                ];
-                let _ = self
-                    .api_client
-                    .update_response(
-                        &response.id,
-                        Some("processing".to_string()),
-                        None,
-                        Some(items),
-                    )
-                    .await;
-
-                conversation.push(ChatMessage {
-                    role: "system".to_string(),
-                    content: dev_note.to_string(),
-                    name: None,
-                    tool_call_id: None,
-                });
+                let dev_note = "Developer note: Received only thinking with no tool_call or assistant content. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user. Wrap code/JSON in backticks and never wrap URLs.";
+                Self::push_system_note(&mut conversation, dev_note);
 
                 if empty_retry_attempts < 10 {
                     continue;
@@ -776,34 +732,8 @@ impl ResponseHandler {
             // Final answer (no tool_call in this turn)
             // Enforce: final content must be sent via the 'output' tool.
             // Record the model content as commentary and nudge to call output_markdown.
-            let mut segs = Vec::new();
-            if let Some(thinking) = &model_resp.thinking {
-                if !thinking.trim().is_empty() {
-                    segs.push(serde_json::json!({"type":"commentary","channel":"analysis","text":thinking}));
-                }
-            }
-            if !model_resp.content.trim().is_empty() {
-                segs.push(serde_json::json!({"type":"commentary","channel":"commentary","text": model_resp.content.trim()}));
-            }
-            // Nudge note
-            let nudge = "Include a short plain-text 'commentary' string in EVERY tool call's args, written in gerund form (e.g., 'Opening...', 'Running...', 'Creating...'), to explain what you are doing and why (what, which paths, what command). Manage multi-step work exclusively with the `update_plan` tool (which overwrites /agent/plan.md); never read or write that file directly. Use 'output' for final user-facing results or clarifying questions. For 'output': pass content: [{ type: 'markdown'|'json'|'url', title, content }, ...] (title required). Do not place final content directly in assistant text.";
-            segs.push(serde_json::json!({"type":"note","level":"info","text": nudge}));
-            let _ = self
-                .api_client
-                .update_response(
-                    &response.id,
-                    Some("processing".to_string()),
-                    None,
-                    Some(segs),
-                )
-                .await?;
-            // Also add a system message nudge into conversation and continue loop
-            conversation.push(ChatMessage {
-                role: "system".to_string(),
-                content: nudge.to_string(),
-                name: None,
-                tool_call_id: None,
-            });
+            let dev_note = "Developer note: No tool_call was provided. Always emit a tool_call each turn; if you have a final reply, call the 'output' tool with the appropriate content. Include a short gerund commentary string inside every tool_call's args, manage multi-step work via the `update_plan` tool, and reserve 'output' for final user-facing results.";
+            Self::push_system_note(&mut conversation, dev_note);
             continue;
         }
     }
@@ -1591,6 +1521,15 @@ You have complete freedom to execute commands, install packages, and create solu
             }
         }
         None
+    }
+
+    fn push_system_note(conversation: &mut Vec<ChatMessage>, text: impl Into<String>) {
+        conversation.push(ChatMessage {
+            role: "system".to_string(),
+            content: text.into(),
+            name: None,
+            tool_call_id: None,
+        });
     }
 }
 
