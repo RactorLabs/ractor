@@ -490,11 +490,6 @@ impl ResponseHandler {
                     } else {
                         output_value_preview.to_string()
                     };
-                    if is_update_plan {
-                        conversation.retain(|msg| {
-                            !(msg.role == "tool" && msg.name.as_deref() == Some("update_plan"))
-                        });
-                    }
                     conversation.push(ChatMessage {
                         role: "tool".to_string(),
                         content: tool_content_str,
@@ -551,11 +546,6 @@ impl ResponseHandler {
                         .await;
                     _items_sent += segs.len();
                     let is_update_plan = tool_name == "update_plan";
-                    if is_update_plan {
-                        conversation.retain(|msg| {
-                            !(msg.role == "tool" && msg.name.as_deref() == Some("update_plan"))
-                        });
-                    }
                     if !is_update_plan {
                         let call_summary = serde_json::json!({
                             "tool_call": {"tool": tool_name, "args": args_value.clone() }
