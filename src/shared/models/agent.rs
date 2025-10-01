@@ -38,7 +38,7 @@ pub struct CreateAgentRequest {
     #[serde(default, deserialize_with = "deserialize_tags_vec")]
     pub tags: Vec<String>,
     #[serde(default)]
-    pub secrets: std::collections::HashMap<String, String>,
+    pub env: std::collections::HashMap<String, String>,
     #[serde(default)]
     pub instructions: Option<String>,
     #[serde(default)]
@@ -73,7 +73,7 @@ pub struct RemixAgentRequest {
         default = "default_true",
         deserialize_with = "deserialize_strict_bool_default_true"
     )]
-    pub secrets: bool,
+    pub env: bool,
     #[serde(
         default = "default_true",
         deserialize_with = "deserialize_strict_bool_default_true"
@@ -95,7 +95,7 @@ pub struct PublishAgentRequest {
         default = "default_true",
         deserialize_with = "deserialize_strict_bool_default_true"
     )]
-    pub secrets: bool,
+    pub env: bool,
     #[serde(
         default = "default_true",
         deserialize_with = "deserialize_strict_bool_default_true"
@@ -813,7 +813,7 @@ impl Agent {
     ) -> Result<Option<Agent>, sqlx::Error> {
         let publish_permissions = serde_json::json!({
             "code": req.code,
-            "secrets": req.secrets,
+            "env": req.env,
             "content": true // Content is always allowed
         });
 
@@ -850,7 +850,7 @@ impl Agent {
             SET is_published = false, 
                 published_at = NULL, 
                 published_by = NULL,
-                publish_permissions = JSON_OBJECT('code', true, 'secrets', true)
+                publish_permissions = JSON_OBJECT('code', true, 'env', true)
             WHERE name = ?
             "#,
         )

@@ -19,6 +19,32 @@ pub struct DockerManager {
     db_pool: MySqlPool,
 }
 
+fn render_env_file(env: &HashMap<String, String>) -> String {
+    let mut lines = String::from(
+        "# Raworc agent environment\n# Managed by Raworc controller; do not modify without explicit approval.\n",
+    );
+    let mut entries: Vec<_> = env.iter().collect();
+    entries.sort_by(|a, b| a.0.cmp(b.0));
+    for (key, value) in entries {
+        lines.push_str(&format!("{}={}\n", key, value));
+    }
+    lines
+}
+
+fn parse_env_content(content: &str) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = trimmed.split_once('=') {
+            map.insert(key.trim().to_string(), value.trim().to_string());
+        }
+    }
+    map
+}
+
 impl DockerManager {
     pub fn new(docker: Docker, db_pool: MySqlPool) -> Self {
         Self {
@@ -81,11 +107,11 @@ impl DockerManager {
         }
     }
 
-    // Initialize agent directory structure with secrets, instructions, and setup
+    // Initialize agent directory structure with env, instructions, and setup
     async fn initialize_agent_structure(
         &self,
         agent_name: &str,
-        secrets: &HashMap<String, String>,
+        env: &HashMap<String, String>,
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
@@ -93,24 +119,28 @@ impl DockerManager {
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /agent/code /agent/secrets /agent/logs /agent/content /agent/template
+        let init_script = "sudo mkdir -p /agent/code /agent/logs /agent/content /agent/template
+sudo touch /agent/.env
+sudo chown agent:agent /agent/.env
+sudo chmod 600 /agent/.env
 sudo chown -R agent:agent /agent
 sudo chmod -R 755 /agent
 # Seed default HTML template if missing
 if [ ! -f /agent/template/simple.html ] && [ -f /opt/raworc/templates/simple.html ]; then
   sudo cp /opt/raworc/templates/simple.html /agent/template/simple.html && sudo chown agent:agent /agent/template/simple.html;
 fi
-echo 'Agent directories created (code, secrets, logs, content, template)'
+echo 'Agent directories created (code, .env, logs, content, template)'
 ";
 
         self.execute_command(agent_name, init_script).await?;
 
-        // Write secrets to /agent/secrets/ folder
-        for (key, value) in secrets {
-            let write_secret_command = format!("echo '{}' > /agent/secrets/{}", value, key);
-            self.execute_command(agent_name, &write_secret_command)
-                .await?;
-        }
+        // Write env values to /agent/.env
+        let env_content = render_env_file(env);
+        let write_env_script = format!(
+            "cat <<'EOF_ENV' | sudo tee /agent/.env >/dev/null\n{}EOF_ENV\nsudo chown agent:agent /agent/.env\nsudo chmod 600 /agent/.env\n",
+            env_content
+        );
+        self.execute_command(agent_name, &write_env_script).await?;
 
         // Write instructions if provided
         if let Some(instructions_content) = instructions {
@@ -134,7 +164,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
                 .await?;
         }
 
-        info!("Agent structure initialized with {} secrets", secrets.len());
+        info!("Agent structure initialized with {} env entries", env.len());
 
         Ok(())
     }
@@ -295,11 +325,11 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         parent_agent_name: &str,
         copy_data: bool,
         copy_code: bool,
-        copy_secrets: bool,
+        copy_env: bool,
         copy_content: bool,
     ) -> Result<String> {
-        info!("Creating remix agent {} with selective copy from {} (data: {}, code: {}, secrets: {}, content: {})", 
-              agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content);
+        info!("Creating remix agent {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
+              agent_name, parent_agent_name, copy_data, copy_code, copy_env, copy_content);
 
         // First create the agent volume (without starting container)
         let agent_volume = self.create_agent_volume(agent_name).await?;
@@ -320,7 +350,10 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let mut copy_commands = Vec::new();
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
-        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content /dest/logs && chown -R 1000:1000 /dest".to_string());
+        copy_commands.push(
+            "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
+                .to_string(),
+        );
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -330,10 +363,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
         }
 
-        if copy_secrets {
-            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        if copy_env {
+            copy_commands.push(
+                "if [ -f /source/.env ]; then cp /source/.env /dest/.env || echo 'No env file copied'; else echo 'No env file to copy'; fi"
+                    .to_string(),
+            );
         } else {
-            copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+            copy_commands.push("echo 'Skipping env copy as requested'".to_string());
         }
 
         if copy_content {
@@ -433,25 +469,22 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
 
         info!("Selective copy logs: {}", log_output.trim());
 
-        // Parse secrets from copy output (always copied for remix agents)
-        let mut secrets = std::collections::HashMap::new();
-
-        // Parse SECRET:key=value lines from the copy output
-        for line in log_output.lines() {
-            if line.starts_with("SECRET:") {
-                if let Some(secret_part) = line.strip_prefix("SECRET:") {
-                    if let Some((key, value)) = secret_part.split_once('=') {
-                        secrets.insert(key.to_string(), value.to_string());
-                        info!("Parsed secret from copy output: {}", key);
-                    }
+        let env = if copy_env {
+            match self.read_env_from_volume(&new_volume).await {
+                Ok(map) => map,
+                Err(e) => {
+                    warn!(
+                        "Failed to read env file from copied volume {}: {}",
+                        new_volume, e
+                    );
+                    HashMap::new()
                 }
             }
-        }
+        } else {
+            HashMap::new()
+        };
 
-        info!(
-            "Successfully parsed {} secrets from copy output",
-            secrets.len()
-        );
+        info!("Environment entries copied: {}", env.len());
 
         // Clean up copy container
         let _ = self
@@ -483,13 +516,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         };
 
         info!(
-            "Creating container with {} secrets from copied volume",
-            secrets.len()
+            "Creating container with {} env from copied volume",
+            env.len()
         );
 
-        // Now create and start the container with the copied secrets as environment variables
+        // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(agent_name, Some(secrets), instructions, setup)
+            .create_container_internal(agent_name, Some(env), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -501,7 +534,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         parent_agent_name: &str,
         copy_data: bool,
         copy_code: bool,
-        copy_secrets: bool,
+        copy_env: bool,
         copy_content: bool,
         raworc_token: String,
         principal: String,
@@ -532,7 +565,10 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let mut copy_commands = Vec::new();
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
-        copy_commands.push("mkdir -p /dest/code /dest/data /dest/secrets /dest/content /dest/logs && chown -R 1000:1000 /dest".to_string());
+        copy_commands.push(
+            "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
+                .to_string(),
+        );
 
         if copy_data {
             copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
@@ -542,10 +578,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
         }
 
-        if copy_secrets {
-            copy_commands.push("if [ -d /source/secrets ]; then cp -a /source/secrets/. /dest/secrets/ && echo 'SECRETS_COPIED:' && find /source/secrets -type f -exec bash -c 'echo \"SECRET:$(basename {})=$(cat {})\"' \\; || echo 'No secrets to copy'; fi".to_string());
+        if copy_env {
+            copy_commands.push(
+                "if [ -f /source/.env ]; then cp /source/.env /dest/.env || echo 'No env file copied'; else echo 'No env file to copy'; fi"
+                    .to_string(),
+            );
         } else {
-            copy_commands.push("echo 'Skipping secrets copy as requested'".to_string());
+            copy_commands.push("echo 'Skipping env copy as requested'".to_string());
         }
 
         if copy_content {
@@ -645,24 +684,24 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
 
         info!("Selective copy logs: {}", log_output.trim());
 
-        // Parse secrets from copy output (user secrets only - system tokens are generated separately)
-        let mut secrets = std::collections::HashMap::new();
-
-        // Parse SECRET:key=value lines from the copy output
-        for line in log_output.lines() {
-            if line.starts_with("SECRET:") {
-                if let Some(secret_part) = line.strip_prefix("SECRET:") {
-                    if let Some((key, value)) = secret_part.split_once('=') {
-                        secrets.insert(key.to_string(), value.to_string());
-                        info!("Parsed user secret from copy output: {}", key);
-                    }
+        let env = if copy_env {
+            match self.read_env_from_volume(&new_volume).await {
+                Ok(map) => map,
+                Err(e) => {
+                    warn!(
+                        "Failed to read env file from copied volume {}: {}",
+                        new_volume, e
+                    );
+                    HashMap::new()
                 }
             }
-        }
+        } else {
+            HashMap::new()
+        };
 
         info!(
-            "Successfully parsed {} user secrets from copy output",
-            secrets.len()
+            "Successfully collected {} user env entries from copy",
+            env.len()
         );
 
         // Clean up copy container
@@ -695,15 +734,15 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         };
 
         info!(
-            "Creating remix container with {} user secrets and fresh system tokens",
-            secrets.len()
+            "Creating remix container with {} user env and fresh system tokens",
+            env.len()
         );
 
-        // Now create and start the container with user secrets + generated system tokens
+        // Now create and start the container with user env + generated system tokens
         let container_name = self
             .create_container_internal_with_tokens(
                 agent_name,
-                Some(secrets),
+                Some(env),
                 instructions,
                 setup,
                 raworc_token,
@@ -716,123 +755,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         Ok(container_name)
     }
 
-    // Helper method to read secrets from a volume
-    async fn read_secrets_from_volume(
+    // Helper method to read env from a volume
+    async fn read_env_from_volume(
         &self,
         volume_name: &str,
     ) -> Result<std::collections::HashMap<String, String>> {
-        let mut secrets = std::collections::HashMap::new();
-
-        // Create a temporary container to read secrets from the volume
-        let read_container_name = format!(
-            "raworc_read_secrets_{}",
-            Uuid::new_v4().to_string()[..8].to_string()
-        );
-
-        let config = Config {
-            image: Some(self.agent_image.clone()),
-            user: Some("root".to_string()),
-            cmd: Some(vec![
-                "bash".to_string(),
-                "-c".to_string(),
-                "if [ -d /volume/secrets ]; then find /volume/secrets -type f -exec basename {} \\; 2>/dev/null || true; fi".to_string()
-            ]),
-            host_config: Some(HostConfig {
-                mounts: Some(vec![
-                    Mount {
-                        typ: Some(MountTypeEnum::VOLUME),
-                        source: Some(volume_name.to_string()),
-                        target: Some("/volume".to_string()),
-                        read_only: Some(true),
-                        ..Default::default()
-                    }
-                ]),
-                network_mode: Some("raworc_network".to_string()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        // Create and start container
-        self.docker
-            .create_container(
-                Some(CreateContainerOptions {
-                    name: read_container_name.clone(),
-                    ..Default::default()
-                }),
-                config,
-            )
-            .await?;
-
-        self.docker
-            .start_container::<String>(&read_container_name, None)
-            .await?;
-
-        // Wait for completion
-        let mut wait_stream = self
-            .docker
-            .wait_container::<String>(&read_container_name, None);
-        while let Some(wait_result) = wait_stream.next().await {
-            let _exit_result = wait_result?;
-            break;
-        }
-
-        // Get output (list of secret file names)
-        let logs = self.docker.logs::<String>(
-            &read_container_name,
-            Some(LogsOptions {
-                stdout: true,
-                stderr: false,
-                ..Default::default()
-            }),
-        );
-
-        let secret_files = logs
-            .map(|log| match log {
-                Ok(line) => String::from_utf8_lossy(&line.into_bytes())
-                    .trim()
-                    .to_string(),
-                Err(_) => String::new(),
-            })
-            .collect::<Vec<_>>()
-            .await
-            .join("\n")
-            .lines()
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>();
-
-        info!(
-            "Found {} secret files in volume {}: {:?}",
-            secret_files.len(),
-            volume_name,
-            secret_files
-        );
-
-        // Clean up the read container
-        let _ = self
-            .docker
-            .remove_container(
-                &read_container_name,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    ..Default::default()
-                }),
-            )
-            .await;
-
-        // Now read each secret file content
-        for secret_file in secret_files {
-            if !secret_file.is_empty() {
-                if let Ok(value) = self
-                    .read_file_from_volume(volume_name, &format!("secrets/{}", secret_file))
-                    .await
-                {
-                    secrets.insert(secret_file, value);
-                }
-            }
-        }
-
-        Ok(secrets)
+        let content = self.read_file_from_volume(volume_name, ".env").await?;
+        Ok(parse_env_content(&content))
     }
 
     // Helper method to read a file from a volume
@@ -932,12 +861,12 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
     pub async fn create_container_with_params(
         &self,
         agent_name: &str,
-        secrets: std::collections::HashMap<String, String>,
+        env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(agent_name, Some(secrets), instructions, setup)
+            .create_container_internal(agent_name, Some(env), instructions, setup)
             .await?;
         Ok(container_name)
     }
@@ -945,7 +874,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
     pub async fn create_container_with_params_and_tokens(
         &self,
         agent_name: &str,
-        secrets: std::collections::HashMap<String, String>,
+        env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
         raworc_token: String,
@@ -956,7 +885,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let container_name = self
             .create_container_internal_with_tokens(
                 agent_name,
-                Some(secrets),
+                Some(env),
                 instructions,
                 setup,
                 raworc_token,
@@ -976,28 +905,24 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
     }
 
     pub async fn wake_container(&self, agent_name: &str) -> Result<String> {
-        // Read existing secrets from the volume
+        // Read existing env from the volume
         let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
-            "Waking container for agent {} - reading secrets from volume {}",
+            "Waking container for agent {} - reading env from volume {}",
             agent_name, volume_name
         );
 
-        let secrets = match self.read_secrets_from_volume(&volume_name).await {
+        let env = match self.read_env_from_volume(&volume_name).await {
             Ok(s) => {
-                info!(
-                    "Found {} secrets in volume for agent {}",
-                    s.len(),
-                    agent_name
-                );
+                info!("Found {} env in volume for agent {}", s.len(), agent_name);
                 for key in s.keys() {
-                    info!("  - Secret: {}", key);
+                    info!("  - Env key: {}", key);
                 }
                 Some(s)
             }
             Err(e) => {
                 warn!(
-                    "Could not read secrets from volume for agent {}: {}",
+                    "Could not read env from volume for agent {}: {}",
                     agent_name, e
                 );
                 None
@@ -1015,7 +940,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             .ok();
 
         let container_name = self
-            .create_container_internal(agent_name, secrets, instructions, setup)
+            .create_container_internal(agent_name, env, instructions, setup)
             .await?;
         Ok(container_name)
     }
@@ -1028,17 +953,17 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
-        // Read existing user secrets from the volume (but generate fresh system tokens)
+        // Read existing user env from the volume (but generate fresh system tokens)
         let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
             "Waking container for agent {} with fresh tokens",
             agent_name
         );
 
-        let secrets = match self.read_secrets_from_volume(&volume_name).await {
+        let env = match self.read_env_from_volume(&volume_name).await {
             Ok(s) => {
                 info!(
-                    "Found {} user secrets in volume for agent {}",
+                    "Found {} user env in volume for agent {}",
                     s.len(),
                     agent_name
                 );
@@ -1046,7 +971,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             }
             Err(e) => {
                 warn!(
-                    "Could not read secrets from volume for agent {}: {}",
+                    "Could not read env from volume for agent {}: {}",
                     agent_name, e
                 );
                 None
@@ -1066,7 +991,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let container_name = self
             .create_container_internal_with_tokens(
                 agent_name,
-                secrets,
+                env,
                 instructions,
                 setup,
                 raworc_token,
@@ -1081,7 +1006,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
     async fn create_container_internal(
         &self,
         agent_name: &str,
-        secrets: Option<std::collections::HashMap<String, String>>,
+        env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
@@ -1110,13 +1035,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         labels.insert("raworc.managed".to_string(), "true".to_string());
         labels.insert("raworc.volume".to_string(), agent_volume.clone());
 
-        // Get user token from secrets (added automatically by agent manager)
-        let user_token = secrets
+        // Get user token from env (added automatically by agent manager)
+        let user_token = env_map
             .as_ref()
             .and_then(|s| s.get("RAWORC_TOKEN"))
             .cloned()
             .unwrap_or_else(|| {
-                warn!("No RAWORC_TOKEN found in secrets, Host authentication may fail");
+                warn!("No RAWORC_TOKEN found in env, Host authentication may fail");
                 "missing-token".to_string()
             });
 
@@ -1132,7 +1057,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         // No port bindings or exposed ports needed.
 
         // Set environment variables for the agent structure
-        let mut env = vec![
+        let mut env_vars = vec![
             format!("RAWORC_API_URL=http://raworc_api:9000"),
             format!("RAWORC_AGENT_NAME={}", agent_name),
             format!("RAWORC_AGENT_DIR=/agent"),
@@ -1142,54 +1067,54 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
         let host_url = std::env::var("RAWORC_HOST_URL")
             .expect("RAWORC_HOST_URL must be set by the start script");
-        env.push(format!("RAWORC_HOST_NAME={}", host_name));
-        env.push(format!("RAWORC_HOST_URL={}", host_url));
+        env_vars.push(format!("RAWORC_HOST_NAME={}", host_name));
+        env_vars.push(format!("RAWORC_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
             anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
         })?;
-        env.push(format!("OLLAMA_HOST={}", ollama_host));
+        env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env.push(format!("OLLAMA_MODEL={}", ollama_model));
+        env_vars.push(format!("OLLAMA_MODEL={}", ollama_model));
         let ollama_timeout =
             std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
+        env_vars.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
         // Propagate timeout for model calls; default 600s if unspecified
         let ollama_timeout =
             std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
+        env_vars.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env.push("RAWORC_HAS_SETUP=true".to_string());
+            env_vars.push("RAWORC_HAS_SETUP=true".to_string());
         }
 
         // Add principal information as environment variables
-        if let Some(secrets_map) = &secrets {
+        if let Some(env_map) = &env_map {
             // Extract principal info from RAWORC_TOKEN if available
-            if let Some(_token) = secrets_map.get("RAWORC_TOKEN") {
+            if let Some(_token) = env_map.get("RAWORC_TOKEN") {
                 // Set environment variables for Host principal logging
-                env.push(format!(
+                env_vars.push(format!(
                     "RAWORC_PRINCIPAL={}",
-                    secrets_map
+                    env_map
                         .get("RAWORC_PRINCIPAL")
                         .unwrap_or(&"unknown".to_string())
                 ));
-                env.push(format!(
+                env_vars.push(format!(
                     "RAWORC_PRINCIPAL_TYPE={}",
-                    secrets_map
+                    env_map
                         .get("RAWORC_PRINCIPAL_TYPE")
                         .unwrap_or(&"unknown".to_string())
                 ));
             }
 
-            // Add user secrets as environment variables, but do NOT override
+            // Add user env as environment variables, but do NOT override
             // system-managed values like RAWORC_TOKEN or OLLAMA_HOST.
-            for (key, value) in secrets_map {
+            for (key, value) in env_map {
                 if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for agent {}",
@@ -1197,10 +1122,10 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
                     );
                     continue;
                 }
-                env.push(format!("{}={}", key, value));
+                env_vars.push(format!("{}={}", key, value));
                 if key != "RAWORC_PRINCIPAL" && key != "RAWORC_PRINCIPAL_TYPE" {
                     info!(
-                        "Adding secret {} as environment variable for agent {}",
+                        "Adding env entry {} as environment variable for agent {}",
                         key, agent_name
                     );
                 }
@@ -1220,7 +1145,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             image: Some(container_image),
             hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
             labels: Some(labels),
-            env: Some(env),
+            env: Some(env_vars),
             cmd: Some(cmd),
             working_dir: Some("/agent".to_string()), // User starts in their agent
             exposed_ports: None,
@@ -1251,11 +1176,11 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
 
         // Initialize agent structure after starting container so host can execute setup script
         if !self.agent_initialized(&agent_volume).await? {
-            let empty_secrets = HashMap::new();
-            let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
+            let empty_env: HashMap<String, String> = HashMap::new();
+            let env_ref = env_map.as_ref().unwrap_or(&empty_env);
             self.initialize_agent_structure(
                 agent_name,
-                secrets_ref,
+                env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
             )
@@ -1272,7 +1197,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
     async fn create_container_internal_with_tokens(
         &self,
         agent_name: &str,
-        secrets: Option<std::collections::HashMap<String, String>>,
+        env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
         raworc_token: String,
@@ -1320,7 +1245,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         // No port bindings or exposed ports needed.
 
         // Set environment variables for the agent structure
-        let mut env = vec![
+        let mut env_vars = vec![
             format!("RAWORC_API_URL=http://raworc_api:9000"),
             format!("RAWORC_AGENT_NAME={}", agent_name),
             format!("RAWORC_AGENT_DIR=/agent"),
@@ -1334,35 +1259,35 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
         let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
         let host_url = std::env::var("RAWORC_HOST_URL")
             .expect("RAWORC_HOST_URL must be set by the start script");
-        env.push(format!("RAWORC_HOST_NAME={}", host_name));
-        env.push(format!("RAWORC_HOST_URL={}", host_url));
+        env_vars.push(format!("RAWORC_HOST_NAME={}", host_name));
+        env_vars.push(format!("RAWORC_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
             anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
         })?;
-        env.push(format!("OLLAMA_HOST={}", ollama_host));
+        env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
             std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env.push(format!("OLLAMA_MODEL={}", ollama_model));
+        env_vars.push(format!("OLLAMA_MODEL={}", ollama_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env.push("RAWORC_HAS_SETUP=true".to_string());
+            env_vars.push("RAWORC_HAS_SETUP=true".to_string());
         }
 
         // Add task creation timestamp for message processing
         if let Some(timestamp) = task_created_at {
-            env.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
+            env_vars.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
         info!("Set RAWORC_TOKEN and OLLAMA_HOST as environment variables");
 
-        // Add user secrets as environment variables (but NOT RAWORC_TOKEN or OLLAMA_HOST)
-        if let Some(secrets_map) = &secrets {
-            for (key, value) in secrets_map {
+        // Add user env as environment variables (but NOT RAWORC_TOKEN or OLLAMA_HOST)
+        if let Some(env_map) = &env_map_opt {
+            for (key, value) in env_map {
                 // Skip if user provided their own RAWORC_TOKEN or OLLAMA_HOST - we use system-managed values
                 if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
@@ -1371,9 +1296,9 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
                     );
                     continue;
                 }
-                env.push(format!("{}={}", key, value));
+                env_vars.push(format!("{}={}", key, value));
                 info!(
-                    "Adding user secret {} as environment variable for agent {}",
+                    "Adding user env entry {} as environment variable for agent {}",
                     key, agent_name
                 );
             }
@@ -1392,7 +1317,7 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             image: Some(container_image),
             hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
             labels: Some(labels),
-            env: Some(env),
+            env: Some(env_vars),
             cmd: Some(cmd),
             working_dir: Some("/agent".to_string()), // User starts in their agent
             exposed_ports: None,
@@ -1422,13 +1347,13 @@ echo 'Agent directories created (code, secrets, logs, content, template)'
             .await?;
 
         // Initialize agent structure after starting container so host can execute setup script
-        // Only initialize with user secrets (system tokens are already in environment)
+        // Only initialize with user env (system tokens are already in environment)
         if !self.agent_initialized(&agent_volume).await? {
-            let empty_secrets = HashMap::new();
-            let secrets_ref = secrets.as_ref().unwrap_or(&empty_secrets);
+            let empty_env: HashMap<String, String> = HashMap::new();
+            let env_ref = env_map_opt.as_ref().unwrap_or(&empty_env);
             self.initialize_agent_structure(
                 agent_name,
-                secrets_ref,
+                env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
             )

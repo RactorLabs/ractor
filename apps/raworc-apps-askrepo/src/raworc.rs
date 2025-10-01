@@ -125,7 +125,7 @@ pub struct NewAgentPayload {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub setup: Option<String>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub secrets: HashMap<String, String>,
+    pub env: HashMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub idle_timeout_seconds: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -142,7 +142,7 @@ impl NewAgentPayload {
             instructions: None,
             prompt: None,
             setup: None,
-            secrets: HashMap::new(),
+            env: HashMap::new(),
             idle_timeout_seconds: None,
             busy_timeout_seconds: None,
         }
@@ -178,8 +178,8 @@ impl NewAgentPayload {
         self
     }
 
-    pub fn with_secrets(mut self, secrets: HashMap<String, String>) -> Self {
-        self.secrets = secrets;
+    pub fn with_env(mut self, env: HashMap<String, String>) -> Self {
+        self.env = env;
         self
     }
 }

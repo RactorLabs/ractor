@@ -1596,8 +1596,8 @@ pub async fn create_agent(
     Json(req): Json<CreateAgentRequest>,
 ) -> ApiResult<Json<AgentResponse>> {
     tracing::info!(
-        "Creating agent with secrets: {} keys, instructions: {}, setup: {}, prompt: {}",
-        req.secrets.len(),
+        "Creating agent with env: {} keys, instructions: {}, setup: {}, prompt: {}",
+        req.env.len(),
         req.instructions.is_some(),
         req.setup.is_some(),
         req.prompt.is_some()
@@ -1657,7 +1657,7 @@ pub async fn create_agent(
 
     // Add task to queue for agent manager to create container with agent parameters
     let payload = serde_json::json!({
-        "secrets": req.secrets,
+        "env": req.env,
         "instructions": req.instructions,
         "setup": req.setup,
         "prompt": req.prompt,
@@ -1737,14 +1737,14 @@ pub async fn remix_agent(
                 "Code remix not permitted for this published agent".to_string(),
             ));
         }
-        if req.secrets
+        if req.env
             && !publish_perms
-                .get("secrets")
+                .get("env")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Secrets remix not permitted for this published agent".to_string(),
+                "Environment remix not permitted for this published agent".to_string(),
             ));
         }
         // Content is always allowed - no permission check needed
@@ -1758,7 +1758,7 @@ pub async fn remix_agent(
 
     // Store the remix options before moving req into Agent::remix
     let copy_code = req.code;
-    let copy_secrets = req.secrets;
+    let copy_env = req.env;
     // Content is always copied
     let copy_content = true;
     let initial_prompt = req.prompt.clone();
@@ -1791,7 +1791,7 @@ pub async fn remix_agent(
         "remix": true,
         "parent_agent_name": parent.name,
         "copy_code": copy_code,
-        "copy_secrets": copy_secrets,
+        "copy_env": copy_env,
         "copy_content": copy_content,
         "prompt": initial_prompt,
         "principal": created_by,
@@ -2236,7 +2236,7 @@ pub async fn publish_agent(
     let payload = serde_json::json!({
         "content": req.content, // Content is always included in v0.4.0
         "code": req.code,
-        "secrets": req.secrets
+        "env": req.env
     });
 
     sqlx::query(

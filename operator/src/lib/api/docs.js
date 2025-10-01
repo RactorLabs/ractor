@@ -41,7 +41,7 @@ export function getCommonSchemas() {
       { name: 'is_published', type: 'boolean', desc: 'Published state' },
       { name: 'published_at', type: 'string|null (RFC3339)', desc: 'When published' },
       { name: 'published_by', type: 'string|null', desc: 'Who published' },
-      { name: 'publish_permissions', type: 'object', desc: '{ code: boolean, secrets: boolean, content: boolean }' },
+      { name: 'publish_permissions', type: 'object', desc: '{ code: boolean, env: boolean, content: boolean }' },
       { name: 'idle_timeout_seconds', type: 'int', desc: 'Idle timeout' },
       { name: 'busy_timeout_seconds', type: 'int', desc: 'Busy timeout' },
       { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When idle started' },
@@ -314,7 +314,7 @@ export function getApiDocs(base) {
     "is_published": true,
     "published_at": "2025-01-01T12:30:00Z",
     "published_by": "admin",
-    "publish_permissions": {"code": true, "secrets": false, "content": true},
+    "publish_permissions": {"code": true, "env": false, "content": true},
     "idle_timeout_seconds": 300,
     "busy_timeout_seconds": 3600,
     "idle_from": "2025-01-01T12:10:00Z",
@@ -350,7 +350,7 @@ export function getApiDocs(base) {
   "is_published": true,
   "published_at": "2025-01-01T12:30:00Z",
   "published_by": "admin",
-  "publish_permissions": {"code": true, "secrets": false, "content": true},
+  "publish_permissions": {"code": true, "env": false, "content": true},
   "idle_timeout_seconds": 300,
   "busy_timeout_seconds": 3600,
   "idle_from": "2025-01-01T12:10:00Z",
@@ -407,22 +407,22 @@ export function getApiDocs(base) {
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
-      ], example: `curl -s ${BASE}/api/v0/agents?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListAgentsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListAgentsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
       { method: 'POST', path: '/api/v0/agents', auth: 'bearer', desc: 'Create agent.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
         { in: 'body', name: 'tags', type: 'string[]', required: false, desc: "Array of tags; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces (default: [])" },
-        { in: 'body', name: 'secrets', type: 'object<string,string>', required: false, desc: 'Key/value secrets map (default: empty)' },
+        { in: 'body', name: 'env', type: 'object<string,string>', required: false, desc: 'Key/value env map (default: empty)' },
         { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Idle timeout seconds (default 300)' },
         { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Busy timeout seconds (default 3600)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo agent"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo agent"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
       { method: 'GET', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Get agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
-      ], example: `curl -s ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
+      ], example: `curl -s ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo agent","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/agents/{name}', auth: 'bearer', desc: 'Update agent by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
@@ -430,7 +430,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: "Replace tags array; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces" },
         { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
         { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"secrets":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
+      ], example: `curl -s -X PUT ${BASE}/api/v0/agents/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_agent_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/agents/{name}/state', auth: 'bearer', desc: 'Update agent state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' }
@@ -461,16 +461,16 @@ export function getApiDocs(base) {
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New agent name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Copy code (default true)' },
-        { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Copy secrets (default true)' },
+        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Copy env (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/remix -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"secrets":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/remix -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/publish', auth: 'bearer', desc: 'Publish agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code remix (default true)' },
-        { in: 'body', name: 'secrets', type: 'boolean', required: false, desc: 'Allow secrets remix (default true)' },
+        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env remix (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/publish -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"secrets":false,"content":true}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","is_published":true,"published_at":"2025-01-01T12:30:00Z",...}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/publish -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"content":true}'`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","is_published":true,"published_at":"2025-01-01T12:30:00Z",...}` }] },
       { method: 'POST', path: '/api/v0/agents/{name}/unpublish', auth: 'bearer', desc: 'Unpublish agent.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Agent name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/agents/<name>/unpublish -H "Authorization: Bearer <token>"`, resp: { schema: 'Agent' }, responses: [{ status: 200, body: `{"name":"demo","is_published":false,"published_at":null,...}` }] },

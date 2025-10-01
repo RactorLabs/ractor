@@ -47,4 +47,4 @@ The service listens for `Ctrl+C` and will exit gracefully.
 - Tags applied to provisioned agents: `askrepo`, `twitter`, and `tweet<tweet_id>`.
 - Agents are created with a 15-minute busy timeout and receive the `tweet_id` as their initial prompt.
 - Twitter API rate limits are surfaced via logs; the service will retry on the next polling interval.
-- When present, the Twitter credentials listed above are copied into agent secrets as `TWITTER_*` keys so the `twitter_api_client` tooling can authenticate.
+- When present, the Twitter credentials listed above are copied into the agent `.env` file as `TWITTER_*` keys so the `twitter_api_client` tooling can authenticate.

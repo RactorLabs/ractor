@@ -6,7 +6,7 @@ Create a Rust-based RAWORC app (`apps/raworc-apps-askrepo`) that polls Twitter m
 ## Key Assumptions
 - Twitter API credentials (bearer token + target user id) are provided via `RAWORC_APPS_ASKREPO_TWITTER_*` environment variables.
 - RAWORC host URL and admin token are available via `RAWORC_HOST_URL` and `RAWORC_APPS_ASKREPO_ADMIN_TOKEN` respectively.
-- Optional Twitter OAuth credentials (`RAWORC_APPS_ASKREPO_TWITTER_*` / `TWITTER_*`) may be set so the service can forward them into agent secrets for the `twitter_api_client` tools.
+- Optional Twitter OAuth credentials (`RAWORC_APPS_ASKREPO_TWITTER_*` / `TWITTER_*`) may be set so the service can forward them into the agent `.env` file for the `twitter_api_client` tools.
 - Agents are uniquely keyed by name `Tweet_<tweet_id>`, so existence checks can reuse that naming convention to avoid duplicates.
 - Build tooling assumes Rust 1.82+ (update local toolchain via `rustup update stable`).
 

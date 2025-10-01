@@ -80,9 +80,13 @@ fn truncate(mut s: String) -> String {
 pub async fn run_bash(cmd: &str) -> Result<String> {
     let start_time = std::time::SystemTime::now();
     info!(tool = "bash", %cmd, "tool start");
+    let wrapped_cmd = format!(
+        "export PATH=\"/agent/bin:$PATH\"; if [ -f /agent/.env ]; then set -a; . /agent/.env; set +a; fi; {}",
+        cmd
+    );
     let out = Command::new("bash")
         .arg("-lc")
-        .arg(cmd)
+        .arg(&wrapped_cmd)
         .current_dir(AGENT_ROOT)
         .output()
         .await?;

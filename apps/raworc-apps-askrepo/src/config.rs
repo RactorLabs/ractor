@@ -63,25 +63,25 @@ impl Config {
         })
     }
 
-    pub fn agent_secrets(&self) -> HashMap<String, String> {
-        let mut secrets = HashMap::new();
-        secrets.insert(
+    pub fn agent_env(&self) -> HashMap<String, String> {
+        let mut env_map = HashMap::new();
+        env_map.insert(
             "TWITTER_BEARER_TOKEN".to_string(),
             self.twitter_bearer_token.clone(),
         );
         if let Some(value) = self.twitter_api_key.as_ref() {
-            secrets.insert("TWITTER_API_KEY".to_string(), value.clone());
+            env_map.insert("TWITTER_API_KEY".to_string(), value.clone());
         }
         if let Some(value) = self.twitter_api_secret.as_ref() {
-            secrets.insert("TWITTER_API_SECRET".to_string(), value.clone());
+            env_map.insert("TWITTER_API_SECRET".to_string(), value.clone());
         }
         if let Some(value) = self.twitter_access_token.as_ref() {
-            secrets.insert("TWITTER_ACCESS_TOKEN".to_string(), value.clone());
+            env_map.insert("TWITTER_ACCESS_TOKEN".to_string(), value.clone());
         }
         if let Some(value) = self.twitter_access_token_secret.as_ref() {
-            secrets.insert("TWITTER_ACCESS_TOKEN_SECRET".to_string(), value.clone());
+            env_map.insert("TWITTER_ACCESS_TOKEN_SECRET".to_string(), value.clone());
         }
-        secrets
+        env_map
     }
 }
 

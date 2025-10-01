@@ -51,12 +51,12 @@
   let prompt = '';
   let description = '';
 
-  // Secrets as dynamic rows
-  let secrets = [{ key: '', val: '' }];
-  function addSecretRow() { secrets = [...secrets, { key: '', val: '' }]; }
-  function asSecretsMap() {
+  // Environment entries as dynamic rows
+  let envEntries = [{ key: '', val: '' }];
+  function addEnvRow() { envEntries = [...envEntries, { key: '', val: '' }]; }
+  function asEnvMap() {
     const map = {};
-    for (const r of secrets) {
+    for (const r of envEntries) {
       if (r.key && String(r.val).length > 0) map[r.key] = r.val;
     }
     return map;
@@ -95,7 +95,7 @@
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
-        secrets: asSecretsMap()
+        env: asEnvMap()
       };
 
       const res = await apiFetch('/agents', { method: 'POST', body: JSON.stringify(body) });
@@ -178,23 +178,23 @@
             </div>
 
             <div class="col-12">
-              <div class="fw-500 small text-body text-opacity-75 mb-1">Secrets (key/value)</div>
+              <div class="fw-500 small text-body text-opacity-75 mb-1">Environment Variables (key/value)</div>
               <div class="row g-2 align-items-end">
-                {#each secrets as row, idx}
+                {#each envEntries as row, idx}
                   <div class="col-6 col-md-4">
-                    <label class="form-label" for={'skey_'+idx}>Key</label>
-                    <input id={'skey_'+idx} class="form-control" bind:value={row.key} placeholder="API_KEY" />
+                    <label class="form-label" for={'env_key_'+idx}>Key</label>
+                    <input id={'env_key_'+idx} class="form-control" bind:value={row.key} placeholder="API_KEY" />
                   </div>
                   <div class="col-6 col-md-6">
-                    <label class="form-label" for={'sval_'+idx}>Value</label>
-                    <input id={'sval_'+idx} class="form-control" bind:value={row.val} placeholder="secret" />
+                    <label class="form-label" for={'env_val_'+idx}>Value</label>
+                    <input id={'env_val_'+idx} class="form-control" bind:value={row.val} placeholder="value" />
                   </div>
                 {/each}
-                <div class="col-12"><button class="btn btn-outline-secondary btn-sm" on:click|preventDefault={addSecretRow}>+ Add secret</button></div>
+                <div class="col-12"><button class="btn btn-outline-secondary btn-sm" on:click|preventDefault={addEnvRow}>+ Add variable</button></div>
               </div>
             </div>
 
-            <!-- Move Timeouts and Tags after Secrets, before Metadata -->
+            <!-- Move Timeouts and Tags after Environment Variables, before Metadata -->
             <div class="col-12 col-md-3">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />

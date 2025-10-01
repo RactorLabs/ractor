@@ -104,11 +104,7 @@ impl Tool for ShellTool {
             );
         }
         // emulate working dir via cd then run
-        let cmd = format!(
-            "export PATH=\"/agent/bin:$PATH\"; set -a; for f in /agent/secrets/*; do [ -f \"$f\" ] && . \"$f\"; done; set +a; cd '{}' && {}",
-            exec_dir.replace("'", "'\\''"),
-            commands
-        );
+        let cmd = format!("cd '{}' && {}", exec_dir.replace("'", "'\\''"), commands);
         match run_bash(&cmd).await {
             Ok(out) => {
                 let exit_code = parse_exit_code(&out);

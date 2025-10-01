@@ -100,7 +100,7 @@ import { getHostUrl } from '$lib/branding.js';
     await refresh();
   }
   async function publishAgent(name) {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, secrets: true, content: true }) });
+    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, env: true, content: true }) });
     if (!res.ok) { error = res?.data?.message || 'Publish failed'; return; }
     await refresh();
   }
@@ -112,7 +112,7 @@ import { getHostUrl } from '$lib/branding.js';
   async function remixAgent(name) {
     const newName = prompt('New Agent Name for Remix');
     if (!newName) return;
-    const body = { name: newName.trim(), code: true, secrets: true, content: true };
+    const body = { name: newName.trim(), code: true, env: true, content: true };
     const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { error = res?.data?.message || 'Remix failed'; return; }
     await refresh();

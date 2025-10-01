@@ -344,7 +344,7 @@
                 <tr><td class="font-monospace">is_published</td><td>boolean</td><td>Published state</td></tr>
                 <tr><td class="font-monospace">published_at</td><td>string|null (RFC3339)</td><td>When published</td></tr>
                 <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>
-                <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, secrets: boolean, content: boolean &#125;</span></td></tr>
+                <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, env: boolean, content: boolean &#125;</span></td></tr>
                 <tr><td class="font-monospace">idle_timeout_seconds</td><td>int</td><td>Idle timeout</td></tr>
                 <tr><td class="font-monospace">busy_timeout_seconds</td><td>int</td><td>Busy timeout</td></tr>
                 <tr><td class="font-monospace">idle_from</td><td>string|null (RFC3339)</td><td>When idle started</td></tr>

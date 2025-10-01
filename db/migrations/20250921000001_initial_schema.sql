@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS agents (
     is_published BOOLEAN NOT NULL DEFAULT false,
     published_at TIMESTAMP NULL,
     published_by VARCHAR(255) NULL,
-    publish_permissions JSON DEFAULT ('{"code": true, "secrets": true, "content": true}'),
+    publish_permissions JSON DEFAULT ('{"code": true, "env": true, "content": true}'),
     
     -- Timeout functionality (idle/busy)
     idle_timeout_seconds INT NOT NULL DEFAULT 300,
@@ -150,4 +150,3 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
     ('admin', 'Admin', 'admin');
-

@@ -682,7 +682,7 @@
       if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, {
         method: 'POST',
-        body: JSON.stringify({ name: newName, code: true, secrets: true, content: true })
+        body: JSON.stringify({ name: newName, code: true, env: true, content: true })
       });
       if (!res.ok) {
         remixError = res?.data?.message || res?.data?.error || `Remix failed (HTTP ${res.status})`;
@@ -1399,7 +1399,7 @@
       const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: true, secrets: true, content: true })
+        body: JSON.stringify({ code: true, env: true, content: true })
       });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Publish failed (HTTP ${res.status})`);
       if (agent) {

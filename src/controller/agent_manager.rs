@@ -372,9 +372,9 @@ impl AgentManager {
         let agent_name = task.agent_name.clone();
 
         // Parse the payload to get agent creation parameters
-        let secrets = task
+        let env = task
             .payload
-            .get("secrets")
+            .get("env")
             .and_then(|v| v.as_object())
             .map(|obj| {
                 obj.iter()
@@ -431,8 +431,8 @@ impl AgentManager {
             agent_name, principal
         );
 
-        info!("Creating agent {} for principal {} ({:?}) with {} secrets, instructions: {}, setup: {}, prompt: {}", 
-              agent_name, principal, principal_type, secrets.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating agent {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
+              agent_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
         // Check if this is a remix agent from task payload
         let is_remix = task
@@ -468,9 +468,9 @@ impl AgentManager {
                 .get("copy_code")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            let copy_secrets = task
+            let copy_env = task
                 .payload
-                .get("copy_secrets")
+                .get("copy_env")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
             let copy_content = task
@@ -506,8 +506,8 @@ impl AgentManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating remix agent {} from parent {} (copy_data: {}, copy_code: {}, copy_secrets: {}, copy_content: {}) for principal {} ({})", 
-                  agent_name, parent_agent_name, copy_data, copy_code, copy_secrets, copy_content, remix_principal, remix_principal_type_str);
+            info!("Creating remix agent {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
+                  agent_name, parent_agent_name, copy_data, copy_code, copy_env, copy_content, remix_principal, remix_principal_type_str);
 
             // For remix agents, create container with selective volume copy from parent
             // Generate fresh token for remix agent
@@ -521,7 +521,7 @@ impl AgentManager {
                     parent_agent_name,
                     copy_data,
                     copy_code,
-                    copy_secrets,
+                    copy_env,
                     copy_content,
                     remix_token,
                     remix_principal.to_string(),
@@ -536,7 +536,7 @@ impl AgentManager {
             self.docker_manager
                 .create_container_with_params_and_tokens(
                     &agent_name,
-                    secrets,
+                    env,
                     instructions,
                     setup,
                     agent_token,

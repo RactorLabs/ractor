@@ -75,13 +75,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
     // Initialize agent directories
-    let agent_dirs = [
-        "/agent",
-        "/agent/code",
-        "/agent/secrets",
-        "/agent/content",
-        "/agent/template",
-    ];
+    let agent_dirs = ["/agent", "/agent/code", "/agent/content", "/agent/template"];
 
     for dir in agent_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {

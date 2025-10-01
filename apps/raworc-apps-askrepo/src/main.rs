@@ -156,7 +156,7 @@ async fn ensure_agent_for_tweet(
     let prompt = build_initial_prompt(tweet);
     let instructions_overview = "You are AskRepo. Review repository questions sourced from Twitter mentions and follow the initial task details.".to_string();
 
-    let secrets = config.agent_secrets();
+    let env_map = config.agent_env();
 
     let payload = NewAgentPayload::new(agent_name.clone(), metadata)
         .with_description(Some(format!(
@@ -168,7 +168,7 @@ async fn ensure_agent_for_tweet(
         .with_prompt(prompt)
         .with_idle_timeout(Some(900))
         .with_busy_timeout(Some(1800))
-        .with_secrets(secrets);
+        .with_env(env_map);
 
     raworc.create_agent(&payload).await?;
     info!(agent = %agent_name, "created new AskRepo agent");

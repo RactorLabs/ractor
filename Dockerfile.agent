@@ -61,9 +61,11 @@ COPY target/release/raworc-agent /usr/local/bin/raworc-agent
 
 # Create agent directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /agent/code /agent/secrets /agent/logs /agent/content /agent/template && \
+RUN mkdir -p /agent/code /agent/logs /agent/content /agent/template && \
+    touch /agent/.env && \
     chown -R agent:agent /agent && \
-    chmod -R 755 /agent
+    chmod -R 755 /agent && \
+    chmod 600 /agent/.env
 
 # Seed built-in templates under an immutable path; controller will copy into /agent/template as needed
 USER root
