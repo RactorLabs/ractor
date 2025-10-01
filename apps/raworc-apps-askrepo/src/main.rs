@@ -189,7 +189,7 @@ Task:
 - Apply guardrails: only proceed if the user is asking about a software repository *and* the thread contains a repository URL or explicit owner/repo reference. Otherwise, explain why the request is skipped.
 - Identify the repository in question from the thread, clone it locally, and inspect the codebase.
 - Craft a precise, evidence-based answer addressing the user's question using repository context, and present the explanation in well-structured paragraphs (no bullet dumps) of two to three sentences each so it reads like a thoughtful write-up.
-- Keep the final tweet at 280 characters or fewer; shorten language ahead of time so the post fits without truncation.
+- Keep the final tweet at 280 characters or fewer; shorten language ahead of time so the post fits without truncation. Never include Markdown syntax, backticks, or code snippets in the tweet body—pure text only.
 - Post the final response back to the original tweet through the twitter_api_client tooling. If the post attempt returns HTTP 403, shorten the text (for example, drop the last sentence) and retry once.
 - Do not cite or list file paths directly in the tweet; summarize findings instead."#,
         tweet_id = tweet_id
