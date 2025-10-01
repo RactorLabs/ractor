@@ -105,7 +105,7 @@ impl Tool for ShellTool {
         }
         // emulate working dir via cd then run
         let cmd = format!(
-            "export PATH=\"/agent/bin:$PATH\"; set -a; for f in /agent/secrets/*.env; do [ -f \"$f\" ] && . \"$f\"; done; set +a; cd '{}' && {}",
+            "export PATH=\"/agent/bin:$PATH\"; set -a; for f in /agent/secrets/*; do [ -f \"$f\" ] && . \"$f\"; done; set +a; cd '{}' && {}",
             exec_dir.replace("'", "'\\''"),
             commands
         );
