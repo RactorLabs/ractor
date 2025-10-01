@@ -187,6 +187,7 @@ Task:
 - Read the conversation referenced by {tweet_id}.
 - Clone https://github.com/raworc/twitter_api_client and run `twitter_api_client/get-tweet.py` to pull the full thread content.
 - Apply guardrails: only proceed if the user is asking about a software repository *and* the thread contains a repository URL or explicit owner/repo reference. Otherwise, explain why the request is skipped.
+- If the thread only references shortened links (for example, `t.co`), expand them and follow the redirects to determine whether they lead to a GitHub repository or owner/name combo before deciding the task lacks repo details.
 - Identify the repository in question from the thread, clone it locally, and inspect the codebase.
 - Craft a precise, evidence-based answer addressing the user's question using repository context, and present the explanation in well-structured paragraphs (no bullet dumps) of two to three sentences each so it reads like a thoughtful write-up.
 - Keep the final tweet at 280 characters or fewer; shorten language ahead of time so the post fits without truncation. Never include Markdown syntax, backticks, or code snippets in the tweet body—pure text only.
