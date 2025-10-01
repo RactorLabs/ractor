@@ -52,7 +52,8 @@ usage() {
   echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
   echo "  app_githex  Build the GitHex app image"
-  echo "  all         Build all components (api, agent, controller, operator, content, gateway, app_githex)"
+  echo "  app_askrepo Build the AskRepo app image"
+  echo "  all         Build all components (api, agent, controller, operator, content, gateway, app_githex, app_askrepo)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -98,7 +99,7 @@ fi
 
 # Expand 'all' to actual components (ensure agent precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "app_githex")
+  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
 print_status "Building Raworc Docker images"
@@ -180,6 +181,10 @@ for component in "${COMPONENTS[@]}"; do
     image_name="raworc_app_githex:${TAG}"
     dockerfile="Dockerfile.githex"
     ;;
+  app_askrepo)
+    image_name="raworc_app_askrepo:${TAG}"
+    dockerfile="Dockerfile.askrepo"
+    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -224,6 +229,9 @@ for component in "${COMPONENTS[@]}"; do
   app_githex)
     echo "  raworc_app_githex:${TAG}"
     ;;
+  app_askrepo)
+    echo "  raworc_app_askrepo:${TAG}"
+    ;;
   esac
 done
 
@@ -234,4 +242,7 @@ print_status "To start services with these images, run:"
 echo "  raworc start"
 if [[ " ${COMPONENTS[*]} " =~ " app_githex " ]]; then
   echo "  raworc start app_githex  # GitHex app is opt-in and never starts automatically"
+fi
+if [[ " ${COMPONENTS[*]} " =~ " app_askrepo " ]]; then
+  echo "  raworc start app_askrepo # AskRepo app is opt-in and never starts automatically"
 fi

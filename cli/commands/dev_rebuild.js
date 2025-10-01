@@ -14,13 +14,14 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Rebuild Raworc components via ./scripts/rebuild.sh')
-    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway, app_githex (apps are opt-in). Flags are passed through.')
-    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, app_githex\n' +
+    .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway, app_githex, app_askrepo (apps are opt-in). Flags are passed through.')
+    .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, app_githex, app_askrepo\n' +
       '\nExamples:\n' +
       '  $ raworc rebuild                    # rebuild all components (script default)\n' +
       '  $ raworc rebuild controller         # rebuild controller\n' +
       '  $ raworc rebuild api agent          # rebuild multiple components\n' +
-      '  $ raworc rebuild app_githex         # rebuild the GitHex app container')
+      '  $ raworc rebuild app_githex         # rebuild the GitHex app container\n' +
+      '  $ raworc rebuild app_askrepo        # rebuild the AskRepo app container')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
@@ -29,7 +30,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are Raworc components
-        const allowed = new Set(['api','controller','agent','operator','content','gateway','app_githex']);
+        const allowed = new Set(['api','controller','agent','operator','content','gateway','app_githex','app_askrepo']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
           console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, agent, operator, content, gateway`);

@@ -56,6 +56,7 @@ usage() {
   echo "  content     Push the content image"
   echo "  gateway     Push the gateway image"
   echo "  app_githex  Push the GitHex app image"
+  echo "  app_askrepo Push the AskRepo app image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -103,7 +104,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "app_githex")
+  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
 print_status "Pushing Raworc Docker images"
@@ -153,6 +154,9 @@ for component in "${COMPONENTS[@]}"; do
   app_githex)
     image_name="${REGISTRY}/raworc_app_githex:${TAG}"
     ;;
+  app_askrepo)
+    image_name="${REGISTRY}/raworc_app_askrepo:${TAG}"
+    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -164,6 +168,8 @@ for component in "${COMPONENTS[@]}"; do
   # Check if local image exists (built by build.sh uses project version)
   if [ "$component" = "app_githex" ]; then
     local_image="raworc_app_githex:${TAG}"
+  elif [ "$component" = "app_askrepo" ]; then
+    local_image="raworc_app_askrepo:${TAG}"
   else
     local_image="raworc_${component}:${TAG}"
   fi
@@ -183,6 +189,8 @@ for component in "${COMPONENTS[@]}"; do
   # Also tag as 'latest' if we're pushing a version tag
   if [ "$component" = "app_githex" ]; then
     latest_image="${REGISTRY}/raworc_app_githex:latest"
+  elif [ "$component" = "app_askrepo" ]; then
+    latest_image="${REGISTRY}/raworc_app_askrepo:latest"
   else
     latest_image="${REGISTRY}/raworc_${component}:latest"
   fi
@@ -233,6 +241,12 @@ for component in "${COMPONENTS[@]}"; do
     echo "  ${REGISTRY}/raworc_app_githex:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/raworc_app_githex:latest"
+    fi
+    ;;
+  app_askrepo)
+    echo "  ${REGISTRY}/raworc_app_askrepo:${TAG}"
+    if [ "$TAG" != "latest" ]; then
+      echo "  ${REGISTRY}/raworc_app_askrepo:latest"
     fi
     ;;
   esac

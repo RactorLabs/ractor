@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_app_githex']) {
+  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_app_githex', 'raworc_app_askrepo']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, app_githex (apps start only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, app_githex, app_askrepo (apps start only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -128,7 +128,8 @@ module.exports = (program) => {
       '  $ raworc start                                # Start full stack\n' +
       '  $ raworc start api controller                 # Start API + controller\n' +
       '  $ raworc start mysql                          # Ensure MySQL is up\n' +
-      '  $ raworc start app_githex                     # Start the GitHex app container\n')
+      '  $ raworc start app_githex                     # Start the GitHex app container\n' +
+      '  $ raworc start app_askrepo                    # Start the AskRepo polling app\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
     .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
@@ -201,7 +202,7 @@ module.exports = (program) => {
 
         // Enforce startup order: mysql → ollama → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'app_githex'];
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'app_githex', 'app_askrepo'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -729,6 +730,89 @@ module.exports = (program) => {
               break;
             }
 
+            case 'app_askrepo': {
+              const containerName = 'raworc_app_askrepo';
+              console.log(chalk.blue('[INFO] ') + 'Ensuring AskRepo app is running (opt-in component)...');
+
+              const requiredEnv = [
+                'RAWORC_HOST_URL',
+                'RAWORC_APPS_ASKREPO_ADMIN_TOKEN',
+                'RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN',
+                'RAWORC_APPS_ASKREPO_TWITTER_USER_ID'
+              ];
+              const missing = requiredEnv.filter((name) => !process.env[name] || process.env[name].trim() === '');
+              if (missing.length) {
+                console.error(
+                  chalk.red('[ERROR] ') +
+                    `Missing required environment variables for AskRepo: ${missing.join(', ')}.`
+                );
+                console.error(chalk.red('[ERROR] ') + 'Export the values and retry.');
+                process.exit(1);
+              }
+
+              const imageRef = await resolveRaworcImage(
+                'app_askrepo',
+                'raworc_app_askrepo',
+                'registry.digitalocean.com/raworc/raworc_app_askrepo',
+                tag
+              );
+              const desiredId = await imageId(imageRef);
+
+              if (await containerExists(containerName)) {
+                const running = await containerRunning(containerName);
+                const currentId = await containerImageId(containerName);
+                if (currentId && desiredId && currentId !== desiredId) {
+                  console.log(chalk.blue('[INFO] ') + 'AskRepo image changed; recreating container to apply updates...');
+                  try { await docker(['rm', '-f', containerName]); } catch (_) {}
+                } else {
+                  if (running) {
+                    console.log(chalk.green('[SUCCESS] ') + 'AskRepo already running (background poller).');
+                    console.log();
+                    break;
+                  }
+                  await docker(['start', containerName]);
+                  console.log(chalk.green('[SUCCESS] ') + 'AskRepo started (logs: docker logs raworc_app_askrepo -f)');
+                  console.log();
+                  break;
+                }
+              }
+
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push(
+                '--name', containerName,
+                '--network', 'raworc_network',
+                '-v', 'raworc_app_askrepo:/app/data',
+                '-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`,
+                '-e', `RAWORC_APPS_ASKREPO_ADMIN_TOKEN=${process.env.RAWORC_APPS_ASKREPO_ADMIN_TOKEN}`,
+                '-e', `RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN=${process.env.RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN}`,
+                '-e', `RAWORC_APPS_ASKREPO_TWITTER_USER_ID=${process.env.RAWORC_APPS_ASKREPO_TWITTER_USER_ID}`
+              );
+
+              const optionalEnv = [
+                'RAWORC_APPS_ASKREPO_TWITTER_API_BASE',
+                'RAWORC_APPS_ASKREPO_POLL_INTERVAL_SECS',
+                'RAWORC_APPS_ASKREPO_TWITTER_SINCE_ID',
+                'RAWORC_APPS_ASKREPO_TWITTER_API_KEY',
+                'RAWORC_APPS_ASKREPO_TWITTER_API_SECRET',
+                'RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN',
+                'RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET'
+              ];
+              for (const name of optionalEnv) {
+                const value = process.env[name];
+                if (value && value.trim() !== '') {
+                  args.push('-e', `${name}=${value}`);
+                }
+              }
+
+              args.push(imageRef);
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'AskRepo app container started (background poller)');
+              console.log(chalk.blue('[INFO] ') + 'Monitor logs with: docker logs raworc_app_askrepo -f');
+              console.log();
+              break;
+            }
+
             default:
               console.log(chalk.yellow('[WARNING] ') + `Unknown component: ${comp}. Skipping...`);
           }
@@ -762,6 +846,9 @@ module.exports = (program) => {
           } catch(_) {}
           if (components.includes('app_githex')) {
             console.log(`  • GitHex: http://localhost:${githexHostPort}`);
+          }
+          if (components.includes('app_askrepo')) {
+            console.log('  • AskRepo: docker logs raworc_app_askrepo -f');
           }
           try {
             const m = await docker(['ps','--filter','name=mysql','--format','{{.Names}}'], { silent: true });

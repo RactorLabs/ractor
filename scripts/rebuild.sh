@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api agent controller operator content gateway app_githex)
-DEFAULT_SET=(api agent controller operator content gateway app_githex)
+BUILDABLE_SET=(api agent controller operator content gateway app_githex app_askrepo)
+DEFAULT_SET=(api agent controller operator content gateway app_githex app_askrepo)
 
 process_args() {
   local input=("$@")
