@@ -839,7 +839,7 @@ impl Tool for OutputTool {
     }
 
     fn description(&self) -> &str {
-        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'markdown'|'json'|'url', content }. This concludes the current response."
+        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'markdown'|'json'|'url'|'text', content }. This concludes the current response."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -853,7 +853,7 @@ impl Tool for OutputTool {
                     "items": {
                         "type":"object",
                         "properties":{
-                            "type": {"type":"string","enum":["markdown","json","url"],"description":"Output type"},
+                            "type": {"type":"string","enum":["markdown","json","url","text"],"description":"Output type"},
                             "title": {"type":"string","description":"Title heading for this item (required)"},
                             "content": {"description":"For markdown: string; for json: any JSON value; for url: string (http/https)"}
                         },
@@ -882,8 +882,16 @@ impl Tool for OutputTool {
             .unwrap_or_default();
         let mut items_out: Vec<Value> = Vec::new();
         for (idx, it) in items_in.iter().enumerate() {
-            let typ = it
-                .get("type")
+            let typ_val = it.get("type");
+            if typ_val.is_none() {
+                return Ok(json!({
+                    "status":"error",
+                    "tool":"output",
+                    "error": format!("Developer note: content[{}] is missing required field 'type'. Use one of: markdown, json, url, text.", idx),
+                    "supported_types": ["markdown","json","url","text"]
+                }));
+            }
+            let typ = typ_val
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_lowercase();
@@ -902,6 +910,12 @@ impl Tool for OutputTool {
                         ))
                     })?;
                     items_out.push(json!({"type":"markdown","title": title, "content": content}));
+                }
+                "text" => {
+                    let content = it.get("content").and_then(|v| v.as_str()).ok_or_else(|| {
+                        anyhow!(format!("content[{}].content must be string for text", idx))
+                    })?;
+                    items_out.push(json!({"type":"text","title": title, "content": content}));
                 }
                 "json" => {
                     let content = it.get("content").cloned().unwrap_or(Value::Null);
@@ -925,7 +939,7 @@ impl Tool for OutputTool {
                         "status":"error",
                         "tool":"output",
                         "error": format!("unsupported type '{}' at index {}", typ, idx),
-                        "supported_types": ["markdown","json","url"]
+                        "supported_types": ["markdown","json","url","text"]
                     }));
                 }
             }
@@ -934,7 +948,7 @@ impl Tool for OutputTool {
             "status":"ok",
             "tool":"output",
             "items": items_out,
-            "supported_types": ["markdown","json","url"]
+            "supported_types": ["markdown","json","url","text"]
         }))
     }
 }
