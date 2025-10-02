@@ -359,7 +359,6 @@ impl ResponseHandler {
                         "tool_call": {"tool": tool_name, "args": args }
                     })
                     .to_string();
-                    let is_update_plan = tool_name == "update_plan";
                     conversation.push(ChatMessage {
                         role: "assistant".to_string(),
                         content: call_summary,
@@ -545,19 +544,16 @@ impl ResponseHandler {
                         )
                         .await;
                     _items_sent += segs.len();
-                    let is_update_plan = tool_name == "update_plan";
-                    if !is_update_plan {
-                        let call_summary = serde_json::json!({
-                            "tool_call": {"tool": tool_name, "args": args_value.clone() }
-                        })
-                        .to_string();
-                        conversation.push(ChatMessage {
-                            role: "assistant".to_string(),
-                            content: call_summary,
-                            name: None,
-                            tool_call_id: None,
-                        });
-                    }
+                    let call_summary = serde_json::json!({
+                        "tool_call": {"tool": tool_name, "args": args_value.clone() }
+                    })
+                    .to_string();
+                    conversation.push(ChatMessage {
+                        role: "assistant".to_string(),
+                        content: call_summary,
+                        name: None,
+                        tool_call_id: None,
+                    });
 
                     let output_value_raw: serde_json::Value = match self
                         .tool_registry
@@ -1065,8 +1061,10 @@ You are running as an Agent in the {host_name} system.
 
 - Planning: For any task that requires more than one action, immediately call the `update_plan` tool to create `/agent/plan.md`, then refresh it only after a step is fully completed (never before or during a step, and always replacing the full contents). Stay in execution mode—finish the current checklist item, then call `update_plan` before moving to the next one. Never invoke `update_plan` twice in a row; batch all checklist changes into a single call and, once the plan accurately reflects the current status, move on to the next task instead of calling it again. Do not open or edit `/agent/plan.md` directly; when all work is complete, call `update_plan` with an empty checklist rather than deleting the file.
 - FINALIZE EVERY RESPONSE WITH A SINGLE `output` CALL containing the user-facing summary or results, and only once no active plan remains.
+- If you plan to ask the user for any API key or credential via `output`, first run `echo $VAR_NAME` and inspect `/agent/.env`; only request the value if both checks fail.
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - STRICT: Every assistant turn MUST emit exactly one `tool_call`. Do not produce assistant text outside a tool_call payload. If you need to communicate with the user, call `output` with the message content.
+- Never produce an `output` message just to acknowledge or restate developer notes; those instructions are internal and should only influence tool choices.
 - Do NOT return thinking-only responses. Thinking alone is not sufficient; you must issue a tool_call every turn.
 - Do NOT ask the user to start an HTTP server for /agent/content.
 - Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
