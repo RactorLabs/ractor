@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS agents (
     
     -- Context cutoff marker for conversation trimming
     context_cutoff_at TIMESTAMP NULL,
+    last_context_length BIGINT NOT NULL DEFAULT 0,
     
     -- Constraints
     CONSTRAINT agents_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
@@ -150,3 +151,14 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
 INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
 VALUES 
     ('admin', 'Admin', 'admin');
+
+
+-- Blocked Principals (merged from 20250924000002)
+CREATE TABLE IF NOT EXISTS blocked_principals (
+    principal VARCHAR(255) NOT NULL,
+    principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('Admin', 'User')),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (principal, principal_type),
+    INDEX idx_blocked_principals_principal (principal),
+    INDEX idx_blocked_principals_type (principal_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
