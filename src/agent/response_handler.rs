@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 const MAX_TOOL_OUTPUT_CHARS: usize = 8_000;
 
 enum SalvageAttempt {
@@ -17,6 +17,15 @@ enum SalvageAttempt {
         args: serde_json::Value,
     },
     InvalidFormat,
+}
+
+#[derive(Debug, Clone)]
+enum PlanStatus {
+    Missing,
+    Empty,
+    Pending { next_task: String },
+    Complete,
+    Unreadable,
 }
 
 pub struct ResponseHandler {
@@ -392,7 +401,26 @@ impl ResponseHandler {
                         "output": output_value_full,
                     });
                     let mut result_items = vec![seg_tool_result.clone()];
-                    result_items.push(self.plan_note_item().await);
+                    let (plan_note, plan_status) = self.plan_note_and_status().await;
+                    if tool_name == "output" {
+                        if let PlanStatus::Pending { next_task } = &plan_status {
+                            result_items.push(serde_json::json!({
+                                "type": "note",
+                                "level": "warning",
+                                "text": format!(
+                                    "Developer note: Output rejected because the plan still has unchecked items. Complete the next task before calling `output` again: {}",
+                                    next_task
+                                ),
+                            }));
+                        } else if matches!(plan_status, PlanStatus::Unreadable) {
+                            result_items.push(serde_json::json!({
+                                "type": "note",
+                                "level": "warning",
+                                "text": "Developer note: Output rejected because the plan could not be read. Use `update_plan` to repair or recreate it before finalizing.",
+                            }));
+                        }
+                    }
+                    result_items.push(plan_note);
                     let _ = self
                         .api_client
                         .update_response(
@@ -424,6 +452,22 @@ impl ResponseHandler {
                     }
                     // Special case: unified output tool finalizes immediately
                     if tool_name == "output" {
+                        match plan_status {
+                            PlanStatus::Pending { next_task } => {
+                                let dev_note = format!(
+                                    "Developer note: Plan still has unchecked items. Finish '{}' before calling `output` again. Work through the checklist sequentially and update it after each completed task.",
+                                    next_task
+                                );
+                                Self::push_system_note(&mut conversation, dev_note);
+                                continue;
+                            }
+                            PlanStatus::Unreadable => {
+                                let dev_note = "Developer note: Output cannot be finalized because the plan could not be read. Use the `update_plan` tool to recreate or clear the checklist before finishing.".to_string();
+                                Self::push_system_note(&mut conversation, dev_note);
+                                continue;
+                            }
+                            _ => {}
+                        }
                         let items = seg_tool_result
                             .get("output")
                             .and_then(|v| v.get("items"))
@@ -578,7 +622,26 @@ impl ResponseHandler {
                         "output": output_value_full,
                     });
                     let mut result_items = vec![seg_tool_result.clone()];
-                    result_items.push(self.plan_note_item().await);
+                    let (plan_note, plan_status) = self.plan_note_and_status().await;
+                    if tool_name == "output" {
+                        if let PlanStatus::Pending { next_task } = &plan_status {
+                            result_items.push(serde_json::json!({
+                                "type": "note",
+                                "level": "warning",
+                                "text": format!(
+                                    "Developer note: Output rejected because the plan still has unchecked items. Complete the next task before calling `output` again: {}",
+                                    next_task
+                                ),
+                            }));
+                        } else if matches!(plan_status, PlanStatus::Unreadable) {
+                            result_items.push(serde_json::json!({
+                                "type": "note",
+                                "level": "warning",
+                                "text": "Developer note: Output rejected because the plan could not be read. Use `update_plan` to repair or recreate it before finalizing.",
+                            }));
+                        }
+                    }
+                    result_items.push(plan_note);
                     let _ = self
                         .api_client
                         .update_response(
@@ -590,6 +653,22 @@ impl ResponseHandler {
                         .await;
                     _items_sent += 1;
                     if tool_name == "output" {
+                        match plan_status {
+                            PlanStatus::Pending { next_task } => {
+                                let dev_note = format!(
+                                    "Developer note: Plan still has unchecked items. Finish '{}' before calling `output` again. Work through the checklist sequentially and update it after each completed task.",
+                                    next_task
+                                );
+                                Self::push_system_note(&mut conversation, dev_note);
+                                continue;
+                            }
+                            PlanStatus::Unreadable => {
+                                let dev_note = "Developer note: Output cannot be finalized because the plan could not be read. Use the `update_plan` tool to recreate or clear the checklist before finishing.".to_string();
+                                Self::push_system_note(&mut conversation, dev_note);
+                                continue;
+                            }
+                            _ => {}
+                        }
                         let items = seg_tool_result
                             .get("output")
                             .and_then(|v| v.get("items"))
@@ -1439,28 +1518,35 @@ You have complete freedom to execute commands, install packages, and create solu
         prompt
     }
 
-    async fn plan_note_item(&self) -> serde_json::Value {
+    async fn plan_note_and_status(&self) -> (serde_json::Value, PlanStatus) {
         use std::path::Path;
 
         let plan_path = Path::new("/agent/plan.md");
         if !plan_path.exists() {
-            return serde_json::json!({
-                "type": "note",
-                "level": "info",
-                "text": "Plan Checklist:\n(no plan file). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
-            });
+            return (
+                serde_json::json!({
+                    "type": "note",
+                    "level": "info",
+                    "text": "Plan Checklist:\n(no plan file). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
+                }),
+                PlanStatus::Missing,
+            );
         }
 
         match tokio::fs::read_to_string(plan_path).await {
             Ok(content) => {
                 let has_non_empty_content = content.lines().any(|line| !line.trim().is_empty());
                 if !has_non_empty_content {
-                    return serde_json::json!({
-                        "type": "note",
-                        "level": "info",
-                        "text": "Plan Checklist:\n(no active plan). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
-                    });
+                    return (
+                        serde_json::json!({
+                            "type": "note",
+                            "level": "info",
+                            "text": "Plan Checklist:\n(no active plan). If this work requires multiple steps, call `update_plan` to create the initial checklist before continuing.\nFocus on NEXT TASK: decide whether a plan is required and create one before proceeding."
+                        }),
+                        PlanStatus::Empty,
+                    );
                 }
+
                 let tasks: Vec<(bool, String)> = content
                     .lines()
                     .filter_map(Self::parse_plan_task_line)
@@ -1470,11 +1556,14 @@ You have complete freedom to execute commands, install packages, and create solu
                     let summary = String::from(
                         "Plan Checklist:\n(empty)\nFocus on NEXT TASK: none (plan cleared). Call `update_plan` with new tasks if further work remains, and only after a step is finished."
                     );
-                    return serde_json::json!({
-                        "type": "note",
-                        "level": "info",
-                        "text": summary
-                    });
+                    return (
+                        serde_json::json!({
+                            "type": "note",
+                            "level": "info",
+                            "text": summary
+                        }),
+                        PlanStatus::Empty,
+                    );
                 }
 
                 let mut summary = String::from("Plan Checklist:\n");
@@ -1490,29 +1579,39 @@ You have complete freedom to execute commands, install packages, and create solu
                     summary.push('\n');
                 }
 
-                if let Some(idx) = next_idx {
+                let status = if let Some(idx) = next_idx {
                     summary.push_str(&format!("Focus on NEXT TASK: {}", tasks[idx].1));
                     summary.push_str(
                         "\nCall `update_plan` after you fully complete this step (never mid-step).",
                     );
+                    PlanStatus::Pending {
+                        next_task: tasks[idx].1.clone(),
+                    }
                 } else {
                     summary.push_str("Focus on NEXT TASK: none (all items complete). Call `update_plan` with an empty checklist to confirm completion if you have not already done so.");
-                }
+                    PlanStatus::Complete
+                };
 
                 let text = summary.trim_end().to_string();
-                serde_json::json!({
-                    "type": "note",
-                    "level": "info",
-                    "text": text
-                })
+                (
+                    serde_json::json!({
+                        "type": "note",
+                        "level": "info",
+                        "text": text
+                    }),
+                    status,
+                )
             }
             Err(e) => {
                 warn!("Failed to read plan for note: {}", e);
-                serde_json::json!({
-                    "type": "note",
-                    "level": "warning",
-                    "text": "Plan exists but could not be read. Use `update_plan` to regenerate it before continuing."
-                })
+                (
+                    serde_json::json!({
+                        "type": "note",
+                        "level": "warning",
+                        "text": "Plan exists but could not be read. Use `update_plan` to regenerate it before continuing."
+                    }),
+                    PlanStatus::Unreadable,
+                )
             }
         }
     }
