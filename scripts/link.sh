@@ -35,7 +35,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Link the Raworc CLI for development (npm link)"
+    echo "Link the Ractor CLI for development (npm link)"
     echo "This creates a live development link so changes reflect immediately"
     echo ""
     echo "Options:"
@@ -45,7 +45,7 @@ usage() {
     echo "What this does:"
     echo "  1. Install npm dependencies in cli/"
     echo "  2. Create development link with 'npm link'"
-    echo "  3. Make 'raworc' command available globally (linked to source)"
+    echo "  3. Make 'ractor' command available globally (linked to source)"
     echo ""
     echo "Examples:"
     echo "  $0                      Link CLI for development"
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "🔗 Linking Raworc CLI for development"
+print_status "🔗 Linking Ractor CLI for development"
 
 # Check if Node.js is installed
 if ! command -v node >/dev/null 2>&1; then
@@ -131,7 +131,7 @@ echo ""
 # Step 2: Unlink if force option or already linked
 if [ "$FORCE" = true ]; then
     print_status "Force option detected, unlinking first..."
-    npm unlink -g raworc-cli 2>/dev/null || true
+    npm unlink -g ractor-cli 2>/dev/null || true
 fi
 
 # Step 3: Create development link
@@ -139,7 +139,7 @@ print_status "Creating development link..."
 
 if npm link; then
     print_success "Development link created successfully"
-    print_status "The 'raworc' command is now linked to your source code"
+    print_status "The 'ractor' command is now linked to your source code"
 else
     print_error "Failed to create development link"
     print_status "You may need to run with elevated privileges:"
@@ -154,39 +154,39 @@ print_success "🎉 Development link completed!"
 echo ""
 print_status "Development Workflow:"
 echo "  1. Edit source code:     vim cli/commands/start.js"
-echo "  2. Test immediately:     raworc start"
+echo "  2. Test immediately:     ractor start"
 echo "  3. Changes are live:     No reinstall needed!"
 
 echo ""
 print_status "Available Commands:"
-echo "  raworc --help           # Show help"
-echo "  raworc start            # Start services"
-echo "  raworc auth login       # Authenticate"
-echo "  raworc api version      # Check API"
-echo "  raworc agent create     # Interactive agent"
+echo "  ractor --help           # Show help"
+echo "  ractor start            # Start services"
+echo "  ractor auth login       # Authenticate"
+echo "  ractor api version      # Check API"
+echo "  ractor agent create     # Interactive agent"
 
 # Show installed version
 package_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
 echo ""
-print_status "Linked Raworc CLI version: $package_version"
+print_status "Linked Ractor CLI version: $package_version"
 
-# Check if raworc command is available
+# Check if ractor command is available
 echo ""
-if command -v raworc >/dev/null 2>&1; then
-    print_success "✓ 'raworc' command is available (linked to development source)"
-    raworc --version 2>/dev/null || echo "  Run 'raworc --help' to get started"
+if command -v ractor >/dev/null 2>&1; then
+    print_success "✓ 'ractor' command is available (linked to development source)"
+    ractor --version 2>/dev/null || echo "  Run 'ractor --help' to get started"
     
     # Show what the link points to
-    which_raworc=$(which raworc 2>/dev/null || echo "unknown")
-    if [ "$which_raworc" != "unknown" ]; then
-        print_status "Link location: $which_raworc"
-        if [ -L "$which_raworc" ]; then
-            link_target=$(readlink "$which_raworc" 2>/dev/null || echo "unknown")
+    which_ractor=$(which ractor 2>/dev/null || echo "unknown")
+    if [ "$which_ractor" != "unknown" ]; then
+        print_status "Link location: $which_ractor"
+        if [ -L "$which_ractor" ]; then
+            link_target=$(readlink "$which_ractor" 2>/dev/null || echo "unknown")
             print_status "Points to: $link_target"
         fi
     fi
 else
-    print_warning "⚠ 'raworc' command not found in PATH"
+    print_warning "⚠ 'ractor' command not found in PATH"
     print_status "You may need to restart your terminal or add npm global bin to PATH"
     print_status "Global npm bin: $(npm bin -g 2>/dev/null || echo 'unknown')"
 fi
@@ -196,4 +196,4 @@ print_status "💡 Development Tips:"
 echo "  • Edit any file in cli/ - changes take effect immediately"
 echo "  • No need to reinstall after code changes"  
 echo "  • Use 'scripts/install.sh' for stable global installation"
-echo "  • Use 'npm unlink -g raworc-cli' to remove the link"
+echo "  • Use 'npm unlink -g ractor-cli' to remove the link"

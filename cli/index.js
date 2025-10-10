@@ -19,7 +19,7 @@ const rebuildShortcut = require('./commands/dev_rebuild');
 const program = new Command();
 
 program
-  .name('raworc')
+  .name('ractor')
   .description('Remote Agentic Work Orchestrator - CLI for Computer use agents')
   .version(pkg.version, '-v, --version', 'output the version number');
 

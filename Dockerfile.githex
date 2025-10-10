@@ -1,4 +1,4 @@
-# Raworc GitHex Next.js application
+# Ractor GitHex Next.js application
 
 FROM node:20-alpine AS deps
 WORKDIR /app

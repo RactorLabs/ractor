@@ -1,4 +1,4 @@
-# Raworc AskRepo Rust application
+# Ractor AskRepo Rust application
 
 FROM rust:1.84-slim-bullseye AS builder
 WORKDIR /src
@@ -11,11 +11,11 @@ ENV CARGO_TARGET_DIR=/src/target
 
 # Pre-copy Cargo manifests to leverage incremental caching
 COPY Cargo.toml Cargo.lock ./
-COPY apps/raworc-apps-askrepo/Cargo.toml apps/raworc-apps-askrepo/Cargo.toml
+COPY apps/ractor-apps-askrepo/Cargo.toml apps/ractor-apps-askrepo/Cargo.toml
 
 # Copy source and build
 COPY . .
-RUN cargo build --release --manifest-path apps/raworc-apps-askrepo/Cargo.toml
+RUN cargo build --release --manifest-path apps/ractor-apps-askrepo/Cargo.toml
 
 FROM debian:bullseye-slim
 WORKDIR /app
@@ -25,15 +25,15 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Runtime user (non-root)
-RUN useradd --system --home /app --shell /usr/sbin/nologin raworc
+RUN useradd --system --home /app --shell /usr/sbin/nologin ractor
 
-COPY --from=builder /src/target/release/raworc-apps-askrepo /usr/local/bin/raworc-apps-askrepo
+COPY --from=builder /src/target/release/ractor-apps-askrepo /usr/local/bin/ractor-apps-askrepo
 
 # Persistent directory for logs/state if needed
-RUN mkdir -p /app/data && chown raworc:raworc /app/data
+RUN mkdir -p /app/data && chown ractor:ractor /app/data
 VOLUME ["/app/data"]
 
 ENV RUST_LOG=info
-USER raworc
+USER ractor
 
-CMD ["raworc-apps-askrepo"]
+CMD ["ractor-apps-askrepo"]

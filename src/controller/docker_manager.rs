@@ -21,7 +21,7 @@ pub struct DockerManager {
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
     let mut lines = String::from(
-        "# Raworc agent environment\n# Managed by Raworc controller; do not modify without explicit approval.\n",
+        "# Ractor agent environment\n# Managed by Ractor controller; do not modify without explicit approval.\n",
     );
     let mut entries: Vec<_> = env.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -51,7 +51,7 @@ impl DockerManager {
             docker,
             db_pool,
             agent_image: std::env::var("AGENT_IMAGE")
-                .unwrap_or_else(|_| "raworc_agent:latest".to_string()),
+                .unwrap_or_else(|_| "ractor_agent:latest".to_string()),
             cpu_limit: std::env::var("AGENT_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
@@ -65,13 +65,13 @@ impl DockerManager {
 
     // NEW: Create agent volume with explicit naming
     async fn create_agent_volume(&self, agent_name: &str) -> Result<String> {
-        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.agent_name".to_string(), agent_name.to_string());
-        labels.insert("raworc.type".to_string(), "agent_volume".to_string());
+        labels.insert("ractor.agent_name".to_string(), agent_name.to_string());
+        labels.insert("ractor.type".to_string(), "agent_volume".to_string());
         labels.insert(
-            "raworc.created_at".to_string(),
+            "ractor.created_at".to_string(),
             chrono::Utc::now().to_rfc3339(),
         );
 
@@ -90,12 +90,12 @@ impl DockerManager {
 
     // Get agent volume name (derived from agent name). Docker volume names must be lowercase.
     fn get_agent_volume_name(&self, agent_name: &str) -> String {
-        format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase())
+        format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase())
     }
 
     // Get agent container name (derived from agent name). Docker container names must be lowercase.
     fn get_agent_container_name(&self, agent_name: &str) -> String {
-        format!("raworc_agent_{}", agent_name.to_ascii_lowercase())
+        format!("ractor_agent_{}", agent_name.to_ascii_lowercase())
     }
 
     // Check if agent volume exists
@@ -126,8 +126,8 @@ sudo chmod 600 /agent/.env
 sudo chown -R agent:agent /agent
 sudo chmod -R 755 /agent
 # Seed default HTML template if missing
-if [ ! -f /agent/template/simple.html ] && [ -f /opt/raworc/templates/simple.html ]; then
-  sudo cp /opt/raworc/templates/simple.html /agent/template/simple.html && sudo chown agent:agent /agent/template/simple.html;
+if [ ! -f /agent/template/simple.html ] && [ -f /opt/ractor/templates/simple.html ]; then
+  sudo cp /opt/ractor/templates/simple.html /agent/template/simple.html && sudo chown agent:agent /agent/template/simple.html;
 fi
 echo 'Agent directories created (code, .env, logs, content, template)'
 ";
@@ -177,7 +177,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     // NEW: Cleanup agent volume
     pub async fn cleanup_agent_volume(&self, agent_name: &str) -> Result<()> {
-        let expected_volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let expected_volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
@@ -207,10 +207,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Then copy data from parent volume to new volume using Docker command
         let parent_volume = format!(
-            "raworc_agent_data_{}",
+            "ractor_agent_data_{}",
             parent_agent_name.to_ascii_lowercase()
         );
-        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying volume data from {} to {}",
@@ -218,7 +218,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
 
         let config = Config {
             image: Some(self.agent_image.clone()),
@@ -244,7 +244,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     }
                 ]),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -336,10 +336,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "raworc_agent_data_{}",
+            "ractor_agent_data_{}",
             parent_agent_name.to_ascii_lowercase()
         );
-        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -386,7 +386,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
 
         let config = Config {
             image: Some(self.agent_image.clone()),
@@ -409,7 +409,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     },
                 ]),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -536,7 +536,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         copy_code: bool,
         copy_env: bool,
         copy_content: bool,
-        raworc_token: String,
+        ractor_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
@@ -551,10 +551,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "raworc_agent_data_{}",
+            "ractor_agent_data_{}",
             parent_agent_name.to_ascii_lowercase()
         );
-        let new_volume = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -601,7 +601,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("raworc_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
 
         let config = Config {
             image: Some(self.agent_image.clone()),
@@ -624,7 +624,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     },
                 ]),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -745,7 +745,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 Some(env),
                 instructions,
                 setup,
-                raworc_token,
+                ractor_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -767,7 +767,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     // Helper method to read a file from a volume
     async fn read_file_from_volume(&self, volume_name: &str, file_path: &str) -> Result<String> {
         let read_container_name = format!(
-            "raworc_read_file_{}",
+            "ractor_read_file_{}",
             Uuid::new_v4().to_string()[..8].to_string()
         );
 
@@ -790,7 +790,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                     read_only: Some(true),
                     ..Default::default()
                 }]),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -877,7 +877,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
-        raworc_token: String,
+        ractor_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
@@ -888,7 +888,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 Some(env),
                 instructions,
                 setup,
-                raworc_token,
+                ractor_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -906,7 +906,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     pub async fn wake_container(&self, agent_name: &str) -> Result<String> {
         // Read existing env from the volume
-        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
             "Waking container for agent {} - reading env from volume {}",
             agent_name, volume_name
@@ -948,13 +948,13 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     pub async fn wake_container_with_tokens(
         &self,
         agent_name: &str,
-        raworc_token: String,
+        ractor_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user env from the volume (but generate fresh system tokens)
-        let volume_name = format!("raworc_agent_data_{}", agent_name.to_ascii_lowercase());
+        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
         info!(
             "Waking container for agent {} with fresh tokens",
             agent_name
@@ -994,7 +994,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 env,
                 instructions,
                 setup,
-                raworc_token,
+                ractor_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -1010,7 +1010,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
@@ -1031,17 +1031,17 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.agent".to_string(), agent_name.to_string());
-        labels.insert("raworc.managed".to_string(), "true".to_string());
-        labels.insert("raworc.volume".to_string(), agent_volume.clone());
+        labels.insert("ractor.agent".to_string(), agent_name.to_string());
+        labels.insert("ractor.managed".to_string(), "true".to_string());
+        labels.insert("ractor.volume".to_string(), agent_volume.clone());
 
         // Get user token from env (added automatically by agent manager)
         let user_token = env_map
             .as_ref()
-            .and_then(|s| s.get("RAWORC_TOKEN"))
+            .and_then(|s| s.get("RACTOR_TOKEN"))
             .cloned()
             .unwrap_or_else(|| {
-                warn!("No RAWORC_TOKEN found in env, Host authentication may fail");
+                warn!("No RACTOR_TOKEN found in env, Host authentication may fail");
                 "missing-token".to_string()
             });
 
@@ -1058,17 +1058,17 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Set environment variables for the agent structure
         let mut env_vars = vec![
-            format!("RAWORC_API_URL=http://raworc_api:9000"),
-            format!("RAWORC_AGENT_NAME={}", agent_name),
-            format!("RAWORC_AGENT_DIR=/agent"),
+            format!("RACTOR_API_URL=http://ractor_api:9000"),
+            format!("RACTOR_AGENT_NAME={}", agent_name),
+            format!("RACTOR_AGENT_DIR=/agent"),
         ];
 
         // Propagate host branding and URL to agents (provided by start script)
-        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL")
-            .expect("RAWORC_HOST_URL must be set by the start script");
-        env_vars.push(format!("RAWORC_HOST_NAME={}", host_name));
-        env_vars.push(format!("RAWORC_HOST_URL={}", host_url));
+        let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
+        let host_url = std::env::var("RACTOR_HOST_URL")
+            .expect("RACTOR_HOST_URL must be set by the start script");
+        env_vars.push(format!("RACTOR_HOST_NAME={}", host_name));
+        env_vars.push(format!("RACTOR_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
@@ -1090,32 +1090,32 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env_vars.push("RAWORC_HAS_SETUP=true".to_string());
+            env_vars.push("RACTOR_HAS_SETUP=true".to_string());
         }
 
         // Add principal information as environment variables
         if let Some(env_map) = &env_map {
-            // Extract principal info from RAWORC_TOKEN if available
-            if let Some(_token) = env_map.get("RAWORC_TOKEN") {
+            // Extract principal info from RACTOR_TOKEN if available
+            if let Some(_token) = env_map.get("RACTOR_TOKEN") {
                 // Set environment variables for Host principal logging
                 env_vars.push(format!(
-                    "RAWORC_PRINCIPAL={}",
+                    "RACTOR_PRINCIPAL={}",
                     env_map
-                        .get("RAWORC_PRINCIPAL")
+                        .get("RACTOR_PRINCIPAL")
                         .unwrap_or(&"unknown".to_string())
                 ));
                 env_vars.push(format!(
-                    "RAWORC_PRINCIPAL_TYPE={}",
+                    "RACTOR_PRINCIPAL_TYPE={}",
                     env_map
-                        .get("RAWORC_PRINCIPAL_TYPE")
+                        .get("RACTOR_PRINCIPAL_TYPE")
                         .unwrap_or(&"unknown".to_string())
                 ));
             }
 
             // Add user env as environment variables, but do NOT override
-            // system-managed values like RAWORC_TOKEN or OLLAMA_HOST.
+            // system-managed values like RACTOR_TOKEN or OLLAMA_HOST.
             for (key, value) in env_map {
-                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
+                if key == "RACTOR_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for agent {}",
                         key, agent_name
@@ -1123,7 +1123,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                     continue;
                 }
                 env_vars.push(format!("{}={}", key, value));
-                if key != "RAWORC_PRINCIPAL" && key != "RAWORC_PRINCIPAL_TYPE" {
+                if key != "RACTOR_PRINCIPAL" && key != "RACTOR_PRINCIPAL_TYPE" {
                     info!(
                         "Adding env entry {} as environment variable for agent {}",
                         key, agent_name
@@ -1134,9 +1134,9 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "raworc-agent".to_string(),
+            "ractor-agent".to_string(),
             "--api-url".to_string(),
-            "http://raworc_api:9000".to_string(),
+            "http://ractor_api:9000".to_string(),
             "--agent-name".to_string(),
             agent_name.to_string(),
         ];
@@ -1154,7 +1154,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 cpu_period: Some(100000),
                 memory: Some(self.memory_limit),
                 memory_swap: Some(self.memory_limit),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
@@ -1200,12 +1200,12 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
-        raworc_token: String,
+        ractor_token: String,
         principal: String,
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
@@ -1229,9 +1229,9 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         };
 
         let mut labels = HashMap::new();
-        labels.insert("raworc.agent".to_string(), agent_name.to_string());
-        labels.insert("raworc.managed".to_string(), "true".to_string());
-        labels.insert("raworc.volume".to_string(), agent_volume.clone());
+        labels.insert("ractor.agent".to_string(), agent_name.to_string());
+        labels.insert("ractor.managed".to_string(), "true".to_string());
+        labels.insert("ractor.volume".to_string(), agent_volume.clone());
 
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
@@ -1246,21 +1246,21 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Set environment variables for the agent structure
         let mut env_vars = vec![
-            format!("RAWORC_API_URL=http://raworc_api:9000"),
-            format!("RAWORC_AGENT_NAME={}", agent_name),
-            format!("RAWORC_AGENT_DIR=/agent"),
+            format!("RACTOR_API_URL=http://ractor_api:9000"),
+            format!("RACTOR_AGENT_NAME={}", agent_name),
+            format!("RACTOR_AGENT_DIR=/agent"),
             // Set the generated system tokens directly as environment variables
-            format!("RAWORC_TOKEN={}", raworc_token),
-            format!("RAWORC_PRINCIPAL={}", principal),
-            format!("RAWORC_PRINCIPAL_TYPE={}", principal_type),
+            format!("RACTOR_TOKEN={}", ractor_token),
+            format!("RACTOR_PRINCIPAL={}", principal),
+            format!("RACTOR_PRINCIPAL_TYPE={}", principal_type),
         ];
 
         // Propagate host branding and URL to agents (provided by start script)
-        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let host_url = std::env::var("RAWORC_HOST_URL")
-            .expect("RAWORC_HOST_URL must be set by the start script");
-        env_vars.push(format!("RAWORC_HOST_NAME={}", host_name));
-        env_vars.push(format!("RAWORC_HOST_URL={}", host_url));
+        let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
+        let host_url = std::env::var("RACTOR_HOST_URL")
+            .expect("RACTOR_HOST_URL must be set by the start script");
+        env_vars.push(format!("RACTOR_HOST_NAME={}", host_name));
+        env_vars.push(format!("RACTOR_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
@@ -1275,21 +1275,21 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env_vars.push("RAWORC_HAS_SETUP=true".to_string());
+            env_vars.push("RACTOR_HAS_SETUP=true".to_string());
         }
 
         // Add task creation timestamp for message processing
         if let Some(timestamp) = task_created_at {
-            env_vars.push(format!("RAWORC_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
+            env_vars.push(format!("RACTOR_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
-        info!("Set RAWORC_TOKEN and OLLAMA_HOST as environment variables");
+        info!("Set RACTOR_TOKEN and OLLAMA_HOST as environment variables");
 
-        // Add user env as environment variables (but NOT RAWORC_TOKEN or OLLAMA_HOST)
+        // Add user env as environment variables (but NOT RACTOR_TOKEN or OLLAMA_HOST)
         if let Some(env_map) = &env_map_opt {
             for (key, value) in env_map {
-                // Skip if user provided their own RAWORC_TOKEN or OLLAMA_HOST - we use system-managed values
-                if key == "RAWORC_TOKEN" || key == "OLLAMA_HOST" {
+                // Skip if user provided their own RACTOR_TOKEN or OLLAMA_HOST - we use system-managed values
+                if key == "RACTOR_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead",
                         key
@@ -1306,9 +1306,9 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "raworc-agent".to_string(),
+            "ractor-agent".to_string(),
             "--api-url".to_string(),
-            "http://raworc_api:9000".to_string(),
+            "http://ractor_api:9000".to_string(),
             "--agent-name".to_string(),
             agent_name.to_string(),
         ];
@@ -1326,7 +1326,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 cpu_period: Some(100000),
                 memory: Some(self.memory_limit),
                 memory_swap: Some(self.memory_limit),
-                network_mode: Some("raworc_network".to_string()),
+                network_mode: Some("ractor_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
@@ -1369,7 +1369,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     // Sleep container but retain persistent volume (for agent pause/sleep)
     pub async fn sleep_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         info!("Sleeping container {}", container_name);
 
@@ -1407,7 +1407,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     // Delete container and remove persistent volume (for agent deletion)
     pub async fn delete_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         info!("Deleting container {}", container_name);
 
@@ -1452,7 +1452,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
 
     pub async fn execute_command(&self, agent_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         info!(
             "Executing command in container {}: {}",
@@ -1490,7 +1490,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         agent_name: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
         let exec_config = CreateExecOptions {
             cmd: Some(cmd),
             attach_stdout: Some(true),
@@ -1528,7 +1528,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     }
 
     pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
         let public_path = format!("/content/{}", agent_name);
 
         info!(
@@ -1538,7 +1538,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Ensure directory exists inside content container
         let mkdir_output = std::process::Command::new("docker")
-            .args(&["exec", "raworc_content", "mkdir", "-p", &public_path])
+            .args(&["exec", "ractor_content", "mkdir", "-p", &public_path])
             .output();
         if let Err(e) = mkdir_output {
             return Err(anyhow::anyhow!("Failed to create content directory: {}", e));
@@ -1549,7 +1549,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             "docker",
             "cp",
             &format!("{}:/agent/content/.", container_name),
-            &format!("raworc_content:{}/", public_path),
+            &format!("ractor_content:{}/", public_path),
         ];
         match std::process::Command::new(copy_cmd[0])
             .args(&copy_cmd[1..])
@@ -1596,7 +1596,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Remove public directory from server container using docker exec
         let output = std::process::Command::new("docker")
-            .args(&["exec", "raworc_content", "rm", "-rf", &public_path])
+            .args(&["exec", "ractor_content", "rm", "-rf", &public_path])
             .output()
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -1627,7 +1627,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     /// Check if an agent container exists and is running healthily
     pub async fn is_container_healthy(&self, agent_name: &str) -> Result<bool> {
-        let container_name = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {

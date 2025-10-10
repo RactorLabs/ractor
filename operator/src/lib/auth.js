@@ -1,9 +1,9 @@
 // Simple auth helpers using browser cookies + a reactive auth store
 import { writable } from 'svelte/store';
 
-const TOKEN_COOKIE = 'raworc_token';
-const OPERATOR_COOKIE = 'raworc_operator';
-const PRINCIPAL_COOKIE = 'raworc_principal_type';
+const TOKEN_COOKIE = 'ractor_token';
+const OPERATOR_COOKIE = 'ractor_operator';
+const PRINCIPAL_COOKIE = 'ractor_principal_type';
 
 export const auth = writable({ token: null, name: null, type: null });
 

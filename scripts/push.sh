@@ -15,8 +15,8 @@ else
 fi
 
 # Default registry prefix (DigitalOcean Container Registry)
-# Example full image name: registry.digitalocean.com/raworc/raworc_api:TAG
-DEFAULT_REGISTRY="registry.digitalocean.com/raworc"
+# Example full image name: registry.digitalocean.com/ractor/ractor_api:TAG
+DEFAULT_REGISTRY="registry.digitalocean.com/ractor"
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,7 +46,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Push Docker images for Raworc components to registry"
+  echo "Push Docker images for Ractor components to registry"
   echo ""
   echo "Components:"
   echo "  api         Push the api image"
@@ -107,7 +107,7 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
-print_status "Pushing Raworc Docker images"
+print_status "Pushing Ractor Docker images"
 print_status "Tag: $TAG"
 print_status "Registry: $REGISTRY"
 print_status "Components: ${COMPONENTS[*]}"
@@ -134,28 +134,28 @@ echo ""
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api)
-    image_name="${REGISTRY}/raworc_api:${TAG}"
+    image_name="${REGISTRY}/ractor_api:${TAG}"
     ;;
   controller)
-    image_name="${REGISTRY}/raworc_controller:${TAG}"
+    image_name="${REGISTRY}/ractor_controller:${TAG}"
     ;;
   agent)
-    image_name="${REGISTRY}/raworc_agent:${TAG}"
+    image_name="${REGISTRY}/ractor_agent:${TAG}"
     ;;
   operator)
-    image_name="${REGISTRY}/raworc_operator:${TAG}"
+    image_name="${REGISTRY}/ractor_operator:${TAG}"
     ;;
   content)
-    image_name="${REGISTRY}/raworc_content:${TAG}"
+    image_name="${REGISTRY}/ractor_content:${TAG}"
     ;;
   gateway)
-    image_name="${REGISTRY}/raworc_gateway:${TAG}"
+    image_name="${REGISTRY}/ractor_gateway:${TAG}"
     ;;
   app_githex)
-    image_name="${REGISTRY}/raworc_app_githex:${TAG}"
+    image_name="${REGISTRY}/ractor_app_githex:${TAG}"
     ;;
   app_askrepo)
-    image_name="${REGISTRY}/raworc_app_askrepo:${TAG}"
+    image_name="${REGISTRY}/ractor_app_askrepo:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -167,11 +167,11 @@ for component in "${COMPONENTS[@]}"; do
 
   # Check if local image exists (built by build.sh uses project version)
   if [ "$component" = "app_githex" ]; then
-    local_image="raworc_app_githex:${TAG}"
+    local_image="ractor_app_githex:${TAG}"
   elif [ "$component" = "app_askrepo" ]; then
-    local_image="raworc_app_askrepo:${TAG}"
+    local_image="ractor_app_askrepo:${TAG}"
   else
-    local_image="raworc_${component}:${TAG}"
+    local_image="ractor_${component}:${TAG}"
   fi
   if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${local_image}$"; then
     print_error "Local image $local_image not found. Build it first with:"
@@ -188,11 +188,11 @@ for component in "${COMPONENTS[@]}"; do
 
   # Also tag as 'latest' if we're pushing a version tag
   if [ "$component" = "app_githex" ]; then
-    latest_image="${REGISTRY}/raworc_app_githex:latest"
+    latest_image="${REGISTRY}/ractor_app_githex:latest"
   elif [ "$component" = "app_askrepo" ]; then
-    latest_image="${REGISTRY}/raworc_app_askrepo:latest"
+    latest_image="${REGISTRY}/ractor_app_askrepo:latest"
   else
-    latest_image="${REGISTRY}/raworc_${component}:latest"
+    latest_image="${REGISTRY}/ractor_${component}:latest"
   fi
   if [ "$TAG" != "latest" ]; then
     print_status "Tagging $local_image as $latest_image..."
@@ -232,21 +232,21 @@ print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api | controller | agent | operator | content | gateway)
-    echo "  ${REGISTRY}/raworc_${component}:${TAG}"
+    echo "  ${REGISTRY}/ractor_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/raworc_${component}:latest"
+      echo "  ${REGISTRY}/ractor_${component}:latest"
     fi
     ;;
   app_githex)
-    echo "  ${REGISTRY}/raworc_app_githex:${TAG}"
+    echo "  ${REGISTRY}/ractor_app_githex:${TAG}"
     if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/raworc_app_githex:latest"
+      echo "  ${REGISTRY}/ractor_app_githex:latest"
     fi
     ;;
   app_askrepo)
-    echo "  ${REGISTRY}/raworc_app_askrepo:${TAG}"
+    echo "  ${REGISTRY}/ractor_app_askrepo:${TAG}"
     if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/raworc_app_askrepo:latest"
+      echo "  ${REGISTRY}/ractor_app_askrepo:latest"
     fi
     ;;
   esac

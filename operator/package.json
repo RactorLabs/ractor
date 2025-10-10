@@ -1,5 +1,5 @@
 {
-    "name": "raworc-operator",
+    "name": "ractor-operator",
 	"version": "5.0.0",
 	"private": true,
 	"scripts": {

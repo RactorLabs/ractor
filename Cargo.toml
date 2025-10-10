@@ -1,5 +1,5 @@
 [package]
-name = "raworc"
+name = "ractor"
 version = "0.10.12"
 edition = "2021"
 
@@ -39,17 +39,17 @@ globset = "0.4"
 base64 = "0.22"
 
 [[bin]]
-name = "raworc-api"
+name = "ractor-api"
 path = "src/api/main.rs"
 
 [[bin]]
-name = "raworc-controller" 
+name = "ractor-controller" 
 path = "src/controller/main.rs"
 
 [[bin]]
-name = "raworc-agent"
+name = "ractor-agent"
 path = "src/agent/main.rs"
 
 [[bin]]
-name = "raworc-content"
+name = "ractor-content"
 path = "src/content/main.rs"

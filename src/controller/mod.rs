@@ -6,7 +6,7 @@ pub use agent_manager::AgentManager;
 use anyhow::Result;
 
 pub async fn run() -> Result<()> {
-    tracing::info!("Starting Raworc Controller...");
+    tracing::info!("Starting Ractor Controller...");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

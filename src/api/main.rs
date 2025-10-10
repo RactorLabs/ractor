@@ -8,7 +8,7 @@ mod shared;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize service logging
-    let _ = shared::logging::init_service_logging("/app/logs", "raworc_api");
+    let _ = shared::logging::init_service_logging("/app/logs", "ractor_api");
 
     // Run the API server
     api::rest::api::run_rest_server().await

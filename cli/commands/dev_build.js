@@ -13,16 +13,16 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('build')
-    .description('[development only] Build Raworc images via ./scripts/build.sh')
+    .description('[development only] Build Ractor images via ./scripts/build.sh')
     .argument('[args...]', 'Components: api, controller, agent, operator, content, gateway, app_githex, app_askrepo (apps are opt-in). Flags are passed through (e.g., -n, --no-cache).')
     .addHelpText('after', '\nAllowed components: api, controller, agent, operator, content, gateway, app_githex, app_askrepo\n' +
       '\nExamples:\n' +
-      '  $ raworc build                       # builds all (script default)\n' +
-      '  $ raworc build api controller        # build only api and controller\n' +
-      '  $ raworc build operator content      # build Operator UI and Content\n' +
-      '  $ raworc build app_githex            # build the GitHex app image\n' +
-      '  $ raworc build app_askrepo           # build the AskRepo app image\n' +
-      '  $ raworc build -- -n --no-cache      # pass flags through to script')
+      '  $ ractor build                       # builds all (script default)\n' +
+      '  $ ractor build api controller        # build only api and controller\n' +
+      '  $ ractor build operator content      # build Operator UI and Content\n' +
+      '  $ ractor build app_githex            # build the GitHex app image\n' +
+      '  $ ractor build app_askrepo           # build the AskRepo app image\n' +
+      '  $ ractor build -- -n --no-cache      # pass flags through to script')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'build.sh');
@@ -30,7 +30,7 @@ module.exports = (program) => {
           console.error('[ERROR] scripts/build.sh not found. This command is for development only.');
           process.exit(1);
         }
-        // Validate non-flag args are Raworc components (or 'all')
+        // Validate non-flag args are Ractor components (or 'all')
         const allowed = new Set(['api','controller','agent','operator','content','gateway','app_githex','app_askrepo','all']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {

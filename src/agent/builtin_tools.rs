@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::api::RaworcClient;
+use super::api::RactorClient;
 use super::tool_registry::Tool;
 use super::tools::{run_bash, text_edit, TextEditAction, PLAN_PATH};
 use anyhow::anyhow;
@@ -670,11 +670,11 @@ impl Tool for FindFilenameTool {
 
 /// Publish tool (no confirmation required)
 pub struct PublishTool {
-    api: Arc<RaworcClient>,
+    api: Arc<RactorClient>,
 }
 
 impl PublishTool {
-    pub fn new(api: Arc<RaworcClient>) -> Self {
+    pub fn new(api: Arc<RactorClient>) -> Self {
         Self { api }
     }
 }
@@ -723,11 +723,11 @@ impl Tool for PublishTool {
 
 /// Sleep tool (explicit user confirmation required)
 pub struct SleepTool {
-    api: Arc<RaworcClient>,
+    api: Arc<RactorClient>,
 }
 
 impl SleepTool {
-    pub fn new(api: Arc<RaworcClient>) -> Self {
+    pub fn new(api: Arc<RactorClient>) -> Self {
         Self { api }
     }
 }

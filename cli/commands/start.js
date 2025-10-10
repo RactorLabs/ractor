@@ -47,14 +47,14 @@ function readProjectVersionOrLatest() {
 
 async function ensureNetwork() {
   try {
-    await docker(['network', 'inspect', 'raworc_network'], { silent: true });
+    await docker(['network', 'inspect', 'ractor_network'], { silent: true });
   } catch (_) {
-    await docker(['network', 'create', 'raworc_network']);
+    await docker(['network', 'create', 'ractor_network']);
   }
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data', 'raworc_app_githex', 'raworc_app_askrepo']) {
+  for (const v of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data', 'ractor_app_githex', 'ractor_app_askrepo']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -101,19 +101,19 @@ module.exports = (program) => {
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
-    .option('--mysql-database <db>', 'MySQL database name', 'raworc')
-    .option('--mysql-user <user>', 'MySQL user', 'raworc')
-    .option('--mysql-password <pw>', 'MySQL user password', 'raworc')
+    .option('--mysql-database <db>', 'MySQL database name', 'ractor')
+    .option('--mysql-user <user>', 'MySQL user', 'ractor')
+    .option('--mysql-password <pw>', 'MySQL user password', 'ractor')
     // API options
-    .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
+    .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://ractor:ractor@mysql:3306/ractor')
     .option('--api-jwt-secret <secret>', 'API JWT_SECRET')
     .option('--api-rust-log <level>', 'API RUST_LOG', 'info')
-    .option('--api-raworc-host <host>', 'API RAWORC_HOST')
-    .option('--api-raworc-port <port>', 'API RAWORC_PORT')
+    .option('--api-ractor-host <host>', 'API RACTOR_HOST')
+    .option('--api-ractor-port <port>', 'API RACTOR_PORT')
     .option('--api-api-port <port>', 'Host port for API (maps to 9000)', '9000')
     .option('--api-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
     // Controller options
-    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://raworc:raworc@mysql:3306/raworc')
+    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://ractor:ractor@mysql:3306/ractor')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
@@ -125,11 +125,11 @@ module.exports = (program) => {
       '  • Does not stop or remove any containers.\n' +
       '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
       '\nExamples:\n' +
-      '  $ raworc start                                # Start full stack\n' +
-      '  $ raworc start api controller                 # Start API + controller\n' +
-      '  $ raworc start mysql                          # Ensure MySQL is up\n' +
-      '  $ raworc start app_githex                     # Start the GitHex app container\n' +
-      '  $ raworc start app_askrepo                    # Start the AskRepo polling app\n')
+      '  $ ractor start                                # Start full stack\n' +
+      '  $ ractor start api controller                 # Start API + controller\n' +
+      '  $ ractor start mysql                          # Ensure MySQL is up\n' +
+      '  $ ractor start app_githex                     # Start the GitHex app container\n' +
+      '  $ ractor start app_askrepo                    # Start the AskRepo polling app\n')
     .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
     .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
     .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
@@ -140,8 +140,8 @@ module.exports = (program) => {
         const tag = readProjectVersionOrLatest();
 
         // Resolve host branding and URL only here (script-level default allowed)
-        const RAWORC_HOST_NAME = process.env.RAWORC_HOST_NAME || 'Raworc';
-        const RAWORC_HOST_URL = (process.env.RAWORC_HOST_URL || 'http://localhost').replace(/\/$/, '');
+        const RACTOR_HOST_NAME = process.env.RACTOR_HOST_NAME || 'Ractor';
+        const RACTOR_HOST_URL = (process.env.RACTOR_HOST_URL || 'http://localhost').replace(/\/$/, '');
 
         function withPort(baseUrl, port) {
           try {
@@ -162,7 +162,7 @@ module.exports = (program) => {
           } catch (_) { return false; }
         }
 
-        async function resolveRaworcImage(component, localShortName, remoteRepo, tag) {
+        async function resolveRactorImage(component, localShortName, remoteRepo, tag) {
           const localName = `${localShortName}:${tag}`;
           if (await imageExistsLocally(localName)) {
             console.log(chalk.blue('[INFO] ') + `${component}: using local image ${localName}`);
@@ -190,7 +190,7 @@ module.exports = (program) => {
 
         // Note: resolve images lazily per requested component to avoid unnecessary pulls
 
-        console.log(chalk.blue('[INFO] ') + 'Starting Raworc services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + 'Starting Ractor services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
@@ -228,7 +228,7 @@ module.exports = (program) => {
         if (options.pull) {
           console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
           try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
-          // Raworc images are resolved lazily when each component starts.
+          // Ractor images are resolved lazily when each component starts.
           console.log();
         }
 
@@ -294,13 +294,13 @@ module.exports = (program) => {
               if (detached) args.push('-d');
               args.push(
                 '--name','mysql',
-                '--network','raworc_network',
+                '--network','ractor_network',
                 '-p', `${String(options.mysqlPort || '3307')}:3306`,
                 '-v','mysql_data:/var/lib/mysql',
                 '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
-                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'raworc'}`,
-                '-e',`MYSQL_USER=${options.mysqlUser || 'raworc'}`,
-                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'raworc'}`,
+                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'ractor'}`,
+                '-e',`MYSQL_USER=${options.mysqlUser || 'ractor'}`,
+                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'ractor'}`,
                 '--health-cmd','mysqladmin ping -h localhost -u root -proot',
                 '--health-interval','10s',
                 '--health-timeout','5s',
@@ -424,7 +424,7 @@ module.exports = (program) => {
 
               const args = ['run','-d',
                 '--name','ollama',
-                '--network','raworc_network',
+                '--network','ractor_network',
               ];
               if (hostPublish) args.push('-p','11434:11434');
               args.push(
@@ -452,7 +452,7 @@ module.exports = (program) => {
               if (hostPublish) {
                 console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
                 while (Date.now() - start < timeoutMs) {
-              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(RAWORC_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
+              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(RACTOR_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
                   await new Promise(r=>setTimeout(r,2000));
                 }
               } else {
@@ -481,25 +481,25 @@ module.exports = (program) => {
 
             case 'api': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring API is running...');
-              if (await containerRunning('raworc_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
-              if (await containerExists('raworc_api')) {
-                await docker(['start','raworc_api']);
+              if (await containerRunning('ractor_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
+              if (await containerExists('ractor_api')) {
+                await docker(['start','ractor_api']);
                 console.log(chalk.green('[SUCCESS] ') + 'API started');
                 console.log();
                 break;
               }
-              const API_IMAGE = await resolveRaworcImage('api','raworc_api','registry.digitalocean.com/raworc/raworc_api', tag);
+              const API_IMAGE = await resolveRactorImage('api','ractor_api','registry.digitalocean.com/ractor/ractor_api', tag);
               const args = ['run','-d',
-                '--name','raworc_api',
-                '--network','raworc_network',
-                '-v', 'raworc_api_data:/app/logs',
-                '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc'}`,
+                '--name','ractor_api',
+                '--network','ractor_network',
+                '-v', 'ractor_api_data:/app/logs',
+                '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://ractor:ractor@mysql:3306/ractor'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
-                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
-                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
-                ...(options.apiRaworcHost ? ['-e', `RAWORC_HOST=${options.apiRaworcHost}`] : []),
-                ...(options.apiRaworcPort ? ['-e', `RAWORC_PORT=${options.apiRaworcPort}`] : []),
+                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
+                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`,
+                ...(options.apiRactorHost ? ['-e', `RACTOR_HOST=${options.apiRactorHost}`] : []),
+                ...(options.apiRactorPort ? ['-e', `RACTOR_PORT=${options.apiRactorPort}`] : []),
                 API_IMAGE
               ];
               await docker(args);
@@ -514,9 +514,9 @@ module.exports = (program) => {
               const DESIRED_OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
 
               // If container exists, verify env matches; recreate if not
-              if (await containerExists('raworc_controller')) {
+              if (await containerExists('ractor_controller')) {
                 try {
-                  const inspect = await execCmd('docker', ['inspect','raworc_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
+                  const inspect = await execCmd('docker', ['inspect','ractor_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
                   const currentEnv = (inspect.stdout || '').split('\n').filter(Boolean);
                   const envMap = Object.fromEntries(currentEnv.map(e => {
                     const idx = e.indexOf('=');
@@ -526,9 +526,9 @@ module.exports = (program) => {
                   const needsRecreate = !currentHost || currentHost !== DESIRED_OLLAMA_HOST;
                   if (needsRecreate) {
                     console.log(chalk.blue('[INFO] ') + `Recreating controller to apply OLLAMA_HOST=${DESIRED_OLLAMA_HOST}`);
-                    try { await docker(['rm','-f','raworc_controller']); } catch (_) {}
-                  } else if (!(await containerRunning('raworc_controller'))) {
-                    await docker(['start','raworc_controller']);
+                    try { await docker(['rm','-f','ractor_controller']); } catch (_) {}
+                  } else if (!(await containerRunning('ractor_controller'))) {
+                    await docker(['start','ractor_controller']);
                     console.log(chalk.green('[SUCCESS] ') + 'Controller started');
                     console.log();
                     break;
@@ -544,8 +544,8 @@ module.exports = (program) => {
               // Default OLLAMA_HOST to internal service always
               const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
-              const agentImage = options.controllerAgentImage || await resolveRaworcImage('agent','raworc_agent','registry.digitalocean.com/raworc/raworc_agent', tag);
-              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://raworc:raworc@mysql:3306/raworc';
+              const agentImage = options.controllerAgentImage || await resolveRactorImage('agent','ractor_agent','registry.digitalocean.com/ractor/ractor_agent', tag);
+              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://ractor:ractor@mysql:3306/ractor';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
               const model = (() => {
@@ -556,10 +556,10 @@ module.exports = (program) => {
                 return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:120b';
               })();
               const args = ['run','-d',
-                '--name','raworc_controller',
-                '--network','raworc_network',
+                '--name','ractor_controller',
+                '--network','ractor_network',
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
-                '-v','raworc_controller_data:/app/logs',
+                '-v','ractor_controller_data:/app/logs',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
@@ -568,8 +568,8 @@ module.exports = (program) => {
                 '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
                 '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
                 '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
-                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
-                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`,
+                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
+                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`,
                 '-e',`AGENT_IMAGE=${agentImage}`,
                 '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
                 '-e',`AGENT_MEMORY_LIMIT=${(getOptionSource('controllerAgentMemoryLimit')==='cli' ? options.controllerAgentMemoryLimit : (process.env.AGENT_MEMORY_LIMIT || options.controllerAgentMemoryLimit || '536870912'))}`,
@@ -577,7 +577,7 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
-              args.push(await resolveRaworcImage('controller','raworc_controller','registry.digitalocean.com/raworc/raworc_controller', tag));
+              args.push(await resolveRactorImage('controller','ractor_controller','registry.digitalocean.com/ractor/ractor_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
@@ -587,25 +587,25 @@ module.exports = (program) => {
             case 'operator': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
 
-              if (!process.env.RAWORC_HOST_NAME || !process.env.RAWORC_HOST_URL) {
-                console.error(chalk.red('[ERROR] ') + 'RAWORC_HOST_NAME and RAWORC_HOST_URL must be set before starting raworc_operator.');
+              if (!process.env.RACTOR_HOST_NAME || !process.env.RACTOR_HOST_URL) {
+                console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_NAME and RACTOR_HOST_URL must be set before starting ractor_operator.');
                 process.exit(1);
               }
 
-              if (await containerExists('raworc_operator')) {
+              if (await containerExists('ractor_operator')) {
                 // If container exists, ensure it matches the desired image; recreate if not
-                const running = await containerRunning('raworc_operator');
-                const currentId = await containerImageId('raworc_operator');
-              const desiredId = await imageId(await resolveRaworcImage('operator','raworc_operator','registry.digitalocean.com/raworc/raworc_operator', tag));
+                const running = await containerRunning('ractor_operator');
+                const currentId = await containerImageId('ractor_operator');
+              const desiredId = await imageId(await resolveRactorImage('operator','ractor_operator','registry.digitalocean.com/ractor/ractor_operator', tag));
                 if (currentId && desiredId && currentId !== desiredId) {
                   console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
-                  try { await docker(['rm','-f','raworc_operator']); } catch (_) {}
+                  try { await docker(['rm','-f','ractor_operator']); } catch (_) {}
                 } else if (running) {
                   console.log(chalk.green('[SUCCESS] ') + 'Operator already running');
                   console.log();
                   break;
                 } else if (!running && currentId && desiredId && currentId === desiredId) {
-                  await docker(['start','raworc_operator']);
+                  await docker(['start','ractor_operator']);
                   console.log(chalk.green('[SUCCESS] ') + 'Operator started');
                   console.log();
                   break;
@@ -616,14 +616,14 @@ module.exports = (program) => {
               const args = ['run'];
               if (detached) args.push('-d');
               args.push(
-                '--name','raworc_operator',
-                '--network','raworc_network',
-                '-v','raworc_content_data:/content',
-                '-v','raworc_operator_data:/app/logs',
-                '-e',`RAWORC_HOST_NAME=${RAWORC_HOST_NAME}`,
-                '-e',`RAWORC_HOST_URL=${RAWORC_HOST_URL}`
+                '--name','ractor_operator',
+                '--network','ractor_network',
+                '-v','ractor_content_data:/content',
+                '-v','ractor_operator_data:/app/logs',
+                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
+                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`
               );
-              args.push(await resolveRaworcImage('operator','raworc_operator','registry.digitalocean.com/raworc/raworc_operator', tag));
+              args.push(await resolveRactorImage('operator','ractor_operator','registry.digitalocean.com/ractor/ractor_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
@@ -632,17 +632,17 @@ module.exports = (program) => {
 
             case 'content': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Content service is running...');
-              if (await containerRunning('raworc_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
-              if (await containerExists('raworc_content')) {
-                await docker(['start','raworc_content']);
+              if (await containerRunning('ractor_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
+              if (await containerExists('ractor_content')) {
+                await docker(['start','ractor_content']);
                 console.log(chalk.green('[SUCCESS] ') + 'Content started');
                 console.log();
                 break;
               }
-              const CONTENT_IMAGE = await resolveRaworcImage('content','raworc_content','registry.digitalocean.com/raworc/raworc_content', tag);
+              const CONTENT_IMAGE = await resolveRactorImage('content','ractor_content','registry.digitalocean.com/ractor/ractor_content', tag);
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','raworc_content','--network','raworc_network','-v','raworc_content_data:/content', CONTENT_IMAGE);
+              args.push('--name','ractor_content','--network','ractor_network','-v','ractor_content_data:/content', CONTENT_IMAGE);
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Content service container started');
               console.log();
@@ -651,9 +651,9 @@ module.exports = (program) => {
 
             case 'gateway': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring gateway (NGINX) is running on port 80...');
-              if (await containerRunning('raworc_gateway')) { console.log(chalk.green('[SUCCESS] ') + 'Gateway already running'); console.log(); break; }
-              if (await containerExists('raworc_gateway')) {
-                await docker(['start','raworc_gateway']);
+              if (await containerRunning('ractor_gateway')) { console.log(chalk.green('[SUCCESS] ') + 'Gateway already running'); console.log(); break; }
+              if (await containerExists('ractor_gateway')) {
+                await docker(['start','ractor_gateway']);
                 console.log(chalk.green('[SUCCESS] ') + 'Gateway started');
                 console.log();
                 break;
@@ -663,8 +663,8 @@ module.exports = (program) => {
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','raworc_gateway','--network','raworc_network','-p','80:80');
-              args.push(await resolveRaworcImage('gateway','raworc_gateway','registry.digitalocean.com/raworc/raworc_gateway', tag));
+              args.push('--name','ractor_gateway','--network','ractor_network','-p','80:80');
+              args.push(await resolveRactorImage('gateway','ractor_gateway','registry.digitalocean.com/ractor/ractor_gateway', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Gateway container started (port 80)');
               console.log();
@@ -672,10 +672,10 @@ module.exports = (program) => {
             }
 
             case 'app_githex': {
-              const containerName = 'raworc_app_githex';
+              const containerName = 'ractor_app_githex';
               console.log(chalk.blue('[INFO] ') + 'Ensuring GitHex app is running (opt-in component)...');
 
-              const imageRef = await resolveRaworcImage('app_githex', 'raworc_app_githex', 'registry.digitalocean.com/raworc/raworc_app_githex', tag);
+              const imageRef = await resolveRactorImage('app_githex', 'ractor_app_githex', 'registry.digitalocean.com/ractor/ractor_app_githex', tag);
               const desiredId = await imageId(imageRef);
 
               if (await containerExists(containerName)) {
@@ -702,13 +702,13 @@ module.exports = (program) => {
                 console.log(chalk.yellow('[WARNING] ') + `Port ${githexHostPort} is already in use on the host. GitHex may fail to bind.`);
               }
 
-              if (!process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN) {
-                console.error(chalk.red('[ERROR] ') + 'RAWORC_APPS_GITHEX_ADMIN_TOKEN is required to start GitHex. Set the token in your environment and try again.');
+              if (!process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN) {
+                console.error(chalk.red('[ERROR] ') + 'RACTOR_APPS_GITHEX_ADMIN_TOKEN is required to start GitHex. Set the token in your environment and try again.');
                 process.exit(1);
               }
 
-              if (!process.env.RAWORC_HOST_URL) {
-                console.error(chalk.red('[ERROR] ') + 'RAWORC_HOST_URL is required to start GitHex. Export it in your environment to match the Raworc API base URL.');
+              if (!process.env.RACTOR_HOST_URL) {
+                console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_URL is required to start GitHex. Export it in your environment to match the Ractor API base URL.');
                 process.exit(1);
               }
 
@@ -716,11 +716,11 @@ module.exports = (program) => {
               if (detached) args.push('-d');
               args.push(
                 '--name', containerName,
-                '--network', 'raworc_network',
+                '--network', 'ractor_network',
                 '-p', `${githexHostPort}:8001`,
-                '-v', 'raworc_app_githex:/app/storage',
-                '-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`,
-                '-e', `RAWORC_APPS_GITHEX_ADMIN_TOKEN=${process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN}`
+                '-v', 'ractor_app_githex:/app/storage',
+                '-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`,
+                '-e', `RACTOR_APPS_GITHEX_ADMIN_TOKEN=${process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN}`
               );
 
               args.push(imageRef);
@@ -731,14 +731,14 @@ module.exports = (program) => {
             }
 
             case 'app_askrepo': {
-              const containerName = 'raworc_app_askrepo';
+              const containerName = 'ractor_app_askrepo';
               console.log(chalk.blue('[INFO] ') + 'Ensuring AskRepo app is running (opt-in component)...');
 
               const requiredEnv = [
-                'RAWORC_HOST_URL',
-                'RAWORC_APPS_ASKREPO_ADMIN_TOKEN',
-                'RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN',
-                'RAWORC_APPS_ASKREPO_TWITTER_USER_ID'
+                'RACTOR_HOST_URL',
+                'RACTOR_APPS_ASKREPO_ADMIN_TOKEN',
+                'RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN',
+                'RACTOR_APPS_ASKREPO_TWITTER_USER_ID'
               ];
               const missing = requiredEnv.filter((name) => !process.env[name] || process.env[name].trim() === '');
               if (missing.length) {
@@ -750,10 +750,10 @@ module.exports = (program) => {
                 process.exit(1);
               }
 
-              const imageRef = await resolveRaworcImage(
+              const imageRef = await resolveRactorImage(
                 'app_askrepo',
-                'raworc_app_askrepo',
-                'registry.digitalocean.com/raworc/raworc_app_askrepo',
+                'ractor_app_askrepo',
+                'registry.digitalocean.com/ractor/ractor_app_askrepo',
                 tag
               );
               const desiredId = await imageId(imageRef);
@@ -771,7 +771,7 @@ module.exports = (program) => {
                     break;
                   }
                   await docker(['start', containerName]);
-                  console.log(chalk.green('[SUCCESS] ') + 'AskRepo started (logs: docker logs raworc_app_askrepo -f)');
+                  console.log(chalk.green('[SUCCESS] ') + 'AskRepo started (logs: docker logs ractor_app_askrepo -f)');
                   console.log();
                   break;
                 }
@@ -781,22 +781,22 @@ module.exports = (program) => {
               if (detached) args.push('-d');
               args.push(
                 '--name', containerName,
-                '--network', 'raworc_network',
-                '-v', 'raworc_app_askrepo:/app/data',
-                '-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`,
-                '-e', `RAWORC_APPS_ASKREPO_ADMIN_TOKEN=${process.env.RAWORC_APPS_ASKREPO_ADMIN_TOKEN}`,
-                '-e', `RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN=${process.env.RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN}`,
-                '-e', `RAWORC_APPS_ASKREPO_TWITTER_USER_ID=${process.env.RAWORC_APPS_ASKREPO_TWITTER_USER_ID}`
+                '--network', 'ractor_network',
+                '-v', 'ractor_app_askrepo:/app/data',
+                '-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`,
+                '-e', `RACTOR_APPS_ASKREPO_ADMIN_TOKEN=${process.env.RACTOR_APPS_ASKREPO_ADMIN_TOKEN}`,
+                '-e', `RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN=${process.env.RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN}`,
+                '-e', `RACTOR_APPS_ASKREPO_TWITTER_USER_ID=${process.env.RACTOR_APPS_ASKREPO_TWITTER_USER_ID}`
               );
 
               const optionalEnv = [
-                'RAWORC_APPS_ASKREPO_TWITTER_API_BASE',
-                'RAWORC_APPS_ASKREPO_POLL_INTERVAL_SECS',
-                'RAWORC_APPS_ASKREPO_TWITTER_SINCE_ID',
-                'RAWORC_APPS_ASKREPO_TWITTER_API_KEY',
-                'RAWORC_APPS_ASKREPO_TWITTER_API_SECRET',
-                'RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN',
-                'RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET'
+                'RACTOR_APPS_ASKREPO_TWITTER_API_BASE',
+                'RACTOR_APPS_ASKREPO_POLL_INTERVAL_SECS',
+                'RACTOR_APPS_ASKREPO_TWITTER_SINCE_ID',
+                'RACTOR_APPS_ASKREPO_TWITTER_API_KEY',
+                'RACTOR_APPS_ASKREPO_TWITTER_API_SECRET',
+                'RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN',
+                'RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET'
               ];
               for (const name of optionalEnv) {
                 const value = process.env[name];
@@ -808,7 +808,7 @@ module.exports = (program) => {
               args.push(imageRef);
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'AskRepo app container started (background poller)');
-              console.log(chalk.blue('[INFO] ') + 'Monitor logs with: docker logs raworc_app_askrepo -f');
+              console.log(chalk.blue('[INFO] ') + 'Monitor logs with: docker logs ractor_app_askrepo -f');
               console.log();
               break;
             }
@@ -823,23 +823,23 @@ module.exports = (program) => {
         console.log();
         let status = '';
         try {
-          const res = await docker(['ps','--filter','name=raworc_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true });
+          const res = await docker(['ps','--filter','name=ractor_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true });
           status = res.stdout;
         } catch(_) {}
         if (status && status.trim()) {
           console.log(status);
           console.log();
-          console.log(chalk.green('[SUCCESS] ') + '🎉 Raworc services are now running!');
+          console.log(chalk.green('[SUCCESS] ') + '🎉 Ractor services are now running!');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Service URLs:');
           try {
-            const g = await docker(['ps','--filter','name=raworc_gateway','--format','{{.Names}}'], { silent: true });
+            const g = await docker(['ps','--filter','name=ractor_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
-              console.log(`  • Gateway: ${RAWORC_HOST_URL}/`);
-              console.log(`  • Operator UI: ${RAWORC_HOST_URL}/`);
-              console.log(`  • API via Gateway: ${RAWORC_HOST_URL}/api`);
+              console.log(`  • Gateway: ${RACTOR_HOST_URL}/`);
+              console.log(`  • Operator UI: ${RACTOR_HOST_URL}/`);
+              console.log(`  • API via Gateway: ${RACTOR_HOST_URL}/api`);
 
-              console.log(`  • Content: ${RAWORC_HOST_URL}/content`);
+              console.log(`  • Content: ${RACTOR_HOST_URL}/content`);
             } else {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
@@ -848,7 +848,7 @@ module.exports = (program) => {
             console.log(`  • GitHex: http://localhost:${githexHostPort}`);
           }
           if (components.includes('app_askrepo')) {
-            console.log('  • AskRepo: docker logs raworc_app_askrepo -f');
+            console.log('  • AskRepo: docker logs ractor_app_askrepo -f');
           }
           try {
             const m = await docker(['ps','--filter','name=mysql','--format','{{.Names}}'], { silent: true });
@@ -858,17 +858,17 @@ module.exports = (program) => {
           } catch(_) {}
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Next steps:');
-          console.log('  • Check logs: docker logs raworc_api -f');
-          console.log('  • Authenticate: raworc login -u admin -p admin');
-          console.log('  • Check version: raworc api version');
-          console.log('  • Start agent: raworc agent create');
+          console.log('  • Check logs: docker logs ractor_api -f');
+          console.log('  • Authenticate: ractor login -u admin -p admin');
+          console.log('  • Check version: ractor api version');
+          console.log('  • Start agent: ractor agent create');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Container management:');
-          console.log("  • Stop services: raworc stop");
+          console.log("  • Stop services: ractor stop");
           console.log("  • View logs: docker logs <container_name>");
-          console.log("  • Check status: docker ps --filter 'name=raworc_'");
+          console.log("  • Check status: docker ps --filter 'name=ractor_'");
         } else {
-          console.error(chalk.red('[ERROR] ') + 'No Raworc containers are running');
+          console.error(chalk.red('[ERROR] ') + 'No Ractor containers are running');
           process.exit(1);
         }
       } catch (error) {

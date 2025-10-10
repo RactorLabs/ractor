@@ -14,7 +14,7 @@ mod shared;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging under content service name
-    let _ = shared::logging::init_service_logging("/app/logs", "raworc_content");
+    let _ = shared::logging::init_service_logging("/app/logs", "ractor_content");
 
     let app = create_app().await;
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await?;
@@ -51,7 +51,7 @@ async fn health_handler() -> impl IntoResponse {
     (
         StatusCode::OK,
         headers,
-        r#"{"status":"healthy","service":"raworc-content"}"#,
+        r#"{"status":"healthy","service":"ractor-content"}"#,
     )
 }
 

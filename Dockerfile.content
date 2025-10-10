@@ -8,8 +8,8 @@ WORKDIR /app
 
 RUN mkdir -p /app/logs /content
 
-COPY target/release/raworc-content /usr/local/bin/raworc-content
+COPY target/release/ractor-content /usr/local/bin/ractor-content
 
 EXPOSE 8000
 
-CMD ["raworc-content"]
+CMD ["ractor-content"]

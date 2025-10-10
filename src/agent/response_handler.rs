@@ -1,4 +1,4 @@
-use super::api::{RaworcClient, ResponseView};
+use super::api::{RactorClient, ResponseView};
 use super::error::Result;
 use super::guardrails::Guardrails;
 use super::ollama::{ChatMessage, ModelResponse, OllamaClient};
@@ -29,7 +29,7 @@ enum PlanStatus {
 }
 
 pub struct ResponseHandler {
-    api_client: Arc<RaworcClient>,
+    api_client: Arc<RactorClient>,
     ollama_client: Arc<OllamaClient>,
     guardrails: Arc<Guardrails>,
     processed_response_ids: Arc<Mutex<HashSet<String>>>,
@@ -39,7 +39,7 @@ pub struct ResponseHandler {
 
 impl ResponseHandler {
     pub fn new(
-        api_client: Arc<RaworcClient>,
+        api_client: Arc<RactorClient>,
         ollama_client: Arc<OllamaClient>,
         guardrails: Arc<Guardrails>,
     ) -> Self {
@@ -47,17 +47,17 @@ impl ResponseHandler {
     }
 
     pub fn new_with_registry(
-        api_client: Arc<RaworcClient>,
+        api_client: Arc<RactorClient>,
         ollama_client: Arc<OllamaClient>,
         guardrails: Arc<Guardrails>,
         tool_registry: Option<Arc<ToolRegistry>>,
     ) -> Self {
-        let task_created_at = std::env::var("RAWORC_TASK_CREATED_AT")
+        let task_created_at = std::env::var("RACTOR_TASK_CREATED_AT")
             .ok()
             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|| {
-                warn!("RAWORC_TASK_CREATED_AT not found, using current time");
+                warn!("RACTOR_TASK_CREATED_AT not found, using current time");
                 Utc::now()
             });
 
@@ -1042,9 +1042,9 @@ impl ResponseHandler {
 
     async fn build_system_prompt(&self) -> String {
         // Read hosting context from environment (provided by start script)
-        let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
-        let base_url_env = std::env::var("RAWORC_HOST_URL")
-            .expect("RAWORC_HOST_URL must be set by the start script");
+        let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
+        let base_url_env = std::env::var("RACTOR_HOST_URL")
+            .expect("RACTOR_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
         // Fetch agent info from API/DB (name, publish state)
@@ -1099,7 +1099,7 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 
         // Planning is managed via /agent/plan.md using the update_plan tool
 
-        // Start with System Context specific to Raworc runtime
+        // Start with System Context specific to Ractor runtime
         let mut prompt = String::from(format!(
             r#"## System Context
 

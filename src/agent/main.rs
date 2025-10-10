@@ -7,15 +7,15 @@ mod agent;
 mod logging;
 
 #[derive(Parser)]
-#[command(name = "raworc-agent")]
-#[command(about = "Raworc Agent - Computer Use Agent inside agent containers")]
+#[command(name = "ractor-agent")]
+#[command(about = "Ractor Agent - Computer Use Agent inside agent containers")]
 struct Args {
     /// API server URL
-    #[arg(long, env = "RAWORC_API_URL")]
+    #[arg(long, env = "RACTOR_API_URL")]
     api_url: String,
 
     /// Agent Name
-    #[arg(long, env = "RAWORC_AGENT_NAME")]
+    #[arg(long, env = "RACTOR_AGENT_NAME")]
     agent_name: String,
 }
 
@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize service logging (write alongside agent data)
-    let _ = logging::init_service_logging("/agent/logs", "raworc_agent");
+    let _ = logging::init_service_logging("/agent/logs", "ractor_agent");
 
     // Run the Agent (Computer Use Agent) with comprehensive error handling
     loop {

@@ -57,7 +57,7 @@ jobs:
           # Re-login to DOCR to avoid short-lived token expiry during long builds
           doctl registry login --expiry-seconds 1800
           chmod +x ./scripts/push.sh
-          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/raworc
+          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/ractor
           
       - name: Publish CLI to npm
         working-directory: ./cli
@@ -71,23 +71,23 @@ jobs:
         run: |
           gh release create ${{ steps.get_version.outputs.VERSION }} \
             --title "Release ${{ steps.get_version.outputs.VERSION }}" \
-            --notes "## Raworc ${{ steps.get_version.outputs.VERSION }}
+            --notes "## Ractor ${{ steps.get_version.outputs.VERSION }}
           
           ### Published Packages
           - **Docker Images (DOCR)**:
-            - \`registry.digitalocean.com/raworc/raworc_api:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_controller:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_agent:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_operator:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_content:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_gateway:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/raworc/raworc_app_githex:${{ steps.get_version.outputs.VERSION }}\`
-          - **npm Package**: \`@raworc/cli@${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_api:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_controller:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_agent:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_operator:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_content:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_gateway:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_app_githex:${{ steps.get_version.outputs.VERSION }}\`
+          - **npm Package**: \`@ractor/cli@${{ steps.get_version.outputs.VERSION }}\`
           
           ### Installation
           \`\`\`bash
-          npm install -g @raworc/cli@${{ steps.get_version.outputs.VERSION }}
-          raworc start
+          npm install -g @ractor/cli@${{ steps.get_version.outputs.VERSION }}
+          ractor start
           \`\`\`
           
           All images are also tagged as \`:latest\` at DOCR"

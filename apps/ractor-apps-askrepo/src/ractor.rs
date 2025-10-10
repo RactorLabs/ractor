@@ -6,21 +6,21 @@ use std::collections::HashMap;
 use tracing::{debug, trace};
 use urlencoding::encode;
 
-pub struct RaworcClient {
+pub struct RactorClient {
     http: Client,
     base_url: Url,
 }
 
-impl RaworcClient {
+impl RactorClient {
     pub fn new(config: &Config) -> Result<Self> {
         let http = Client::builder()
-            .user_agent("raworc-apps-askrepo/0.1")
-            .default_headers(Self::default_headers(&config.raworc_admin_token)?)
+            .user_agent("ractor-apps-askrepo/0.1")
+            .default_headers(Self::default_headers(&config.ractor_admin_token)?)
             .build()
-            .context("failed to build Raworc reqwest client")?;
+            .context("failed to build Ractor reqwest client")?;
 
         let mut base_url =
-            Url::parse(&config.raworc_host_url).context("RAWORC_HOST_URL is not a valid URL")?;
+            Url::parse(&config.ractor_host_url).context("RACTOR_HOST_URL is not a valid URL")?;
         if base_url.path().is_empty() {
             base_url.set_path("/");
         }
@@ -41,7 +41,7 @@ impl RaworcClient {
         headers.insert(
             header::AUTHORIZATION,
             header::HeaderValue::from_str(&format!("Bearer {}", token))
-                .context("invalid RAWORC admin token for header")?,
+                .context("invalid RACTOR admin token for header")?,
         );
         Ok(headers)
     }
@@ -60,14 +60,14 @@ impl RaworcClient {
             .get(url.clone())
             .send()
             .await
-            .with_context(|| format!("failed to query Raworc API for agent '{}'", name))?;
+            .with_context(|| format!("failed to query Ractor API for agent '{}'", name))?;
         match res.status() {
             StatusCode::OK => Ok(true),
             StatusCode::NOT_FOUND => Ok(false),
             status => {
                 let body = res.text().await.unwrap_or_default();
                 Err(anyhow!(
-                    "Raworc API returned {} while checking agent existence (body: {})",
+                    "Ractor API returned {} while checking agent existence (body: {})",
                     status,
                     body
                 ))
@@ -99,13 +99,13 @@ impl RaworcClient {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow!(
-                "Raworc API returned {} when creating agent (body: {})",
+                "Ractor API returned {} when creating agent (body: {})",
                 status,
                 body
             ));
         }
 
-        debug!(agent = %payload.name, "created agent via Raworc API");
+        debug!(agent = %payload.name, "created agent via Ractor API");
         Ok(())
     }
 }

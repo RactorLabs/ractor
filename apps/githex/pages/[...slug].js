@@ -192,7 +192,7 @@ export default function RepoPage({
     let cancelled = false;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/raworc/responses/${encodeURIComponent(derivedAgentName)}/${encodeURIComponent(derivedResponseId)}`);
+        const res = await fetch(`/api/ractor/responses/${encodeURIComponent(derivedAgentName)}/${encodeURIComponent(derivedResponseId)}`);
         if (!res.ok) {
           throw new Error(`Polling failed with status ${res.status}`);
         }
@@ -358,7 +358,7 @@ export default function RepoPage({
       return {
         label: 'Setup required',
         tone: 'warning',
-        message: setupError || 'Required Raworc credentials are missing. Set RAWORC_HOST_URL and RAWORC_APPS_GITHEX_ADMIN_TOKEN before using GitHex.'
+        message: setupError || 'Required Ractor credentials are missing. Set RACTOR_HOST_URL and RACTOR_APPS_GITHEX_ADMIN_TOKEN before using GitHex.'
       };
     }
 
@@ -390,7 +390,7 @@ export default function RepoPage({
     let message;
     if (isTerminal(status)) {
       if (isFailed) {
-        message = `The agent reported a failure while analyzing ${owner}/${name}. Check Raworc logs for more detail.`;
+        message = `The agent reported a failure while analyzing ${owner}/${name}. Check Ractor logs for more detail.`;
       } else if (isCancelled) {
         message = `The agent cancelled the request before completion. Try again later.`;
       } else {
@@ -483,7 +483,7 @@ export default function RepoPage({
           <section className="output-panel" aria-live="polite">
             {isFailed && (
               <p className="output-panel__error">
-                The agent reported a failure while analyzing {owner}/{name}. Check Raworc logs for more detail.
+                The agent reported a failure while analyzing {owner}/{name}. Check Ractor logs for more detail.
               </p>
             )}
             {isCancelled && (
@@ -523,7 +523,7 @@ export async function getServerSideProps(context) {
   try {
     const githubRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, {
       headers: {
-        'User-Agent': 'raworc-githex-app',
+        'User-Agent': 'ractor-githex-app',
         Accept: 'application/vnd.github+json'
       }
     });
@@ -562,7 +562,7 @@ export async function getServerSideProps(context) {
     const contributorsRes = await fetch(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contributors?per_page=1&anon=1`, {
       headers: {
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'raworc-githex-app'
+        'User-Agent': 'ractor-githex-app'
       }
     });
     if (contributorsRes.ok) {
@@ -583,10 +583,10 @@ export async function getServerSideProps(context) {
     console.warn('[GitHex] Contributor lookup failed:', contributorError);
   }
 
-  const adminToken = process.env.RAWORC_APPS_GITHEX_ADMIN_TOKEN;
-  const raworcHost = process.env.RAWORC_HOST_URL;
+  const adminToken = process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN;
+  const ractorHost = process.env.RACTOR_HOST_URL;
 
-  if (!adminToken || !raworcHost) {
+  if (!adminToken || !ractorHost) {
     return {
       props: {
         owner,
@@ -595,21 +595,21 @@ export async function getServerSideProps(context) {
         agentName: null,
         response: null,
         responseId: null,
-        setupError: 'Required Raworc credentials are missing.',
+        setupError: 'Required Ractor credentials are missing.',
         repoStats
       }
     };
   }
 
-  const base = raworcHost.endsWith('/') ? raworcHost.slice(0, -1) : raworcHost;
+  const base = ractorHost.endsWith('/') ? ractorHost.slice(0, -1) : ractorHost;
   const headers = {
     Authorization: `Bearer ${adminToken}`,
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    'User-Agent': 'raworc-githex-app'
+    'User-Agent': 'ractor-githex-app'
   };
 
-  // No local storage; rely on Raworc API for response resolution
+  // No local storage; rely on Ractor API for response resolution
 
   // No response id in URL — resolve or create response internally
 

@@ -11,10 +11,10 @@ module.exports = (program) => {
     .option('-i, --images-only', 'Only pull Docker images, skip CLI update')
     .addHelpText('after', '\n' +
       'Examples:\n' +
-      '  $ raworc pull                    # Pull latest version\n' +
-      '  $ raworc pull 0.4.0              # Pull specific version\n' +
-      '  $ raworc pull latest             # Pull latest version (explicit)\n' +
-      '  $ raworc pull 0.3.5 --cli-only  # Pull specific CLI version only\n')
+      '  $ ractor pull                    # Pull latest version\n' +
+      '  $ ractor pull 0.4.0              # Pull specific version\n' +
+      '  $ ractor pull latest             # Pull latest version (explicit)\n' +
+      '  $ ractor pull 0.3.5 --cli-only  # Pull specific CLI version only\n')
     .action(async (version, options) => {
       try {
         // Default to latest if no version specified
@@ -44,7 +44,7 @@ module.exports = (program) => {
           display.info(`Updating CLI to ${versionDisplay}...`);
           try {
             // Install specific version of the CLI package globally
-            const npmCommand = `npm install -g @raworc/cli@${cliVersionTag}`;
+            const npmCommand = `npm install -g @ractor/cli@${cliVersionTag}`;
             execSync(npmCommand, { 
               stdio: options.verbose ? 'inherit' : 'pipe',
               encoding: 'utf8'
@@ -53,7 +53,7 @@ module.exports = (program) => {
           } catch (error) {
             display.error(`Failed to update CLI to ${versionDisplay}`);
             console.error(chalk.gray('Error updating CLI:'), error.message);
-            display.info(`Try running: npm install -g @raworc/cli@${cliVersionTag}`);
+            display.info(`Try running: npm install -g @ractor/cli@${cliVersionTag}`);
           }
         }
 
@@ -76,8 +76,8 @@ module.exports = (program) => {
         // Show next steps
         console.log();
         console.log(chalk.cyan('Next steps:'));
-        console.log('  • Start services: ' + chalk.white('raworc start'));
-        console.log('  • Check version: ' + chalk.white('raworc --version'));
+        console.log('  • Start services: ' + chalk.white('ractor start'));
+        console.log('  • Check version: ' + chalk.white('ractor --version'));
         
       } catch (error) {
         display.error('Error: ' + error.message);

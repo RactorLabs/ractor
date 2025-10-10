@@ -1,4 +1,4 @@
-# @raworc/cli
+# @ractor/cli
 
 Remote Agentic Work Orchestrator - CLI for Computer use agents
 
@@ -8,4 +8,4 @@ See this repository's README for installation instructions, setup guides, and do
 
 ## Support
 
-- **🐦 Community**: [x.com/raworc](https://x.com/raworc)
+- **🐦 Community**: [x.com/ractor](https://x.com/ractor)

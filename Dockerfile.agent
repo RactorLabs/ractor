@@ -57,7 +57,7 @@ ENV NVM_DIR=/home/agent/.nvm
 
 # Copy pre-built binary from local build
 USER root
-COPY target/release/raworc-agent /usr/local/bin/raworc-agent
+COPY target/release/ractor-agent /usr/local/bin/ractor-agent
 
 # Create agent directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
@@ -69,9 +69,9 @@ RUN mkdir -p /agent/code /agent/logs /agent/content /agent/template && \
 
 # Seed built-in templates under an immutable path; controller will copy into /agent/template as needed
 USER root
-RUN mkdir -p /opt/raworc/templates
-COPY assets/agent/template/simple.html /opt/raworc/templates/simple.html
-RUN chown -R agent:agent /opt/raworc
+RUN mkdir -p /opt/ractor/templates
+COPY assets/agent/template/simple.html /opt/ractor/templates/simple.html
+RUN chown -R agent:agent /opt/ractor
 USER agent
 
 # Switch back to agent user and set working directory to /agent
@@ -79,6 +79,6 @@ USER agent
 WORKDIR /agent
 
 # Configure environment variables for agent structure
-ENV RAWORC_AGENT_DIR=/agent
+ENV RACTOR_AGENT_DIR=/agent
 
-CMD ["raworc-agent", "--api-url", "http://raworc_api:9000", "--agent-name", "unknown", "--api-key", "unknown"]
+CMD ["ractor-agent", "--api-url", "http://ractor_api:9000", "--agent-name", "unknown", "--api-key", "unknown"]

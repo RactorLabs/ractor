@@ -305,7 +305,7 @@ pub async fn read_agent_file(
                 builder = builder.header("content-type", ct);
                 builder = builder.header("cache-control", "no-store");
                 builder = builder.header(
-                    "x-raworc-file-size",
+                    "x-ractor-file-size",
                     res.get("size")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(bytes.len() as u64)

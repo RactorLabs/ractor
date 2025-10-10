@@ -9,6 +9,6 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy the pre-built binary from local build
-COPY target/release/raworc-controller /usr/local/bin/raworc-controller
+COPY target/release/ractor-controller /usr/local/bin/ractor-controller
 
-CMD ["raworc-controller"]
+CMD ["ractor-controller"]

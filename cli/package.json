@@ -1,10 +1,10 @@
 {
-  "name": "@raworc/cli",
+  "name": "@ractor/cli",
   "version": "0.10.12",
-  "description": "Raworc CLI - Computer use agents",
+  "description": "Ractor CLI - Computer use agents",
   "main": "index.js",
   "bin": {
-    "raworc": "./index.js"
+    "ractor": "./index.js"
   },
   "scripts": {
     "start": "node index.js"
@@ -16,7 +16,7 @@
     "remote-work",
     "manual-work"
   ],
-  "author": "Raworc Team",
+  "author": "Ractor Team",
   "license": "UNLICENSED",
   "dependencies": {
     "chalk": "^4.1.2",

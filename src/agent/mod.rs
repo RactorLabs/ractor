@@ -14,22 +14,22 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
-    tracing::info!("Starting Raworc Agent...");
+    tracing::info!("Starting Ractor Agent...");
     tracing::info!("Connecting to API: {}", api_url);
     tracing::info!("Agent Name: {}", agent_name);
 
     // Log which principal this Agent is running as
-    if let Ok(principal) = std::env::var("RAWORC_PRINCIPAL") {
+    if let Ok(principal) = std::env::var("RACTOR_PRINCIPAL") {
         let principal_type =
-            std::env::var("RAWORC_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
+            std::env::var("RACTOR_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
         tracing::info!("Running as principal: {} ({})", principal, principal_type);
     }
 
-    // Use RAWORC_TOKEN from environment (user's token set as secret)
-    let api_token = std::env::var("RAWORC_TOKEN")
-        .map_err(|_| anyhow::anyhow!("RAWORC_TOKEN environment variable is required"))?;
+    // Use RACTOR_TOKEN from environment (user's token set as secret)
+    let api_token = std::env::var("RACTOR_TOKEN")
+        .map_err(|_| anyhow::anyhow!("RACTOR_TOKEN environment variable is required"))?;
 
-    // Debug: Log the RAWORC token being used (partially masked for security)
+    // Debug: Log the RACTOR token being used (partially masked for security)
     let masked_token = if api_token.len() > 20 {
         format!(
             "{}...{}",
@@ -39,7 +39,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     } else {
         "<too-short>".to_string()
     };
-    tracing::info!("Using RAWORC_TOKEN: {}", masked_token);
+    tracing::info!("Using RACTOR_TOKEN: {}", masked_token);
 
     // Resolve Ollama host from environment; required (no default)
     let mut ollama_host = std::env::var("OLLAMA_HOST")
@@ -59,7 +59,7 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     });
 
     // Initialize API client
-    let api_client = Arc::new(api::RaworcClient::new(config.clone()));
+    let api_client = Arc::new(api::RactorClient::new(config.clone()));
 
     // Initialize Ollama client
     let ollama_client = match ollama::OllamaClient::new(&ollama_host) {
@@ -92,13 +92,13 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
         }
     }
 
-    // No separate content preview server; content is published via raworc-content.
+    // No separate content preview server; content is published via ractor-content.
 
     // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/agent/code/setup.sh");
 
     // Check if a setup script is expected based on environment variable
-    let has_setup_script = std::env::var("RAWORC_HAS_SETUP").is_ok();
+    let has_setup_script = std::env::var("RACTOR_HAS_SETUP").is_ok();
 
     if has_setup_script {
         // Setup script is expected, wait up to 2 seconds for it to be written by controller
@@ -169,11 +169,11 @@ pub async fn run(api_url: &str, agent_name: &str) -> Result<()> {
     }
 
     // Log published content URL hint
-    let base_url = std::env::var("RAWORC_HOST_URL")
-        .expect("RAWORC_HOST_URL must be set by the start script")
+    let base_url = std::env::var("RACTOR_HOST_URL")
+        .expect("RACTOR_HOST_URL must be set by the start script")
         .trim_end_matches('/')
         .to_string();
-    let host_name = std::env::var("RAWORC_HOST_NAME").unwrap_or_else(|_| "Raworc".to_string());
+    let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
     let operator_url = format!("{}", base_url);
     let api_url = format!("{}/api", base_url);
     let published_url = format!("{}/content/{}/", base_url, agent_name);

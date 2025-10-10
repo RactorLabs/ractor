@@ -34,7 +34,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Install development dependencies for Raworc"
+    echo "Install development dependencies for Ractor"
     echo ""
     echo "Options:"
     echo "  -v, --verbose           Show detailed output"
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "🔧 Installing Raworc development dependencies"
+print_status "🔧 Installing Ractor development dependencies"
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -205,13 +205,13 @@ echo ""
 print_status "Next steps:"
 print_status "  1. Link CLI for development:    ./scripts/link.sh"
 print_status "  2. Build services:              ./scripts/build.sh"
-print_status "  3. Start services:              raworc start"
-print_status "  4. Test authentication:         raworc auth login --user admin --pass admin"
-print_status "  5. Start agent:                 raworc agent create"
+print_status "  3. Start services:              ractor start"
+print_status "  4. Test authentication:         ractor auth login --user admin --pass admin"
+print_status "  5. Start agent:                 ractor agent create"
 
 echo ""
 print_status "💡 Development workflow:"
 print_status "  • Edit code in src/ or cli/"
 print_status "  • Rebuild services: ./scripts/build.sh"
 print_status "  • CLI changes are live (if linked)"
-print_status "  • Stop/Start services: raworc stop && raworc start"
+print_status "  • Stop/Start services: ractor stop && ractor start"

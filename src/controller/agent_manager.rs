@@ -244,7 +244,7 @@ impl AgentManager {
         Ok(slept_count)
     }
 
-    /// Generate a agent-specific RAWORC token for the given principal
+    /// Generate a agent-specific RACTOR token for the given principal
     fn generate_agent_token(
         &self,
         principal: &str,
@@ -257,7 +257,7 @@ impl AgentManager {
             sub_type: principal_type,
             exp: exp.timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
-            iss: "raworc-agent-manager".to_string(),
+            iss: "ractor-agent-manager".to_string(),
         };
 
         let token = encode(
@@ -420,7 +420,7 @@ impl AgentManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic token for this agent (for Raworc auth)
+        // Generate dynamic token for this agent (for Ractor auth)
         info!("Generating dynamic token for agent {}", agent_name);
         let agent_token = self
             .generate_agent_token(principal, principal_type, &agent_name)
@@ -1121,17 +1121,17 @@ impl AgentManager {
             }
         }
 
-        let agent_container = format!("raworc_agent_{}", agent_name.to_ascii_lowercase());
+        let agent_container = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
 
         // First, create the content directory in the content container
         let public_dir = format!("/content/{}", agent_name);
         info!(
-            "Executing: docker exec raworc_content mkdir -p {}",
+            "Executing: docker exec ractor_content mkdir -p {}",
             public_dir
         );
 
         let mkdir_output = tokio::process::Command::new("docker")
-            .args(&["exec", "raworc_content", "mkdir", "-p", &public_dir])
+            .args(&["exec", "ractor_content", "mkdir", "-p", &public_dir])
             .output()
             .await
             .map_err(|e| {
@@ -1188,7 +1188,7 @@ impl AgentManager {
             .args(&[
                 "cp",
                 &format!("{}//.", temp_dir),
-                &format!("raworc_content:/content/{}/", agent_name),
+                &format!("ractor_content:/content/{}/", agent_name),
             ])
             .output()
             .await
@@ -1221,13 +1221,13 @@ impl AgentManager {
         // Remove content directory for this agent from the content container
         let public_path = format!("/content/{}", agent_name);
         info!(
-            "Executing: docker exec raworc_content rm -rf {}",
+            "Executing: docker exec ractor_content rm -rf {}",
             public_path
         );
 
         // Remove the published directory from content container
         let remove_output = tokio::process::Command::new("docker")
-            .args(&["exec", "raworc_content", "rm", "-rf", &public_path])
+            .args(&["exec", "ractor_content", "rm", "-rf", &public_path])
             .output()
             .await
             .map_err(|e| {

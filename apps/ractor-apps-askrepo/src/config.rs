@@ -8,8 +8,8 @@ pub struct Config {
     pub twitter_user_id: String,
     pub twitter_api_base: String,
     pub poll_interval: Duration,
-    pub raworc_host_url: String,
-    pub raworc_admin_token: String,
+    pub ractor_host_url: String,
+    pub ractor_admin_token: String,
     pub initial_since_id: Option<String>,
     pub twitter_api_key: Option<String>,
     pub twitter_api_secret: Option<String>,
@@ -19,32 +19,32 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> Result<Self> {
-        let twitter_bearer_token = env::var("RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN")
-            .context("RAWORC_APPS_ASKREPO_TWITTER_BEARER_TOKEN is required")?;
-        let twitter_user_id = env::var("RAWORC_APPS_ASKREPO_TWITTER_USER_ID")
-            .context("RAWORC_APPS_ASKREPO_TWITTER_USER_ID is required")?;
-        let twitter_api_base = env::var("RAWORC_APPS_ASKREPO_TWITTER_API_BASE")
+        let twitter_bearer_token = env::var("RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN")
+            .context("RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN is required")?;
+        let twitter_user_id = env::var("RACTOR_APPS_ASKREPO_TWITTER_USER_ID")
+            .context("RACTOR_APPS_ASKREPO_TWITTER_USER_ID is required")?;
+        let twitter_api_base = env::var("RACTOR_APPS_ASKREPO_TWITTER_API_BASE")
             .unwrap_or_else(|_| "https://api.x.com".to_string());
-        let poll_interval_secs: u64 = env::var("RAWORC_APPS_ASKREPO_POLL_INTERVAL_SECS")
+        let poll_interval_secs: u64 = env::var("RACTOR_APPS_ASKREPO_POLL_INTERVAL_SECS")
             .ok()
             .and_then(|val| val.parse().ok())
             .unwrap_or(90);
-        let raworc_host_url = env::var("RAWORC_HOST_URL").context("RAWORC_HOST_URL is required")?;
-        let raworc_admin_token = env::var("RAWORC_APPS_ASKREPO_ADMIN_TOKEN")
-            .context("RAWORC_APPS_ASKREPO_ADMIN_TOKEN is required")?;
-        let initial_since_id = env::var("RAWORC_APPS_ASKREPO_TWITTER_SINCE_ID").ok();
+        let ractor_host_url = env::var("RACTOR_HOST_URL").context("RACTOR_HOST_URL is required")?;
+        let ractor_admin_token = env::var("RACTOR_APPS_ASKREPO_ADMIN_TOKEN")
+            .context("RACTOR_APPS_ASKREPO_ADMIN_TOKEN is required")?;
+        let initial_since_id = env::var("RACTOR_APPS_ASKREPO_TWITTER_SINCE_ID").ok();
         let twitter_api_key =
-            env_fallback("RAWORC_APPS_ASKREPO_TWITTER_API_KEY", "TWITTER_API_KEY");
+            env_fallback("RACTOR_APPS_ASKREPO_TWITTER_API_KEY", "TWITTER_API_KEY");
         let twitter_api_secret = env_fallback(
-            "RAWORC_APPS_ASKREPO_TWITTER_API_SECRET",
+            "RACTOR_APPS_ASKREPO_TWITTER_API_SECRET",
             "TWITTER_API_SECRET",
         );
         let twitter_access_token = env_fallback(
-            "RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN",
+            "RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN",
             "TWITTER_ACCESS_TOKEN",
         );
         let twitter_access_token_secret = env_fallback(
-            "RAWORC_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET",
+            "RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET",
             "TWITTER_ACCESS_TOKEN_SECRET",
         );
 
@@ -53,8 +53,8 @@ impl Config {
             twitter_user_id,
             twitter_api_base,
             poll_interval: Duration::from_secs(poll_interval_secs.max(10)),
-            raworc_host_url,
-            raworc_admin_token,
+            ractor_host_url,
+            ractor_admin_token,
             initial_since_id,
             twitter_api_key,
             twitter_api_secret,

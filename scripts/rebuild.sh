@@ -62,10 +62,10 @@ for COMPONENT in "${ORDERED[@]}"; do
   # 2) Stop the running container (when applicable)
   if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Stopping $COMPONENT..."
-    if command -v raworc >/dev/null 2>&1; then
-      raworc stop "$COMPONENT" || true
+    if command -v ractor >/dev/null 2>&1; then
+      ractor stop "$COMPONENT" || true
     else
-      echo "[WARNING] raworc CLI not found; skipping stop for $COMPONENT" >&2
+      echo "[WARNING] ractor CLI not found; skipping stop for $COMPONENT" >&2
     fi
   else
     if [[ "$COMPONENT" == "agent" ]]; then
@@ -78,10 +78,10 @@ for COMPONENT in "${ORDERED[@]}"; do
   # 3) Start the container so it picks up the freshly built image
   if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Starting $COMPONENT..."
-    if command -v raworc >/dev/null 2>&1; then
-      raworc start "$COMPONENT" || true
+    if command -v ractor >/dev/null 2>&1; then
+      ractor start "$COMPONENT" || true
     else
-      echo "[WARNING] raworc CLI not found; skipping start for $COMPONENT" >&2
+      echo "[WARNING] ractor CLI not found; skipping start for $COMPONENT" >&2
     fi
   else
     if [[ "$COMPONENT" == "agent" ]]; then

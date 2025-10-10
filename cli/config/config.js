@@ -4,7 +4,7 @@ const fs = require('fs-extra');
 
 class Config {
   constructor() {
-    this.configDir = path.join(os.homedir(), '.raworc');
+    this.configDir = path.join(os.homedir(), '.ractor');
     this.configFile = path.join(this.configDir, 'config.json');
     this.authFile = path.join(this.configDir, 'auth.json');
     

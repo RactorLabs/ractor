@@ -21,27 +21,27 @@ async function exec(cmd, args = [], opts = {}) {
 module.exports = (program) => {
   program
     .command('fix')
-    .description('Attempt to repair common Docker/env issues for Raworc')
-    .option('--pull', 'Pull Raworc Docker images')
+    .description('Attempt to repair common Docker/env issues for Ractor')
+    .option('--pull', 'Pull Ractor Docker images')
     .option('--prune', 'Prune dangling images/cache after cleanup')
-    .option('--agents', 'Also force-remove all raworc agent containers')
+    .option('--agents', 'Also force-remove all ractor agent containers')
     .option('--link', 'Run ./scripts/link.sh if present (dev)')
     .addHelpText('after', '\n' +
       'This command replaces ad-hoc setup.sh steps by applying safe host-side fixes.\n' +
       '\nActions performed:\n' +
       '  • Validate Docker availability\n' +
       '  • Ensure network/volumes exist\n' +
-      '  • Remove exited raworc_* containers (optionally all agents)\n' +
+      '  • Remove exited ractor_* containers (optionally all agents)\n' +
       '  • Optional: pull images, prune caches\n' +
       '  • Quick GPU accessibility test\n' +
       '\nExamples:\n' +
-      '  $ raworc fix\n' +
-      '  $ raworc fix --pull\n' +
-      '  $ raworc fix --prune --agents\n' +
-      '  $ raworc fix --link\n')
+      '  $ ractor fix\n' +
+      '  $ ractor fix --pull\n' +
+      '  $ ractor fix --prune --agents\n' +
+      '  $ ractor fix --link\n')
     .action(async (options) => {
       try {
-        display.showCommandBox(`${display.icons.reset} Raworc Fix`, { operation: 'Repair Docker/env for Raworc' });
+        display.showCommandBox(`${display.icons.reset} Ractor Fix`, { operation: 'Repair Docker/env for Ractor' });
 
         // 1) Docker availability
         display.info('[1/6] Checking Docker availability...');
@@ -53,18 +53,18 @@ module.exports = (program) => {
         display.success('Docker is available');
 
         // 2) Ensure network
-        display.info('[2/6] Ensuring network raworc_network exists...');
+        display.info('[2/6] Ensuring network ractor_network exists...');
         try {
-          await docker.execDocker(['network', 'inspect', 'raworc_network'], { silent: true });
+          await docker.execDocker(['network', 'inspect', 'ractor_network'], { silent: true });
           display.success('Network exists');
         } catch (_) {
-          await docker.execDocker(['network', 'create', 'raworc_network']);
+          await docker.execDocker(['network', 'create', 'ractor_network']);
           display.success('Network created');
         }
 
         // 3) Ensure volumes
         display.info('[3/6] Ensuring required volumes exist...');
-        const volumes = ['mysql_data','raworc_content_data','ollama_data','raworc_api_data','raworc_operator_data','raworc_controller_data'];
+        const volumes = ['mysql_data','ractor_content_data','ollama_data','ractor_api_data','ractor_operator_data','ractor_controller_data'];
         for (const v of volumes) {
           try {
             await docker.execDocker(['volume','inspect', v], { silent: true });
@@ -74,10 +74,10 @@ module.exports = (program) => {
         }
         display.success('Volumes ready');
 
-        // 4) Remove exited raworc containers
-        display.info('[4/6] Removing exited raworc_* containers...');
+        // 4) Remove exited ractor containers
+        display.info('[4/6] Removing exited ractor_* containers...');
         try {
-          const list = await docker.execDocker(['ps','-a','-q','--filter','name=raworc_','--filter','status=exited'], { silent: true });
+          const list = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_','--filter','status=exited'], { silent: true });
           const ids = (list.stdout || '').trim().split('\n').filter(Boolean);
           if (ids.length) {
             try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {}
@@ -91,9 +91,9 @@ module.exports = (program) => {
 
         // Optional: remove ALL agent containers
         if (options.agents) {
-          display.info('Removing ALL raworc agent containers (force)...');
+          display.info('Removing ALL ractor agent containers (force)...');
           try {
-            const r = await docker.execDocker(['ps','-a','-q','--filter','name=raworc_agent_'], { silent: true });
+            const r = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_agent_'], { silent: true });
             const ids = (r.stdout || '').trim().split('\n').filter(Boolean);
             if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} agent containers`); }
             else { display.success('No agent containers found'); }
@@ -102,7 +102,7 @@ module.exports = (program) => {
 
         // 5) Optional: pull images
         if (options.pull) {
-          display.info('[5/6] Pulling Raworc images (latest)...');
+          display.info('[5/6] Pulling Ractor images (latest)...');
           try { await docker.pull('latest'); display.success('Images pulled'); } catch (e) { display.warning('Image pull warning: ' + e.message); }
         } else {
           display.info('[5/6] Skipping image pull (use --pull to enable)');
@@ -135,8 +135,8 @@ module.exports = (program) => {
 
         console.log();
         display.success('Fix completed. You can now try:');
-        console.log('  • Start services: raworc start');
-        console.log('  • Check status:  docker ps --filter name=raworc_');
+        console.log('  • Start services: ractor start');
+        console.log('  • Check status:  docker ps --filter name=ractor_');
       } catch (error) {
         console.error(chalk.red('Error:'), error.message);
         process.exit(1);

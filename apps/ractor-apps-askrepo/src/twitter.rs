@@ -53,12 +53,12 @@ pub struct TwitterClient {
 impl TwitterClient {
     pub fn new(config: &Config) -> Result<Self> {
         let http = Client::builder()
-            .user_agent("raworc-apps-askrepo/0.1")
+            .user_agent("ractor-apps-askrepo/0.1")
             .build()
             .context("failed to build twitter reqwest client")?;
 
         let mut base_url = Url::parse(&config.twitter_api_base)
-            .context("RAWORC_APPS_ASKREPO_TWITTER_API_BASE is not a valid URL")?;
+            .context("RACTOR_APPS_ASKREPO_TWITTER_API_BASE is not a valid URL")?;
         if base_url.path().is_empty() || base_url.path() == "/" {
             base_url.set_path("/");
         }

@@ -4,17 +4,17 @@ const path = require('path');
 class DockerManager {
   constructor() {
     // Use published Docker images from DigitalOcean Container Registry
-    // Registry namespace: registry.digitalocean.com/raworc
+    // Registry namespace: registry.digitalocean.com/ractor
     this.images = {
       mysql: 'mysql:8.0',
-      api: 'registry.digitalocean.com/raworc/raworc_api:latest',
-      controller: 'registry.digitalocean.com/raworc/raworc_controller:latest',
-      agent: 'registry.digitalocean.com/raworc/raworc_agent:latest',
-      operator: 'registry.digitalocean.com/raworc/raworc_operator:latest',
-      gateway: 'registry.digitalocean.com/raworc/raworc_gateway:latest',
-      content: 'registry.digitalocean.com/raworc/raworc_content:latest',
-      app_githex: 'registry.digitalocean.com/raworc/raworc_app_githex:latest',
-      app_askrepo: 'registry.digitalocean.com/raworc/raworc_app_askrepo:latest'
+      api: 'registry.digitalocean.com/ractor/ractor_api:latest',
+      controller: 'registry.digitalocean.com/ractor/ractor_controller:latest',
+      agent: 'registry.digitalocean.com/ractor/ractor_agent:latest',
+      operator: 'registry.digitalocean.com/ractor/ractor_operator:latest',
+      gateway: 'registry.digitalocean.com/ractor/ractor_gateway:latest',
+      content: 'registry.digitalocean.com/ractor/ractor_content:latest',
+      app_githex: 'registry.digitalocean.com/ractor/ractor_app_githex:latest',
+      app_askrepo: 'registry.digitalocean.com/ractor/ractor_app_askrepo:latest'
     };
   }
 
@@ -56,16 +56,16 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['mysql', 'raworc_api', 'raworc_operator', 'raworc_content', 'raworc_controller', 'raworc_gateway'];
+    const serviceList = services.length > 0 ? services : ['mysql', 'ractor_api', 'ractor_operator', 'ractor_content', 'ractor_controller', 'ractor_gateway'];
     
     // Map service names to component names
     const componentMap = {
-      'raworc_api': 'api',
-      'raworc_controller': 'controller',
+      'ractor_api': 'api',
+      'ractor_controller': 'controller',
       'mysql': 'mysql',
-      'raworc_operator': 'operator',
-      'raworc_gateway': 'gateway',
-      'raworc_content': 'content'
+      'ractor_operator': 'operator',
+      'ractor_gateway': 'gateway',
+      'ractor_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -89,13 +89,13 @@ class DockerManager {
 
     // Create network if it doesn't exist
     try {
-      await this.execDocker(['network', 'inspect', 'raworc_network'], { silent: true });
+      await this.execDocker(['network', 'inspect', 'ractor_network'], { silent: true });
     } catch (error) {
-      await this.execDocker(['network', 'create', 'raworc_network']);
+      await this.execDocker(['network', 'create', 'ractor_network']);
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'raworc_content_data', 'ollama_data', 'raworc_api_data', 'raworc_operator_data', 'raworc_controller_data']) {
+    for (const volume of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -113,8 +113,8 @@ class DockerManager {
   async startService(component) {
     // Stop and remove existing container
     try {
-      await this.execDocker(['stop', `raworc_${component}`], { silent: true });
-      await this.execDocker(['rm', `raworc_${component}`], { silent: true });
+      await this.execDocker(['stop', `ractor_${component}`], { silent: true });
+      await this.execDocker(['rm', `ractor_${component}`], { silent: true });
     } catch (error) {
       // Container doesn't exist, that's fine
     }
@@ -124,13 +124,13 @@ class DockerManager {
         await this.execDocker([
           'run', '-d',
           '--name', 'mysql',
-          '--network', 'raworc_network',
+          '--network', 'ractor_network',
           '-p', '3307:3306',
           '-v', 'mysql_data:/var/lib/mysql',
           '-e', 'MYSQL_ROOT_PASSWORD=root',
-          '-e', 'MYSQL_DATABASE=raworc',
-          '-e', 'MYSQL_USER=raworc',
-          '-e', 'MYSQL_PASSWORD=raworc',
+          '-e', 'MYSQL_DATABASE=ractor',
+          '-e', 'MYSQL_USER=ractor',
+          '-e', 'MYSQL_PASSWORD=ractor',
           '--health-cmd', 'mysqladmin ping -h localhost -u root -proot',
           '--health-interval', '10s',
           '--health-timeout', '5s',
@@ -153,46 +153,46 @@ class DockerManager {
       case 'operator':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_operator',
-          '--network', 'raworc_network',
-          '-v', 'raworc_content_data:/content',
-          '-v', 'raworc_operator_data:/app/logs',
-          ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
-          ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
+          '--name', 'ractor_operator',
+          '--network', 'ractor_network',
+          '-v', 'ractor_content_data:/content',
+          '-v', 'ractor_operator_data:/app/logs',
+          ...(process.env.RACTOR_HOST_NAME ? ['-e', `RACTOR_HOST_NAME=${process.env.RACTOR_HOST_NAME}`] : []),
+          ...(process.env.RACTOR_HOST_URL ? ['-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`] : []),
           this.images.operator
         ]);
-        console.log('🚀 raworc_operator started');
+        console.log('🚀 ractor_operator started');
         break;
       case 'content':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_content',
-          '--network', 'raworc_network',
-          '-v', 'raworc_content_data:/content',
-          this.images.content || 'registry.digitalocean.com/raworc/raworc_content:latest'
+          '--name', 'ractor_content',
+          '--network', 'ractor_network',
+          '-v', 'ractor_content_data:/content',
+          this.images.content || 'registry.digitalocean.com/ractor/ractor_content:latest'
         ]);
-        console.log('🚀 raworc_content started');
+        console.log('🚀 ractor_content started');
         break;
 
       case 'gateway':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_gateway',
-          '--network', 'raworc_network',
+          '--name', 'ractor_gateway',
+          '--network', 'ractor_network',
           '-p', '80:80',
           this.images.gateway
         ]);
-        console.log('🚀 raworc_gateway started (port 80)');
+        console.log('🚀 ractor_gateway started (port 80)');
         break;
 
       case 'api':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_api',
-          '--network', 'raworc_network',
+          '--name', 'ractor_api',
+          '--network', 'ractor_network',
           '-p', '9000:9000',
-          '-v', 'raworc_api_data:/app/logs',
-          '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
+          '-v', 'ractor_api_data:/app/logs',
+          '-e', 'DATABASE_URL=mysql://ractor:ractor@mysql:3306/ractor',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
           this.images.api
@@ -202,15 +202,15 @@ class DockerManager {
       case 'controller':
         await this.execDocker([
           'run', '-d',
-          '--name', 'raworc_controller',
-          '--network', 'raworc_network',
+          '--name', 'ractor_controller',
+          '--network', 'ractor_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
-          '-v', 'raworc_controller_data:/app/logs',
-          '-e', 'DATABASE_URL=mysql://raworc:raworc@mysql:3306/raworc',
+          '-v', 'ractor_controller_data:/app/logs',
+          '-e', 'DATABASE_URL=mysql://ractor:ractor@mysql:3306/ractor',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
-          ...(process.env.RAWORC_HOST_NAME ? ['-e', `RAWORC_HOST_NAME=${process.env.RAWORC_HOST_NAME}`] : []),
-          ...(process.env.RAWORC_HOST_URL ? ['-e', `RAWORC_HOST_URL=${process.env.RAWORC_HOST_URL}`] : []),
+          ...(process.env.RACTOR_HOST_NAME ? ['-e', `RACTOR_HOST_NAME=${process.env.RACTOR_HOST_NAME}`] : []),
+          ...(process.env.RACTOR_HOST_URL ? ['-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`] : []),
           '-e', `AGENT_IMAGE=${this.images.agent}`,
           '-e', 'AGENT_CPU_LIMIT=0.5',
           '-e', 'AGENT_MEMORY_LIMIT=536870912',
@@ -243,16 +243,16 @@ class DockerManager {
   // Stop services
   async stop(services = [], cleanup = false) {
     // Default to stopping gateway, controller, operator and api
-    const serviceList = services.length > 0 ? services : ['raworc_gateway', 'raworc_controller', 'raworc_operator', 'raworc_content', 'raworc_api'];
+    const serviceList = services.length > 0 ? services : ['ractor_gateway', 'ractor_controller', 'ractor_operator', 'ractor_content', 'ractor_api'];
     
     // Map service names to component names
     const componentMap = {
-      'raworc_api': 'api',
-      'raworc_controller': 'controller',
+      'ractor_api': 'api',
+      'ractor_controller': 'controller',
       'mysql': 'mysql',
-      'raworc_operator': 'operator',
-      'raworc_gateway': 'gateway',
-      'raworc_content': 'content'
+      'ractor_operator': 'operator',
+      'ractor_gateway': 'gateway',
+      'ractor_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -260,8 +260,8 @@ class DockerManager {
     // Stop in reverse order
     for (const component of components.reverse()) {
       try {
-        await this.execDocker(['stop', `raworc_${component}`], { silent: true });
-        await this.execDocker(['rm', `raworc_${component}`], { silent: true });
+        await this.execDocker(['stop', `ractor_${component}`], { silent: true });
+        await this.execDocker(['rm', `ractor_${component}`], { silent: true });
       } catch (error) {
         // Container might not exist
       }
@@ -276,7 +276,7 @@ class DockerManager {
   // Get service status
   async status() {
     try {
-      const result = await this.execDocker(['ps', '--filter', 'name=raworc_', '--format', 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'], { silent: true });
+      const result = await this.execDocker(['ps', '--filter', 'name=ractor_', '--format', 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'], { silent: true });
       return result.stdout;
     } catch (error) {
       return null;
@@ -289,12 +289,12 @@ class DockerManager {
     const versionedImages = {};
     for (const [component, image] of Object.entries(this.images)) {
       if (component !== 'mysql') {
-        // For raworc images, use the specified version tag
-        if (image.startsWith('registry.digitalocean.com/raworc/') || image.startsWith('raworc/')) {
+        // For ractor images, use the specified version tag
+        if (image.startsWith('registry.digitalocean.com/ractor/') || image.startsWith('ractor/')) {
           const [repo] = image.split(':');
           versionedImages[component] = `${repo}:${version}`;
         } else {
-          // For non-raworc images, use original (like python:3.11-slim)
+          // For non-ractor images, use original (like python:3.11-slim)
           versionedImages[component] = image;
         }
       }
@@ -333,7 +333,7 @@ class DockerManager {
   // Clean up agent containers
   async cleanupContainers() {
     try {
-      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=raworc_agent_'], { silent: true });
+      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=ractor_agent_'], { silent: true });
       
       if (result.stdout.trim()) {
         const containerIds = result.stdout.trim().split('\n').filter(id => id);

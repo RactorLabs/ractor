@@ -2,8 +2,8 @@
 
 ## Project Structure & Module Organization
 
-- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `agent/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `raworc-api`, `raworc-controller`, `raworc-agent`, `raworc-content`.
-- `cli/`: Node.js CLI (`raworc`).
+- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `agent/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `ractor-api`, `ractor-controller`, `ractor-agent`, `ractor-content`.
+- `cli/`: Node.js CLI (`ractor`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
 - `assets/`: Static assets.
@@ -12,17 +12,17 @@
 
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
-- Start services (Docker via CLI): `raworc start [components...]`
+- Start services (Docker via CLI): `ractor start [components...]`
   - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
   - In dev, use `./scripts/build.sh` to build images when needed.
-- Stop: `raworc stop [components...]` (supports `agents` to stop all agent containers).
-- Dev CLI link: `./scripts/link.sh` then use `raworc --help` or `raworc start`.
+- Stop: `ractor stop [components...]` (supports `agents` to stop all agent containers).
+- Dev CLI link: `./scripts/link.sh` then use `ractor --help` or `ractor start`.
 
 ## Contributor Workflow Rules
 
-- Use the CLI for service management: `raworc start|stop|doctor`.
+- Use the CLI for service management: `ractor start|stop|doctor`.
 - Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh`.
-- Always run `./scripts/link.sh` before invoking the `raworc` CLI during development.
+- Always run `./scripts/link.sh` before invoking the `ractor` CLI during development.
 - Keep changes minimal and consistent with existing patterns; prefer editing within current modules.
 
 ## Coding Style & Naming Conventions
@@ -30,7 +30,7 @@
 - Rust 2021, 4-space indent, `snake_case` for modules, `CamelCase` for types, `SCREAMING_SNAKE_CASE` for consts.
 - Format: `cargo fmt` (check with `cargo fmt --check`).
 - Lint: `cargo clippy -- -D warnings` (fix or justify warnings).
-- Files and bins use `raworc-*` naming (e.g., `raworc-api`).
+- Files and bins use `ractor-*` naming (e.g., `ractor-api`).
 
 ## Testing Guidelines
 
@@ -38,13 +38,13 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && raworc start ollama mysql api controller && ./scripts/link.sh && raworc --version`.
+- Integration smoke test: `./scripts/build.sh && ractor start ollama mysql api controller && ./scripts/link.sh && ractor --version`.
 
 ## Commit & Pull Request Guidelines
 
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
 - PRs must include: summary, test plan, breaking changes (if any), and linked issues.
-- Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `raworc start api`.
+- Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `ractor start api`.
 - Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
 - Branch naming: `type/short-description` (e.g., `feat/session-timeout`).
 
@@ -55,13 +55,13 @@ Note on commit message formatting:
 
 ## Security & Configuration Tips
 
-- .env files are no longer required for starting services via CLI. Pass configuration via `raworc start` flags. Avoid committing environment values.
+- .env files are no longer required for starting services via CLI. Pass configuration via `ractor start` flags. Avoid committing environment values.
 - Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`.
 
-- Example local DB: `mysql://raworc:raworc@localhost:3307/raworc`.
+- Example local DB: `mysql://ractor:ractor@localhost:3307/ractor`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
-- The CLI injects `RAWORC_HOST_NAME`/`RAWORC_HOST_URL` into Operator, Controller and agents for consistent links/branding.
+- The CLI injects `RACTOR_HOST_NAME`/`RACTOR_HOST_URL` into Operator, Controller and agents for consistent links/branding.
 
 ## Data Model Highlights (Agents)
 
@@ -88,12 +88,12 @@ Note on commit message formatting:
 
 - Primary routes live under `/agents` (list, create, details/chat). Legacy `/app/*` routes have been removed.
 - Agent page shows tags and supports “Remix”, “Edit Tags”, “Delete” via modals. Sleep/Wake buttons appear only when actionable.
-- Published content is served by the `raworc-content` service under `/content/{agent}` and proxied publicly via the Gateway at port 80.
+- Published content is served by the `ractor-content` service under `/content/{agent}` and proxied publicly via the Gateway at port 80.
 
 ## Agent-Specific Instructions
 
 - Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.
-- Link the CLI before usage: `./scripts/link.sh`, then prefer `raworc ...` commands for checks (e.g., `raworc --version`).
+- Link the CLI before usage: `./scripts/link.sh`, then prefer `ractor ...` commands for checks (e.g., `ractor --version`).
 - Coordinate actions: wait for explicit maintainer instruction before running long/destructive ops, publishing, or committing.
 - Commit policy: never reference AI/assistants; no emojis; write professional, imperative, conventional commits.
 - Pre‑commit checklist: `cargo fmt --check`, `cargo clippy`, `cargo build --release`, `cargo test`, and verify services start.

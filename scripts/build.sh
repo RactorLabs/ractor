@@ -42,7 +42,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Build Docker images for Raworc components"
+  echo "Build Docker images for Ractor components"
   echo ""
   echo "Components:"
   echo "  api         Build the api image"
@@ -102,7 +102,7 @@ if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
   COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
-print_status "Building Raworc Docker images"
+print_status "Building Ractor Docker images"
 if [[ -n "${PROJECT_VERSION:-}" ]]; then
   print_status "Tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
 else
@@ -140,19 +140,19 @@ echo ""
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api)
-    image_name="raworc_api:${TAG}"
+    image_name="ractor_api:${TAG}"
     dockerfile="Dockerfile.api"
     ;;
   controller)
-    image_name="raworc_controller:${TAG}"
+    image_name="ractor_controller:${TAG}"
     dockerfile="Dockerfile.controller"
     ;;
   agent)
-    image_name="raworc_agent:${TAG}"
+    image_name="ractor_agent:${TAG}"
     dockerfile="Dockerfile.agent"
     ;;
   operator)
-    image_name="raworc_operator:${TAG}"
+    image_name="ractor_operator:${TAG}"
     dockerfile="Dockerfile.operator"
     # Build Operator (npm) outside Docker for speed and reproducibility
     print_status "Cleaning Operator build caches (.svelte-kit, build, Vite cache)"
@@ -164,25 +164,25 @@ for component in "${COMPONENTS[@]}"; do
     print_status "Installing production deps for runtime (npm ci --omit=dev)"
     (cd operator && npm ci --omit=dev)
     # If an Operator container exists, remove it so the next start uses the fresh image
-    if docker ps -a --format '{{.Names}}' | grep -q '^raworc_operator$'; then
-      print_status "Removing existing raworc_operator container to avoid stale UI"
-      docker rm -f raworc_operator >/dev/null 2>&1 || true
+    if docker ps -a --format '{{.Names}}' | grep -q '^ractor_operator$'; then
+      print_status "Removing existing ractor_operator container to avoid stale UI"
+      docker rm -f ractor_operator >/dev/null 2>&1 || true
     fi
     ;;
   content)
-    image_name="raworc_content:${TAG}"
+    image_name="ractor_content:${TAG}"
     dockerfile="Dockerfile.content"
     ;;
   gateway)
-    image_name="raworc_gateway:${TAG}"
+    image_name="ractor_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
     ;;
   app_githex)
-    image_name="raworc_app_githex:${TAG}"
+    image_name="ractor_app_githex:${TAG}"
     dockerfile="Dockerfile.githex"
     ;;
   app_askrepo)
-    image_name="raworc_app_askrepo:${TAG}"
+    image_name="ractor_app_askrepo:${TAG}"
     dockerfile="Dockerfile.askrepo"
     ;;
   *)
@@ -224,13 +224,13 @@ print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api | controller | agent | operator | content | gateway)
-    echo "  raworc_${component}:${TAG}"
+    echo "  ractor_${component}:${TAG}"
     ;;
   app_githex)
-    echo "  raworc_app_githex:${TAG}"
+    echo "  ractor_app_githex:${TAG}"
     ;;
   app_askrepo)
-    echo "  raworc_app_askrepo:${TAG}"
+    echo "  ractor_app_askrepo:${TAG}"
     ;;
   esac
 done
@@ -239,10 +239,10 @@ echo ""
 print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
-echo "  raworc start"
+echo "  ractor start"
 if [[ " ${COMPONENTS[*]} " =~ " app_githex " ]]; then
-  echo "  raworc start app_githex  # GitHex app is opt-in and never starts automatically"
+  echo "  ractor start app_githex  # GitHex app is opt-in and never starts automatically"
 fi
 if [[ " ${COMPONENTS[*]} " =~ " app_askrepo " ]]; then
-  echo "  raworc start app_askrepo # AskRepo app is opt-in and never starts automatically"
+  echo "  ractor start app_askrepo # AskRepo app is opt-in and never starts automatically"
 fi
