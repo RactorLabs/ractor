@@ -4,7 +4,7 @@ mod twitter;
 
 use anyhow::{bail, Result};
 use config::Config;
-use ractor::{NewAgentPayload, RactorClient};
+use ractor::{NewSessionPayload, RactorClient};
 use tokio::signal;
 use tokio::time::{self, MissedTickBehavior};
 use tracing::{debug, error, info, warn};
@@ -105,13 +105,13 @@ async fn process_mentions_cycle(
     let mut had_error = false;
 
     for (numeric_id, tweet) in tweets_with_ids {
-        match ensure_agent_for_tweet(ractor, &tweet, config).await {
+        match ensure_session_for_tweet(ractor, &tweet, config).await {
             Ok(_) => {
                 let updated = Some(last_success_id.map_or(numeric_id, |curr| curr.max(numeric_id)));
                 last_success_id = updated;
             }
             Err(err) => {
-                error!(?err, tweet_id = %tweet.id, "failed to ensure agent for tweet");
+                error!(?err, tweet_id = %tweet.id, "failed to ensure session for tweet");
                 had_error = true;
             }
         }
@@ -124,15 +124,15 @@ async fn process_mentions_cycle(
     Ok(last_success_id.map(|id| id.to_string()))
 }
 
-async fn ensure_agent_for_tweet(
+async fn ensure_session_for_tweet(
     ractor: &RactorClient,
     tweet: &twitter::Tweet,
     config: &Config,
 ) -> Result<()> {
     let tweet_id = tweet.id.as_str();
-    let agent_name = format!("tweet-{}", tweet_id);
-    if ractor.agent_exists(&agent_name).await? {
-        debug!(agent = %agent_name, "agent already exists; skipping creation");
+    let session_name = format!("tweet-{}", tweet_id);
+    if ractor.session_exists(&session_name).await? {
+        debug!(session = %session_name, "session already exists; skipping creation");
         return Ok(());
     }
 
@@ -156,11 +156,11 @@ async fn ensure_agent_for_tweet(
     let prompt = build_initial_prompt(tweet);
     let instructions_overview = "You are AskRepo. Review repository questions sourced from Twitter mentions and follow the initial task details.".to_string();
 
-    let env_map = config.agent_env();
+    let env_map = config.session_env();
 
-    let payload = NewAgentPayload::new(agent_name.clone(), metadata)
+    let payload = NewSessionPayload::new(session_name.clone(), metadata)
         .with_description(Some(format!(
-            "AskRepo agent bootstrap for tweet {}",
+            "AskRepo session bootstrap for tweet {}",
             tweet_id
         )))
         .with_tags(tags)
@@ -170,8 +170,8 @@ async fn ensure_agent_for_tweet(
         .with_busy_timeout(Some(1800))
         .with_env(env_map);
 
-    ractor.create_agent(&payload).await?;
-    info!(agent = %agent_name, "created new AskRepo agent");
+    ractor.create_session(&payload).await?;
+    info!(session = %session_name, "created new AskRepo session");
     Ok(())
 }
 

@@ -14,11 +14,11 @@ pub mod permissions {
     pub const OPERATOR_UPDATE: (&str, &str, &str) = ("api", "operators", "update");
     pub const OPERATOR_DELETE: (&str, &str, &str) = ("api", "operators", "delete");
 
-    pub const AGENT_LIST: (&str, &str, &str) = ("api", "agents", "list");
-    pub const AGENT_GET: (&str, &str, &str) = ("api", "agents", "get");
-    pub const AGENT_CREATE: (&str, &str, &str) = ("api", "agents", "create");
-    pub const AGENT_UPDATE: (&str, &str, &str) = ("api", "agents", "update");
-    pub const AGENT_DELETE: (&str, &str, &str) = ("api", "agents", "delete");
+    pub const SESSION_LIST: (&str, &str, &str) = ("api", "sessions", "list");
+    pub const SESSION_GET: (&str, &str, &str) = ("api", "sessions", "get");
+    pub const SESSION_CREATE: (&str, &str, &str) = ("api", "sessions", "create");
+    pub const SESSION_UPDATE: (&str, &str, &str) = ("api", "sessions", "update");
+    pub const SESSION_DELETE: (&str, &str, &str) = ("api", "sessions", "delete");
 }
 
 pub async fn check_api_permission(

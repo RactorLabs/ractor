@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api agent controller operator content gateway app_githex app_askrepo)
-DEFAULT_SET=(api agent controller operator content gateway app_githex app_askrepo)
+BUILDABLE_SET=(api session controller operator content gateway app_githex app_askrepo)
+DEFAULT_SET=(api session controller operator content gateway app_githex app_askrepo)
 
 process_args() {
   local input=("$@")
@@ -16,17 +16,17 @@ process_args() {
     done
     [[ $exists -eq 0 ]] && unique+=("$c")
   done
-  # ensure 'agent' precedes 'controller' when both present
-  local i_agent=-1 i_controller=-1
+  # ensure 'session' precedes 'controller' when both present
+  local i_session=-1 i_controller=-1
   for i in "${!unique[@]}"; do
-    [[ "${unique[$i]}" == "agent" ]] && i_agent=$i
+    [[ "${unique[$i]}" == "session" ]] && i_session=$i
     [[ "${unique[$i]}" == "controller" ]] && i_controller=$i
   done
-  if [[ $i_agent -ge 0 && $i_controller -ge 0 && $i_agent -gt $i_controller ]]; then
+  if [[ $i_session -ge 0 && $i_controller -ge 0 && $i_session -gt $i_controller ]]; then
     local tmp=( )
     for i in "${!unique[@]}"; do
-      if [[ $i -eq $i_agent ]]; then continue; fi
-      if [[ $i -eq $i_controller ]]; then tmp+=("agent"); fi
+      if [[ $i -eq $i_session ]]; then continue; fi
+      if [[ $i -eq $i_controller ]]; then tmp+=("session"); fi
       tmp+=("${unique[$i]}")
     done
     unique=("${tmp[@]}")
@@ -60,7 +60,7 @@ for COMPONENT in "${ORDERED[@]}"; do
   bash "$(dirname "$0")/build.sh" "$COMPONENT"
 
   # 2) Stop the running container (when applicable)
-  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
+  if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Stopping $COMPONENT..."
     if command -v ractor >/dev/null 2>&1; then
       ractor stop "$COMPONENT" || true
@@ -68,15 +68,15 @@ for COMPONENT in "${ORDERED[@]}"; do
       echo "[WARNING] ractor CLI not found; skipping stop for $COMPONENT" >&2
     fi
   else
-    if [[ "$COMPONENT" == "agent" ]]; then
-      echo "[INFO] Skipping stop for agent (no standalone agent container)"
+    if [[ "$COMPONENT" == "session" ]]; then
+      echo "[INFO] Skipping stop for session (no standalone session container)"
     else
       echo "[INFO] Skipping stop for app component ($COMPONENT is not auto-managed)"
     fi
   fi
 
   # 3) Start the container so it picks up the freshly built image
-  if [[ "$COMPONENT" != "agent" && "$COMPONENT" != app_* ]]; then
+  if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Starting $COMPONENT..."
     if command -v ractor >/dev/null 2>&1; then
       ractor start "$COMPONENT" || true
@@ -84,8 +84,8 @@ for COMPONENT in "${ORDERED[@]}"; do
       echo "[WARNING] ractor CLI not found; skipping start for $COMPONENT" >&2
     fi
   else
-    if [[ "$COMPONENT" == "agent" ]]; then
-      echo "[INFO] Skipping start for agent (controller uses agent image)"
+    if [[ "$COMPONENT" == "session" ]]; then
+      echo "[INFO] Skipping start for session (controller uses session image)"
     else
       echo "[INFO] Skipping start for app component ($COMPONENT is never auto-started)"
     fi

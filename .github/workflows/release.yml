@@ -77,7 +77,7 @@ jobs:
           - **Docker Images (DOCR)**:
             - \`registry.digitalocean.com/ractor/ractor_api:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/ractor/ractor_controller:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_agent:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/ractor/ractor_session:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/ractor/ractor_operator:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/ractor/ractor_content:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/ractor/ractor_gateway:${{ steps.get_version.outputs.VERSION }}\`

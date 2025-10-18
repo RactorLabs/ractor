@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `agent/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `ractor-api`, `ractor-controller`, `ractor-agent`, `ractor-content`.
+- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `session/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `ractor-api`, `ractor-controller`, `ractor-session`, `ractor-content`.
 - `cli/`: Node.js CLI (`ractor`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
@@ -15,7 +15,7 @@
 - Start services (Docker via CLI): `ractor start [components...]`
   - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
   - In dev, use `./scripts/build.sh` to build images when needed.
-- Stop: `ractor stop [components...]` (supports `agents` to stop all agent containers).
+- Stop: `ractor stop [components...]` (supports `sessions` to stop all session containers).
 - Dev CLI link: `./scripts/link.sh` then use `ractor --help` or `ractor start`.
 
 ## Contributor Workflow Rules
@@ -61,36 +61,36 @@ Note on commit message formatting:
 - Example local DB: `mysql://ractor:ractor@localhost:3307/ractor`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
-- The CLI injects `RACTOR_HOST_NAME`/`RACTOR_HOST_URL` into Operator, Controller and agents for consistent links/branding.
+- The CLI injects `RACTOR_HOST_NAME`/`RACTOR_HOST_URL` into Operator, Controller and sessions for consistent links/branding.
 
-## Data Model Highlights (Agents)
+## Data Model Highlights (Sessions)
 
-- Name-based primary key: agents are addressed by `name` (no numeric ID).
+- Name-based primary key: sessions are addressed by `name` (no numeric ID).
 - Core fields: `state` (`init|idle|busy|slept`), `created_by`, timestamps, `metadata` (JSON).
 - Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`env`,`content`).
 - Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
 
-## Agent Lifecycle & API
+## Session Lifecycle & API
 
-- Controller creates the agent container and sets initial DB state to `init` (only if still `init`, to avoid racing agent updates).
-- The agent, on boot, calls the API to report state:
-  - `POST /api/v0/agents/{name}/idle` when ready (sets state to `idle` and starts idle timer).
-  - `POST /api/v0/agents/{name}/busy` when processing (sets `busy` and starts busy timer).
+- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session updates).
+- The session, on boot, calls the API to report state:
+  - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts idle timer).
+  - `POST /api/v0/sessions/{name}/busy` when processing (sets `busy` and starts busy timer).
 - Sleep/Wake actions:
-  - `POST /agents/{name}/sleep` schedules container stop and sets state to `slept`.
-  - `POST /agents/{name}/wake` restarts container and transitions via `init`.
-- Responses: `GET/POST /agents/{name}/responses` for user↔agent exchanges, stored in `agent_responses`.
+  - `POST /sessions/{name}/sleep` schedules container stop and sets state to `slept`.
+  - `POST /sessions/{name}/wake` restarts container and transitions via `init`.
+- Responses: `GET/POST /sessions/{name}/responses` for user↔session exchanges, stored in `session_responses`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
   - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the response reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
 
 ## Operator UI
 
-- Primary routes live under `/agents` (list, create, details/chat). Legacy `/app/*` routes have been removed.
-- Agent page shows tags and supports “Remix”, “Edit Tags”, “Delete” via modals. Sleep/Wake buttons appear only when actionable.
-- Published content is served by the `ractor-content` service under `/content/{agent}` and proxied publicly via the Gateway at port 80.
+- Primary routes live under `/sessions` (list, create, details/chat). Legacy `/app/*` routes have been removed.
+- Session page shows tags and supports “Remix”, “Edit Tags”, “Delete” via modals. Sleep/Wake buttons appear only when actionable.
+- Published content is served by the `ractor-content` service under `/content/{session}` and proxied publicly via the Gateway at port 80.
 
-## Agent-Specific Instructions
+## Session-Specific Instructions
 
 - Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.
 - Link the CLI before usage: `./scripts/link.sh`, then prefer `ractor ...` commands for checks (e.g., `ractor --version`).

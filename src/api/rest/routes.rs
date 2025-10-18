@@ -16,14 +16,14 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
         .route("/version", get(version))
         .route("/operators/{name}/login", post(auth::login))
-        // Public agent endpoints (no auth required)
+        // Public session endpoints (no auth required)
         .route(
-            "/published/agents",
-            get(handlers::agents::list_published_agents),
+            "/published/sessions",
+            get(handlers::sessions::list_published_sessions),
         )
         .route(
-            "/published/agents/{name}",
-            get(handlers::agents::get_published_agent),
+            "/published/sessions/{name}",
+            get(handlers::sessions::get_published_session),
         );
 
     // Protected routes
@@ -56,75 +56,87 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/operators/{name}/password",
             put(handlers::operators::update_operator_password),
         )
-        // Agent endpoints
-        .route("/agents", get(handlers::agents::list_agents))
-        .route("/agents", post(handlers::agents::create_agent))
-        .route("/agents/{name}", get(handlers::agents::get_agent))
-        .route("/agents/{name}", put(handlers::agents::update_agent))
+        // Session endpoints
+        .route("/sessions", get(handlers::sessions::list_sessions))
+        .route("/sessions", post(handlers::sessions::create_session))
+        .route("/sessions/{name}", get(handlers::sessions::get_session))
+        .route("/sessions/{name}", put(handlers::sessions::update_session))
         .route(
-            "/agents/{name}/state",
-            put(handlers::agents::update_agent_state),
+            "/sessions/{name}/state",
+            put(handlers::sessions::update_session_state),
         )
         .route(
-            "/agents/{name}/busy",
-            post(handlers::agents::update_agent_to_busy),
+            "/sessions/{name}/busy",
+            post(handlers::sessions::update_session_to_busy),
         )
         .route(
-            "/agents/{name}/idle",
-            post(handlers::agents::update_agent_to_idle),
-        )
-        .route("/agents/{name}/sleep", post(handlers::agents::sleep_agent))
-        .route(
-            "/agents/{name}/cancel",
-            post(handlers::agents::cancel_active_response),
-        )
-        .route("/agents/{name}/wake", post(handlers::agents::wake_agent))
-        .route(
-            "/agents/{name}/runtime",
-            get(handlers::agents::get_agent_runtime),
-        )
-        .route("/agents/{name}/remix", post(handlers::agents::remix_agent))
-        .route(
-            "/agents/{name}/context",
-            get(handlers::agents::get_agent_context),
+            "/sessions/{name}/idle",
+            post(handlers::sessions::update_session_to_idle),
         )
         .route(
-            "/agents/{name}/context/clear",
-            post(handlers::agents::clear_agent_context),
+            "/sessions/{name}/sleep",
+            post(handlers::sessions::sleep_session),
         )
         .route(
-            "/agents/{name}/context/compact",
-            post(handlers::agents::compact_agent_context),
+            "/sessions/{name}/cancel",
+            post(handlers::sessions::cancel_active_response),
         )
         .route(
-            "/agents/{name}/context/usage",
-            post(handlers::agents::update_agent_context_usage),
+            "/sessions/{name}/wake",
+            post(handlers::sessions::wake_session),
         )
         .route(
-            "/agents/{name}/publish",
-            post(handlers::agents::publish_agent),
+            "/sessions/{name}/runtime",
+            get(handlers::sessions::get_session_runtime),
         )
         .route(
-            "/agents/{name}/unpublish",
-            post(handlers::agents::unpublish_agent),
+            "/sessions/{name}/remix",
+            post(handlers::sessions::remix_session),
         )
-        .route("/agents/{name}", delete(handlers::agents::delete_agent))
+        .route(
+            "/sessions/{name}/context",
+            get(handlers::sessions::get_session_context),
+        )
+        .route(
+            "/sessions/{name}/context/clear",
+            post(handlers::sessions::clear_session_context),
+        )
+        .route(
+            "/sessions/{name}/context/compact",
+            post(handlers::sessions::compact_session_context),
+        )
+        .route(
+            "/sessions/{name}/context/usage",
+            post(handlers::sessions::update_session_context_usage),
+        )
+        .route(
+            "/sessions/{name}/publish",
+            post(handlers::sessions::publish_session),
+        )
+        .route(
+            "/sessions/{name}/unpublish",
+            post(handlers::sessions::unpublish_session),
+        )
+        .route(
+            "/sessions/{name}",
+            delete(handlers::sessions::delete_session),
+        )
         // Message endpoints removed in favor of Responses
         // Response endpoints (composite model)
         .route(
-            "/agents/{name}/responses",
+            "/sessions/{name}/responses",
             get(handlers::responses::list_responses),
         )
         .route(
-            "/agents/{name}/responses",
+            "/sessions/{name}/responses",
             post(handlers::responses::create_response),
         )
         .route(
-            "/agents/{name}/responses/{id}",
+            "/sessions/{name}/responses/{id}",
             get(handlers::responses::get_response_by_id).put(handlers::responses::update_response),
         )
         .route(
-            "/agents/{name}/responses/count",
+            "/sessions/{name}/responses/count",
             get(handlers::responses::get_response_count),
         )
         // Global response lookup by id
@@ -132,26 +144,26 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/responses/{id}",
             get(handlers::responses::get_response_global_by_id),
         )
-        // Agent files (read-only)
+        // Session files (read-only)
         .route(
-            "/agents/{name}/files/read/{*path}",
-            get(handlers::agents::read_agent_file),
+            "/sessions/{name}/files/read/{*path}",
+            get(handlers::sessions::read_session_file),
         )
         .route(
-            "/agents/{name}/files/metadata/{*path}",
-            get(handlers::agents::get_agent_file_metadata),
+            "/sessions/{name}/files/metadata/{*path}",
+            get(handlers::sessions::get_session_file_metadata),
         )
         .route(
-            "/agents/{name}/files/list/{*path}",
-            get(handlers::agents::list_agent_files),
+            "/sessions/{name}/files/list/{*path}",
+            get(handlers::sessions::list_session_files),
         )
         .route(
-            "/agents/{name}/files/list",
-            get(handlers::agents::list_agent_files_root),
+            "/sessions/{name}/files/list",
+            get(handlers::sessions::list_session_files_root),
         )
         .route(
-            "/agents/{name}/files/delete/{*path}",
-            delete(handlers::agents::delete_agent_file),
+            "/sessions/{name}/files/delete/{*path}",
+            delete(handlers::sessions::delete_session_file),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

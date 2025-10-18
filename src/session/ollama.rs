@@ -605,7 +605,7 @@ impl OllamaClient {
     async fn log_ollama_request(&self, req: &ChatRequest<'_>, id: u64) {
         match serde_json::to_string_pretty(req) {
             Ok(req_json) => {
-                let filename = format!("/agent/logs/ollama_{}_request.json", id);
+                let filename = format!("/session/logs/ollama_{}_request.json", id);
                 let log_content = format!(
                     "{{\n  \"id\": {},\n  \"model\": \"{}\",\n  \"message_count\": {},\n  \"tools_count\": {},\n  \"request\": {}\n}}\n",
                     id,
@@ -637,7 +637,7 @@ impl OllamaClient {
                 Err(_) => (response_text.to_string(), response_text.to_string()),
             };
 
-        let filename = format!("/agent/logs/ollama_{}_response.json", id);
+        let filename = format!("/session/logs/ollama_{}_response.json", id);
         let log_content = format!(
             "{{\n  \"id\": {},\n  \"response_length\": {},\n  \"response\": {}\n}}\n",
             id,

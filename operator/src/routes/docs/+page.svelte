@@ -236,7 +236,7 @@
     <Card class="mb-3">
       <div class="card-header fw-bold">Response Object</div>
       <div class="card-body p-3 p-sm-4 small">
-        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/agents/&#123;name&#125;/responses</span> endpoints.</div>
+        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/sessions/&#123;name&#125;/responses</span> endpoints.</div>
         <div class="table-responsive">
           <table class="table table-sm table-bordered mb-2">
             <thead>
@@ -244,7 +244,7 @@
             </thead>
             <tbody>
               <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
-              <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent name</td></tr>
+              <tr><td class="font-monospace">session_name</td><td>string</td><td>Session name</td></tr>
               <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span>, <span class="font-monospace">cancelled</span></td></tr>
               <tr><td class="font-monospace">input_content</td><td>array</td><td>User input content items (e.g., <span class="font-monospace">&#91;&#123; type: 'text', content: 'hello' &#125;&#93;</span>). Preferred input shape uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">&#123; text: string &#125;</span> is accepted.</td></tr>
               <tr><td class="font-monospace">output_content</td><td>array</td><td>Final content items extracted from <span class="font-monospace">segments</span> (typically the <span class="font-monospace">tool_result</span> with <span class="font-monospace">tool='output'</span>).</td></tr>
@@ -327,16 +327,16 @@
         </div>
 
         <div class="mb-3">
-          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent Object</div>
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Session Object</div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered mb-2">
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
-                <tr><td class="font-monospace">name</td><td>string</td><td>Agent name (primary key)</td></tr>
+                <tr><td class="font-monospace">name</td><td>string</td><td>Session name (primary key)</td></tr>
                 <tr><td class="font-monospace">created_by</td><td>string</td><td>Owner username</td></tr>
                 <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|slept</span></td></tr>
                 <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
-                <tr><td class="font-monospace">parent_agent_name</td><td>string|null</td><td>Parent agent name if remixed</td></tr>
+                <tr><td class="font-monospace">parent_session_name</td><td>string|null</td><td>Parent session name if remixed</td></tr>
                 <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
                 <tr><td class="font-monospace">last_activity_at</td><td>string|null (RFC3339)</td><td>Last activity timestamp</td></tr>
                 <tr><td class="font-monospace">metadata</td><td>object</td><td>Arbitrary JSON metadata</td></tr>
@@ -361,14 +361,14 @@
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
                 <tr><td class="font-monospace">count</td><td>int</td><td>Count value</td></tr>
-                <tr><td class="font-monospace">agent_name</td><td>string</td><td>Agent identifier the count pertains to</td></tr>
+                <tr><td class="font-monospace">session_name</td><td>string</td><td>Session identifier the count pertains to</td></tr>
               </tbody>
             </table>
           </div>
         </div>
 
         <div class="mb-3">
-          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent Busy/Idle Response</div>
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Session Busy/Idle Response</div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered mb-2">
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
@@ -382,7 +382,7 @@
         </div>
 
         <div>
-          <div class="fw-500 small text-body text-opacity-75 mb-1">Agent State Update Response</div>
+          <div class="fw-500 small text-body text-opacity-75 mb-1">Session State Update Response</div>
           <div class="table-responsive">
             <table class="table table-sm table-bordered mb-2">
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>

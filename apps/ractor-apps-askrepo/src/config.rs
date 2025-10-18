@@ -63,7 +63,7 @@ impl Config {
         })
     }
 
-    pub fn agent_env(&self) -> HashMap<String, String> {
+    pub fn session_env(&self) -> HashMap<String, String> {
         let mut env_map = HashMap::new();
         env_map.insert(
             "TWITTER_BEARER_TOKEN".to_string(),

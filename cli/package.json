@@ -1,7 +1,7 @@
 {
   "name": "@ractor/cli",
   "version": "0.10.12",
-  "description": "Ractor CLI - Computer use agents",
+  "description": "Ractor CLI - Computer use sessions",
   "main": "index.js",
   "bin": {
     "ractor": "./index.js"
@@ -12,7 +12,7 @@
   "keywords": [
     "computer-use",
     "automation",
-    "agents",
+    "sessions",
     "remote-work",
     "manual-work"
   ],

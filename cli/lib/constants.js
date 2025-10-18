@@ -1,18 +1,18 @@
-// Agent state constants
-const AGENT_STATE_INIT = 'init';
-const AGENT_STATE_IDLE = 'idle';
-const AGENT_STATE_BUSY = 'busy';
-const AGENT_STATE_SLEPT = 'slept';
-const AGENT_STATE_DELETED = 'deleted';
+// Session state constants
+const SESSION_STATE_INIT = 'init';
+const SESSION_STATE_IDLE = 'idle';
+const SESSION_STATE_BUSY = 'busy';
+const SESSION_STATE_SLEPT = 'slept';
+const SESSION_STATE_DELETED = 'deleted';
 
 
 module.exports = {
-  // Agent states
-  AGENT_STATE_INIT,
-  AGENT_STATE_IDLE,
-  AGENT_STATE_BUSY,
-  AGENT_STATE_SLEPT,
-  AGENT_STATE_DELETED,
+  // Session states
+  SESSION_STATE_INIT,
+  SESSION_STATE_IDLE,
+  SESSION_STATE_BUSY,
+  SESSION_STATE_SLEPT,
+  SESSION_STATE_DELETED,
 
   // No message roles; responses represent full exchanges
 };

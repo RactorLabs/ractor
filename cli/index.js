@@ -20,7 +20,7 @@ const program = new Command();
 
 program
   .name('ractor')
-  .description('Remote Agentic Work Orchestrator - CLI for Computer use agents')
+  .description('Remote Sessionic Work Orchestrator - CLI for Computer use sessions')
   .version(pkg.version, '-v, --version', 'output the version number');
 
 // Show help automatically after errors and suggestions for mistyped commands

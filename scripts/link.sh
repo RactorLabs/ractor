@@ -163,7 +163,7 @@ echo "  ractor --help           # Show help"
 echo "  ractor start            # Start services"
 echo "  ractor auth login       # Authenticate"
 echo "  ractor api version      # Check API"
-echo "  ractor agent create     # Interactive agent"
+echo "  ractor session create     # Interactive session"
 
 # Show installed version
 package_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")

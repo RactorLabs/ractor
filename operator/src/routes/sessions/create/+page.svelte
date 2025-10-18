@@ -6,7 +6,7 @@
   import { apiFetch } from '$lib/api/client.js';
   import { isAuthenticated } from '$lib/auth.js';
 
-  setPageTitle('Create Agent');
+  setPageTitle('Create Session');
 
   // Simple readable-name generator obeying ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
   // Name format: super_power + creature (animal/bird/mythical)
@@ -98,13 +98,13 @@
         env: asEnvMap()
       };
 
-      const res = await apiFetch('/agents', { method: 'POST', body: JSON.stringify(body) });
+      const res = await apiFetch('/sessions', { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) {
         const msg = res?.data?.message || res?.data?.error || `Create failed (HTTP ${res.status})`;
         throw new Error(msg);
       }
-      // Navigate to the created agent page
-      goto(`/agents/${encodeURIComponent(name)}`);
+      // Navigate to the created session page
+      goto(`/sessions/${encodeURIComponent(name)}`);
     } catch (e) {
       error = e.message || String(e);
     } finally {
@@ -120,7 +120,7 @@
   <div class="col-xl-12">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
-        <div class="fw-bold fs-20px">Create Agent</div>
+        <div class="fw-bold fs-20px">Create Session</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
           <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
@@ -137,16 +137,16 @@
         <form on:submit|preventDefault={submit}>
           <div class="row g-3">
             <div class="col-12">
-              <label class="form-label" for="agent-name">Name</label>
+              <label class="form-label" for="session-name">Name</label>
               <div class="input-group">
-                <input id="agent-name" class="form-control" bind:value={name} />
+                <input id="session-name" class="form-control" bind:value={name} />
                 <button class="btn btn-outline-secondary" on:click|preventDefault={() => name = genName()}>Shuffle</button>
               </div>
               <div class="form-text">Letters, digits, dashes; max 63.</div>
             </div>
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>
-              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this agent" />
+              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this session" />
             </div>
             
 
@@ -163,18 +163,18 @@
                   }
                 }}
               ></textarea>
-              <div class="form-text">Press Ctrl+Enter to create the agent.</div>
+              <div class="form-text">Press Ctrl+Enter to create the session.</div>
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label" for="instructions">Starting System Instruction (Markdown)</label>
               <textarea id="instructions" class="form-control font-monospace" rows="6" bind:value={instructions}></textarea>
-              <div class="form-text">You can change these later by directly asking the agent to update its instructions.</div>
+              <div class="form-text">You can change these later by directly asking the session to update its instructions.</div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label" for="setup">Starting Setup Script (bash)</label>
               <textarea id="setup" class="form-control font-monospace" rows="6" bind:value={setup}></textarea>
-              <div class="form-text">You can modify this later by asking the agent to update its setup.sh.</div>
+              <div class="form-text">You can modify this later by asking the session to update its setup.sh.</div>
             </div>
 
             <div class="col-12">
@@ -220,7 +220,7 @@
 
             <div class="col-12 d-flex gap-2">
               <button type="button" class="btn btn-outline-theme" on:click|preventDefault={submit} disabled={loading}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Submitting…{:else}Submit{/if}</button>
-              <a class="btn btn-outline-secondary" href="/agents">Cancel</a>
+              <a class="btn btn-outline-secondary" href="/sessions">Cancel</a>
             </div>
           </div>
         </form>

@@ -63,10 +63,10 @@
 
   let name = '';
   $: name = $page.params.name;
-  // Keep document title as just the agent name (no prefix)
-  $: setPageTitle(name || 'Agent');
+  // Keep document title as just the session name (no prefix)
+  $: setPageTitle(name || 'Session');
 
-  let agent = null;
+  let session = null;
   let stateStr = '';
   // Chat rendering derived from Responses
   let chat = [];
@@ -168,11 +168,11 @@
   let pollHandle = null;
   let runtimeSeconds = 0;
   let currentSessionSeconds = 0;
-  // Equalize top card heights (left Agent card and right Info card)
+  // Equalize top card heights (left Session card and right Info card)
   // No JS equal-height logic; use layout-based alignment
 
   // ---------------- File panel state (right side) ----------------
-  // Start at /agent/ (represented as empty relative path "")
+  // Start at /session/ (represented as empty relative path "")
   let fmLoading = false;
   let fmError = null;
   let fmEntries = [];
@@ -181,7 +181,7 @@
   let fmNextOffset = null;
   let fmTotal = 0;
   let fmListKey = 0; // force remount of scroll area after list refresh
-  // Maintain relative path segments under /agent
+  // Maintain relative path segments under /session
   let fmSegments = [];
   // Reactive full path label for toolbar (current folder only; no selection state)
   let currentFullPath = '';
@@ -199,7 +199,7 @@
       const segs = [...(target.segs || []), target.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       // Attempt delete (not supported in read-only API; will likely fail)
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/files/delete/${relEnc}`, { method: 'DELETE' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/files/delete/${relEnc}`, { method: 'DELETE' });
       if (!res.ok) {
         throw new Error(res?.data?.message || res?.data?.error || 'Delete not supported');
       }
@@ -221,14 +221,14 @@
     try { return (fmSegments || []).map(encodeURIComponent).join('/'); } catch (_) { return ''; }
   }
   function fmDisplayPath() {
-    try { return ['/agent'].concat(fmSegments || []).join('/'); } catch (_) { return '/agent'; }
+    try { return ['/session'].concat(fmSegments || []).join('/'); } catch (_) { return '/session'; }
   }
   function fmDisplayPathShort() {
     try { return (fmSegments && fmSegments.length) ? ('/' + (fmSegments || []).join('/')) : '/'; } catch (_) { return '/'; }
   }
   function fmCurrentFullPath(segs, fileName) {
     try {
-      const base = ['/agent'].concat(segs || []);
+      const base = ['/session'].concat(segs || []);
       if (fileName) return base.concat([fileName]).join('/');
       return base.join('/');
     } catch (_) { return fmDisplayPath(); }
@@ -264,8 +264,8 @@
     try {
       let path = fmPathStr();
       let url;
-      if (!path) url = `/agents/${encodeURIComponent(name)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
-      else url = `/agents/${encodeURIComponent(name)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      if (!path) url = `/sessions/${encodeURIComponent(name)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      else url = `/sessions/${encodeURIComponent(name)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
       const res = await apiFetch(url);
       if (seq !== fmListSeq) return; // outdated
       if (!res.ok) {
@@ -344,7 +344,7 @@
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/agents/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const url = `/api/v0/sessions/${encodeURIComponent(name)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: fmPreviewAbort ? fmPreviewAbort.signal : undefined });
       if (!res.ok) {
         fmPreviewError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Open failed (HTTP ${res.status})`));
@@ -401,7 +401,7 @@
       const segs = [...fmSegments, entry?.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/agents/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const url = `/api/v0/sessions/${encodeURIComponent(name)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
       if (!res.ok) { fmError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Download failed (HTTP ${res.status})`)); return; }
       const blob = await res.blob();
@@ -518,7 +518,7 @@
   async function fetchContextUsage() {
     try {
       ctxLoading = true;
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context`);
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context`);
       if (res.ok) {
         ctx = res.data || null;
         // Update banner flag if over soft limit
@@ -531,7 +531,7 @@
   }
   async function clearContext() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context/clear`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context/clear`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Clear failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -547,7 +547,7 @@
     try {
       isCompacting = true;
       ctxLoading = true;
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/context/compact`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context/compact`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -564,7 +564,7 @@
   }
   let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
-  // Content preview via agent ports has been removed.
+  // Content preview via session ports has been removed.
   // Details (analysis + tool calls/results) visibility controlled via toggles
 
   function stateClass(state) {
@@ -593,7 +593,7 @@
   }
 
   function normState(v) { return String(v || '').trim().toLowerCase(); }
-  $: stateStr = normState(agent?.state);
+  $: stateStr = normState(session?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
   function isSlept() { return stateStr === 'slept'; }
@@ -607,7 +607,7 @@
   let showTagsModal = false;
   let tagsInput = '';
   function openEditTags() {
-    const current = Array.isArray(agent?.tags) ? agent.tags : [];
+    const current = Array.isArray(session?.tags) ? session.tags : [];
     tagsInput = current.join(', ');
     showTagsModal = true;
   }
@@ -623,11 +623,11 @@
   async function saveTags() {
     try {
       const tags = parseTagsInput();
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
-      // Update local agent tags
-      agent = res.data || agent;
-      if (agent && !Array.isArray(agent.tags)) agent.tags = tags;
+      // Update local session tags
+      session = res.data || session;
+      if (session && !Array.isArray(session.tags)) session.tags = tags;
       showTagsModal = false;
     } catch (e) {
       alert(e.message || String(e));
@@ -639,8 +639,8 @@
   let idleTimeoutInput = 0;
   let busyTimeoutInput = 0;
   function openEditTimeouts() {
-    const idle = Number(agent?.idle_timeout_seconds ?? 0);
-    const busy = Number(agent?.busy_timeout_seconds ?? 0);
+    const idle = Number(session?.idle_timeout_seconds ?? 0);
+    const busy = Number(session?.busy_timeout_seconds ?? 0);
     idleTimeoutInput = Number.isFinite(idle) && idle >= 0 ? idle : 0;
     busyTimeoutInput = Number.isFinite(busy) && busy >= 0 ? busy : 0;
     showTimeoutsModal = true;
@@ -651,13 +651,13 @@
       const idle = Math.max(0, Math.floor(Number(idleTimeoutInput || 0)));
       const busy = Math.max(0, Math.floor(Number(busyTimeoutInput || 0)));
       const body = { idle_timeout_seconds: idle, busy_timeout_seconds: busy };
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
-      // Update local agent snapshot
-      agent = res.data || agent;
-      if (agent) {
-        agent.idle_timeout_seconds = idle;
-        agent.busy_timeout_seconds = busy;
+      // Update local session snapshot
+      session = res.data || session;
+      if (session) {
+        session.idle_timeout_seconds = idle;
+        session.busy_timeout_seconds = busy;
       }
       showTimeoutsModal = false;
     } catch (e) {
@@ -680,7 +680,7 @@
       const newName = String(remixName || '').trim();
       const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
       if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/remix`, {
         method: 'POST',
         body: JSON.stringify({ name: newName, code: true, env: true, content: true })
       });
@@ -689,7 +689,7 @@
         return;
       }
       showRemixModal = false;
-      goto(`/agents/${encodeURIComponent(newName)}`);
+      goto(`/sessions/${encodeURIComponent(newName)}`);
     } catch (e) {
       remixError = e.message || String(e);
     }
@@ -715,13 +715,13 @@
   async function confirmSleep() {
     const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
     showSleepModal = false;
-    await sleepAgent(d, sleepNoteInput);
+    await sleepSession(d, sleepNoteInput);
   }
 
-  async function fetchAgent() {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}`);
+  async function fetchSession() {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`);
     if (res.ok && res.data) {
-      agent = res.data;
+      session = res.data;
     }
     // No content frame to compute; panel shows status only.
   }
@@ -729,7 +729,7 @@
   async function fetchRuntime(force = false) {
     try {
       if (!force && Date.now() - _runtimeFetchedAt < 10000) return; // throttle to 10s
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/runtime`);
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/runtime`);
       if (res.ok) {
         const v = Number(res?.data?.total_runtime_seconds ?? 0);
         if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
@@ -741,7 +741,7 @@
   }
 
   async function fetchResponses() {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses?limit=200`);
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/responses?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.responses || []);
       // Only auto-stick if near bottom before refresh
@@ -774,7 +774,7 @@
         const meta = { type: 'composite_step', in_progress: String(r?.status || '').toLowerCase() === 'processing' };
         const outputContent = Array.isArray(r?.output_content) ? r.output_content : [];
         transformed.push({
-          role: 'agent',
+          role: 'session',
           id: r.id + ':out',
           content: contentText,
           metadata: meta,
@@ -795,7 +795,7 @@
     pollHandle = setInterval(async () => {
       await fetchResponses();
       await fetchContextUsage();
-      await fetchAgent();
+      await fetchSession();
       await fetchRuntime();
     }, 2000);
   }
@@ -974,8 +974,8 @@
       let raw = String(p ?? '').trim();
       if (!raw) return '';
       raw = raw.split('\\').join('/');
-      if (raw.startsWith('/agent/')) raw = raw.slice('/agent/'.length);
-      else if (raw === '/agent' || raw === '/agent/') raw = '';
+      if (raw.startsWith('/session/')) raw = raw.slice('/session/'.length);
+      else if (raw === '/session' || raw === '/session/') raw = '';
       else if (raw.startsWith('/')) raw = raw.slice(1);
       raw = raw.replace(/^\.\/+/, '');
       raw = raw.replace(/\/+/g, '/');
@@ -1087,13 +1087,13 @@
       if (glob) addTextPart(glob);
       return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filename)' };
     }
-    if (t === 'publish_agent') {
+    if (t === 'publish_session') {
       const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
       if (note) addTextPart(`publish ${note}`.trim());
       else addTextPart('publish');
       return { parts, text: parts.map((p) => p.text).join(' > ') || 'publish' };
     }
-    if (t === 'sleep_agent') {
+    if (t === 'sleep_session') {
       const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
       const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
       const label = [`sleep${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
@@ -1316,10 +1316,10 @@
     e?.preventDefault?.();
     if (isCompacting) { return; }
     const content = (input || '').trim();
-    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Agent is busy'; } return; }
+    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Session is busy'; } return; }
     sending = true;
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/responses`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/responses`, {
         method: 'POST',
         body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
       });
@@ -1356,12 +1356,12 @@
     sending = false;
   }
 
-  async function sleepAgent(delaySeconds = 5, note = '') {
+  async function sleepSession(delaySeconds = 5, note = '') {
     try {
       const body = { delay_seconds: delaySeconds };
       const t = String(note || '').trim();
       if (t) body['note'] = t;
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify(body) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
       // Do not optimistically flip state; let polling update when controller sleeps it
       error = null;
@@ -1370,21 +1370,21 @@
     }
   }
 
-  async function wakeAgent() {
+  async function wakeSession() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Wake failed (HTTP ${res.status})`);
       // Optimistically set to init; controller will flip to idle/busy
-      if (agent) agent = { ...(agent || {}), state: 'init' };
+      if (session) session = { ...(session || {}), state: 'init' };
       const deadline = Date.now() + 120000; // wait up to 2 minutes
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 1000));
-        await fetchAgent();
-        const s = normState(agent?.state);
+        await fetchSession();
+        const s = normState(session?.state);
         if (s && s !== 'init') break;
       }
       // If we progressed past init, refresh files once now
-      if (normState(agent?.state) !== 'init') {
+      if (normState(session?.state) !== 'init') {
         await fetchFiles(true);
       }
       error = null;
@@ -1394,16 +1394,16 @@
     }
   }
 
-  async function publishAgent() {
+  async function publishSession() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: true, env: true, content: true })
       });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Publish failed (HTTP ${res.status})`);
-      if (agent) {
-        agent = { ...(agent || {}), is_published: true, isPublished: true };
+      if (session) {
+        session = { ...(session || {}), is_published: true, isPublished: true };
       }
       error = null;
     } catch (e) {
@@ -1411,12 +1411,12 @@
     }
   }
 
-  async function unpublishAgent() {
+  async function unpublishSession() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Unpublish failed (HTTP ${res.status})`);
-      if (agent) {
-        agent = { ...(agent || {}), is_published: false, isPublished: false };
+      if (session) {
+        session = { ...(session || {}), is_published: false, isPublished: false };
       }
       error = null;
     } catch (e) {
@@ -1426,9 +1426,9 @@
 
   async function cancelActive() {
     try {
-      const res = await apiFetch(`/agents/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
-      await fetchAgent();
+      await fetchSession();
       await fetchResponses();
     } catch (e) {
       error = e.message || String(e);
@@ -1436,17 +1436,17 @@
   }
 
   // Remix action: open modal instead of prompt
-  function remixAgent() { openRemixModal(); }
+  function remixSession() { openRemixModal(); }
 
   // Delete action: open modal instead of prompt
-  function deleteAgent() { openDeleteModal(); }
+  function deleteSession() { openDeleteModal(); }
 
   // Generate a default remix name by adding or incrementing a numeric suffix
   function nextRemixName(cur) {
     const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
     const basic = (s) => (s && typeof s === 'string') ? s.toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
     let s = basic(cur).replace(/^-+/, '').replace(/-+$/, '');
-    if (!s) return 'new-agent-1';
+    if (!s) return 'new-session-1';
 
     // If ends with -digits, increment, else add -1
     const m = s.match(/^(.*?)-(\d+)$/);
@@ -1474,7 +1474,7 @@
       // Pad start if needed and strip invalid ending
       candidate = candidate.replace(/^[^a-z]+/, 'a').replace(/[^a-z0-9]$/, '0');
       if (!valid.test(candidate)) {
-        candidate = 'new-agent-1';
+        candidate = 'new-session-1';
       }
     }
     return candidate;
@@ -1490,7 +1490,7 @@
     // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
     try {
-      await fetchAgent();
+      await fetchSession();
       await fetchRuntime(true);
       await fetchResponses();
       // Render the chat before attempting to scroll
@@ -1570,13 +1570,13 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Sleep Agent</h5>
+          <h5 class="modal-title">Sleep Session</h5>
           <button type="button" class="btn-close" aria-label="Close" on:click={closeSleepModal}></button>
         </div>
         <div class="modal-body">
           <label class="form-label" for="sleep-delay">Sleep in (seconds)</label>
           <input id="sleep-delay" type="number" min="5" step="1" class="form-control" bind:value={sleepDelayInput} />
-          <div class="form-text">Minimum 5 seconds. The agent will go to sleep after this delay.</div>
+          <div class="form-text">Minimum 5 seconds. The session will go to sleep after this delay.</div>
           <div class="mt-3">
             <label class="form-label" for="sleep-note">Note (optional)</label>
             <input id="sleep-note" type="text" class="form-control" bind:value={sleepNoteInput} placeholder="e.g., Taking a break" />
@@ -1598,14 +1598,14 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Remix Agent</h5>
+          <h5 class="modal-title">Remix Session</h5>
           <button type="button" class="btn-close" aria-label="Close" on:click={closeRemixModal}></button>
         </div>
         <div class="modal-body">
           {#if remixError}
             <div class="alert alert-danger small">{remixError}</div>
           {/if}
-          <label class="form-label" for="remix-name">New Agent Name</label>
+          <label class="form-label" for="remix-name">New Session Name</label>
           <input
             id="remix-name"
             class="form-control"
@@ -1629,7 +1629,7 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Delete Agent</h5>
+          <h5 class="modal-title">Delete Session</h5>
           <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
         </div>
         <div class="modal-body">
@@ -1641,10 +1641,10 @@
           <button class="btn btn-danger" disabled={!canConfirmDelete} on:click={async () => {
             try {
               const cur = String(name || '').trim();
-              const res = await apiFetch(`/agents/${encodeURIComponent(cur)}`, { method: 'DELETE' });
+              const res = await apiFetch(`/sessions/${encodeURIComponent(cur)}`, { method: 'DELETE' });
               if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
               showDeleteModal = false;
-              goto('/agents');
+              goto('/sessions');
             } catch (e) {
               alert(e.message || String(e));
             }
@@ -1664,18 +1664,18 @@
         <Card class="h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
-              {#if agent}
-                <a class="fw-bold text-decoration-none fs-22px" href={'/agents/' + encodeURIComponent(agent.name || '')}>{agent.name || '-'}</a>
-                {#if agent.is_published || agent.isPublished}
-                  <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
+              {#if session}
+                <a class="fw-bold text-decoration-none fs-22px" href={'/sessions/' + encodeURIComponent(session.name || '')}>{session.name || '-'}</a>
+                {#if session.is_published || session.isPublished}
+                  <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${session?.name || name}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
                 {/if}
               {:else}
                 <div class="fw-bold fs-22px">{name}</div>
               {/if}
             </div>
-            <div class="small text-body text-opacity-75 flex-grow-1">{agent?.description || agent?.desc || 'No description'}</div>
-            {#if isAdmin && agent}
-              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{agent.created_by}</span></div>
+            <div class="small text-body text-opacity-75 flex-grow-1">{session?.description || session?.desc || 'No description'}</div>
+            {#if isAdmin && session}
+              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{session.created_by}</span></div>
             {/if}
             <!-- Public URL in main card -->
             
@@ -1684,38 +1684,38 @@
             <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
-                {#if agent}
-                  <i class={`${stateIconClass(agent.state || agent.status)} me-1`}></i>
-                  <span class="text-uppercase small fw-bold text-body">{agent.state || agent.status || 'unknown'}</span>
+                {#if session}
+                  <i class={`${stateIconClass(session.state || session.status)} me-1`}></i>
+                  <span class="text-uppercase small fw-bold text-body">{session.state || session.status || 'unknown'}</span>
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put agent to sleep">
+                  <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put session to sleep">
                     <i class="fa fa-moon me-1"></i><span>Sleep</span>
                   </button>
                 {/if}
-                {#if agent}
-                  {#if agent.is_published || agent.isPublished}
+                {#if session}
+                  {#if session.is_published || session.isPublished}
                     <div class="dropdown">
                       <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
                         <i class="fa fa-globe me-1"></i><span>Published</span>
                       </button>
                       <ul class="dropdown-menu dropdown-menu-end">
                         <li>
-                          <a class="dropdown-item" href={`${getHostUrl()}/content/${agent?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link-alt me-2"></i>Open Public URL</a>
+                          <a class="dropdown-item" href={`${getHostUrl()}/content/${session?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link-alt me-2"></i>Open Public URL</a>
                         </li>
                         <li>
-                          <button class="dropdown-item" on:click={publishAgent}><i class="fa fa-cloud-upload-alt me-2"></i>Publish New Version</button>
+                          <button class="dropdown-item" on:click={publishSession}><i class="fa fa-cloud-upload-alt me-2"></i>Publish New Version</button>
                         </li>
                         <li>
-                          <button class="dropdown-item text-danger" on:click={unpublishAgent}><i class="fa fa-eye-slash me-2"></i>Unpublish</button>
+                          <button class="dropdown-item text-danger" on:click={unpublishSession}><i class="fa fa-eye-slash me-2"></i>Unpublish</button>
                         </li>
                       </ul>
                     </div>
                 {:else}
-                  <button type="button" class="btn btn-outline-secondary btn-sm" on:click={publishAgent} aria-label="Publish content">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" on:click={publishSession} aria-label="Publish content">
                     <i class="fa fa-cloud-upload-alt me-1"></i><span>Publish</span>
                   </button>
                 {/if}
@@ -1725,11 +1725,11 @@
                     <i class="fa fa-ellipsis-h"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={remixAgent}><i class="fa fa-random me-2"></i>Remix</button></li>
+                    <li><button class="dropdown-item" on:click={remixSession}><i class="fa fa-random me-2"></i>Remix</button></li>
                     <li><button class="dropdown-item" on:click={openEditTags}><i class="fa fa-tags me-2"></i>Edit Tags</button></li>
                     <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fa fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteAgent}><i class="fa fa-trash me-2"></i>Delete</button></li>
+                    <li><button class="dropdown-item text-danger" on:click={deleteSession}><i class="fa fa-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>
@@ -1738,12 +1738,12 @@
         </Card>
       </div>
       <div class="col-12 col-lg-6 d-none d-lg-block">
-        {#if agent}
+        {#if session}
           <Card class="h-100">
             <div class="card-body small">
               <!-- Last Activity removed per design -->
-              <div class="mt-1">Idle Timeout: {fmtDuration(agent.idle_timeout_seconds)}</div>
-              <div class="mt-1">Busy Timeout: {fmtDuration(agent.busy_timeout_seconds)}</div>
+              <div class="mt-1">Idle Timeout: {fmtDuration(session.idle_timeout_seconds)}</div>
+              <div class="mt-1">Busy Timeout: {fmtDuration(session.busy_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
@@ -1848,7 +1848,7 @@
                 </div>
               </div>
             {:else}
-              <!-- Agent side -->
+              <!-- Session side -->
               {#if hasComposite(m)}
                 <!-- Composite rendering: thinking, tool calls/results, final in one message -->
                 <div class="mb-3">
@@ -2058,7 +2058,7 @@
                   </details>
                 </div>
               {:else}
-                <!-- Tool response card or regular agent message -->
+                <!-- Tool response card or regular session message -->
                 {#if isToolResult(m) && showTools}
                   <!-- Compact single-line summary that toggles details for ALL tool responses -->
                   <div class="d-flex mb-2 justify-content-start">
@@ -2217,15 +2217,15 @@
             {#if stateStr === 'slept'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Agent is sleeping</div>
-                  <p class="small mb-3 text-body-secondary">Wake the agent to browse its workspace files.</p>
-                  <button class="btn btn-outline-success btn-sm" on:click={wakeAgent}><i class="bi bi-sun me-1"></i>Wake</button>
+                  <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Session is sleeping</div>
+                  <p class="small mb-3 text-body-secondary">Wake the session to browse its workspace files.</p>
+                  <button class="btn btn-outline-success btn-sm" on:click={wakeSession}><i class="bi bi-sun me-1"></i>Wake</button>
                 </div>
               </div>
             {:else if stateStr === 'init'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for agent to wake up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to wake up</div>
                 </div>
               </div>
             {:else}

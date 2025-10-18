@@ -51,7 +51,7 @@ usage() {
   echo "Components:"
   echo "  api         Push the api image"
   echo "  controller  Push the controller image"
-  echo "  agent       Push the agent image"
+  echo "  session       Push the session image"
   echo "  operator    Push the operator image"
   echo "  content     Push the content image"
   echo "  gateway     Push the gateway image"
@@ -104,7 +104,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "agent" "operator" "content" "gateway" "app_githex" "app_askrepo")
+  COMPONENTS=("api" "controller" "session" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
 print_status "Pushing Ractor Docker images"
@@ -139,8 +139,8 @@ for component in "${COMPONENTS[@]}"; do
   controller)
     image_name="${REGISTRY}/ractor_controller:${TAG}"
     ;;
-  agent)
-    image_name="${REGISTRY}/ractor_agent:${TAG}"
+  session)
+    image_name="${REGISTRY}/ractor_session:${TAG}"
     ;;
   operator)
     image_name="${REGISTRY}/ractor_operator:${TAG}"
@@ -231,7 +231,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | agent | operator | content | gateway)
+  api | controller | session | operator | content | gateway)
     echo "  ${REGISTRY}/ractor_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/ractor_${component}:latest"

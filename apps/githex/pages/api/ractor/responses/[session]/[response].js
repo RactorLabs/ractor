@@ -22,9 +22,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { agent, response } = req.query || {};
-  if (!agent || !response) {
-    return res.status(400).json({ error: 'Missing agent or response identifier' });
+  const { session, response } = req.query || {};
+  if (!session || !response) {
+    return res.status(400).json({ error: 'Missing session or response identifier' });
   }
 
   try {
@@ -35,9 +35,9 @@ export default async function handler(req, res) {
 
   const token = process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN;
   const host = process.env.RACTOR_HOST_URL.replace(/\/$/, '');
-  const agentId = encodeURIComponent(Array.isArray(agent) ? agent[0] : agent);
+  const sessionId = encodeURIComponent(Array.isArray(session) ? session[0] : session);
   const responseId = encodeURIComponent(Array.isArray(response) ? response[0] : response);
-  const target = `${host}/api/v0/agents/${agentId}/responses/${responseId}`;
+  const target = `${host}/api/v0/sessions/${sessionId}/responses/${responseId}`;
 
   try {
     const upstream = await fetch(target, {

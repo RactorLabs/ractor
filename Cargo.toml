@@ -47,8 +47,8 @@ name = "ractor-controller"
 path = "src/controller/main.rs"
 
 [[bin]]
-name = "ractor-agent"
-path = "src/agent/main.rs"
+name = "ractor-session"
+path = "src/session/main.rs"
 
 [[bin]]
 name = "ractor-content"

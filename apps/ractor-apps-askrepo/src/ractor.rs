@@ -46,28 +46,28 @@ impl RactorClient {
         Ok(headers)
     }
 
-    fn agent_url(&self, name: &str) -> Result<Url> {
+    fn session_url(&self, name: &str) -> Result<Url> {
         self.base_url
-            .join(&format!("/api/v0/agents/{}", encode(name)))
-            .context("failed to construct agent URL")
+            .join(&format!("/api/v0/sessions/{}", encode(name)))
+            .context("failed to construct session URL")
     }
 
-    pub async fn agent_exists(&self, name: &str) -> Result<bool> {
-        let url = self.agent_url(name)?;
-        trace!(%url, "checking for existing agent");
+    pub async fn session_exists(&self, name: &str) -> Result<bool> {
+        let url = self.session_url(name)?;
+        trace!(%url, "checking for existing session");
         let res = self
             .http
             .get(url.clone())
             .send()
             .await
-            .with_context(|| format!("failed to query Ractor API for agent '{}'", name))?;
+            .with_context(|| format!("failed to query Ractor API for session '{}'", name))?;
         match res.status() {
             StatusCode::OK => Ok(true),
             StatusCode::NOT_FOUND => Ok(false),
             status => {
                 let body = res.text().await.unwrap_or_default();
                 Err(anyhow!(
-                    "Ractor API returned {} while checking agent existence (body: {})",
+                    "Ractor API returned {} while checking session existence (body: {})",
                     status,
                     body
                 ))
@@ -75,13 +75,13 @@ impl RactorClient {
         }
     }
 
-    pub async fn create_agent(&self, payload: &NewAgentPayload) -> Result<()> {
+    pub async fn create_session(&self, payload: &NewSessionPayload) -> Result<()> {
         let url = self
             .base_url
-            .join("/api/v0/agents")
-            .context("failed to build create-agent URL")?;
+            .join("/api/v0/sessions")
+            .context("failed to build create-session URL")?;
 
-        trace!(%url, agent = %payload.name, "creating agent");
+        trace!(%url, session = %payload.name, "creating session");
 
         let response = self
             .http
@@ -91,7 +91,7 @@ impl RactorClient {
             .await
             .with_context(|| {
                 format!(
-                    "failed to submit create-agent request for '{}'",
+                    "failed to submit create-session request for '{}'",
                     payload.name
                 )
             })?;
@@ -99,19 +99,19 @@ impl RactorClient {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(anyhow!(
-                "Ractor API returned {} when creating agent (body: {})",
+                "Ractor API returned {} when creating session (body: {})",
                 status,
                 body
             ));
         }
 
-        debug!(agent = %payload.name, "created agent via Ractor API");
+        debug!(session = %payload.name, "created session via Ractor API");
         Ok(())
     }
 }
 
 #[derive(Debug, Serialize)]
-pub struct NewAgentPayload {
+pub struct NewSessionPayload {
     pub metadata: serde_json::Value,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -132,7 +132,7 @@ pub struct NewAgentPayload {
     pub busy_timeout_seconds: Option<i32>,
 }
 
-impl NewAgentPayload {
+impl NewSessionPayload {
     pub fn new(name: String, metadata: serde_json::Value) -> Self {
         Self {
             metadata,

@@ -130,10 +130,10 @@ module.exports = (program) => {
       '  $ ractor start mysql                          # Ensure MySQL is up\n' +
       '  $ ractor start app_githex                     # Start the GitHex app container\n' +
       '  $ ractor start app_askrepo                    # Start the AskRepo polling app\n')
-    .option('--controller-agent-image <image>', 'Controller AGENT_IMAGE')
-    .option('--controller-agent-cpu-limit <n>', 'Controller AGENT_CPU_LIMIT', '0.5')
-    .option('--controller-agent-memory-limit <bytes>', 'Controller AGENT_MEMORY_LIMIT', '536870912')
-    .option('--controller-agent-disk-limit <bytes>', 'Controller AGENT_DISK_LIMIT', '1073741824')
+    .option('--controller-session-image <image>', 'Controller SESSION_IMAGE')
+    .option('--controller-session-cpu-limit <n>', 'Controller SESSION_CPU_LIMIT', '0.5')
+    .option('--controller-session-memory-limit <bytes>', 'Controller SESSION_MEMORY_LIMIT', '536870912')
+    .option('--controller-session-disk-limit <bytes>', 'Controller SESSION_DISK_LIMIT', '1073741824')
     .action(async (components, options) => {
       try {
         const detached = options.foreground ? false : (options.detached !== false);
@@ -544,7 +544,7 @@ module.exports = (program) => {
               // Default OLLAMA_HOST to internal service always
               const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
-              const agentImage = options.controllerAgentImage || await resolveRactorImage('agent','ractor_agent','registry.digitalocean.com/ractor/ractor_agent', tag);
+              const sessionImage = options.controllerSessionImage || await resolveRactorImage('session','ractor_session','registry.digitalocean.com/ractor/ractor_session', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://ractor:ractor@mysql:3306/ractor';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
@@ -564,16 +564,16 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`OLLAMA_MODEL=${model}`,
-                // Model/runtime defaults for agent calls
+                // Model/runtime defaults for session calls
                 '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
                 '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
                 '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
                 '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
                 '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`,
-                '-e',`AGENT_IMAGE=${agentImage}`,
-                '-e',`AGENT_CPU_LIMIT=${options.controllerAgentCpuLimit || '0.5'}`,
-                '-e',`AGENT_MEMORY_LIMIT=${(getOptionSource('controllerAgentMemoryLimit')==='cli' ? options.controllerAgentMemoryLimit : (process.env.AGENT_MEMORY_LIMIT || options.controllerAgentMemoryLimit || '536870912'))}`,
-                '-e',`AGENT_DISK_LIMIT=${options.controllerAgentDiskLimit || '1073741824'}`,
+                '-e',`SESSION_IMAGE=${sessionImage}`,
+                '-e',`SESSION_CPU_LIMIT=${options.controllerSessionCpuLimit || '0.5'}`,
+                '-e',`SESSION_MEMORY_LIMIT=${(getOptionSource('controllerSessionMemoryLimit')==='cli' ? options.controllerSessionMemoryLimit : (process.env.SESSION_MEMORY_LIMIT || options.controllerSessionMemoryLimit || '536870912'))}`,
+                '-e',`SESSION_DISK_LIMIT=${options.controllerSessionDiskLimit || '1073741824'}`,
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
@@ -861,7 +861,7 @@ module.exports = (program) => {
           console.log('  • Check logs: docker logs ractor_api -f');
           console.log('  • Authenticate: ractor login -u admin -p admin');
           console.log('  • Check version: ractor api version');
-          console.log('  • Start agent: ractor agent create');
+          console.log('  • Start session: ractor session create');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Container management:');
           console.log("  • Stop services: ractor stop");

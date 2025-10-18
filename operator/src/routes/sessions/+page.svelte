@@ -6,11 +6,11 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
 
-  setPageTitle('Agents');
+  setPageTitle('Sessions');
 
   let loading = true;
   let error = null;
-  let agents = [];
+  let sessions = [];
   // Filters + pagination
   let q = '';
   let stateFilter = '';
@@ -62,16 +62,16 @@ import { getHostUrl } from '$lib/branding.js';
     return params.toString();
   }
 
-  async function fetchAgents() {
+  async function fetchSessions() {
     const qs = buildQuery();
-    const res = await apiFetch(`/agents?${qs}`);
+    const res = await apiFetch(`/sessions?${qs}`);
     if (!res.ok) {
-      error = res?.data?.message || `Failed to load agents (HTTP ${res.status})`;
+      error = res?.data?.message || `Failed to load sessions (HTTP ${res.status})`;
       loading = false;
       return;
     }
     const data = res.data || {};
-    agents = Array.isArray(data.items) ? data.items : [];
+    sessions = Array.isArray(data.items) ? data.items : [];
     total = Number(data.total || 0);
     limit = Number(data.limit || limit);
     const offset = Number(data.offset || 0);
@@ -79,7 +79,7 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function sleepAgent(name) {
+  async function sleepSession(name) {
     let delaySeconds = 5;
     try {
       const input = prompt('Sleep in how many seconds? (min 5)', '5');
@@ -88,39 +88,39 @@ import { getHostUrl } from '$lib/branding.js';
         if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
       }
     } catch (_) {}
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
     if (!res.ok) { error = res?.data?.message || 'Sleep failed'; return; }
     // Give the controller time to perform delayed sleep before refreshing
     await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
     await refresh();
   }
-  async function wakeAgent(name) {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
+  async function wakeSession(name) {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
     if (!res.ok) { error = res?.data?.message || 'Wake failed'; return; }
     await refresh();
   }
-  async function publishAgent(name) {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, env: true, content: true }) });
+  async function publishSession(name) {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, env: true, content: true }) });
     if (!res.ok) { error = res?.data?.message || 'Publish failed'; return; }
     await refresh();
   }
-  async function unpublishAgent(name) {
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
+  async function unpublishSession(name) {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
     if (!res.ok) { error = res?.data?.message || 'Unpublish failed'; return; }
     await refresh();
   }
-  async function remixAgent(name) {
-    const newName = prompt('New Agent Name for Remix');
+  async function remixSession(name) {
+    const newName = prompt('New Session Name for Remix');
     if (!newName) return;
     const body = { name: newName.trim(), code: true, env: true, content: true };
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}/remix`, { method: 'POST', body: JSON.stringify(body) });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/remix`, { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { error = res?.data?.message || 'Remix failed'; return; }
     await refresh();
   }
-  async function deleteAgent(name) {
-    const ok = confirm(`Delete agent '${name}'? This cannot be undone.`);
+  async function deleteSession(name) {
+    const ok = confirm(`Delete session '${name}'? This cannot be undone.`);
     if (!ok) return;
-    const res = await apiFetch(`/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
     await refresh();
   }
@@ -130,7 +130,7 @@ import { getHostUrl } from '$lib/branding.js';
     stopPolling();
     const filtersActive = (q && q.trim()) || (tagsText && tagsText.trim()) || (stateFilter && stateFilter.trim());
     if (!filtersActive && pageNum === 1) {
-      pollHandle = setInterval(async () => { try { await fetchAgents(); } catch (_) {} }, 3000);
+      pollHandle = setInterval(async () => { try { await fetchSessions(); } catch (_) {} }, 3000);
     }
   }
   function stopPolling() {
@@ -140,7 +140,7 @@ import { getHostUrl } from '$lib/branding.js';
   function syncUrl() {
     try {
       const qs = buildQuery();
-      const url = qs ? `/agents?${qs}` : '/agents';
+      const url = qs ? `/sessions?${qs}` : '/sessions';
       goto(url, { replaceState: true, keepfocus: true, noScroll: true });
     } catch (_) {}
   }
@@ -149,7 +149,7 @@ import { getHostUrl } from '$lib/branding.js';
     pageNum = 1;
     syncUrl();
     loading = true;
-    await fetchAgents();
+    await fetchSessions();
     loading = false;
     startPolling();
   }
@@ -170,7 +170,7 @@ import { getHostUrl } from '$lib/branding.js';
       limit = Number(sp.get('limit') || 30);
       pageNum = Number(sp.get('page') || 1);
     } catch (_) {}
-    await fetchAgents();
+    await fetchSessions();
     loading = false;
     startPolling();
   });
@@ -190,9 +190,9 @@ import { getHostUrl } from '$lib/branding.js';
   </div>
 {/if}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-  <div class="fw-bold fs-20px">Agents</div>
+  <div class="fw-bold fs-20px">Sessions</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <a href="/agents/create" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Agent</a>
+    <a href="/sessions/create" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Session</a>
   </div>
   
   <!-- Filters row -->
@@ -242,24 +242,24 @@ import { getHostUrl } from '$lib/branding.js';
           <div class="d-flex align-items-center justify-content-center" style="min-height: 30vh;">
             <div class="text-center text-body text-opacity-75">
               <div class="spinner-border text-theme mb-3"></div>
-              <div>Loading agents…</div>
+              <div>Loading sessions…</div>
             </div>
           </div>
         {:else if error}
           <div class="alert alert-danger small">{error}</div>
-        {:else if !agents || agents.length === 0}
-          <div class="text-body text-opacity-75">No agents found.</div>
+        {:else if !sessions || sessions.length === 0}
+          <div class="text-body text-opacity-75">No sessions found.</div>
           <div class="mt-3">
-            <a href="/agents/create" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Create your first agent</a>
+            <a href="/sessions/create" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Create your first session</a>
           </div>
         {:else}
           <div class="row g-3">
-            {#each agents as a}
+            {#each sessions as a}
               <div class="col-12 col-sm-6 col-lg-4">
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px" href={'/agents/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
+                      <a class="fw-bold text-decoration-none fs-18px" href={'/sessions/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
                       {#if a.is_published}
                         <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
                       {/if}
@@ -287,7 +287,7 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => sleepAgent(a.name)} aria-label="Put agent to sleep">
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => sleepSession(a.name)} aria-label="Put session to sleep">
                             <i class="bi bi-moon me-1"></i><span>Sleep</span>
                           </button>
                         {/if}
@@ -301,15 +301,15 @@ import { getHostUrl } from '$lib/branding.js';
                                 <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-2"></i>Open Public URL</a>
                               </li>
                               <li>
-                                <button class="dropdown-item" on:click={() => publishAgent(a.name)}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
+                                <button class="dropdown-item" on:click={() => publishSession(a.name)}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
                               </li>
                               <li>
-                                <button class="dropdown-item text-danger" on:click={() => unpublishAgent(a.name)}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
+                                <button class="dropdown-item text-danger" on:click={() => unpublishSession(a.name)}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
                               </li>
                             </ul>
                           </div>
                         {:else}
-                          <button type="button" class="btn btn-outline-secondary btn-sm" on:click={() => publishAgent(a.name)} aria-label="Publish content">
+                          <button type="button" class="btn btn-outline-secondary btn-sm" on:click={() => publishSession(a.name)} aria-label="Publish content">
                             <i class="bi bi-cloud-arrow-up me-1"></i><span>Publish</span>
                           </button>
                         {/if}
@@ -318,10 +318,10 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => remixAgent(a.name)}><i class="bi bi-shuffle me-2"></i>Remix</button></li>
-                            <li><button class="dropdown-item" on:click={() => goto('/agents/' + encodeURIComponent(a.name))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => remixSession(a.name)}><i class="bi bi-shuffle me-2"></i>Remix</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/sessions/' + encodeURIComponent(a.name))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteAgent(a.name)}><i class="bi bi-trash me-2"></i>Delete</button></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteSession(a.name)}><i class="bi bi-trash me-2"></i>Delete</button></li>
                           </ul>
                         </div>
                       </div>
@@ -353,15 +353,15 @@ import { getHostUrl } from '$lib/branding.js';
           </div>
           {#if pages > 1}
           <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
-            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>Prev</button>
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>Prev</button>
             {#each Array(pages) as _, idx}
               {#if Math.abs((idx+1) - pageNum) <= 2 || idx === 0 || idx+1 === pages}
-                <button class={`btn btn-sm ${idx+1===pageNum ? 'btn-theme' : 'btn-outline-secondary'}`} on:click={async () => { pageNum = idx+1; syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>{idx+1}</button>
+                <button class={`btn btn-sm ${idx+1===pageNum ? 'btn-theme' : 'btn-outline-secondary'}`} on:click={async () => { pageNum = idx+1; syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>{idx+1}</button>
               {:else if Math.abs((idx+1) - pageNum) === 3}
                 <span class="px-1">…</span>
               {/if}
             {/each}
-            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum >= pages} on:click={async () => { pageNum = Math.min(pages, pageNum+1); syncUrl(); loading = true; await fetchAgents(); loading = false; startPolling(); }}>Next</button>
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum >= pages} on:click={async () => { pageNum = Math.min(pages, pageNum+1); syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>Next</button>
           </div>
           {/if}
         {/if}

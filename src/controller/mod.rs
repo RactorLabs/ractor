@@ -1,7 +1,7 @@
-mod agent_manager;
 pub mod docker_manager;
+mod session_manager;
 
-pub use agent_manager::AgentManager;
+pub use session_manager::SessionManager;
 
 use anyhow::Result;
 
@@ -15,10 +15,10 @@ pub async fn run() -> Result<()> {
         std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
     tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
-    // Initialize agent manager and run
-    let agent_manager = AgentManager::new(&database_url).await?;
-    if let Err(e) = agent_manager.run().await {
-        tracing::error!("Agent manager error: {}", e);
+    // Initialize session manager and run
+    let session_manager = SessionManager::new(&database_url).await?;
+    if let Err(e) = session_manager.run().await {
+        tracing::error!("Session manager error: {}", e);
     }
     Ok(())
 }

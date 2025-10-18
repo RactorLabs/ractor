@@ -47,13 +47,13 @@ usage() {
   echo "Components:"
   echo "  api         Build the api image"
   echo "  controller  Build the controller image"
-  echo "  agent       Build the agent image"
+  echo "  session       Build the session image"
   echo "  operator    Build the operator UI image"
   echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
   echo "  app_githex  Build the GitHex app image"
   echo "  app_askrepo Build the AskRepo app image"
-  echo "  all         Build all components (api, agent, controller, operator, content, gateway, app_githex, app_askrepo)"
+  echo "  all         Build all components (api, session, controller, operator, content, gateway, app_githex, app_askrepo)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -97,9 +97,9 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("all")
 fi
 
-# Expand 'all' to actual components (ensure agent precedes controller)
+# Expand 'all' to actual components (ensure session precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "agent" "controller" "operator" "content" "gateway" "app_githex" "app_askrepo")
+  COMPONENTS=("api" "session" "controller" "operator" "content" "gateway" "app_githex" "app_askrepo")
 fi
 
 print_status "Building Ractor Docker images"
@@ -147,9 +147,9 @@ for component in "${COMPONENTS[@]}"; do
     image_name="ractor_controller:${TAG}"
     dockerfile="Dockerfile.controller"
     ;;
-  agent)
-    image_name="ractor_agent:${TAG}"
-    dockerfile="Dockerfile.agent"
+  session)
+    image_name="ractor_session:${TAG}"
+    dockerfile="Dockerfile.session"
     ;;
   operator)
     image_name="ractor_operator:${TAG}"
@@ -223,7 +223,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | agent | operator | content | gateway)
+  api | controller | session | operator | content | gateway)
     echo "  ractor_${component}:${TAG}"
     ;;
   app_githex)

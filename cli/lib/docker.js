@@ -9,7 +9,7 @@ class DockerManager {
       mysql: 'mysql:8.0',
       api: 'registry.digitalocean.com/ractor/ractor_api:latest',
       controller: 'registry.digitalocean.com/ractor/ractor_controller:latest',
-      agent: 'registry.digitalocean.com/ractor/ractor_agent:latest',
+      session: 'registry.digitalocean.com/ractor/ractor_session:latest',
       operator: 'registry.digitalocean.com/ractor/ractor_operator:latest',
       gateway: 'registry.digitalocean.com/ractor/ractor_gateway:latest',
       content: 'registry.digitalocean.com/ractor/ractor_content:latest',
@@ -211,10 +211,10 @@ class DockerManager {
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
           ...(process.env.RACTOR_HOST_NAME ? ['-e', `RACTOR_HOST_NAME=${process.env.RACTOR_HOST_NAME}`] : []),
           ...(process.env.RACTOR_HOST_URL ? ['-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`] : []),
-          '-e', `AGENT_IMAGE=${this.images.agent}`,
-          '-e', 'AGENT_CPU_LIMIT=0.5',
-          '-e', 'AGENT_MEMORY_LIMIT=536870912',
-          '-e', 'AGENT_DISK_LIMIT=1073741824',
+          '-e', `SESSION_IMAGE=${this.images.session}`,
+          '-e', 'SESSION_CPU_LIMIT=0.5',
+          '-e', 'SESSION_MEMORY_LIMIT=536870912',
+          '-e', 'SESSION_DISK_LIMIT=1073741824',
           '-e', 'RUST_LOG=info',
           this.images.controller
         ]);
@@ -267,7 +267,7 @@ class DockerManager {
       }
     }
 
-    // Clean up agent containers if requested
+    // Clean up session containers if requested
     if (cleanup) {
       await this.cleanupContainers();
     }
@@ -307,7 +307,7 @@ class DockerManager {
         console.log(`✅ Successfully pulled ${image}`);
       } catch (error) {
         console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
-        if (component === 'agent') {
+        if (component === 'session') {
           console.warn(`   The controller will attempt to pull this image when needed.`);
         }
       }
@@ -330,10 +330,10 @@ class DockerManager {
     return this.checkDocker();
   }
 
-  // Clean up agent containers
+  // Clean up session containers
   async cleanupContainers() {
     try {
-      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=ractor_agent_'], { silent: true });
+      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=ractor_session_'], { silent: true });
       
       if (result.stdout.trim()) {
         const containerIds = result.stdout.trim().split('\n').filter(id => id);

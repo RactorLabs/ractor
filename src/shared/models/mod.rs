@@ -1,18 +1,18 @@
 use sqlx::{MySql, Pool};
 use thiserror::Error;
 
-pub mod agent;
 pub mod constants;
+pub mod session;
 // message module removed in favor of response
 pub mod response;
 pub mod state_helpers;
 
-pub use agent::{
-    Agent, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest, RestoreAgentRequest,
-    UpdateAgentRequest, UpdateAgentStateRequest,
+pub use session::{
+    CreateSessionRequest, PublishSessionRequest, RemixSessionRequest, RestoreSessionRequest,
+    Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 // legacy message exports removed
-pub use response::{AgentResponse, CreateResponseRequest, ResponseView, UpdateResponseRequest};
+pub use response::{CreateResponseRequest, ResponseView, SessionResponse, UpdateResponseRequest};
 
 // Database errors
 #[derive(Error, Debug)]

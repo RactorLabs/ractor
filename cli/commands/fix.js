@@ -24,20 +24,20 @@ module.exports = (program) => {
     .description('Attempt to repair common Docker/env issues for Ractor')
     .option('--pull', 'Pull Ractor Docker images')
     .option('--prune', 'Prune dangling images/cache after cleanup')
-    .option('--agents', 'Also force-remove all ractor agent containers')
+    .option('--sessions', 'Also force-remove all ractor session containers')
     .option('--link', 'Run ./scripts/link.sh if present (dev)')
     .addHelpText('after', '\n' +
       'This command replaces ad-hoc setup.sh steps by applying safe host-side fixes.\n' +
       '\nActions performed:\n' +
       '  • Validate Docker availability\n' +
       '  • Ensure network/volumes exist\n' +
-      '  • Remove exited ractor_* containers (optionally all agents)\n' +
+      '  • Remove exited ractor_* containers (optionally all sessions)\n' +
       '  • Optional: pull images, prune caches\n' +
       '  • Quick GPU accessibility test\n' +
       '\nExamples:\n' +
       '  $ ractor fix\n' +
       '  $ ractor fix --pull\n' +
-      '  $ ractor fix --prune --agents\n' +
+      '  $ ractor fix --prune --sessions\n' +
       '  $ ractor fix --link\n')
     .action(async (options) => {
       try {
@@ -89,15 +89,15 @@ module.exports = (program) => {
           display.warning('Could not list/remove exited containers: ' + e.message);
         }
 
-        // Optional: remove ALL agent containers
-        if (options.agents) {
-          display.info('Removing ALL ractor agent containers (force)...');
+        // Optional: remove ALL session containers
+        if (options.sessions) {
+          display.info('Removing ALL ractor session containers (force)...');
           try {
-            const r = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_agent_'], { silent: true });
+            const r = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_session_'], { silent: true });
             const ids = (r.stdout || '').trim().split('\n').filter(Boolean);
-            if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} agent containers`); }
-            else { display.success('No agent containers found'); }
-          } catch (e) { display.warning('Agent cleanup warning: ' + e.message); }
+            if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} session containers`); }
+            else { display.success('No session containers found'); }
+          } catch (e) { display.warning('Session cleanup warning: ' + e.message); }
         }
 
         // 5) Optional: pull images

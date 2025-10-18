@@ -4,9 +4,9 @@ use serde_json::Value;
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct AgentResponse {
+pub struct SessionResponse {
     pub id: String,
-    pub agent_name: String,
+    pub session_name: String,
     pub created_by: String,
     pub status: String, // pending | processing | completed | failed | timedout
     pub input: serde_json::Value,
@@ -35,7 +35,7 @@ pub struct UpdateResponseRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseView {
     pub id: String,
-    pub agent_name: String,
+    pub session_name: String,
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<Value>,
@@ -47,13 +47,13 @@ pub struct ResponseView {
     pub updated_at: String,
 }
 
-impl AgentResponse {
+impl SessionResponse {
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        agent_name: &str,
+        session_name: &str,
         created_by: &str,
         req: CreateResponseRequest,
-    ) -> Result<AgentResponse, sqlx::Error> {
+    ) -> Result<SessionResponse, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
@@ -67,12 +67,12 @@ impl AgentResponse {
 
         sqlx::query(
             r#"
-            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
-        .bind(agent_name)
+        .bind(session_name)
         .bind(created_by)
         .bind(&status)
         .bind(&req.input)
@@ -82,9 +82,9 @@ impl AgentResponse {
         .execute(pool)
         .await?;
 
-        Ok(AgentResponse {
+        Ok(SessionResponse {
             id,
-            agent_name: agent_name.to_string(),
+            session_name: session_name.to_string(),
             created_by: created_by.to_string(),
             status,
             input: req.input,
@@ -94,38 +94,38 @@ impl AgentResponse {
         })
     }
 
-    pub async fn find_by_agent(
+    pub async fn find_by_session(
         pool: &sqlx::MySqlPool,
-        agent_name: &str,
+        session_name: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<AgentResponse>, sqlx::Error> {
+    ) -> Result<Vec<SessionResponse>, sqlx::Error> {
         let limit = limit.unwrap_or(100).min(1000);
         let offset = offset.unwrap_or(0);
-        sqlx::query_as::<_, AgentResponse>(
+        sqlx::query_as::<_, SessionResponse>(
             r#"
-            SELECT id, agent_name, created_by, status, input, output, created_at, updated_at
-            FROM agent_responses
-            WHERE agent_name = ?
+            SELECT id, session_name, created_by, status, input, output, created_at, updated_at
+            FROM session_responses
+            WHERE session_name = ?
             ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
             "#,
         )
-        .bind(agent_name)
+        .bind(session_name)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
         .await
     }
 
-    pub async fn count_by_agent(
+    pub async fn count_by_session(
         pool: &sqlx::MySqlPool,
-        agent_name: &str,
+        session_name: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM agent_responses WHERE agent_name = ?",
+            "SELECT COUNT(*) FROM session_responses WHERE session_name = ?",
         )
-        .bind(agent_name)
+        .bind(session_name)
         .fetch_one(pool)
         .await?;
         Ok(result)
@@ -134,9 +134,9 @@ impl AgentResponse {
     pub async fn find_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
-    ) -> Result<Option<AgentResponse>, sqlx::Error> {
-        sqlx::query_as::<_, AgentResponse>(
-            r#"SELECT id, agent_name, created_by, status, input, output, created_at, updated_at FROM agent_responses WHERE id = ?"#
+    ) -> Result<Option<SessionResponse>, sqlx::Error> {
+        sqlx::query_as::<_, SessionResponse>(
+            r#"SELECT id, session_name, created_by, status, input, output, created_at, updated_at FROM session_responses WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -147,7 +147,7 @@ impl AgentResponse {
         pool: &sqlx::MySqlPool,
         id: &str,
         req: UpdateResponseRequest,
-    ) -> Result<AgentResponse, sqlx::Error> {
+    ) -> Result<SessionResponse, sqlx::Error> {
         // Load existing
         let mut resp = Self::find_by_id(pool, id)
             .await?
@@ -197,7 +197,7 @@ impl AgentResponse {
 
         let now = Utc::now();
         sqlx::query(
-            r#"UPDATE agent_responses SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE session_responses SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&resp.status)
         .bind(&resp.input)

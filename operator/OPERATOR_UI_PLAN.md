@@ -6,9 +6,9 @@ Goal: Build a complete Operator web UI that documents and interacts with the Rac
 - API documentation (public): Cover every endpoint under `GET /api/v0/**` with clear method, path, params, request/response examples, and notes.
 - Interactive UI (authenticated):
   - Login page (Operator authentication)
-  - Agents list and details
-  - Agent chat-style responses (send + poll)
-  - Agent state/actions (wake, sleep, idle, busy, remix, publish)
+  - Sessions list and details
+  - Session chat-style responses (send + poll)
+  - Session state/actions (wake, sleep, idle, busy, remix, publish)
   - Basic profile/settings for the logged-in operator
 
 ## References
@@ -16,12 +16,12 @@ Goal: Build a complete Operator web UI that documents and interacts with the Rac
   - Public:
     - `GET  /api/v0/version`
     - `POST /api/v0/operators/{name}/login`
-    - `GET  /api/v0/published/agents`
-    - `GET  /api/v0/published/agents/{name}`
+    - `GET  /api/v0/published/sessions`
+    - `GET  /api/v0/published/sessions/{name}`
   - Protected (Bearer JWT):
     - Auth: `GET /api/v0/auth`, `POST /api/v0/auth/token`
     - Operators: CRUD + password update
-    - Agents: CRUD + state transitions + publish lifecycle
+    - Sessions: CRUD + state transitions + publish lifecycle
     - Responses: list/create/count
 - CLI 0.4.4 (tag) for flows and payload shapes:
   - `cli/lib/api.js` shows: base URL, Bearer token header, endpoint prefixing (`/api/v0`), and typical request/response handling.
@@ -42,8 +42,8 @@ Goal: Build a complete Operator web UI that documents and interacts with the Rac
     - `/docs/*` (API documentation)
     - `/login` (operator login)
   - Authenticated (guarded layout)
-    - `/app/agents` (list)
-    - `/app/agents/[name]` (details + chat/responses)
+    - `/app/sessions` (list)
+    - `/app/sessions/[name]` (details + chat/responses)
     - `/app/profile` (basic account info)
     - `/app/settings` (basic settings)
 - UI conventions: follow existing Operator template components, SCSS, and page layout options in `appOptions`.
@@ -54,7 +54,7 @@ Deliverables:
 - Categories and pages mapping to server routes:
   - Auth (public + protected)
   - Operators
-  - Agents
+  - Sessions
   - Responses
   - Published (public catalog)
 - Implementation details:
@@ -69,22 +69,22 @@ Deliverables:
 - On success:
   - Save JWT to cookie `ractor_token`
   - Save operator name to cookie `ractor_operator`
-  - Redirect to `/app/agents`
+  - Redirect to `/app/sessions`
 - Auth guard:
   - Create `src/routes/app/+layout.svelte` that checks token cookie on mount and redirects to `/login` when missing/invalid.
   - Optionally ping `GET /api/v0/auth` once to confirm validity; if 401, clear cookie and redirect to `/login`.
 
-## Phase 3 — Agents (list + details)
+## Phase 3 — Sessions (list + details)
 Deliverables:
-- `/app/agents` page: table of agents using `GET /api/v0/agents`
+- `/app/sessions` page: table of sessions using `GET /api/v0/sessions`
   - Columns: id, name, state, published, created_at, updated_at
   - Actions: open details, wake/sleep/idle/busy, publish/unpublish, delete
-- `/app/agents/[name]` page: basic info panel + messaging panel
-  - Info: agent metadata and quick actions (wake/sleep/etc.)
+- `/app/sessions/[name]` page: basic info panel + messaging panel
+  - Info: session metadata and quick actions (wake/sleep/etc.)
   - Responses (chat):
-    - List: `GET /api/v0/agents/{name}/responses`
-    - Send: `POST /api/v0/agents/{name}/responses`
-    - Poll: periodic `GET /api/v0/agents/{name}/responses/count` to detect changes and refresh list
+    - List: `GET /api/v0/sessions/{name}/responses`
+    - Send: `POST /api/v0/sessions/{name}/responses`
+    - Poll: periodic `GET /api/v0/sessions/{name}/responses/count` to detect changes and refresh list
 - UX: use template components for layout, forms, and toasts; loading states; error banners.
 
 ## Phase 4 — Operators & Profile
@@ -98,7 +98,7 @@ Deliverables:
 ## Phase 5 — Polish & Hardening
 - Add logout (clear cookies; redirect to `/login`).
 - Global API error handler and notification system.
-- Empty states, pagination for lists, and basic filters for agents.
+- Empty states, pagination for lists, and basic filters for sessions.
 - Optional: Move to httpOnly cookies with server-set `Set-Cookie` if API evolves to support it.
 - Optional: Replace message polling with SSE/WebSocket when server supports it.
 
@@ -107,8 +107,8 @@ Deliverables:
 2) Login page and auth cookie handling
 3) Auth-guarded `/app` layout
 4) API client wrapper with token attachment
-5) Agents list page
-6) Agent details + responses (send/poll)
+5) Sessions list page
+6) Session details + responses (send/poll)
 7) Profile page and logout
 8) Operator admin pages (optional by role)
 9) Polish: errors, toasts, pagination, filters
@@ -116,8 +116,8 @@ Deliverables:
 ## API coverage checklist (server `routes.rs`)
 - [ ] GET  /api/v0/version (docs)
 - [ ] POST /api/v0/operators/{name}/login (docs + login)
-- [ ] GET  /api/v0/published/agents (docs)
-- [ ] GET  /api/v0/published/agents/{name} (docs)
+- [ ] GET  /api/v0/published/sessions (docs)
+- [ ] GET  /api/v0/published/sessions/{name} (docs)
 - [ ] GET  /api/v0/auth (docs + profile)
 - [ ] POST /api/v0/auth/token (docs)
 - [ ] GET  /api/v0/operators (docs [+ UI if applicable])
@@ -126,22 +126,22 @@ Deliverables:
 - [ ] PUT  /api/v0/operators/{name} (docs)
 - [ ] DELETE /api/v0/operators/{name} (docs)
 - [ ] PUT  /api/v0/operators/{name}/password (docs)
-- [ ] GET  /api/v0/agents (docs + list UI)
-- [ ] POST /api/v0/agents (docs)
-- [ ] GET  /api/v0/agents/{name} (docs + details UI)
-- [ ] PUT  /api/v0/agents/{name} (docs)
-- [ ] PUT  /api/v0/agents/{name}/state (docs)
-- [ ] POST /api/v0/agents/{name}/busy (docs)
-- [ ] POST /api/v0/agents/{name}/idle (docs)
-- [ ] POST /api/v0/agents/{name}/sleep (docs)
-- [ ] POST /api/v0/agents/{name}/wake (docs + action UI)
-- [ ] POST /api/v0/agents/{name}/remix (docs)
-- [ ] POST /api/v0/agents/{name}/publish (docs)
-- [ ] POST /api/v0/agents/{name}/unpublish (docs)
-- [ ] DELETE /api/v0/agents/{name} (docs)
-- [ ] GET  /api/v0/agents/{name}/responses (docs + chat UI)
-- [ ] POST /api/v0/agents/{name}/responses (docs + chat UI)
-- [ ] GET  /api/v0/agents/{name}/responses/count (docs + polling)
+- [ ] GET  /api/v0/sessions (docs + list UI)
+- [ ] POST /api/v0/sessions (docs)
+- [ ] GET  /api/v0/sessions/{name} (docs + details UI)
+- [ ] PUT  /api/v0/sessions/{name} (docs)
+- [ ] PUT  /api/v0/sessions/{name}/state (docs)
+- [ ] POST /api/v0/sessions/{name}/busy (docs)
+- [ ] POST /api/v0/sessions/{name}/idle (docs)
+- [ ] POST /api/v0/sessions/{name}/sleep (docs)
+- [ ] POST /api/v0/sessions/{name}/wake (docs + action UI)
+- [ ] POST /api/v0/sessions/{name}/remix (docs)
+- [ ] POST /api/v0/sessions/{name}/publish (docs)
+- [ ] POST /api/v0/sessions/{name}/unpublish (docs)
+- [ ] DELETE /api/v0/sessions/{name} (docs)
+- [ ] GET  /api/v0/sessions/{name}/responses (docs + chat UI)
+- [ ] POST /api/v0/sessions/{name}/responses (docs + chat UI)
+- [ ] GET  /api/v0/sessions/{name}/responses/count (docs + polling)
 
 ## Notes
 - Initial implementation will avoid adding new backend endpoints; only consume existing APIs.

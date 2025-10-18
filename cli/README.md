@@ -1,6 +1,6 @@
 # @ractor/cli
 
-Remote Agentic Work Orchestrator - CLI for Computer use agents
+Remote Sessionic Work Orchestrator - CLI for Computer use sessions
 
 ## Getting Started
 

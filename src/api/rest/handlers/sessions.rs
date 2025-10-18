@@ -15,11 +15,11 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    Agent, AppState, CreateAgentRequest, PublishAgentRequest, RemixAgentRequest,
-    RestoreAgentRequest, UpdateAgentRequest, UpdateAgentStateRequest,
+    AppState, CreateSessionRequest, PublishSessionRequest, RemixSessionRequest,
+    RestoreSessionRequest, Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
-// Use fully-qualified names for response records to avoid name conflict with local AgentResponse
+// Use fully-qualified names for response records to avoid name conflict with local SessionResponse
 use crate::shared::models::response as resp_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
@@ -36,12 +36,12 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 }
 
 #[derive(Debug, Serialize)]
-pub struct AgentResponse {
+pub struct SessionResponse {
     pub name: String, // Primary key - no more id field
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_agent_name: Option<String>, // Changed from parent_agent_id
+    pub parent_session_name: Option<String>, // Changed from parent_session_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -60,7 +60,7 @@ pub struct AgentResponse {
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct ListAgentsQuery {
+pub struct ListSessionsQuery {
     pub state: Option<String>,
     pub q: Option<String>,
     // Accept both tags=alpha (single), tags=alpha&tags=beta (repeat), or tags[]=alpha
@@ -121,8 +121,8 @@ where
 }
 
 #[derive(Debug, Serialize)]
-pub struct PaginatedAgents {
-    pub items: Vec<AgentResponse>,
+pub struct PaginatedSessions {
+    pub items: Vec<SessionResponse>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -130,10 +130,10 @@ pub struct PaginatedAgents {
     pub pages: i64,
 }
 
-impl AgentResponse {
-    async fn from_agent(agent: Agent, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
+impl SessionResponse {
+    async fn from_session(session: Session, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
         // Convert tags from JSON value to Vec<String>
-        let tags: Vec<String> = match agent.tags {
+        let tags: Vec<String> = match session.tags {
             serde_json::Value::Array(arr) => arr
                 .into_iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
@@ -141,55 +141,55 @@ impl AgentResponse {
             _ => Vec::new(),
         };
         Ok(Self {
-            name: agent.name,
-            created_by: agent.created_by,
-            state: agent.state,
-            description: agent.description,
-            parent_agent_name: agent.parent_agent_name,
-            created_at: agent.created_at.to_rfc3339(),
-            last_activity_at: agent.last_activity_at.map(|dt| dt.to_rfc3339()),
-            metadata: agent.metadata,
+            name: session.name,
+            created_by: session.created_by,
+            state: session.state,
+            description: session.description,
+            parent_session_name: session.parent_session_name,
+            created_at: session.created_at.to_rfc3339(),
+            last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
+            metadata: session.metadata,
             tags,
-            is_published: agent.is_published,
-            published_at: agent.published_at.map(|dt| dt.to_rfc3339()),
-            published_by: agent.published_by,
-            publish_permissions: agent.publish_permissions,
-            idle_timeout_seconds: agent.idle_timeout_seconds,
-            busy_timeout_seconds: agent.busy_timeout_seconds,
-            idle_from: agent.idle_from.map(|dt| dt.to_rfc3339()),
-            busy_from: agent.busy_from.map(|dt| dt.to_rfc3339()),
-            context_cutoff_at: agent.context_cutoff_at.map(|dt| dt.to_rfc3339()),
-            last_context_length: agent.last_context_length,
+            is_published: session.is_published,
+            published_at: session.published_at.map(|dt| dt.to_rfc3339()),
+            published_by: session.published_by,
+            publish_permissions: session.publish_permissions,
+            idle_timeout_seconds: session.idle_timeout_seconds,
+            busy_timeout_seconds: session.busy_timeout_seconds,
+            idle_from: session.idle_from.map(|dt| dt.to_rfc3339()),
+            busy_from: session.busy_from.map(|dt| dt.to_rfc3339()),
+            context_cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
+            last_context_length: session.last_context_length,
         })
     }
 }
 
-// Helper function to find agent by name
-async fn find_agent_by_name(
+// Helper function to find session by name
+async fn find_session_by_name(
     state: &AppState,
     name: &str,
     created_by: &str,
     is_admin: bool,
-) -> Result<Agent, ApiError> {
+) -> Result<Session, ApiError> {
     // Try to find by name directly (names are globally unique)
-    if let Some(agent) = Agent::find_by_name(&state.db, name)
+    if let Some(session) = Session::find_by_name(&state.db, name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch agent: {}", e)))?
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
     {
-        // Admins can access any agent, regular users only their own or published agents
-        if is_admin || agent.created_by == created_by || agent.is_published {
-            return Ok(agent);
+        // Admins can access any session, regular users only their own or published sessions
+        if is_admin || session.created_by == created_by || session.is_published {
+            return Ok(session);
         } else {
             return Err(ApiError::Forbidden(
-                "Access denied to this agent".to_string(),
+                "Access denied to this session".to_string(),
             ));
         }
     }
 
-    Err(ApiError::NotFound("Agent not found".to_string()))
+    Err(ApiError::NotFound("Session not found".to_string()))
 }
 
-// -------- Agent Files (read-only) --------
+// -------- Session Files (read-only) --------
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ListFilesQuery {
@@ -221,7 +221,7 @@ fn map_file_task_error(err: &str) -> ApiError {
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Agent is sleeping".to_string())
+        ApiError::Conflict("Session is sleeping".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -229,15 +229,15 @@ fn map_file_task_error(err: &str) -> ApiError {
     }
 }
 
-pub async fn read_agent_file(
+pub async fn read_session_file(
     State(state): State<Arc<AppState>>,
     Path((name, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Response, ApiError> {
-    // Admins require explicit permission; owners can access their own agents
+    // Admins require explicit permission; owners can access their own sessions
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to read files".to_string())
@@ -248,7 +248,7 @@ pub async fn read_agent_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
@@ -264,7 +264,7 @@ pub async fn read_agent_file(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+        r#"INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
             VALUES (?, ?, 'file_read', ?, ?, 'pending')"#,
     )
     .bind(&task_id)
@@ -278,7 +278,7 @@ pub async fn read_agent_file(
     // Poll for completion up to 15s
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+        let row = sqlx::query(r#"SELECT status, payload, error FROM session_tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&*state.db)
             .await
@@ -331,14 +331,14 @@ pub async fn read_agent_file(
     }
 }
 
-pub async fn get_agent_file_metadata(
+pub async fn get_session_file_metadata(
     State(state): State<Arc<AppState>>,
     Path((name, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to read files".to_string())
@@ -348,7 +348,7 @@ pub async fn get_agent_file_metadata(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -359,7 +359,7 @@ pub async fn get_agent_file_metadata(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+        r#"INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
             VALUES (?, ?, 'file_metadata', ?, ?, 'pending')"#,
     )
     .bind(&task_id)
@@ -377,7 +377,7 @@ pub async fn get_agent_file_metadata(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+        let row = sqlx::query(r#"SELECT status, payload, error FROM session_tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&*state.db)
             .await
@@ -408,7 +408,7 @@ pub async fn get_agent_file_metadata(
     }
 }
 
-pub async fn list_agent_files(
+pub async fn list_session_files(
     State(state): State<Arc<AppState>>,
     Path((name, path)): Path<(String, String)>,
     Query(paging): Query<ListFilesQuery>,
@@ -416,7 +416,7 @@ pub async fn list_agent_files(
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to list files".to_string())
@@ -426,7 +426,7 @@ pub async fn list_agent_files(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -441,7 +441,7 @@ pub async fn list_agent_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+        r#"INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&task_id)
@@ -454,7 +454,7 @@ pub async fn list_agent_files(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+        let row = sqlx::query(r#"SELECT status, payload, error FROM session_tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&*state.db)
             .await
@@ -486,7 +486,7 @@ pub async fn list_agent_files(
 }
 
 // List at root when no path segment provided
-pub async fn list_agent_files_root(
+pub async fn list_session_files_root(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Query(paging): Query<ListFilesQuery>,
@@ -494,7 +494,7 @@ pub async fn list_agent_files_root(
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to list files".to_string())
@@ -504,7 +504,7 @@ pub async fn list_agent_files_root(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
     let task_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
@@ -516,7 +516,7 @@ pub async fn list_agent_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+        r#"INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&task_id)
@@ -529,7 +529,7 @@ pub async fn list_agent_files_root(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+        let row = sqlx::query(r#"SELECT status, payload, error FROM session_tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&*state.db)
             .await
@@ -560,14 +560,14 @@ pub async fn list_agent_files_root(
     }
 }
 
-pub async fn delete_agent_file(
+pub async fn delete_session_file(
     State(state): State<Arc<AppState>>,
     Path((name, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to delete files".to_string())
@@ -577,14 +577,14 @@ pub async fn delete_agent_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
     let task_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({ "path": path });
     sqlx::query(
-        r#"INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
+        r#"INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
             VALUES (?, ?, 'file_delete', ?, ?, 'pending')"#,
     )
     .bind(&task_id)
@@ -597,7 +597,7 @@ pub async fn delete_agent_file(
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM agent_tasks WHERE id = ?"#)
+        let row = sqlx::query(r#"SELECT status, payload, error FROM session_tasks WHERE id = ?"#)
             .bind(&task_id)
             .fetch_optional(&*state.db)
             .await
@@ -628,18 +628,18 @@ pub async fn delete_agent_file(
     }
 }
 
-pub async fn list_agents(
+pub async fn list_sessions(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<ListAgentsQuery>,
+    Query(query): Query<ListSessionsQuery>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<PaginatedAgents>> {
-    // Admins require explicit permission; non-admins can list only their own agents
+) -> ApiResult<Json<PaginatedSessions>> {
+    // Admins require explicit permission; non-admins can list only their own sessions
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_LIST)
+        check_api_permission(&auth, &state, &permissions::SESSION_LIST)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to list agents".to_string())
+                ApiError::Forbidden("Insufficient permissions to list sessions".to_string())
             })?;
     }
 
@@ -701,7 +701,7 @@ pub async fn list_agents(
     }
 
     // Count total
-    let count_sql = format!("SELECT COUNT(*) as cnt FROM agents {}", where_sql);
+    let count_sql = format!("SELECT COUNT(*) as cnt FROM sessions {}", where_sql);
     let mut q_count = sqlx::query_scalar::<_, i64>(&count_sql);
     for b in binds.iter() {
         if let Some(s) = b.as_str() {
@@ -713,24 +713,24 @@ pub async fn list_agents(
     let total: i64 = q_count
         .fetch_one(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count agents: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count sessions: {}", e)))?;
 
     // Fetch page
     let select_sql = format!(
         r#"
-        SELECT name, created_by, state, description, parent_agent_name,
+        SELECT name, created_by, state, description, parent_session_name,
                created_at, last_activity_at, metadata, tags,
                is_published, published_at, published_by, publish_permissions,
                idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
-        FROM agents
+        FROM sessions
         {} 
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         "#,
         where_sql
     );
-    let mut q_items = sqlx::query_as::<_, Agent>(&select_sql);
+    let mut q_items = sqlx::query_as::<_, Session>(&select_sql);
     for b in binds.iter() {
         if let Some(s) = b.as_str() {
             q_items = q_items.bind(s);
@@ -738,14 +738,14 @@ pub async fn list_agents(
     }
     q_items = q_items.bind(limit).bind(offset);
 
-    let agents: Vec<Agent> = q_items
+    let sessions: Vec<Session> = q_items
         .fetch_all(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list agents: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list sessions: {}", e)))?;
 
-    let mut items: Vec<AgentResponse> = Vec::with_capacity(agents.len());
-    for agent in agents {
-        items.push(AgentResponse::from_agent(agent, &state.db).await?);
+    let mut items: Vec<SessionResponse> = Vec::with_capacity(sessions.len());
+    for session in sessions {
+        items.push(SessionResponse::from_session(session, &state.db).await?);
     }
     let page = if limit > 0 { (offset / limit) + 1 } else { 1 };
     let pages = if limit > 0 {
@@ -754,7 +754,7 @@ pub async fn list_agents(
         1
     };
 
-    Ok(Json(PaginatedAgents {
+    Ok(Json(PaginatedSessions {
         items,
         total,
         limit,
@@ -764,18 +764,18 @@ pub async fn list_agents(
     }))
 }
 
-pub async fn get_agent(
+pub async fn get_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<AgentResponse>> {
-    // Admins require explicit permission; non-admins can access only their own agent
+) -> ApiResult<Json<SessionResponse>> {
+    // Admins require explicit permission; non-admins can access only their own session
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to get session".to_string())
             })?;
     }
 
@@ -785,22 +785,24 @@ pub async fn get_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by name (admin can access any agent)
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    // Find session by name (admin can access any session)
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+    Ok(Json(
+        SessionResponse::from_session(session, &state.db).await?,
+    ))
 }
 
-// Cancel the latest in-progress response for an agent and set agent to idle
+// Cancel the latest in-progress response for an session and set session to idle
 pub async fn cancel_active_response(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Admins must have AGENT_UPDATE; owners can cancel their own without RBAC grant
+    // Admins must have SESSION_UPDATE; owners can cancel their own without RBAC grant
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
     }
@@ -811,19 +813,19 @@ pub async fn cancel_active_response(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the agent; enforce ownership for non-admins
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
-    if !is_admin && agent.created_by != *username {
+    // Confirm access to the session; enforce ownership for non-admins
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only cancel your own agents".to_string(),
+            "You can only cancel your own sessions".to_string(),
         ));
     }
 
     // Find latest in-progress response (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .fetch_optional(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -845,7 +847,7 @@ pub async fn cancel_active_response(
             new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
         }
         sqlx::query(
-            r#"UPDATE agent_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
+            r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
         )
         .bind(&new_output)
         .bind(&resp_id)
@@ -858,9 +860,9 @@ pub async fn cancel_active_response(
     // If no response row, try to cancel a queued create_response task (pre-insert race)
     if !cancelled {
         if let Some((task_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM agent_tasks WHERE agent_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            r#"SELECT id, created_by, payload FROM session_tasks WHERE session_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
-        .bind(&agent.name)
+        .bind(&session.name)
         .fetch_optional(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
@@ -872,19 +874,19 @@ pub async fn cancel_active_response(
                 let output = serde_json::json!({"text":"","items":[cancelled_item]});
                 // Insert cancelled response row (idempotent behavior if it already exists)
                 let _ = sqlx::query(
-                    r#"INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                    r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
                 .bind(&resp_id)
-                .bind(&agent.name)
+                .bind(&session.name)
                 .bind(&created_by)
                 .bind(&input)
                 .bind(&output)
                 .execute(&*state.db)
                 .await;
                 // Mark task completed to prevent later insertion
-                let _ = sqlx::query(r#"UPDATE agent_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                let _ = sqlx::query(r#"UPDATE session_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
                     .bind(&task_id)
                     .execute(&*state.db)
                     .await;
@@ -893,21 +895,21 @@ pub async fn cancel_active_response(
         }
     }
 
-    // Set agent to idle
-    sqlx::query(r#"UPDATE agents SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE name = ?"#)
-        .bind(&agent.name)
+    // Set session to idle
+    sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE name = ?"#)
+        .bind(&session.name)
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e)))?;
 
     Ok(Json(
-        serde_json::json!({"status":"ok", "agent": agent.name, "cancelled": cancelled}),
+        serde_json::json!({"status":"ok", "session": session.name, "cancelled": cancelled}),
     ))
 }
 
 #[derive(Debug, Serialize)]
-pub struct AgentContextUsageResponse {
-    pub agent: String,
+pub struct SessionContextUsageResponse {
+    pub session: String,
     pub soft_limit_tokens: i64,
     pub used_tokens_estimated: i64,
     pub used_percent: f64,
@@ -942,23 +944,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    agent_name: &str,
+    session_name: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<(i64, u32), ApiError> {
     // No ordering needed for estimation; avoid sort pressure
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ? AND created_at >= ?"#,
         )
-            .bind(agent_name)
+            .bind(session_name)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ?"#,
         )
-            .bind(agent_name)
+            .bind(session_name)
             .fetch_all(pool)
             .await
     }
@@ -1189,18 +1191,18 @@ async fn estimate_history_tokens_since(
     Ok((est_tokens, msg_count))
 }
 
-pub async fn get_agent_context(
+pub async fn get_session_context(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<AgentContextUsageResponse>> {
+) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Reuse GET permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get agent context".to_string())
+                ApiError::Forbidden("Insufficient permissions to get session context".to_string())
             })?;
     }
 
@@ -1210,8 +1212,8 @@ pub async fn get_agent_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
-    let used = agent.last_context_length;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let used = session.last_context_length;
     let limit = soft_limit_tokens();
     let used_percent = if limit > 0 {
         (used as f64 * 100.0) / (limit as f64)
@@ -1219,13 +1221,13 @@ pub async fn get_agent_context(
         0.0
     };
 
-    let resp = AgentContextUsageResponse {
-        agent: agent.name,
+    let resp = SessionContextUsageResponse {
+        session: session.name,
         soft_limit_tokens: limit,
         used_tokens_estimated: used,
         used_percent,
         basis: "ollama_last_context_length".to_string(),
-        cutoff_at: agent.context_cutoff_at.map(|dt| dt.to_rfc3339()),
+        cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
         measured_at: Utc::now().to_rfc3339(),
         total_messages_considered: 0,
     };
@@ -1233,15 +1235,15 @@ pub async fn get_agent_context(
     Ok(Json(resp))
 }
 
-pub async fn clear_agent_context(
+pub async fn clear_session_context(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<AgentContextUsageResponse>> {
+) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Require update permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to clear context".to_string())
@@ -1254,18 +1256,18 @@ pub async fn clear_agent_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the agent
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    // Confirm access to the session
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Set the cutoff now
-    crate::shared::models::Agent::clear_context_cutoff(&state.db, &agent.name)
+    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was cleared
-    if let Ok(created) = resp_model::AgentResponse::create(
+    if let Ok(created) = resp_model::SessionResponse::create(
         &state.db,
-        &agent.name,
+        &session.name,
         username,
         resp_model::CreateResponseRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1275,7 +1277,7 @@ pub async fn clear_agent_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::AgentResponse::update_by_id(
+        let _ = resp_model::SessionResponse::update_by_id(
             &state.db,
             &created.id,
             resp_model::UpdateResponseRequest {
@@ -1293,8 +1295,8 @@ pub async fn clear_agent_context(
     // Return fresh measurement (reset to zero)
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
-    let resp = AgentContextUsageResponse {
-        agent: agent.name,
+    let resp = SessionContextUsageResponse {
+        session: session.name,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1307,15 +1309,15 @@ pub async fn clear_agent_context(
 }
 
 // Compact context: summarize recent conversation and set a new cutoff.
-pub async fn compact_agent_context(
+pub async fn compact_session_context(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<AgentContextUsageResponse>> {
+) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Require update permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to compact context".to_string())
@@ -1328,25 +1330,25 @@ pub async fn compact_agent_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the agent
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    // Confirm access to the session
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Load conversation history since the current cutoff (if any)
-    let cutoff = agent.context_cutoff_at;
+    let cutoff = session.context_cutoff_at;
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_responses WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
-        .bind(&agent.name)
+        .bind(&session.name)
         .bind(cut)
         .fetch_all(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     } else {
         sqlx::query(
-            r#"SELECT input, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#,
         )
-        .bind(&agent.name)
+        .bind(&session.name)
         .fetch_all(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
@@ -1468,7 +1470,7 @@ pub async fn compact_agent_context(
         "(No prior conversation to compact.)".to_string()
     } else {
         // Call Ollama to summarize the transcript
-        // Prefer the same variable name used by controller/agent; default to Docker network hostname
+        // Prefer the same variable name used by controller/session; default to Docker network hostname
         let base_url =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
         let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:120b".to_string());
@@ -1512,14 +1514,14 @@ pub async fn compact_agent_context(
     };
 
     // Set the cutoff now
-    crate::shared::models::Agent::clear_context_cutoff(&state.db, &agent.name)
+    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was compacted, include summary as a compact_summary item
-    if let Ok(created) = resp_model::AgentResponse::create(
+    if let Ok(created) = resp_model::SessionResponse::create(
         &state.db,
-        &agent.name,
+        &session.name,
         username,
         resp_model::CreateResponseRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1529,7 +1531,7 @@ pub async fn compact_agent_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::AgentResponse::update_by_id(
+        let _ = resp_model::SessionResponse::update_by_id(
             &state.db,
             &created.id,
             resp_model::UpdateResponseRequest {
@@ -1550,8 +1552,8 @@ pub async fn compact_agent_context(
     // Return fresh measurement (post-compaction, reset to zero)
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
-    let resp = AgentContextUsageResponse {
-        agent: agent.name,
+    let resp = SessionContextUsageResponse {
+        session: session.name,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1563,7 +1565,7 @@ pub async fn compact_agent_context(
     Ok(Json(resp))
 }
 
-pub async fn update_agent_context_usage(
+pub async fn update_session_context_usage(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -1575,10 +1577,10 @@ pub async fn update_agent_context_usage(
     };
 
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     let tokens = req.tokens.max(0);
-    Agent::update_last_context_length(&state.db, &agent.name, tokens)
+    Session::update_last_context_length(&state.db, &session.name, tokens)
         .await
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Failed to update context length: {}", e))
@@ -1590,25 +1592,25 @@ pub async fn update_agent_context_usage(
     })))
 }
 
-pub async fn create_agent(
+pub async fn create_session(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<CreateAgentRequest>,
-) -> ApiResult<Json<AgentResponse>> {
+    Json(req): Json<CreateSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
     tracing::info!(
-        "Creating agent with env: {} keys, instructions: {}, setup: {}, prompt: {}",
+        "Creating session with env: {} keys, instructions: {}, setup: {}, prompt: {}",
         req.env.len(),
         req.instructions.is_some(),
         req.setup.is_some(),
         req.prompt.is_some()
     );
 
-    // Admins require explicit permission; non-admins can create their own agents
+    // Admins require explicit permission; non-admins can create their own sessions
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to create agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to create session".to_string())
             })?;
     }
 
@@ -1618,12 +1620,12 @@ pub async fn create_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let agent = Agent::create(&state.db, req.clone(), created_by)
+    let session = Session::create(&state.db, req.clone(), created_by)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to create agent: {:?}", e);
+            tracing::error!("Failed to create session: {:?}", e);
 
-            // Check for unique constraint violation on agent name
+            // Check for unique constraint violation on session name
             if let sqlx::Error::Database(db_err) = &e {
                 tracing::error!(
                     "Database error - code: {:?}, message: '{}'",
@@ -1635,16 +1637,16 @@ pub async fn create_agent(
                     if code == "23000" || code == "1062" {
                         let name_display = &req.name;
                         tracing::info!(
-                            "Detected database constraint violation for agent {}",
+                            "Detected database constraint violation for session {}",
                             name_display
                         );
-                        if db_err.message().contains("agents.PRIMARY")
-                            || db_err.message().contains("unique_agent_name")
+                        if db_err.message().contains("sessions.PRIMARY")
+                            || db_err.message().contains("unique_session_name")
                             || db_err.message().contains("Duplicate entry")
                         {
-                            tracing::info!("Confirmed duplicate agent name constraint violation");
+                            tracing::info!("Confirmed duplicate session name constraint violation");
                             return ApiError::Conflict(format!(
-                                "Agent name '{}' already exists. Choose a different name.",
+                                "Session name '{}' already exists. Choose a different name.",
                                 name_display
                             ));
                         }
@@ -1652,10 +1654,10 @@ pub async fn create_agent(
                 }
             }
 
-            ApiError::Internal(anyhow::anyhow!("Failed to create agent: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
         })?;
 
-    // Add task to queue for agent manager to create container with agent parameters
+    // Add task to queue for session manager to create container with session parameters
     let payload = serde_json::json!({
         "env": req.env,
         "instructions": req.instructions,
@@ -1671,34 +1673,36 @@ pub async fn create_agent(
 
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'create_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'create_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create agent task: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
 
-    tracing::info!("Created agent task for agent {}", agent.name);
+    tracing::info!("Created session task for session {}", session.name);
 
-    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+    Ok(Json(
+        SessionResponse::from_session(session, &state.db).await?,
+    ))
 }
 
-pub async fn remix_agent(
+pub async fn remix_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RemixAgentRequest>,
-) -> ApiResult<Json<AgentResponse>> {
+    Json(req): Json<RemixSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
     // Admins require explicit permission; non-admins can remix according to publish/ownership checks
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_CREATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to remix agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to remix session".to_string())
             })?;
     }
 
@@ -1708,16 +1712,16 @@ pub async fn remix_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find parent agent by ID or name (admin can remix any agent, users can remix published agents)
+    // Find parent session by ID or name (admin can remix any session, users can remix published sessions)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let parent = find_agent_by_name(&state, &name, username, true).await?; // Allow finding any agent for remix (permission check below)
+    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for remix (permission check below)
 
     // Check remix permissions for non-owners
     if parent.created_by != *username && !is_admin {
-        // Non-owner, non-admin can only remix if agent is published
+        // Non-owner, non-admin can only remix if session is published
         if !parent.is_published {
             return Err(ApiError::Forbidden(
-                "You can only remix your own agents or published agents".to_string(),
+                "You can only remix your own sessions or published sessions".to_string(),
             ));
         }
 
@@ -1734,7 +1738,7 @@ pub async fn remix_agent(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Code remix not permitted for this published agent".to_string(),
+                "Code remix not permitted for this published session".to_string(),
             ));
         }
         if req.env
@@ -1744,7 +1748,7 @@ pub async fn remix_agent(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Environment remix not permitted for this published agent".to_string(),
+                "Environment remix not permitted for this published session".to_string(),
             ));
         }
         // Content is always allowed - no permission check needed
@@ -1756,14 +1760,14 @@ pub async fn remix_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Store the remix options before moving req into Agent::remix
+    // Store the remix options before moving req into Session::remix
     let copy_code = req.code;
     let copy_env = req.env;
     // Content is always copied
     let copy_content = true;
     let initial_prompt = req.prompt.clone();
 
-    let agent = Agent::remix(&state.db, &parent.name, req.clone(), created_by)
+    let session = Session::remix(&state.db, &parent.name, req.clone(), created_by)
         .await
         .map_err(|e| {
             // Provide a clearer error on duplicate name conflicts
@@ -1771,25 +1775,25 @@ pub async fn remix_agent(
                 if let Some(code) = db_err.code() {
                     // MySQL duplicate/constraint codes: 23000 (SQLSTATE), 1062 (ER_DUP_ENTRY)
                     if code == "23000" || code == "1062" {
-                        if db_err.message().contains("agents.PRIMARY")
-                            || db_err.message().contains("unique_agent_name")
+                        if db_err.message().contains("sessions.PRIMARY")
+                            || db_err.message().contains("unique_session_name")
                             || db_err.message().contains("Duplicate entry")
                         {
                             return ApiError::Conflict(format!(
-                                "Agent name '{}' already exists. Choose a different name.",
+                                "Session name '{}' already exists. Choose a different name.",
                                 req.name
                             ));
                         }
                     }
                 }
             }
-            ApiError::Internal(anyhow::anyhow!("Failed to remix agent: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e))
         })?;
 
-    // Add task to queue for agent manager to create container with remix options
+    // Add task to queue for session manager to create container with remix options
     let task_payload = serde_json::json!({
         "remix": true,
-        "parent_agent_name": parent.name,
+        "parent_session_name": parent.name,
         "copy_code": copy_code,
         "copy_env": copy_env,
         "copy_content": copy_content,
@@ -1803,76 +1807,78 @@ pub async fn remix_agent(
 
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'create_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'create_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(created_by)
     .bind(task_payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create agent task: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
 
-    tracing::info!("Created agent task for remixed agent {}", agent.name);
+    tracing::info!("Created session task for remixed session {}", session.name);
 
-    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+    Ok(Json(
+        SessionResponse::from_session(session, &state.db).await?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SleepAgentRequest {
+pub struct SleepSessionRequest {
     #[serde(default)]
     pub delay_seconds: Option<u64>,
     #[serde(default)]
     pub note: Option<String>,
 }
 
-pub async fn sleep_agent(
+pub async fn sleep_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    maybe_req: Option<Json<SleepAgentRequest>>,
-) -> ApiResult<Json<AgentResponse>> {
-    tracing::info!("Sleep request received for agent: {}", name);
+    maybe_req: Option<Json<SleepSessionRequest>>,
+) -> ApiResult<Json<SessionResponse>> {
+    tracing::info!("Sleep request received for session: {}", name);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can sleep any agent)
+    // Find session by ID or name (admin can sleep any session)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, created_by, is_admin).await?;
+    let session = find_session_by_name(&state, &name, created_by, is_admin).await?;
 
-    tracing::info!("Found agent in state: {}", agent.state);
+    tracing::info!("Found session in state: {}", session.state);
 
-    // Check permission for updating agents (admin only). Owners can sleep without RBAC grant
+    // Check permission for updating sessions (admin only). Owners can sleep without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to sleep agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to sleep session".to_string())
             })?;
     }
 
-    // Allow sleeping own agents or admin can sleep any agent
+    // Allow sleeping own sessions or admin can sleep any session
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
     let is_admin = is_admin_principal(&auth, &state).await;
-    if !is_admin && agent.created_by != *username {
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "Can only sleep your own agents".to_string(),
+            "Can only sleep your own sessions".to_string(),
         ));
     }
     tracing::info!("Permission check passed");
 
     // Check current state - cannot sleep if already sleeping
 
-    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT {
+    if session.state == crate::shared::models::constants::SESSION_STATE_SLEPT {
         return Err(ApiError::BadRequest(
-            "Agent is already sleeping".to_string(),
+            "Session is already sleeping".to_string(),
         ));
     }
 
@@ -1904,11 +1910,11 @@ pub async fn sleep_agent(
     };
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'sleep_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'sleep_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(&created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -1918,33 +1924,33 @@ pub async fn sleep_agent(
         ApiError::Internal(anyhow::anyhow!("Failed to create suspend task: {}", e))
     })?;
 
-    tracing::info!("Created suspend task for agent {}", name);
+    tracing::info!("Created suspend task for session {}", name);
 
     // Do not insert a pre-sleep marker; the controller will add a single 'slept' marker when sleep completes
 
-    // Fetch agent (state remains as-is until controller executes sleep)
-    let updated_agent = Agent::find_by_name(&state.db, &name)
+    // Fetch session (state remains as-is until controller executes sleep)
+    let updated_session = Session::find_by_name(&state.db, &name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated agent: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
     Ok(Json(
-        AgentResponse::from_agent(updated_agent, &state.db).await?,
+        SessionResponse::from_session(updated_session, &state.db).await?,
     ))
 }
 
-pub async fn wake_agent(
+pub async fn wake_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RestoreAgentRequest>,
-) -> ApiResult<Json<AgentResponse>> {
-    // Check permission for updating agents (admin only). Owners can wake without RBAC grant
+    Json(req): Json<RestoreSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
+    // Check permission for updating sessions (admin only). Owners can wake without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to wake agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to wake session".to_string())
             })?;
     }
 
@@ -1954,43 +1960,43 @@ pub async fn wake_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can find any agent, but restore has ownership restrictions)
+    // Find session by ID or name (admin can find any session, but restore has ownership restrictions)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Ownership: owners can wake their own agents; admins (with AGENT_UPDATE) may wake any agent
-    if agent.created_by != *username && !is_admin {
+    // Ownership: owners can wake their own sessions; admins (with SESSION_UPDATE) may wake any session
+    if session.created_by != *username && !is_admin {
         return Err(ApiError::Forbidden(
-            "You can only wake your own agents.".to_string(),
+            "You can only wake your own sessions.".to_string(),
         ));
     }
 
     // Check current state - can only wake if sleeping
-    if agent.state != crate::shared::models::constants::AGENT_STATE_SLEPT {
+    if session.state != crate::shared::models::constants::SESSION_STATE_SLEPT {
         return Err(ApiError::BadRequest(format!(
-            "Cannot wake agent in {} state - only sleeping agents can be woken",
-            agent.state
+            "Cannot wake session in {} state - only sleeping sessions can be woken",
+            session.state
         )));
     }
 
-    // Update agent state to INIT and bump activity timestamp.
+    // Update session state to INIT and bump activity timestamp.
     // Guard on current state to avoid races between check and update.
     let result = query(
         r#"
-        UPDATE agents 
+        UPDATE sessions 
         SET state = ?, last_activity_at = CURRENT_TIMESTAMP
         WHERE name = ? AND state = ?
         "#,
     )
-    .bind(crate::shared::models::constants::AGENT_STATE_INIT)
-    .bind(&agent.name)
-    .bind(crate::shared::models::constants::AGENT_STATE_SLEPT)
+    .bind(crate::shared::models::constants::SESSION_STATE_INIT)
+    .bind(&session.name)
+    .bind(crate::shared::models::constants::SESSION_STATE_SLEPT)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake agent: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake session: {}", e)))?;
 
     if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound("Agent not found".to_string()));
+        return Err(ApiError::NotFound("Session not found".to_string()));
     }
 
     // Get the principal name for task creation
@@ -2000,22 +2006,22 @@ pub async fn wake_agent(
     };
 
     // Add task to restart the container with optional prompt
-    // Include the agent owner as principal for token generation so the
+    // Include the session owner as principal for token generation so the
     // container can authenticate to the API even when an admin triggers wake.
     let restore_payload = serde_json::json!({
         "prompt": req.prompt,
         "reason": "user_wake",
-        "principal": agent.created_by,
+        "principal": session.created_by,
         "principal_type": "User"
     });
 
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'wake_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'wake_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .bind(&restore_payload)
     .execute(&*state.db)
@@ -2025,31 +2031,31 @@ pub async fn wake_agent(
         ApiError::Internal(anyhow::anyhow!("Failed to create resume task: {}", e))
     })?;
 
-    tracing::info!("Created resume task for agent {}", agent.name);
+    tracing::info!("Created resume task for session {}", session.name);
 
-    // Fetch updated agent
-    let updated_agent = Agent::find_by_name(&state.db, &agent.name)
+    // Fetch updated session
+    let updated_session = Session::find_by_name(&state.db, &session.name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated agent: {}", e)))?
-        .ok_or(ApiError::NotFound("Agent not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     Ok(Json(
-        AgentResponse::from_agent(updated_agent, &state.db).await?,
+        SessionResponse::from_session(updated_session, &state.db).await?,
     ))
 }
 
-pub async fn update_agent(
+pub async fn update_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<UpdateAgentRequest>,
-) -> ApiResult<Json<AgentResponse>> {
+    Json(req): Json<UpdateSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
     // Admins require explicit permission; owners can update without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to update agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to update session".to_string())
             })?;
     }
 
@@ -2059,68 +2065,68 @@ pub async fn update_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can access any agent for update/delete)
+    // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
     // Enforce ownership: only admin or owner may update
-    if !is_admin && agent.created_by != *username {
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only update your own agents".to_string(),
+            "You can only update your own sessions".to_string(),
         ));
     }
 
-    let updated_agent = Agent::update(&state.db, &agent.name, req)
+    let updated_session = Session::update(&state.db, &session.name, req)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
             if error_msg.contains("No fields to update") {
                 ApiError::BadRequest(error_msg)
-            } else if error_msg.contains("unique_agent_name")
+            } else if error_msg.contains("unique_session_name")
                 || error_msg.contains("Duplicate entry")
             {
-                ApiError::BadRequest("A agent with this name already exists".to_string())
+                ApiError::BadRequest("A session with this name already exists".to_string())
             } else {
-                ApiError::Internal(anyhow::anyhow!("Failed to update agent: {}", e))
+                ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e))
             }
         })?
-        .ok_or(ApiError::NotFound("Agent not found".to_string()))?;
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     Ok(Json(
-        AgentResponse::from_agent(updated_agent, &state.db).await?,
+        SessionResponse::from_session(updated_session, &state.db).await?,
     ))
 }
 
-pub async fn update_agent_state(
+pub async fn update_session_state(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<UpdateAgentStateRequest>,
+    Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Get agent and verify ownership (same pattern as other agent endpoints)
+    // Get session and verify ownership (same pattern as other session endpoints)
     // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can access any agent for update/delete)
+    // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Update the state with ownership verification
     let result = sqlx::query(
-        "UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND created_by = ?"
+        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND created_by = ?"
     )
     .bind(&req.state)
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound(
-            "Agent not found or access denied".to_string(),
+            "Session not found or access denied".to_string(),
         ));
     }
 
@@ -2130,17 +2136,17 @@ pub async fn update_agent_state(
     })))
 }
 
-pub async fn delete_agent(
+pub async fn delete_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
-    // Check permission for deleting agents (admin only). Owners can delete without RBAC grant
+    // Check permission for deleting sessions (admin only). Owners can delete without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_DELETE)
+        check_api_permission(&auth, &state, &permissions::SESSION_DELETE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to delete agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to delete session".to_string())
             })?;
     }
 
@@ -2150,62 +2156,62 @@ pub async fn delete_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can access any agent for update/delete)
+    // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Hard delete: schedule unpublish and container+volume removal, then remove DB row
     // Queue unpublish to remove any public content
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'unpublish_agent', ?, '{}', 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'unpublish_session', ?, '{}', 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish task: {}", e)))?;
 
-    // Add task to queue for agent manager to destroy container and cleanup volume
+    // Add task to queue for session manager to destroy container and cleanup volume
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'destroy_agent', ?, '{}', 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'destroy_session', ?, '{}', 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy task: {}", e)))?;
 
-    tracing::info!("Created destroy task for agent {}", agent.name);
+    tracing::info!("Created destroy task for session {}", session.name);
 
-    let deleted = Agent::delete(&state.db, &agent.name)
+    let deleted = Session::delete(&state.db, &session.name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete agent: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete session: {}", e)))?;
 
     if !deleted {
-        return Err(ApiError::NotFound("Agent not found".to_string()));
+        return Err(ApiError::NotFound("Session not found".to_string()));
     }
 
     Ok(())
 }
 
-pub async fn publish_agent(
+pub async fn publish_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<PublishAgentRequest>,
-) -> ApiResult<Json<AgentResponse>> {
-    // Check permission for updating agents (admin only). Owners can publish without RBAC grant
+    Json(req): Json<PublishSessionRequest>,
+) -> ApiResult<Json<SessionResponse>> {
+    // Check permission for updating sessions (admin only). Owners can publish without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to publish agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to publish session".to_string())
             })?;
     }
 
@@ -2215,22 +2221,22 @@ pub async fn publish_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can publish any agent)
+    // Find session by ID or name (admin can publish any session)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can publish)
-    if !is_admin && agent.created_by != *username {
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only publish your own agents".to_string(),
+            "You can only publish your own sessions".to_string(),
         ));
     }
 
-    // Publish the agent
-    let published_agent = Agent::publish(&state.db, &agent.name, username, req.clone())
+    // Publish the session
+    let published_session = Session::publish(&state.db, &session.name, username, req.clone())
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to publish agent: {}", e)))?
-        .ok_or(ApiError::NotFound("Agent not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to publish session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     // Create task to copy content files to public directory
     let payload = serde_json::json!({
@@ -2241,35 +2247,35 @@ pub async fn publish_agent(
 
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'publish_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'publish_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .bind(payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create publish task: {}", e)))?;
 
-    tracing::info!("Created publish task for agent {}", agent.name);
+    tracing::info!("Created publish task for session {}", session.name);
 
     Ok(Json(
-        AgentResponse::from_agent(published_agent, &state.db).await?,
+        SessionResponse::from_session(published_session, &state.db).await?,
     ))
 }
 
-pub async fn unpublish_agent(
+pub async fn unpublish_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<AgentResponse>> {
-    // Check permission for updating agents (admin only). Owners can unpublish without RBAC grant
+) -> ApiResult<Json<SessionResponse>> {
+    // Check permission for updating sessions (admin only). Owners can unpublish without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::AGENT_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to unpublish agent".to_string())
+                ApiError::Forbidden("Insufficient permissions to unpublish session".to_string())
             })?;
     }
 
@@ -2279,86 +2285,88 @@ pub async fn unpublish_agent(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent by ID or name (admin can unpublish any agent)
+    // Find session by ID or name (admin can unpublish any session)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
     // Check ownership (only owner or admin can unpublish)
-    if !is_admin && agent.created_by != *username {
+    if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only unpublish your own agents".to_string(),
+            "You can only unpublish your own sessions".to_string(),
         ));
     }
 
-    // Unpublish the agent
-    let unpublished_agent = Agent::unpublish(&state.db, &agent.name)
+    // Unpublish the session
+    let unpublished_session = Session::unpublish(&state.db, &session.name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to unpublish agent: {}", e)))?
-        .ok_or(ApiError::NotFound("Agent not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to unpublish session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
     // Create task to remove content files from public directory
     let payload = serde_json::json!({});
 
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
-        VALUES (?, 'unpublish_agent', ?, ?, 'pending')
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
+        VALUES (?, 'unpublish_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .bind(username)
     .bind(payload)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish task: {}", e)))?;
 
-    tracing::info!("Created unpublish task for agent {}", agent.name);
+    tracing::info!("Created unpublish task for session {}", session.name);
 
     Ok(Json(
-        AgentResponse::from_agent(unpublished_agent, &state.db).await?,
+        SessionResponse::from_session(unpublished_session, &state.db).await?,
     ))
 }
 
-pub async fn list_published_agents(
+pub async fn list_published_sessions(
     State(state): State<Arc<AppState>>,
-) -> ApiResult<Json<Vec<AgentResponse>>> {
-    // No authentication required for listing published agents (public access)
+) -> ApiResult<Json<Vec<SessionResponse>>> {
+    // No authentication required for listing published sessions (public access)
 
-    let agents = Agent::find_published(&state.db).await.map_err(|e| {
-        ApiError::Internal(anyhow::anyhow!("Failed to list published agents: {}", e))
+    let sessions = Session::find_published(&state.db).await.map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to list published sessions: {}", e))
     })?;
 
     let mut response = Vec::new();
-    for agent in agents {
-        response.push(AgentResponse::from_agent(agent, &state.db).await?);
+    for session in sessions {
+        response.push(SessionResponse::from_session(session, &state.db).await?);
     }
 
     Ok(Json(response))
 }
 
-pub async fn get_published_agent(
+pub async fn get_published_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
-) -> ApiResult<Json<AgentResponse>> {
-    // No authentication required for getting published agents (public access)
+) -> ApiResult<Json<SessionResponse>> {
+    // No authentication required for getting published sessions (public access)
 
-    let agent = Agent::find_by_name(&state.db, &name)
+    let session = Session::find_by_name(&state.db, &name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch agent: {}", e)))?
-        .ok_or(ApiError::NotFound("Agent not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
+        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Check if agent is published
-    if !agent.is_published {
+    // Check if session is published
+    if !session.is_published {
         return Err(ApiError::NotFound(
-            "Agent not found or not published".to_string(),
+            "Session not found or not published".to_string(),
         ));
     }
 
-    Ok(Json(AgentResponse::from_agent(agent, &state.db).await?))
+    Ok(Json(
+        SessionResponse::from_session(session, &state.db).await?,
+    ))
 }
 
-// GET /agents/{name}/runtime — total runtime across sessions
-pub async fn get_agent_runtime(
+// GET /sessions/{name}/runtime — total runtime across sessions
+pub async fn get_session_runtime(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -2366,10 +2374,10 @@ pub async fn get_agent_runtime(
     // Permission: owner or admin
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::AGENT_GET)
+        check_api_permission(&auth, &state, &permissions::SESSION_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get agent runtime".to_string())
+                ApiError::Forbidden("Insufficient permissions to get session runtime".to_string())
             })?;
     }
 
@@ -2379,14 +2387,14 @@ pub async fn get_agent_runtime(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent (admin can access any agent)
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    // Find session (admin can access any session)
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Fetch all responses for this agent (created_at + output JSON)
+    // Fetch all responses for this session (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#
     )
-    .bind(&agent.name)
+    .bind(&session.name)
     .fetch_all(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
@@ -2420,7 +2428,7 @@ pub async fn get_agent_runtime(
                             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                             .map(|dt| dt.with_timezone(&Utc))
                             .unwrap_or(row_created_at);
-                        let start_at = last_woke.unwrap_or(agent.created_at);
+                        let start_at = last_woke.unwrap_or(session.created_at);
                         let delta = (end_at - start_at).num_seconds();
                         if delta > 0 {
                             total += delta;
@@ -2431,9 +2439,9 @@ pub async fn get_agent_runtime(
         }
     }
 
-    // Include current session up to now when agent is not sleeping
-    if agent.state.to_lowercase() != crate::shared::models::constants::AGENT_STATE_SLEPT {
-        let start_at = last_woke.unwrap_or(agent.created_at);
+    // Include current session up to now when session is not sleeping
+    if session.state.to_lowercase() != crate::shared::models::constants::SESSION_STATE_SLEPT {
+        let start_at = last_woke.unwrap_or(session.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
         if delta > 0 {
@@ -2443,32 +2451,32 @@ pub async fn get_agent_runtime(
     }
 
     Ok(Json(serde_json::json!({
-        "agent_name": agent.name,
+        "session_name": session.name,
         "total_runtime_seconds": total,
         "current_session_seconds": current_session
     })))
 }
 
-pub async fn update_agent_to_busy(
+pub async fn update_session_to_busy(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Only the agent container should be able to call this
+    // Only the session container should be able to call this
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent (agent token should match agent ownership)
+    // Find session (session token should match session ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to busy: clear idle_from and set busy_from (strict busy timeout)
-    Agent::update_agent_to_busy(&state.db, &agent.name)
+    // Update session to busy: clear idle_from and set busy_from (strict busy timeout)
+    Session::update_session_to_busy(&state.db, &session.name)
         .await
         .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update agent to busy: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to update session to busy: {}", e))
         })?;
 
     Ok(Json(serde_json::json!({
@@ -2478,26 +2486,26 @@ pub async fn update_agent_to_busy(
     })))
 }
 
-pub async fn update_agent_to_idle(
+pub async fn update_session_to_idle(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Only the agent container should be able to call this
+    // Only the session container should be able to call this
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find agent (agent token should match agent ownership)
+    // Find session (session token should match session ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let agent = find_agent_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Update agent to idle: set idle_from and clear busy_from (idle timeout active)
-    Agent::update_agent_to_idle(&state.db, &agent.name)
+    // Update session to idle: set idle_from and clear busy_from (idle timeout active)
+    Session::update_session_to_idle(&state.db, &session.name)
         .await
         .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update agent to idle: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to update session to idle: {}", e))
         })?;
 
     Ok(Json(serde_json::json!({

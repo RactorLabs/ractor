@@ -6,8 +6,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::info;
 
-const AGENT_ROOT: &str = "/agent";
-pub const PLAN_PATH: &str = "/agent/plan.md";
+const SESSION_ROOT: &str = "/session";
+pub const PLAN_PATH: &str = "/session/plan.md";
 const MAX_OUTPUT_BYTES: usize = 8_000; // cap tool outputs (characters)
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,15 +35,15 @@ pub enum TextEditAction {
 }
 
 fn normalize_path(p: &str) -> Result<PathBuf> {
-    let mut full = PathBuf::from(AGENT_ROOT);
+    let mut full = PathBuf::from(SESSION_ROOT);
     let rel = Path::new(p);
     for c in rel.components() {
         match c {
             Component::Normal(seg) => full.push(seg),
             Component::CurDir => {}
             Component::ParentDir => {
-                // prevent escaping the agent root
-                if !full.starts_with(AGENT_ROOT) {
+                // prevent escaping the session root
+                if !full.starts_with(SESSION_ROOT) {
                     anyhow::bail!("Invalid path traversal");
                 }
             }
@@ -53,9 +53,9 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
         }
     }
     // Ensure still within root
-    let canon_parent = Path::new(AGENT_ROOT);
+    let canon_parent = Path::new(SESSION_ROOT);
     if !full.starts_with(canon_parent) {
-        anyhow::bail!("Path escapes agent root");
+        anyhow::bail!("Path escapes session root");
     }
     Ok(full)
 }
@@ -63,7 +63,7 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
 fn ensure_not_plan(full: &Path) -> Result<()> {
     if full == Path::new(PLAN_PATH) {
         return Err(anyhow!(
-            "direct access to /agent/plan.md is blocked; use the update_plan tool instead"
+            "direct access to /session/plan.md is blocked; use the update_plan tool instead"
         ));
     }
     Ok(())
@@ -81,13 +81,13 @@ pub async fn run_bash(cmd: &str) -> Result<String> {
     let start_time = std::time::SystemTime::now();
     info!(tool = "bash", %cmd, "tool start");
     let wrapped_cmd = format!(
-        "export PATH=\"/agent/bin:$PATH\"; if [ -f /agent/.env ]; then set -a; . /agent/.env; set +a; fi; {}",
+        "export PATH=\"/session/bin:$PATH\"; if [ -f /session/.env ]; then set -a; . /session/.env; set +a; fi; {}",
         cmd
     );
     let out = Command::new("bash")
         .arg("-lc")
         .arg(&wrapped_cmd)
-        .current_dir(AGENT_ROOT)
+        .current_dir(SESSION_ROOT)
         .output()
         .await?;
 
@@ -299,7 +299,7 @@ async fn save_bash_log(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let path = format!("{}/logs/bash_{}.log", AGENT_ROOT, ts);
+    let path = format!("{}/logs/bash_{}.log", SESSION_ROOT, ts);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     let exit = out.status.code().unwrap_or(-1);
@@ -326,7 +326,7 @@ async fn save_text_editor_log(
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let path = format!("{}/logs/text_editor_{}.log", AGENT_ROOT, ts);
+    let path = format!("{}/logs/text_editor_{}.log", SESSION_ROOT, ts);
     let content = format!(
         "=== TEXT EDITOR LOG ===\nTimestamp: {}\nCommand: {}\nPath: {}\nSuccess: {}\nParams: {}\n\nResult: {}\n=== END ===\n",
         ts, command, path_rel, success, params, result_msg

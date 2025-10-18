@@ -73,7 +73,7 @@ async fn not_found_handler() -> impl IntoResponse {
   <body>
     <div class=\"wrap\">
       <h1>No Content</h1>
-      <p>This agent has no published content.</p>
+      <p>This session has no published content.</p>
     </div>
   </body>
 </html>"#;

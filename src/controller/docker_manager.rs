@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 pub struct DockerManager {
     docker: Docker,
-    agent_image: String,
+    session_image: String,
     cpu_limit: f64,
     memory_limit: i64,
     db_pool: MySqlPool,
@@ -21,7 +21,7 @@ pub struct DockerManager {
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
     let mut lines = String::from(
-        "# Ractor agent environment\n# Managed by Ractor controller; do not modify without explicit approval.\n",
+        "# Ractor session environment\n# Managed by Ractor controller; do not modify without explicit approval.\n",
     );
     let mut entries: Vec<_> = env.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -50,26 +50,26 @@ impl DockerManager {
         Self {
             docker,
             db_pool,
-            agent_image: std::env::var("AGENT_IMAGE")
-                .unwrap_or_else(|_| "ractor_agent:latest".to_string()),
-            cpu_limit: std::env::var("AGENT_CPU_LIMIT")
+            session_image: std::env::var("SESSION_IMAGE")
+                .unwrap_or_else(|_| "ractor_session:latest".to_string()),
+            cpu_limit: std::env::var("SESSION_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
                 .unwrap_or(0.5),
-            memory_limit: std::env::var("AGENT_MEMORY_LIMIT")
+            memory_limit: std::env::var("SESSION_MEMORY_LIMIT")
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),
         }
     }
 
-    // NEW: Create agent volume with explicit naming
-    async fn create_agent_volume(&self, agent_name: &str) -> Result<String> {
-        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+    // NEW: Create session volume with explicit naming
+    async fn create_session_volume(&self, session_name: &str) -> Result<String> {
+        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.agent_name".to_string(), agent_name.to_string());
-        labels.insert("ractor.type".to_string(), "agent_volume".to_string());
+        labels.insert("ractor.session_name".to_string(), session_name.to_string());
+        labels.insert("ractor.type".to_string(), "session_volume".to_string());
         labels.insert(
             "ractor.created_at".to_string(),
             chrono::Utc::now().to_rfc3339(),
@@ -83,73 +83,77 @@ impl DockerManager {
         };
 
         self.docker.create_volume(volume_config).await?;
-        info!("Created agent volume: {}", volume_name);
+        info!("Created session volume: {}", volume_name);
 
         Ok(volume_name)
     }
 
-    // Get agent volume name (derived from agent name). Docker volume names must be lowercase.
-    fn get_agent_volume_name(&self, agent_name: &str) -> String {
-        format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase())
+    // Get session volume name (derived from session name). Docker volume names must be lowercase.
+    fn get_session_volume_name(&self, session_name: &str) -> String {
+        format!("ractor_session_data_{}", session_name.to_ascii_lowercase())
     }
 
-    // Get agent container name (derived from agent name). Docker container names must be lowercase.
-    fn get_agent_container_name(&self, agent_name: &str) -> String {
-        format!("ractor_agent_{}", agent_name.to_ascii_lowercase())
+    // Get session container name (derived from session name). Docker container names must be lowercase.
+    fn get_session_container_name(&self, session_name: &str) -> String {
+        format!("ractor_session_{}", session_name.to_ascii_lowercase())
     }
 
-    // Check if agent volume exists
-    async fn agent_volume_exists(&self, agent_name: &str) -> Result<bool> {
-        let volume_name = self.get_agent_volume_name(agent_name);
+    // Check if session volume exists
+    async fn session_volume_exists(&self, session_name: &str) -> Result<bool> {
+        let volume_name = self.get_session_volume_name(session_name);
         match self.docker.inspect_volume(&volume_name).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }
 
-    // Initialize agent directory structure with env, instructions, and setup
-    async fn initialize_agent_structure(
+    // Initialize session directory structure with env, instructions, and setup
+    async fn initialize_session_structure(
         &self,
-        agent_name: &str,
+        session_name: &str,
         env: &HashMap<String, String>,
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
-        info!("Initializing agent structure for agent {}", agent_name);
+        info!(
+            "Initializing session structure for session {}",
+            session_name
+        );
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /agent/code /agent/logs /agent/content /agent/template
-sudo touch /agent/.env
-sudo chown agent:agent /agent/.env
-sudo chmod 600 /agent/.env
-sudo chown -R agent:agent /agent
-sudo chmod -R 755 /agent
+        let init_script = "sudo mkdir -p /session/code /session/logs /session/content /session/template
+sudo touch /session/.env
+sudo chown session:session /session/.env
+sudo chmod 600 /session/.env
+sudo chown -R session:session /session
+sudo chmod -R 755 /session
 # Seed default HTML template if missing
-if [ ! -f /agent/template/simple.html ] && [ -f /opt/ractor/templates/simple.html ]; then
-  sudo cp /opt/ractor/templates/simple.html /agent/template/simple.html && sudo chown agent:agent /agent/template/simple.html;
+if [ ! -f /session/template/simple.html ] && [ -f /opt/ractor/templates/simple.html ]; then
+  sudo cp /opt/ractor/templates/simple.html /session/template/simple.html && sudo chown session:session /session/template/simple.html;
 fi
-echo 'Agent directories created (code, .env, logs, content, template)'
+echo 'Session directories created (code, .env, logs, content, template)'
 ";
 
-        self.execute_command(agent_name, init_script).await?;
+        self.execute_command(session_name, init_script).await?;
 
-        // Write env values to /agent/.env
+        // Write env values to /session/.env
         let env_content = render_env_file(env);
         let write_env_script = format!(
-            "cat <<'EOF_ENV' | sudo tee /agent/.env >/dev/null\n{}EOF_ENV\nsudo chown agent:agent /agent/.env\nsudo chmod 600 /agent/.env\n",
+            "cat <<'EOF_ENV' | sudo tee /session/.env >/dev/null\n{}EOF_ENV\nsudo chown session:session /session/.env\nsudo chmod 600 /session/.env\n",
             env_content
         );
-        self.execute_command(agent_name, &write_env_script).await?;
+        self.execute_command(session_name, &write_env_script)
+            .await?;
 
         // Write instructions if provided
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
             let write_instructions_command = format!(
-                "echo '{}' > /agent/code/instructions.md",
+                "echo '{}' > /session/code/instructions.md",
                 escaped_instructions
             );
-            self.execute_command(agent_name, &write_instructions_command)
+            self.execute_command(session_name, &write_instructions_command)
                 .await?;
         }
 
@@ -157,34 +161,38 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         if let Some(setup_content) = setup {
             let escaped_setup = setup_content.replace("'", "'\"'\"'");
             let write_setup_command = format!(
-                "echo '{}' > /agent/code/setup.sh && chmod +x /agent/code/setup.sh",
+                "echo '{}' > /session/code/setup.sh && chmod +x /session/code/setup.sh",
                 escaped_setup
             );
-            self.execute_command(agent_name, &write_setup_command)
+            self.execute_command(session_name, &write_setup_command)
                 .await?;
         }
 
-        info!("Agent structure initialized with {} env entries", env.len());
+        info!(
+            "Session structure initialized with {} env entries",
+            env.len()
+        );
 
         Ok(())
     }
 
-    // NEW: Check if agent is initialized
-    async fn agent_initialized(&self, _volume_name: &str) -> Result<bool> {
+    // NEW: Check if session is initialized
+    async fn session_initialized(&self, _volume_name: &str) -> Result<bool> {
         // Skip initialization check for now - always initialize
         Ok(false)
     }
 
-    // NEW: Cleanup agent volume
-    pub async fn cleanup_agent_volume(&self, agent_name: &str) -> Result<()> {
-        let expected_volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+    // NEW: Cleanup session volume
+    pub async fn cleanup_session_volume(&self, session_name: &str) -> Result<()> {
+        let expected_volume_name =
+            format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
-                info!("Removed agent volume: {}", expected_volume_name);
+                info!("Removed session volume: {}", expected_volume_name);
             }
             Err(e) => warn!(
-                "Failed to remove agent volume {}: {}",
+                "Failed to remove session volume {}: {}",
                 expected_volume_name, e
             ),
         }
@@ -194,23 +202,23 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     pub async fn create_container_with_volume_copy(
         &self,
-        agent_name: &str,
-        parent_agent_name: &str,
+        session_name: &str,
+        parent_session_name: &str,
     ) -> Result<String> {
         info!(
-            "Creating remix agent {} with volume copy from {}",
-            agent_name, parent_agent_name
+            "Creating remix session {} with volume copy from {}",
+            session_name, parent_session_name
         );
 
         // First create the container normally (this creates the empty target volume)
-        let container_name = self.create_container(agent_name).await?;
+        let container_name = self.create_container(session_name).await?;
 
         // Then copy data from parent volume to new volume using Docker command
         let parent_volume = format!(
-            "ractor_agent_data_{}",
-            parent_agent_name.to_ascii_lowercase()
+            "ractor_session_data_{}",
+            parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying volume data from {} to {}",
@@ -218,10 +226,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
 
         let config = Config {
-            image: Some(self.agent_image.clone()),
+            image: Some(self.session_image.clone()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -321,25 +329,25 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     pub async fn create_container_with_selective_copy(
         &self,
-        agent_name: &str,
-        parent_agent_name: &str,
+        session_name: &str,
+        parent_session_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_env: bool,
         copy_content: bool,
     ) -> Result<String> {
-        info!("Creating remix agent {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
-              agent_name, parent_agent_name, copy_data, copy_code, copy_env, copy_content);
+        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
+              session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content);
 
-        // First create the agent volume (without starting container)
-        let agent_volume = self.create_agent_volume(agent_name).await?;
+        // First create the session volume (without starting container)
+        let session_volume = self.create_session_volume(session_name).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "ractor_agent_data_{}",
-            parent_agent_name.to_ascii_lowercase()
+            "ractor_session_data_{}",
+            parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -349,7 +357,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         // Build copy commands based on what should be copied
         let mut copy_commands = Vec::new();
 
-        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
+        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
         copy_commands.push(
             "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
@@ -386,10 +394,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
 
         let config = Config {
-            image: Some(self.agent_image.clone()),
+            image: Some(self.session_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
@@ -522,7 +530,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(agent_name, Some(env), instructions, setup)
+            .create_container_internal(session_name, Some(env), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -530,8 +538,8 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     pub async fn create_container_with_selective_copy_and_tokens(
         &self,
-        agent_name: &str,
-        parent_agent_name: &str,
+        session_name: &str,
+        parent_session_name: &str,
         copy_data: bool,
         copy_code: bool,
         copy_env: bool,
@@ -542,19 +550,19 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
-            "Creating remix agent {} with selective copy from {} and fresh tokens",
-            agent_name, parent_agent_name
+            "Creating remix session {} with selective copy from {} and fresh tokens",
+            session_name, parent_session_name
         );
 
-        // First create the agent volume (without starting container)
-        let agent_volume = self.create_agent_volume(agent_name).await?;
+        // First create the session volume (without starting container)
+        let session_volume = self.create_session_volume(session_name).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "ractor_agent_data_{}",
-            parent_agent_name.to_ascii_lowercase()
+            "ractor_session_data_{}",
+            parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -564,7 +572,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         // Build copy commands based on what should be copied
         let mut copy_commands = Vec::new();
 
-        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to agent)
+        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
         copy_commands.push(
             "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
@@ -601,10 +609,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", agent_name);
+        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
 
         let config = Config {
-            image: Some(self.agent_image.clone()),
+            image: Some(self.session_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
@@ -741,7 +749,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         // Now create and start the container with user env + generated system tokens
         let container_name = self
             .create_container_internal_with_tokens(
-                agent_name,
+                session_name,
                 Some(env),
                 instructions,
                 setup,
@@ -772,7 +780,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         );
 
         let config = Config {
-            image: Some(self.agent_image.clone()),
+            image: Some(self.session_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
@@ -860,20 +868,20 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     pub async fn create_container_with_params(
         &self,
-        agent_name: &str,
+        session_name: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(agent_name, Some(env), instructions, setup)
+            .create_container_internal(session_name, Some(env), instructions, setup)
             .await?;
         Ok(container_name)
     }
 
     pub async fn create_container_with_params_and_tokens(
         &self,
-        agent_name: &str,
+        session_name: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -884,7 +892,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
-                agent_name,
+                session_name,
                 Some(env),
                 instructions,
                 setup,
@@ -897,24 +905,28 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         Ok(container_name)
     }
 
-    pub async fn create_container(&self, agent_name: &str) -> Result<String> {
+    pub async fn create_container(&self, session_name: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(agent_name, None, None, None)
+            .create_container_internal(session_name, None, None, None)
             .await?;
         Ok(container_name)
     }
 
-    pub async fn wake_container(&self, agent_name: &str) -> Result<String> {
+    pub async fn wake_container(&self, session_name: &str) -> Result<String> {
         // Read existing env from the volume
-        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
         info!(
-            "Waking container for agent {} - reading env from volume {}",
-            agent_name, volume_name
+            "Waking container for session {} - reading env from volume {}",
+            session_name, volume_name
         );
 
         let env = match self.read_env_from_volume(&volume_name).await {
             Ok(s) => {
-                info!("Found {} env in volume for agent {}", s.len(), agent_name);
+                info!(
+                    "Found {} env in volume for session {}",
+                    s.len(),
+                    session_name
+                );
                 for key in s.keys() {
                     info!("  - Env key: {}", key);
                 }
@@ -922,8 +934,8 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             }
             Err(e) => {
                 warn!(
-                    "Could not read env from volume for agent {}: {}",
-                    agent_name, e
+                    "Could not read env from volume for session {}: {}",
+                    session_name, e
                 );
                 None
             }
@@ -940,39 +952,39 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             .ok();
 
         let container_name = self
-            .create_container_internal(agent_name, env, instructions, setup)
+            .create_container_internal(session_name, env, instructions, setup)
             .await?;
         Ok(container_name)
     }
 
     pub async fn wake_container_with_tokens(
         &self,
-        agent_name: &str,
+        session_name: &str,
         ractor_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user env from the volume (but generate fresh system tokens)
-        let volume_name = format!("ractor_agent_data_{}", agent_name.to_ascii_lowercase());
+        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
         info!(
-            "Waking container for agent {} with fresh tokens",
-            agent_name
+            "Waking container for session {} with fresh tokens",
+            session_name
         );
 
         let env = match self.read_env_from_volume(&volume_name).await {
             Ok(s) => {
                 info!(
-                    "Found {} user env in volume for agent {}",
+                    "Found {} user env in volume for session {}",
                     s.len(),
-                    agent_name
+                    session_name
                 );
                 Some(s)
             }
             Err(e) => {
                 warn!(
-                    "Could not read env from volume for agent {}: {}",
-                    agent_name, e
+                    "Could not read env from volume for session {}: {}",
+                    session_name, e
                 );
                 None
             }
@@ -990,7 +1002,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         let container_name = self
             .create_container_internal_with_tokens(
-                agent_name,
+                session_name,
                 env,
                 instructions,
                 setup,
@@ -1005,37 +1017,37 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     async fn create_container_internal(
         &self,
-        agent_name: &str,
+        session_name: &str,
         env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
-        // Use agent image directly for all agents
-        let container_image = self.agent_image.clone();
+        // Use session image directly for all sessions
+        let container_image = self.session_image.clone();
         info!(
-            "Creating container {} with agent image {},",
+            "Creating container {} with session image {},",
             container_name, container_image
         );
 
-        info!("Creating container for agent {}", agent_name);
+        info!("Creating container for session {}", session_name);
 
-        // Create or get existing agent volume
-        let agent_volume = if self.agent_volume_exists(agent_name).await? {
-            self.get_agent_volume_name(agent_name)
+        // Create or get existing session volume
+        let session_volume = if self.session_volume_exists(session_name).await? {
+            self.get_session_volume_name(session_name)
         } else {
-            self.create_agent_volume(agent_name).await?
+            self.create_session_volume(session_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.agent".to_string(), agent_name.to_string());
+        labels.insert("ractor.session".to_string(), session_name.to_string());
         labels.insert("ractor.managed".to_string(), "true".to_string());
-        labels.insert("ractor.volume".to_string(), agent_volume.clone());
+        labels.insert("ractor.volume".to_string(), session_volume.clone());
 
-        // Get user token from env (added automatically by agent manager)
+        // Get user token from env (added automatically by session manager)
         let user_token = env_map
             .as_ref()
             .and_then(|s| s.get("RACTOR_TOKEN"))
@@ -1048,22 +1060,22 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
             typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(agent_volume.clone()),
-            target: Some("/agent".to_string()),
+            source: Some(session_volume.clone()),
+            target: Some("/session".to_string()),
             read_only: Some(false),
             ..Default::default()
         }];
 
         // No port bindings or exposed ports needed.
 
-        // Set environment variables for the agent structure
+        // Set environment variables for the session structure
         let mut env_vars = vec![
             format!("RACTOR_API_URL=http://ractor_api:9000"),
-            format!("RACTOR_AGENT_NAME={}", agent_name),
-            format!("RACTOR_AGENT_DIR=/agent"),
+            format!("RACTOR_SESSION_NAME={}", session_name),
+            format!("RACTOR_SESSION_DIR=/session"),
         ];
 
-        // Propagate host branding and URL to agents (provided by start script)
+        // Propagate host branding and URL to sessions (provided by start script)
         let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
         let host_url = std::env::var("RACTOR_HOST_URL")
             .expect("RACTOR_HOST_URL must be set by the start script");
@@ -1117,16 +1129,16 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             for (key, value) in env_map {
                 if key == "RACTOR_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
-                        "Skipping user-provided {} - using system-managed value instead for agent {}",
-                        key, agent_name
+                        "Skipping user-provided {} - using system-managed value instead for session {}",
+                        key, session_name
                     );
                     continue;
                 }
                 env_vars.push(format!("{}={}", key, value));
                 if key != "RACTOR_PRINCIPAL" && key != "RACTOR_PRINCIPAL_TYPE" {
                     info!(
-                        "Adding env entry {} as environment variable for agent {}",
-                        key, agent_name
+                        "Adding env entry {} as environment variable for session {}",
+                        key, session_name
                     );
                 }
             }
@@ -1134,20 +1146,23 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "ractor-agent".to_string(),
+            "ractor-session".to_string(),
             "--api-url".to_string(),
             "http://ractor_api:9000".to_string(),
-            "--agent-name".to_string(),
-            agent_name.to_string(),
+            "--session-name".to_string(),
+            session_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
+            hostname: Some(format!(
+                "session-{}",
+                &session_name[..session_name.len().min(8)]
+            )),
             labels: Some(labels),
             env: Some(env_vars),
             cmd: Some(cmd),
-            working_dir: Some("/agent".to_string()), // User starts in their agent
+            working_dir: Some("/session".to_string()), // User starts in their session
             exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1174,12 +1189,12 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize agent structure after starting container so host can execute setup script
-        if !self.agent_initialized(&agent_volume).await? {
+        // Initialize session structure after starting container so host can execute setup script
+        if !self.session_initialized(&session_volume).await? {
             let empty_env: HashMap<String, String> = HashMap::new();
             let env_ref = env_map.as_ref().unwrap_or(&empty_env);
-            self.initialize_agent_structure(
-                agent_name,
+            self.initialize_session_structure(
+                session_name,
                 env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1188,15 +1203,15 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         }
 
         info!(
-            "Container {} created with agent volume {}",
-            container_name, agent_volume
+            "Container {} created with session volume {}",
+            container_name, session_volume
         );
         Ok(container.id)
     }
 
     async fn create_container_internal_with_tokens(
         &self,
-        agent_name: &str,
+        session_name: &str,
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -1205,57 +1220,57 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
-        // Use agent image directly for all agents
-        let container_image = self.agent_image.clone();
+        // Use session image directly for all sessions
+        let container_image = self.session_image.clone();
         info!(
-            "Creating container {} with agent image and generated tokens",
+            "Creating container {} with session image and generated tokens",
             container_name
         );
 
         info!(
-            "Creating container for agent {} with fresh tokens",
-            agent_name
+            "Creating container for session {} with fresh tokens",
+            session_name
         );
 
-        // Create or get existing agent volume
-        let agent_volume = if self.agent_volume_exists(agent_name).await? {
-            self.get_agent_volume_name(agent_name)
+        // Create or get existing session volume
+        let session_volume = if self.session_volume_exists(session_name).await? {
+            self.get_session_volume_name(session_name)
         } else {
-            self.create_agent_volume(agent_name).await?
+            self.create_session_volume(session_name).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.agent".to_string(), agent_name.to_string());
+        labels.insert("ractor.session".to_string(), session_name.to_string());
         labels.insert("ractor.managed".to_string(), "true".to_string());
-        labels.insert("ractor.volume".to_string(), agent_volume.clone());
+        labels.insert("ractor.volume".to_string(), session_volume.clone());
 
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
             typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(agent_volume.clone()),
-            target: Some("/agent".to_string()),
+            source: Some(session_volume.clone()),
+            target: Some("/session".to_string()),
             read_only: Some(false),
             ..Default::default()
         }];
 
         // No port bindings or exposed ports needed.
 
-        // Set environment variables for the agent structure
+        // Set environment variables for the session structure
         let mut env_vars = vec![
             format!("RACTOR_API_URL=http://ractor_api:9000"),
-            format!("RACTOR_AGENT_NAME={}", agent_name),
-            format!("RACTOR_AGENT_DIR=/agent"),
+            format!("RACTOR_SESSION_NAME={}", session_name),
+            format!("RACTOR_SESSION_DIR=/session"),
             // Set the generated system tokens directly as environment variables
             format!("RACTOR_TOKEN={}", ractor_token),
             format!("RACTOR_PRINCIPAL={}", principal),
             format!("RACTOR_PRINCIPAL_TYPE={}", principal_type),
         ];
 
-        // Propagate host branding and URL to agents (provided by start script)
+        // Propagate host branding and URL to sessions (provided by start script)
         let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
         let host_url = std::env::var("RACTOR_HOST_URL")
             .expect("RACTOR_HOST_URL must be set by the start script");
@@ -1298,28 +1313,31 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 }
                 env_vars.push(format!("{}={}", key, value));
                 info!(
-                    "Adding user env entry {} as environment variable for agent {}",
-                    key, agent_name
+                    "Adding user env entry {} as environment variable for session {}",
+                    key, session_name
                 );
             }
         }
 
         // Set the command with required arguments
         let cmd = vec![
-            "ractor-agent".to_string(),
+            "ractor-session".to_string(),
             "--api-url".to_string(),
             "http://ractor_api:9000".to_string(),
-            "--agent-name".to_string(),
-            agent_name.to_string(),
+            "--session-name".to_string(),
+            session_name.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
-            hostname: Some(format!("agent-{}", &agent_name[..agent_name.len().min(8)])),
+            hostname: Some(format!(
+                "session-{}",
+                &session_name[..session_name.len().min(8)]
+            )),
             labels: Some(labels),
             env: Some(env_vars),
             cmd: Some(cmd),
-            working_dir: Some("/agent".to_string()), // User starts in their agent
+            working_dir: Some("/session".to_string()), // User starts in their session
             exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1346,13 +1364,13 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize agent structure after starting container so host can execute setup script
+        // Initialize session structure after starting container so host can execute setup script
         // Only initialize with user env (system tokens are already in environment)
-        if !self.agent_initialized(&agent_volume).await? {
+        if !self.session_initialized(&session_volume).await? {
             let empty_env: HashMap<String, String> = HashMap::new();
             let env_ref = env_map_opt.as_ref().unwrap_or(&empty_env);
-            self.initialize_agent_structure(
-                agent_name,
+            self.initialize_session_structure(
+                session_name,
                 env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1361,15 +1379,15 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         }
 
         info!(
-            "Container {} created with agent volume {} and fresh system tokens",
-            container_name, agent_volume
+            "Container {} created with session volume {} and fresh system tokens",
+            container_name, session_volume
         );
         Ok(container.id)
     }
 
-    // Sleep container but retain persistent volume (for agent pause/sleep)
-    pub async fn sleep_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+    // Sleep container but retain persistent volume (for session pause/sleep)
+    pub async fn sleep_container(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         info!("Sleeping container {}", container_name);
 
@@ -1405,9 +1423,9 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         }
     }
 
-    // Delete container and remove persistent volume (for agent deletion)
-    pub async fn delete_container(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+    // Delete container and remove persistent volume (for session deletion)
+    pub async fn delete_container(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         info!("Deleting container {}", container_name);
 
@@ -1424,9 +1442,12 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             Ok(_) => {
                 info!("Container {} deleted", container_name);
 
-                // Cleanup the agent volume
-                if let Err(e) = self.cleanup_agent_volume(agent_name).await {
-                    warn!("Failed to cleanup agent volume for {}: {}", agent_name, e);
+                // Cleanup the session volume
+                if let Err(e) = self.cleanup_session_volume(session_name).await {
+                    warn!(
+                        "Failed to cleanup session volume for {}: {}",
+                        session_name, e
+                    );
                 }
 
                 Ok(())
@@ -1435,9 +1456,12 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                 if e.to_string().contains("404") || e.to_string().contains("No such container") {
                     warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
 
-                    // Still try to cleanup the agent volume
-                    if let Err(e) = self.cleanup_agent_volume(agent_name).await {
-                        warn!("Failed to cleanup agent volume for {}: {}", agent_name, e);
+                    // Still try to cleanup the session volume
+                    if let Err(e) = self.cleanup_session_volume(session_name).await {
+                        warn!(
+                            "Failed to cleanup session volume for {}: {}",
+                            session_name, e
+                        );
                     }
 
                     Ok(())
@@ -1451,8 +1475,8 @@ echo 'Agent directories created (code, .env, logs, content, template)'
 
     // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
 
-    pub async fn execute_command(&self, agent_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+    pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Executing command in container {}: {}",
@@ -1487,10 +1511,10 @@ echo 'Agent directories created (code, .env, logs, content, template)'
     // Execute a command and collect stdout/stderr bytes with exit code
     pub async fn exec_collect(
         &self,
-        agent_name: &str,
+        session_name: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
         let exec_config = CreateExecOptions {
             cmd: Some(cmd),
             attach_stdout: Some(true),
@@ -1527,13 +1551,13 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         Ok((code, out_buf, err_buf))
     }
 
-    pub async fn publish_content(&self, agent_name: &str) -> Result<()> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
-        let public_path = format!("/content/{}", agent_name);
+    pub async fn publish_content(&self, session_name: &str) -> Result<()> {
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let public_path = format!("/content/{}", session_name);
 
         info!(
-            "Publishing content for agent {} to {}",
-            agent_name, public_path
+            "Publishing content for session {} to {}",
+            session_name, public_path
         );
 
         // Ensure directory exists inside content container
@@ -1548,7 +1572,7 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         let copy_cmd = [
             "docker",
             "cp",
-            &format!("{}:/agent/content/.", container_name),
+            &format!("{}:/session/content/.", container_name),
             &format!("ractor_content:{}/", public_path),
         ];
         match std::process::Command::new(copy_cmd[0])
@@ -1557,20 +1581,23 @@ echo 'Agent directories created (code, .env, logs, content, template)'
         {
             Ok(output) => {
                 if output.status.success() {
-                    info!("Content published successfully for agent {}", agent_name);
+                    info!(
+                        "Content published successfully for session {}",
+                        session_name
+                    );
                     Ok(())
                 } else {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     if stderr.contains("No such file or directory") {
                         info!(
-                            "No content files found for agent {}, creating empty directory",
-                            agent_name
+                            "No content files found for session {}, creating empty directory",
+                            session_name
                         );
                         Ok(())
                     } else {
                         error!(
-                            "Failed to copy content files for agent {}: {}",
-                            agent_name, stderr
+                            "Failed to copy content files for session {}: {}",
+                            session_name, stderr
                         );
                         Err(anyhow::anyhow!("Failed to copy content files: {}", stderr))
                     }
@@ -1578,20 +1605,20 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             }
             Err(e) => {
                 error!(
-                    "Failed to execute docker cp command for agent {}: {}",
-                    agent_name, e
+                    "Failed to execute docker cp command for session {}: {}",
+                    session_name, e
                 );
                 Err(anyhow::anyhow!("Failed to execute docker cp: {}", e))
             }
         }
     }
 
-    pub async fn unpublish_content(&self, agent_name: &str) -> Result<()> {
-        let public_path = format!("/content/{}", agent_name);
+    pub async fn unpublish_content(&self, session_name: &str) -> Result<()> {
+        let public_path = format!("/content/{}", session_name);
 
         info!(
-            "Unpublishing content for agent {} from content container: {}",
-            agent_name, public_path
+            "Unpublishing content for session {} from content container: {}",
+            session_name, public_path
         );
 
         // Remove public directory from server container using docker exec
@@ -1600,34 +1627,37 @@ echo 'Agent directories created (code, .env, logs, content, template)'
             .output()
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to execute docker exec rm command for agent {}: {}",
-                    agent_name,
+                    "Failed to execute docker exec rm command for session {}: {}",
+                    session_name,
                     e
                 )
             })?;
 
         if output.status.success() {
-            info!("Content unpublished successfully for agent {}", agent_name);
+            info!(
+                "Content unpublished successfully for session {}",
+                session_name
+            );
             Ok(())
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             let stdout = String::from_utf8_lossy(&output.stdout);
             error!(
-                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
-                agent_name, stdout, stderr
+                "Failed to remove public directory for session {}: stdout: {}, stderr: {}",
+                session_name, stdout, stderr
             );
             Err(anyhow::anyhow!(
-                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
-                agent_name,
+                "Failed to remove public directory for session {}: stdout: {}, stderr: {}",
+                session_name,
                 stdout,
                 stderr
             ))
         }
     }
 
-    /// Check if an agent container exists and is running healthily
-    pub async fn is_container_healthy(&self, agent_name: &str) -> Result<bool> {
-        let container_name = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+    /// Check if an session container exists and is running healthily
+    pub async fn is_container_healthy(&self, session_name: &str) -> Result<bool> {
+        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {
@@ -1640,28 +1670,34 @@ echo 'Agent directories created (code, .env, logs, content, template)'
                             return self.ping_container(&container_name).await;
                         } else {
                             // Container exists but is not running
-                            info!("Agent {} container exists but is not running", agent_name);
+                            info!(
+                                "Session {} container exists but is not running",
+                                session_name
+                            );
                             return Ok(false);
                         }
                     }
                 }
                 // Container state is unclear, assume unhealthy
-                warn!("Agent {} container state is unclear", agent_name);
+                warn!("Session {} container state is unclear", session_name);
                 Ok(false)
             }
             Err(bollard::errors::Error::DockerResponseServerError {
                 status_code: 404, ..
             }) => {
                 // Container doesn't exist
-                info!("Agent {} container does not exist", agent_name);
+                info!("Session {} container does not exist", session_name);
                 Ok(false)
             }
             Err(e) => {
                 // Other Docker API error
-                error!("Failed to inspect agent {} container: {}", agent_name, e);
+                error!(
+                    "Failed to inspect session {} container: {}",
+                    session_name, e
+                );
                 Err(anyhow::anyhow!(
-                    "Docker API error for agent {}: {}",
-                    agent_name,
+                    "Docker API error for session {}: {}",
+                    session_name,
                     e
                 ))
             }

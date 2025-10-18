@@ -8,11 +8,11 @@ use tracing::{debug, info};
 // (Removed legacy message types and constants import; API now uses Responses.)
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Agent {
+pub struct Session {
     pub name: String, // Primary key in v0.4.0
     pub created_by: String,
     pub state: String,
-    pub parent_agent_name: Option<String>, // Changed from parent_agent_id
+    pub parent_session_name: Option<String>, // Changed from parent_session_id
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -44,16 +44,16 @@ impl RactorClient {
         Self { client, config }
     }
 
-    // Expose agent name for prompts/logging
-    pub fn agent_name(&self) -> &str {
-        &self.config.agent_name
+    // Expose session name for prompts/logging
+    pub fn session_name(&self) -> &str {
+        &self.config.session_name
     }
 
-    /// Get a response by id for current agent
+    /// Get a response by id for current session
     pub async fn get_response_by_id(&self, id: &str) -> Result<ResponseView> {
         let url = format!(
-            "{}/api/v0/agents/{}/responses/{}",
-            self.config.api_url, self.config.agent_name, id
+            "{}/api/v0/sessions/{}/responses/{}",
+            self.config.api_url, self.config.session_name, id
         );
         let response = self
             .client
@@ -80,14 +80,14 @@ impl RactorClient {
         }
     }
 
-    /// Get agent information
-    pub async fn get_agent(&self) -> Result<Agent> {
+    /// Get session information
+    pub async fn get_session(&self) -> Result<Session> {
         let url = format!(
-            "{}/api/v0/agents/{}",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}",
+            self.config.api_url, self.config.session_name
         );
 
-        debug!("Fetching agent info from: {}", url);
+        debug!("Fetching session info from: {}", url);
 
         let response = self
             .client
@@ -98,16 +98,16 @@ impl RactorClient {
 
         match response.status() {
             StatusCode::OK => {
-                let agent = response.json::<Agent>().await?;
-                debug!("Fetched agent info for: {}", agent.name);
-                Ok(agent)
+                let session = response.json::<Session>().await?;
+                debug!("Fetched session info for: {}", session.name);
+                Ok(session)
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
+                "Session {} not found",
+                self.config.session_name
             ))),
             status => {
                 let error_text = response
@@ -125,8 +125,8 @@ impl RactorClient {
     /// Create a new response (user input)
     pub async fn create_response(&self, input_text: &str) -> Result<ResponseView> {
         let url = format!(
-            "{}/api/v0/agents/{}/responses",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/responses",
+            self.config.api_url, self.config.session_name
         );
         let req = CreateResponseRequest {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
@@ -144,7 +144,7 @@ impl RactorClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -167,8 +167,8 @@ impl RactorClient {
         items: Option<Vec<serde_json::Value>>,
     ) -> Result<ResponseView> {
         let url = format!(
-            "{}/api/v0/agents/{}/responses/{}",
-            self.config.api_url, self.config.agent_name, id
+            "{}/api/v0/sessions/{}/responses/{}",
+            self.config.api_url, self.config.session_name, id
         );
         let mut output = serde_json::Map::new();
         if let Some(t) = output_text {
@@ -208,15 +208,15 @@ impl RactorClient {
         }
     }
 
-    /// List responses for current agent
+    /// List responses for current session
     pub async fn get_responses(
         &self,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<ResponseView>> {
         let mut url = format!(
-            "{}/api/v0/agents/{}/responses",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/responses",
+            self.config.api_url, self.config.session_name
         );
         let mut sep = '?';
         if let Some(l) = limit {
@@ -240,7 +240,7 @@ impl RactorClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -254,11 +254,11 @@ impl RactorClient {
         }
     }
 
-    /// Get response count for current agent
+    /// Get response count for current session
     pub async fn get_response_count(&self) -> Result<u64> {
         let url = format!(
-            "{}/api/v0/agents/{}/responses/count",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/responses/count",
+            self.config.api_url, self.config.session_name
         );
         let response = self
             .client
@@ -278,7 +278,7 @@ impl RactorClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -292,11 +292,11 @@ impl RactorClient {
         }
     }
 
-    /// Update agent to busy (clears idle_from)
-    pub async fn update_agent_to_busy(&self) -> Result<()> {
+    /// Update session to busy (clears idle_from)
+    pub async fn update_session_to_busy(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/agents/{}/busy",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/busy",
+            self.config.api_url, self.config.session_name
         );
 
         let response = self
@@ -308,15 +308,15 @@ impl RactorClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Agent state updated to: busy (timeout paused)");
+                info!("Session state updated to: busy (timeout paused)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
+                "Session {} not found",
+                self.config.session_name
             ))),
             status => {
                 let error_text = response
@@ -331,11 +331,11 @@ impl RactorClient {
         }
     }
 
-    /// Update agent to idle (sets idle_from)
-    pub async fn update_agent_to_idle(&self) -> Result<()> {
+    /// Update session to idle (sets idle_from)
+    pub async fn update_session_to_idle(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/agents/{}/idle",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/idle",
+            self.config.api_url, self.config.session_name
         );
 
         let response = self
@@ -347,15 +347,15 @@ impl RactorClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Agent state updated to: idle (timeout started)");
+                info!("Session state updated to: idle (timeout started)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
+                "Session {} not found",
+                self.config.session_name
             ))),
             status => {
                 let error_text = response
@@ -370,15 +370,15 @@ impl RactorClient {
         }
     }
 
-    pub async fn update_agent_context_length(&self, tokens: i64) -> Result<()> {
+    pub async fn update_session_context_length(&self, tokens: i64) -> Result<()> {
         #[derive(Serialize)]
         struct ContextUsageReq {
             tokens: i64,
         }
 
         let url = format!(
-            "{}/api/v0/agents/{}/context/usage",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/context/usage",
+            self.config.api_url, self.config.session_name
         );
 
         let body = ContextUsageReq {
@@ -398,7 +398,7 @@ impl RactorClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Agent not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -412,11 +412,11 @@ impl RactorClient {
         }
     }
 
-    /// Publish the current agent by name
-    pub async fn publish_agent(&self) -> Result<()> {
+    /// Publish the current session by name
+    pub async fn publish_session(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/agents/{}/publish",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/publish",
+            self.config.api_url, self.config.session_name
         );
 
         let response = self
@@ -437,8 +437,8 @@ impl RactorClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
+                "Session {} not found",
+                self.config.session_name
             ))),
             status => {
                 let error_text = response
@@ -446,22 +446,22 @@ impl RactorClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to publish agent ({}): {}",
+                    "Failed to publish session ({}): {}",
                     status, error_text
                 )))
             }
         }
     }
 
-    /// Sleep the current agent by name after an optional delay (seconds, min 5) with optional note
-    pub async fn sleep_agent(
+    /// Sleep the current session by name after an optional delay (seconds, min 5) with optional note
+    pub async fn sleep_session(
         &self,
         delay_seconds: Option<u64>,
         note: Option<String>,
     ) -> Result<()> {
         let url = format!(
-            "{}/api/v0/agents/{}/sleep",
-            self.config.api_url, self.config.agent_name
+            "{}/api/v0/sessions/{}/sleep",
+            self.config.api_url, self.config.session_name
         );
 
         let response = self
@@ -487,8 +487,8 @@ impl RactorClient {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Agent {} not found",
-                self.config.agent_name
+                "Session {} not found",
+                self.config.session_name
             ))),
             status => {
                 let error_text = response
@@ -496,7 +496,7 @@ impl RactorClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to sleep agent ({}): {}",
+                    "Failed to sleep session ({}): {}",
                     status, error_text
                 )))
             }
@@ -506,7 +506,7 @@ impl RactorClient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResponseView {
     pub id: String,
-    pub agent_name: String,
+    pub session_name: String,
     pub status: String,
     #[serde(default)]
     pub input_content: Option<Vec<serde_json::Value>>,

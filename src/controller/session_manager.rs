@@ -11,7 +11,7 @@ use tracing::{error, info, warn};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::AGENT_STATE_INIT;
+pub use constants::SESSION_STATE_INIT;
 
 // Using local Ollama via OLLAMA_HOST
 
@@ -22,10 +22,10 @@ use rbac::{RbacClaims, SubjectType};
 use super::docker_manager::DockerManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct AgentTask {
+pub struct SessionTask {
     id: String,
     task_type: String,
-    agent_name: String,
+    session_name: String,
     created_by: String,
     payload: serde_json::Value,
     status: String,
@@ -36,13 +36,13 @@ pub struct AgentTask {
     error: Option<String>,
 }
 
-pub struct AgentManager {
+pub struct SessionManager {
     pool: Pool<MySql>,
     docker_manager: DockerManager,
     jwt_secret: String,
 }
 
-impl AgentManager {
+impl SessionManager {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
@@ -64,7 +64,7 @@ impl AgentManager {
 
     pub async fn run(&self) -> Result<()> {
         info!(
-            "Agent Manager started, polling for tasks, auto-sleep monitoring, and health checks..."
+            "Session Manager started, polling for tasks, auto-sleep monitoring, and health checks..."
         );
 
         // Run frequent task polling; run heavier maintenance on a slower cadence
@@ -81,9 +81,9 @@ impl AgentManager {
             };
 
             // Process auto-sleep every 10s
-            let mut agents_slept = 0;
+            let mut sessions_slept = 0;
             if last_auto_sleep.elapsed() >= Duration::from_secs(10) {
-                agents_slept = match self.process_auto_sleep().await {
+                sessions_slept = match self.process_auto_sleep().await {
                     Ok(slept) => slept,
                     Err(e) => {
                         error!("Error processing auto-sleep: {}", e);
@@ -94,12 +94,12 @@ impl AgentManager {
             }
 
             // Check health every 10s
-            let mut agents_recovered = 0;
+            let mut sessions_recovered = 0;
             if last_health.elapsed() >= Duration::from_secs(10) {
-                agents_recovered = match self.check_agent_health().await {
+                sessions_recovered = match self.check_session_health().await {
                     Ok(recovered) => recovered,
                     Err(e) => {
-                        error!("Error checking agent health: {}", e);
+                        error!("Error checking session health: {}", e);
                         0
                     }
                 };
@@ -107,39 +107,43 @@ impl AgentManager {
             }
 
             // If no work was done, short sleep before next poll (improves responsiveness)
-            if tasks_processed == 0 && agents_slept == 0 && agents_recovered == 0 {
+            if tasks_processed == 0 && sessions_slept == 0 && sessions_recovered == 0 {
                 sleep(Duration::from_millis(250)).await;
             }
         }
     }
 
-    /// Ensure the agent container is running and healthy; wake if needed and wait up to timeout_secs
-    pub async fn ensure_agent_running(&self, agent_name: &str, timeout_secs: u64) -> Result<()> {
+    /// Ensure the session container is running and healthy; wake if needed and wait up to timeout_secs
+    pub async fn ensure_session_running(
+        &self,
+        session_name: &str,
+        timeout_secs: u64,
+    ) -> Result<()> {
         // Quick healthy check
-        match self.docker_manager.is_container_healthy(agent_name).await {
+        match self.docker_manager.is_container_healthy(session_name).await {
             Ok(true) => return Ok(()),
             Ok(false) => {}
             Err(e) => {
-                tracing::warn!("health check error for {}: {}", agent_name, e);
+                tracing::warn!("health check error for {}: {}", session_name, e);
             }
         }
 
         // If DB says slept or container absent, wake
         if let Some((state,)) =
-            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM agents WHERE name = ?"#)
-                .bind(agent_name)
+            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sessions WHERE name = ?"#)
+                .bind(session_name)
                 .fetch_optional(&self.pool)
                 .await?
         {
             if state.to_lowercase() == "slept" {
-                tracing::info!("Agent {} is slept; waking container", agent_name);
-                let _ = self.docker_manager.wake_container(agent_name).await?;
+                tracing::info!("Session {} is slept; waking container", session_name);
+                let _ = self.docker_manager.wake_container(session_name).await?;
             }
         } else {
             // No row; nothing we can do
             tracing::warn!(
-                "Agent {} not found in DB during ensure_agent_running",
-                agent_name
+                "Session {} not found in DB during ensure_session_running",
+                session_name
             );
         }
 
@@ -147,15 +151,15 @@ impl AgentManager {
         let mut waited = 0u64;
         let step = 500u64; // ms
         while waited / 1000 < timeout_secs {
-            if let Ok(true) = self.docker_manager.is_container_healthy(agent_name).await {
+            if let Ok(true) = self.docker_manager.is_container_healthy(session_name).await {
                 return Ok(());
             }
             tokio::time::sleep(std::time::Duration::from_millis(step)).await;
             waited += step;
         }
         Err(anyhow::anyhow!(
-            "agent {} not ready in {}s",
-            agent_name,
+            "session {} not ready in {}s",
+            session_name,
             timeout_secs
         ))
     }
@@ -163,20 +167,20 @@ impl AgentManager {
     /// Proxy exec with stdout/stderr collection
     pub async fn exec_collect(
         &self,
-        agent_name: &str,
+        session_name: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        self.docker_manager.exec_collect(agent_name, cmd).await
+        self.docker_manager.exec_collect(session_name, cmd).await
     }
 
     // No external API key required for local Ollama
 
-    /// Process agents that need auto-closing due to timeout
+    /// Process sessions that need auto-closing due to timeout
     async fn process_auto_sleep(&self) -> Result<usize> {
-        // Ensure all idle agents have idle_from set
+        // Ensure all idle sessions have idle_from set
         let _ = sqlx::query(
             r#"
-            UPDATE agents
+            UPDATE sessions
             SET idle_from = NOW()
             WHERE state = 'idle' AND idle_from IS NULL
             "#,
@@ -184,10 +188,10 @@ impl AgentManager {
         .execute(&self.pool)
         .await;
 
-        // Ensure all busy agents have busy_from set
+        // Ensure all busy sessions have busy_from set
         let _ = sqlx::query(
             r#"
-            UPDATE agents
+            UPDATE sessions
             SET busy_from = NOW()
             WHERE state = 'busy' AND busy_from IS NULL
             "#,
@@ -195,11 +199,11 @@ impl AgentManager {
         .execute(&self.pool)
         .await;
 
-        // Find agents that need auto-sleep due to idle timeout
-        let agents_to_close: Vec<(String,)> = sqlx::query_as(
+        // Find sessions that need auto-sleep due to idle timeout
+        let sessions_to_close: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT name
-            FROM agents
+            FROM sessions
             WHERE (state = 'idle' AND idle_from IS NOT NULL AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW())
                OR (state = 'busy' AND busy_from IS NOT NULL AND TIMESTAMPADD(SECOND, busy_timeout_seconds, busy_from) <= NOW())
             ORDER BY
@@ -211,45 +215,45 @@ impl AgentManager {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to find agents to auto-sleep: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-sleep: {}", e))?;
 
         let mut slept_count = 0;
 
-        for (agent_name,) in agents_to_close {
-            info!("Auto-sleeping agent {} due to timeout", agent_name);
+        for (session_name,) in sessions_to_close {
+            info!("Auto-sleeping session {} due to timeout", session_name);
 
-            // Create sleep task for the agent
+            // Create sleep task for the session
             let task_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO agent_tasks (id, agent_name, task_type, created_by, payload, status)
-                VALUES (?, ?, 'sleep_agent', 'system', '{"reason": "auto_sleep_timeout"}', 'pending')
+                INSERT INTO session_tasks (id, session_name, task_type, created_by, payload, status)
+                VALUES (?, ?, 'sleep_session', 'system', '{"reason": "auto_sleep_timeout"}', 'pending')
                 "#)
             .bind(&task_id)
-            .bind(&agent_name)
+            .bind(&session_name)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-sleep task for agent {}: {}", agent_name, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-sleep task for session {}: {}", session_name, e))?;
 
             info!(
-                "Created auto-sleep task {} for agent {}",
-                task_id, agent_name
+                "Created auto-sleep task {} for session {}",
+                task_id, session_name
             );
             slept_count += 1;
         }
 
         if slept_count > 0 {
-            info!("Scheduled {} agents for auto-sleep", slept_count);
+            info!("Scheduled {} sessions for auto-sleep", slept_count);
         }
 
         Ok(slept_count)
     }
 
-    /// Generate a agent-specific RACTOR token for the given principal
-    fn generate_agent_token(
+    /// Generate a session-specific RACTOR token for the given principal
+    fn generate_session_token(
         &self,
         principal: &str,
         principal_type: SubjectType,
-        agent_name: &str,
+        session_name: &str,
     ) -> Result<String> {
         let exp = chrono::Utc::now() + chrono::Duration::hours(24);
         let claims = RbacClaims {
@@ -257,7 +261,7 @@ impl AgentManager {
             sub_type: principal_type,
             exp: exp.timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
-            iss: "ractor-agent-manager".to_string(),
+            iss: "ractor-session-manager".to_string(),
         };
 
         let token = encode(
@@ -265,11 +269,11 @@ impl AgentManager {
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_ref()),
         )
-        .map_err(|e| anyhow::anyhow!("Failed to generate agent token: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
 
         info!(
-            "Generated agent token for principal: {} (agent: {})",
-            principal, agent_name
+            "Generated session token for principal: {} (session: {})",
+            principal, session_name
         );
         Ok(token)
     }
@@ -288,13 +292,13 @@ impl AgentManager {
         Ok(processed)
     }
 
-    async fn fetch_pending_tasks(&self) -> Result<Vec<AgentTask>> {
+    async fn fetch_pending_tasks(&self) -> Result<Vec<SessionTask>> {
         // MySQL doesn't support RETURNING, so we need to do this in two steps
         // First, get and lock the pending tasks
         let task_ids: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT id
-            FROM agent_tasks
+            FROM session_tasks
             WHERE status = 'pending'
             ORDER BY created_at
             LIMIT 5
@@ -312,7 +316,7 @@ impl AgentManager {
         let ids: Vec<String> = task_ids.into_iter().map(|(id,)| id).collect();
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query_str = format!(
-            "UPDATE agent_tasks SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
+            "UPDATE session_tasks SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
         );
 
         let mut query = sqlx::query(&query_str);
@@ -322,8 +326,8 @@ impl AgentManager {
         query.execute(&self.pool).await?;
 
         // Fetch the updated tasks
-        let query_str = format!("SELECT * FROM agent_tasks WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_as::<_, AgentTask>(&query_str);
+        let query_str = format!("SELECT * FROM session_tasks WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, SessionTask>(&query_str);
         for id in &ids {
             query = query.bind(id);
         }
@@ -332,17 +336,17 @@ impl AgentManager {
         Ok(tasks)
     }
 
-    async fn process_task(&self, task: AgentTask) -> Result<()> {
+    async fn process_task(&self, task: SessionTask) -> Result<()> {
         info!("Processing task {} of type {}", task.id, task.task_type);
 
         let result = match task.task_type.as_str() {
-            "create_agent" => self.handle_create_agent(task.clone()).await,
-            "destroy_agent" => self.handle_destroy_agent(task.clone()).await,
+            "create_session" => self.handle_create_session(task.clone()).await,
+            "destroy_session" => self.handle_destroy_session(task.clone()).await,
             "execute_command" => self.handle_execute_command(task.clone()).await,
-            "sleep_agent" => self.handle_sleep_agent(task.clone()).await,
-            "wake_agent" => self.handle_wake_agent(task.clone()).await,
-            "publish_agent" => self.handle_publish_agent(task.clone()).await,
-            "unpublish_agent" => self.handle_unpublish_agent(task.clone()).await,
+            "sleep_session" => self.handle_sleep_session(task.clone()).await,
+            "wake_session" => self.handle_wake_session(task.clone()).await,
+            "publish_session" => self.handle_publish_session(task.clone()).await,
+            "unpublish_session" => self.handle_unpublish_session(task.clone()).await,
             "create_response" => self.handle_create_response(task.clone()).await,
             "file_read" => self.handle_file_read(task.clone()).await,
             "file_metadata" => self.handle_file_metadata(task.clone()).await,
@@ -368,10 +372,10 @@ impl AgentManager {
         Ok(())
     }
 
-    pub async fn handle_create_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name.clone();
+    pub async fn handle_create_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name.clone();
 
-        // Parse the payload to get agent creation parameters
+        // Parse the payload to get session creation parameters
         let env = task
             .payload
             .get("env")
@@ -420,28 +424,28 @@ impl AgentManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic token for this agent (for Ractor auth)
-        info!("Generating dynamic token for agent {}", agent_name);
-        let agent_token = self
-            .generate_agent_token(principal, principal_type, &agent_name)
-            .map_err(|e| anyhow::anyhow!("Failed to generate agent token: {}", e))?;
+        // Generate dynamic token for this session (for Ractor auth)
+        info!("Generating dynamic token for session {}", session_name);
+        let session_token = self
+            .generate_session_token(principal, principal_type, &session_name)
+            .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
 
         info!(
-            "Generated dynamic tokens for agent {} (principal: {})",
-            agent_name, principal
+            "Generated dynamic tokens for session {} (principal: {})",
+            session_name, principal
         );
 
-        info!("Creating agent {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
-              agent_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating session {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
+              session_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a remix agent from task payload
+        // Check if this is a remix session from task payload
         let is_remix = task
             .payload
             .get("remix")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // For remix agents, extract prompt from task payload
+        // For remix sessions, extract prompt from task payload
         let remix_prompt = if is_remix {
             task.payload
                 .get("prompt")
@@ -452,11 +456,11 @@ impl AgentManager {
         };
 
         if is_remix {
-            let parent_agent_name = task
+            let parent_session_name = task
                 .payload
-                .get("parent_agent_name")
+                .get("parent_session_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_agent_name for remix"))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for remix"))?;
 
             let copy_data = task
                 .payload
@@ -479,7 +483,7 @@ impl AgentManager {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            // For remix agents, get principal info from remix task payload
+            // For remix sessions, get principal info from remix task payload
             let remix_principal = task
                 .payload
                 .get("principal")
@@ -506,19 +510,19 @@ impl AgentManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating remix agent {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
-                  agent_name, parent_agent_name, copy_data, copy_code, copy_env, copy_content, remix_principal, remix_principal_type_str);
+            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
+                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, remix_principal, remix_principal_type_str);
 
-            // For remix agents, create container with selective volume copy from parent
-            // Generate fresh token for remix agent
+            // For remix sessions, create container with selective volume copy from parent
+            // Generate fresh token for remix session
             let remix_token = self
-                .generate_agent_token(remix_principal, remix_principal_type, &agent_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate remix agent token: {}", e))?;
+                .generate_session_token(remix_principal, remix_principal_type, &session_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate remix session token: {}", e))?;
 
             self.docker_manager
                 .create_container_with_selective_copy_and_tokens(
-                    &agent_name,
-                    parent_agent_name,
+                    &session_name,
+                    parent_session_name,
                     copy_data,
                     copy_code,
                     copy_env,
@@ -530,16 +534,16 @@ impl AgentManager {
                 )
                 .await?;
         } else {
-            info!("Creating new agent {}", agent_name);
+            info!("Creating new session {}", session_name);
 
-            // For regular agents, create container with agent parameters and generated tokens
+            // For regular sessions, create container with session parameters and generated tokens
             self.docker_manager
                 .create_container_with_params_and_tokens(
-                    &agent_name,
+                    &session_name,
                     env,
                     instructions,
                     setup,
-                    agent_token,
+                    session_token,
                     principal.to_string(),
                     principal_type_str.to_string(),
                     task.created_at,
@@ -550,7 +554,7 @@ impl AgentManager {
         // Send prompt if provided (BEFORE setting state to IDLE)
         let prompt_to_send = prompt.or(remix_prompt);
         if let Some(prompt) = prompt_to_send {
-            info!("Sending prompt to agent {}: {}", agent_name, prompt);
+            info!("Sending prompt to session {}: {}", session_name, prompt);
 
             // Create response record in database (pending)
             let response_id = uuid::Uuid::new_v4().to_string();
@@ -559,65 +563,65 @@ impl AgentManager {
             let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&response_id)
-            .bind(&agent_name)
+            .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
             .bind(&output_json)
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for agent {}",
-                response_id, agent_name
+                "Prompt response {} created for session {}",
+                response_id, session_name
             );
         }
 
-        // Set agent state to INIT after container creation only if it hasn't changed yet.
-        // This avoids overwriting an agent that already set itself to IDLE.
-        sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = NOW() WHERE name = ? AND state = 'init'"#)
-            .bind(AGENT_STATE_INIT)
-            .bind(&agent_name)
+        // Set session state to INIT after container creation only if it hasn't changed yet.
+        // This avoids overwriting an session that already set itself to IDLE.
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE name = ? AND state = 'init'"#)
+            .bind(SESSION_STATE_INIT)
+            .bind(&session_name)
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
 
-    pub async fn handle_destroy_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name;
+    pub async fn handle_destroy_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name;
 
-        info!("Deleting container and volume for agent {}", agent_name);
-        self.docker_manager.delete_container(&agent_name).await?;
+        info!("Deleting container and volume for session {}", session_name);
+        self.docker_manager.delete_container(&session_name).await?;
 
-        // No need to update agent state - DELETE endpoint performs hard delete of agent row
+        // No need to update session state - DELETE endpoint performs hard delete of session row
 
         Ok(())
     }
 
-    pub async fn handle_execute_command(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name;
+    pub async fn handle_execute_command(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name;
         let command = task.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
-        info!("Executing command in agent {}: {}", agent_name, command);
+        info!("Executing command in session {}: {}", session_name, command);
         let output = self
             .docker_manager
-            .execute_command(&agent_name, command)
+            .execute_command(&session_name, command)
             .await?;
 
         sqlx::query(
             r#"
-            INSERT INTO command_results (id, agent_name, command, output, created_at)
+            INSERT INTO command_results (id, session_name, command, output, created_at)
             VALUES (?, ?, ?, ?, NOW())
             "#,
         )
         .bind(uuid::Uuid::new_v4().to_string())
-        .bind(agent_name)
+        .bind(session_name)
         .bind(command)
         .bind(output)
         .execute(&self.pool)
@@ -629,7 +633,7 @@ impl AgentManager {
     async fn mark_task_completed(&self, task_id: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE agent_tasks
+            UPDATE session_tasks
             SET status = 'completed',
                 completed_at = NOW(),
                 updated_at = NOW()
@@ -646,7 +650,7 @@ impl AgentManager {
     async fn mark_task_failed(&self, task_id: &str, error: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE agent_tasks
+            UPDATE session_tasks
             SET status = 'failed',
                 error = ?,
                 completed_at = NOW(),
@@ -662,8 +666,8 @@ impl AgentManager {
         Ok(())
     }
 
-    pub async fn handle_sleep_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name;
+    pub async fn handle_sleep_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name;
         // Optional delay before sleeping (in seconds), minimum 5 seconds
         let delay_secs = task
             .payload
@@ -673,34 +677,34 @@ impl AgentManager {
             .unwrap_or(5);
         if delay_secs > 0 {
             info!(
-                "Delaying sleep for agent {} by {} seconds",
-                agent_name, delay_secs
+                "Delaying sleep for session {} by {} seconds",
+                session_name, delay_secs
             );
             sleep(Duration::from_secs(delay_secs)).await;
         }
         // Capture prior state and created_at for runtime measurement
-        let agent_row_opt: Option<(chrono::DateTime<Utc>, String)> =
-            sqlx::query_as(r#"SELECT created_at, state FROM agents WHERE name = ?"#)
-                .bind(&agent_name)
+        let session_row_opt: Option<(chrono::DateTime<Utc>, String)> =
+            sqlx::query_as(r#"SELECT created_at, state FROM sessions WHERE name = ?"#)
+                .bind(&session_name)
                 .fetch_optional(&self.pool)
                 .await?;
-        let (agent_created_at, prior_state) = agent_row_opt
+        let (session_created_at, prior_state) = session_row_opt
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
 
-        info!("Sleeping container for agent {}", agent_name);
+        info!("Sleeping container for session {}", session_name);
 
         // Sleep the Docker container but keep the persistent volume
-        self.docker_manager.sleep_container(&agent_name).await?;
+        self.docker_manager.sleep_container(&session_name).await?;
 
-        // Update agent state to slept
-        sqlx::query(r#"UPDATE agents SET state = 'slept' WHERE name = ?"#)
-            .bind(&agent_name)
+        // Update session state to slept
+        sqlx::query(r#"UPDATE sessions SET state = 'slept' WHERE name = ?"#)
+            .bind(&session_name)
             .execute(&self.pool)
             .await?;
 
-        info!("Agent {} state updated to slept", agent_name);
-        // Create a chat marker response to indicate the agent has slept
+        info!("Session {} state updated to slept", session_name);
+        // Create a chat marker response to indicate the session has slept
         let response_id = uuid::Uuid::new_v4().to_string();
         let created_by = task.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
@@ -731,9 +735,9 @@ impl AgentManager {
 
         // Mark the latest in-progress response as cancelled (processing or pending) (applies to any sleep reason)
         if let Some((resp_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM agent_responses WHERE agent_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+            r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
-        .bind(&agent_name)
+        .bind(&session_name)
         .fetch_optional(&self.pool)
         .await
         .unwrap_or(None)
@@ -757,7 +761,7 @@ impl AgentManager {
             }
             // Update response status to 'cancelled'
             let _ = sqlx::query(
-                r#"UPDATE agent_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
+                r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
             )
             .bind(&new_output)
             .bind(&resp_id)
@@ -766,9 +770,9 @@ impl AgentManager {
         } else {
             // If no response row exists yet (pre-insert race), try to find the latest create_response task and insert a cancelled response
             if let Some((task_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM agent_tasks WHERE agent_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+                r#"SELECT id, created_by, payload FROM session_tasks WHERE session_name = ? AND task_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
             )
-            .bind(&agent_name)
+            .bind(&session_name)
             .fetch_optional(&self.pool)
             .await
             .unwrap_or(None)
@@ -778,33 +782,33 @@ impl AgentManager {
                     let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
                     let output = serde_json::json!({"text":"","items":[cancelled_item]});
                     let _ = sqlx::query(
-                        r#"INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                        r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
                             VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                             ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                     )
                     .bind(resp_id)
-                    .bind(&agent_name)
+                    .bind(&session_name)
                     .bind(&created_by)
                     .bind(&input)
                     .bind(&output)
                     .execute(&self.pool)
                     .await;
-                    let _ = sqlx::query(r#"UPDATE agent_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                    let _ = sqlx::query(r#"UPDATE session_tasks SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
                         .bind(&task_id)
                         .execute(&self.pool)
                         .await;
                 }
             }
         }
-        // Determine runtime: time from last wake marker (or agent.created_at if none)
+        // Determine runtime: time from last wake marker (or session.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-            r#"SELECT created_at, output FROM agent_responses WHERE agent_name = ? ORDER BY created_at DESC LIMIT 50"#
+            r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
         )
-        .bind(&agent_name)
+        .bind(&session_name)
         .fetch_all(&self.pool)
         .await
         .unwrap_or_default();
-        let mut start_ts = agent_created_at;
+        let mut start_ts = session_created_at;
         for (row_created_at, output) in recent_rows {
             if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                 let mut found = false;
@@ -835,12 +839,12 @@ impl AgentManager {
 
         sqlx::query(
             r#"
-            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
             "#,
         )
         .bind(&response_id)
-        .bind(&agent_name)
+        .bind(&session_name)
         .bind(&created_by)
         .bind(&serde_json::json!({"text": ""}))
         .bind(&output_json)
@@ -850,8 +854,8 @@ impl AgentManager {
         Ok(())
     }
 
-    pub async fn handle_wake_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name;
+    pub async fn handle_wake_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name;
         // Prefer explicitly provided principal/principal_type from payload (owner),
         // fall back to task.created_by as a regular subject.
         let effective_principal = task
@@ -867,29 +871,29 @@ impl AgentManager {
             .unwrap_or("User")
             .to_string();
 
-        info!("Waking container for agent {}", agent_name);
+        info!("Waking container for session {}", session_name);
 
-        // Generate fresh tokens for woken agent
-        info!("Generating fresh tokens for woken agent {}", agent_name);
+        // Generate fresh tokens for woken session
+        info!("Generating fresh tokens for woken session {}", session_name);
         let wake_token = self
-            .generate_agent_token(
+            .generate_session_token(
                 &effective_principal,
                 match effective_principal_type.as_str() {
                     "Admin" => SubjectType::Admin,
                     _ => SubjectType::Subject,
                 },
-                &agent_name,
+                &session_name,
             )
-            .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to generate wake session token: {}", e))?;
 
-        // All woken agents were slept (container destroyed), so recreate container
+        // All woken sessions were slept (container destroyed), so recreate container
         info!(
-            "Agent {} was slept, waking container with persistent volume and fresh tokens",
-            agent_name
+            "Session {} was slept, waking container with persistent volume and fresh tokens",
+            session_name
         );
         self.docker_manager
             .wake_container_with_tokens(
-                &agent_name,
+                &session_name,
                 wake_token,
                 effective_principal.clone(),
                 effective_principal_type.clone(),
@@ -897,47 +901,50 @@ impl AgentManager {
             )
             .await?;
 
-        // Update last_activity_at and clear idle_from/busy_from since agent is being woken (will set to idle later)
+        // Update last_activity_at and clear idle_from/busy_from since session is being woken (will set to idle later)
         sqlx::query(
-            r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
+            r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
         )
-        .bind(&agent_name)
+        .bind(&session_name)
         .execute(&self.pool)
         .await?;
 
-        info!("Container woken for agent {}", agent_name);
+        info!("Container woken for session {}", session_name);
 
         // Send prompt if provided
         if let Some(prompt) = task.payload.get("prompt").and_then(|v| v.as_str()) {
-            info!("Sending prompt to woken agent {}: {}", agent_name, prompt);
+            info!(
+                "Sending prompt to woken session {}: {}",
+                session_name, prompt
+            );
 
             // Get the principal name from the task
             let principal = effective_principal.clone();
 
-            // Create response record in database for woken agent
+            // Create response record in database for woken session
             let response_id = uuid::Uuid::new_v4().to_string();
             let input_json = serde_json::json!({ "text": prompt });
             let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&response_id)
-            .bind(&agent_name)
+            .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
             .bind(&output_json)
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for woken agent {}",
-                response_id, agent_name
+                "Prompt response {} created for woken session {}",
+                response_id, session_name
             );
         }
 
-        // Insert a chat marker indicating the agent has woken
+        // Insert a chat marker indicating the session has woken
         let response_id = uuid::Uuid::new_v4().to_string();
         let now_text = chrono::Utc::now().to_rfc3339();
         let reason = task
@@ -956,12 +963,12 @@ impl AgentManager {
         });
         sqlx::query(
             r#"
-            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
         .bind(&response_id)
-        .bind(&agent_name)
+        .bind(&session_name)
         .bind(&effective_principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
@@ -973,11 +980,11 @@ impl AgentManager {
         Ok(())
     }
 
-    pub async fn handle_create_response(&self, task: AgentTask) -> Result<()> {
-        let agent_name = task.agent_name.clone();
+    pub async fn handle_create_response(&self, task: SessionTask) -> Result<()> {
+        let session_name = task.session_name.clone();
         let principal = task.created_by.clone();
 
-        info!("Handling create_response for agent {}", agent_name);
+        info!("Handling create_response for session {}", session_name);
 
         // Parse payload
         let response_id = task
@@ -996,10 +1003,10 @@ impl AgentManager {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        // Inspect agent state
+        // Inspect session state
         let state_opt: Option<(String,)> =
-            sqlx::query_as(r#"SELECT state FROM agents WHERE name = ?"#)
-                .bind(&agent_name)
+            sqlx::query_as(r#"SELECT state FROM sessions WHERE name = ?"#)
+                .bind(&session_name)
                 .fetch_optional(&self.pool)
                 .await?;
         let state = state_opt.map(|t| t.0).unwrap_or_default();
@@ -1007,15 +1014,15 @@ impl AgentManager {
         // Wake if needed
         if wake_if_slept && state == "slept" {
             info!(
-                "Agent {} slept; waking prior to inserting response",
-                agent_name
+                "Session {} slept; waking prior to inserting response",
+                session_name
             );
             let wake_token = self
-                .generate_agent_token(&principal, SubjectType::Subject, &agent_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate wake agent token: {}", e))?;
+                .generate_session_token(&principal, SubjectType::Subject, &session_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate wake session token: {}", e))?;
             self.docker_manager
                 .wake_container_with_tokens(
-                    &agent_name,
+                    &session_name,
                     wake_token,
                     principal.clone(),
                     "User".to_string(),
@@ -1023,9 +1030,9 @@ impl AgentManager {
                 )
                 .await?;
             sqlx::query(
-                r#"UPDATE agents SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
+                r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
             )
-            .bind(&agent_name)
+            .bind(&session_name)
             .execute(&self.pool)
             .await?;
 
@@ -1043,12 +1050,12 @@ impl AgentManager {
             });
             sqlx::query(
             r#"
-            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
         .bind(&marker_id)
-        .bind(&agent_name)
+        .bind(&session_name)
         .bind(&principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
@@ -1060,7 +1067,7 @@ impl AgentManager {
 
         // If a response with this id already exists (e.g., pre-insert cancel), skip insertion
         if let Some((_existing_id, existing_status)) = sqlx::query_as::<_, (String, String)>(
-            r#"SELECT id, status FROM agent_responses WHERE id = ?"#,
+            r#"SELECT id, status FROM session_responses WHERE id = ?"#,
         )
         .bind(&response_id)
         .fetch_optional(&self.pool)
@@ -1083,12 +1090,12 @@ impl AgentManager {
             .unwrap_or(task.created_at);
         sqlx::query(
             r#"
-            INSERT INTO agent_responses (id, agent_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
             "#,
         )
         .bind(&response_id)
-        .bind(&agent_name)
+        .bind(&session_name)
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
@@ -1096,14 +1103,17 @@ impl AgentManager {
         .bind(&resp_created_at)
         .execute(&self.pool)
         .await?;
-        info!("Inserted response {} for agent {}", response_id, agent_name);
+        info!(
+            "Inserted response {} for session {}",
+            response_id, session_name
+        );
 
         Ok(())
     }
 
-    async fn handle_publish_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = &task.agent_name;
-        info!("Publishing content for agent {}", agent_name);
+    async fn handle_publish_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = &task.session_name;
+        info!("Publishing content for session {}", session_name);
 
         // Check if docker command is available
         match tokio::process::Command::new("which")
@@ -1121,10 +1131,10 @@ impl AgentManager {
             }
         }
 
-        let agent_container = format!("ractor_agent_{}", agent_name.to_ascii_lowercase());
+        let session_container = format!("ractor_session_{}", session_name.to_ascii_lowercase());
 
         // First, create the content directory in the content container
-        let public_dir = format!("/content/{}", agent_name);
+        let public_dir = format!("/content/{}", session_name);
         info!(
             "Executing: docker exec ractor_content mkdir -p {}",
             public_dir
@@ -1136,8 +1146,8 @@ impl AgentManager {
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to execute mkdir command for agent {}: {}",
-                    agent_name,
+                    "Failed to execute mkdir command for session {}: {}",
+                    session_name,
                     e
                 )
             })?;
@@ -1146,39 +1156,42 @@ impl AgentManager {
             let stderr = String::from_utf8_lossy(&mkdir_output.stderr);
             let stdout = String::from_utf8_lossy(&mkdir_output.stdout);
             return Err(anyhow::anyhow!(
-                "Failed to create public directory for agent {}: stdout: {}, stderr: {}",
-                agent_name,
+                "Failed to create public directory for session {}: stdout: {}, stderr: {}",
+                session_name,
                 stdout,
                 stderr
             ));
         }
 
-        // Copy content files from agent container directly to server container's public directory
-        // This uses docker cp to copy from agent container to filesystem, then from filesystem to server container
-        let temp_dir = format!("/tmp/content_publish_{}", agent_name);
+        // Copy content files from session container directly to server container's public directory
+        // This uses docker cp to copy from session container to filesystem, then from filesystem to server container
+        let temp_dir = format!("/tmp/content_publish_{}", session_name);
 
         // Create temp directory on filesystem
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| anyhow::anyhow!("Failed to create temp directory: {}", e))?;
 
-        // Copy from agent container to filesystem temp
+        // Copy from session container to filesystem temp
         let copy1_output = tokio::process::Command::new("docker")
             .args(&[
                 "cp",
-                &format!("{}:/agent/content/.", agent_container),
+                &format!("{}:/session/content/.", session_container),
                 &format!("{}/", temp_dir),
             ])
             .output()
             .await
             .map_err(|e| {
-                anyhow::anyhow!("Failed to execute copy command from agent container: {}", e)
+                anyhow::anyhow!(
+                    "Failed to execute copy command from session container: {}",
+                    e
+                )
             })?;
 
         if !copy1_output.status.success() {
             let _ = std::fs::remove_dir_all(&temp_dir);
             let stderr = String::from_utf8_lossy(&copy1_output.stderr);
             return Err(anyhow::anyhow!(
-                "Failed to copy content from agent container: {}",
+                "Failed to copy content from session container: {}",
                 stderr
             ));
         }
@@ -1188,7 +1201,7 @@ impl AgentManager {
             .args(&[
                 "cp",
                 &format!("{}//.", temp_dir),
-                &format!("ractor_content:/content/{}/", agent_name),
+                &format!("ractor_content:/content/{}/", session_name),
             ])
             .output()
             .await
@@ -1208,18 +1221,18 @@ impl AgentManager {
         }
 
         info!(
-            "Content published for agent {} to /content/{}/",
-            agent_name, agent_name
+            "Content published for session {} to /content/{}/",
+            session_name, session_name
         );
         Ok(())
     }
 
-    async fn handle_unpublish_agent(&self, task: AgentTask) -> Result<()> {
-        let agent_name = &task.agent_name;
-        info!("Unpublishing content for agent {}", agent_name);
+    async fn handle_unpublish_session(&self, task: SessionTask) -> Result<()> {
+        let session_name = &task.session_name;
+        info!("Unpublishing content for session {}", session_name);
 
-        // Remove content directory for this agent from the content container
-        let public_path = format!("/content/{}", agent_name);
+        // Remove content directory for this session from the content container
+        let public_path = format!("/content/{}", session_name);
         info!(
             "Executing: docker exec ractor_content rm -rf {}",
             public_path
@@ -1232,8 +1245,8 @@ impl AgentManager {
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Failed to execute rm command for agent {}: {}",
-                    agent_name,
+                    "Failed to execute rm command for session {}: {}",
+                    session_name,
                     e
                 )
             })?;
@@ -1242,24 +1255,24 @@ impl AgentManager {
             let stderr = String::from_utf8_lossy(&remove_output.stderr);
             let stdout = String::from_utf8_lossy(&remove_output.stdout);
             return Err(anyhow::anyhow!(
-                "Failed to remove public directory for agent {}: stdout: {}, stderr: {}",
-                agent_name,
+                "Failed to remove public directory for session {}: stdout: {}, stderr: {}",
+                session_name,
                 stdout,
                 stderr
             ));
         }
 
-        info!("Content unpublished for agent {}", agent_name);
+        info!("Content unpublished for session {}", session_name);
         Ok(())
     }
 
-    /// Check health of all non-sleeping agents and mark failed containers as slept
-    async fn check_agent_health(&self) -> Result<usize> {
-        // Find all agents that are not sleeping (active agents)
-        let active_agents: Vec<(String, String)> = sqlx::query_as(
+    /// Check health of all non-sleeping sessions and mark failed containers as slept
+    async fn check_session_health(&self) -> Result<usize> {
+        // Find all sessions that are not sleeping (active sessions)
+        let active_sessions: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT name, state
-            FROM agents
+            FROM sessions
             WHERE state != 'slept'
             ORDER BY name
             "#,
@@ -1267,16 +1280,23 @@ impl AgentManager {
         .fetch_all(&self.pool)
         .await?;
 
-        if active_agents.is_empty() {
+        if active_sessions.is_empty() {
             return Ok(0);
         }
 
-        info!("Checking health of {} active agents", active_agents.len());
+        info!(
+            "Checking health of {} active sessions",
+            active_sessions.len()
+        );
         let mut recovered_count = 0;
 
-        for (agent_name, current_state) in active_agents {
+        for (session_name, current_state) in active_sessions {
             // Check if container exists and is running
-            match self.docker_manager.is_container_healthy(&agent_name).await {
+            match self
+                .docker_manager
+                .is_container_healthy(&session_name)
+                .await
+            {
                 Ok(true) => {
                     // Container is healthy, no action needed
                     continue;
@@ -1284,25 +1304,25 @@ impl AgentManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Agent {} container is unhealthy or missing, marking as slept for recovery",
-                        agent_name
+                        "Session {} container is unhealthy or missing, marking as slept for recovery",
+                        session_name
                     );
 
-                    // Mark agent as slept so it can be woken up later
+                    // Mark session as slept so it can be woken up later
                     if let Err(e) =
-                        sqlx::query(r#"UPDATE agents SET state = 'slept' WHERE name = ?"#)
-                            .bind(&agent_name)
+                        sqlx::query(r#"UPDATE sessions SET state = 'slept' WHERE name = ?"#)
+                            .bind(&session_name)
                             .execute(&self.pool)
                             .await
                     {
                         error!(
-                            "Failed to mark unhealthy agent {} as slept: {}",
-                            agent_name, e
+                            "Failed to mark unhealthy session {} as slept: {}",
+                            session_name, e
                         );
                     } else {
                         info!(
-                            "Agent {} marked as slept due to container failure (was: {})",
-                            agent_name, current_state
+                            "Session {} marked as slept due to container failure (was: {})",
+                            session_name, current_state
                         );
                         recovered_count += 1;
                     }
@@ -1310,8 +1330,8 @@ impl AgentManager {
                 Err(e) => {
                     // Health check failed, likely Docker connection issues
                     error!(
-                        "Health check failed for agent {}: {}, will retry next cycle",
-                        agent_name, e
+                        "Health check failed for session {}: {}, will retry next cycle",
+                        session_name, e
                     );
                 }
             }
@@ -1319,7 +1339,7 @@ impl AgentManager {
 
         if recovered_count > 0 {
             info!(
-                "Marked {} agents as slept due to container failures",
+                "Marked {} sessions as slept due to container failures",
                 recovered_count
             );
         }
@@ -1355,7 +1375,7 @@ impl AgentManager {
             map.insert("result".into(), result);
         }
         sqlx::query(
-            r#"UPDATE agent_tasks SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
+            r#"UPDATE session_tasks SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
         )
         .bind(&payload)
         .bind(task_id)
@@ -1366,7 +1386,7 @@ impl AgentManager {
 
     async fn task_fail(&self, task_id: &str, msg: String) -> Result<()> {
         sqlx::query(
-            r#"UPDATE agent_tasks SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
+            r#"UPDATE session_tasks SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
         )
         .bind(&msg)
         .bind(task_id)
@@ -1375,7 +1395,7 @@ impl AgentManager {
         Ok(())
     }
 
-    pub async fn handle_file_read(&self, task: AgentTask) -> Result<()> {
+    pub async fn handle_file_read(&self, task: SessionTask) -> Result<()> {
         let path = task
             .payload
             .get("path")
@@ -1387,22 +1407,22 @@ impl AgentManager {
         // Do not auto-wake for file APIs; require running container
         match self
             .docker_manager
-            .is_container_healthy(&task.agent_name)
+            .is_container_healthy(&task.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .task_fail(&task.id, "agent is sleeping".to_string())
+                    .task_fail(&task.id, "session is sleeping".to_string())
                     .await;
             }
         }
-        let full_path = format!("/agent/{}", safe);
+        let full_path = format!("/session/{}", safe);
         // Get size and content type
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &task.agent_name,
+                &task.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1429,7 +1449,10 @@ impl AgentManager {
         }
         let (code, stdout, stderr) = self
             .docker_manager
-            .exec_collect(&task.agent_name, vec!["/bin/cat".into(), full_path.clone()])
+            .exec_collect(
+                &task.session_name,
+                vec!["/bin/cat".into(), full_path.clone()],
+            )
             .await?;
         if code != 0 {
             return self
@@ -1447,7 +1470,7 @@ impl AgentManager {
             .await
     }
 
-    pub async fn handle_file_metadata(&self, task: AgentTask) -> Result<()> {
+    pub async fn handle_file_metadata(&self, task: SessionTask) -> Result<()> {
         let path = task
             .payload
             .get("path")
@@ -1458,22 +1481,22 @@ impl AgentManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&task.agent_name)
+            .is_container_healthy(&task.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .task_fail(&task.id, "agent is sleeping".to_string())
+                    .task_fail(&task.id, "session is sleeping".to_string())
                     .await;
             }
         }
-        let full_path = format!("/agent/{}", safe);
+        let full_path = format!("/session/{}", safe);
         let fmt = "%F|%s|%a|%Y|%N";
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &task.agent_name,
+                &task.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1522,7 +1545,7 @@ impl AgentManager {
             .await
     }
 
-    pub async fn handle_file_list(&self, task: AgentTask) -> Result<()> {
+    pub async fn handle_file_list(&self, task: SessionTask) -> Result<()> {
         let path = task
             .payload
             .get("path")
@@ -1547,20 +1570,20 @@ impl AgentManager {
         };
         match self
             .docker_manager
-            .is_container_healthy(&task.agent_name)
+            .is_container_healthy(&task.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .task_fail(&task.id, "agent is sleeping".to_string())
+                    .task_fail(&task.id, "session is sleeping".to_string())
                     .await;
             }
         }
         let base = if safe.is_empty() {
-            "/agent".to_string()
+            "/session".to_string()
         } else {
-            format!("/agent/{}", safe)
+            format!("/session/{}", safe)
         };
 
         // Print one record per line so parser can split by lines()
@@ -1568,7 +1591,7 @@ impl AgentManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &task.agent_name,
+                &task.session_name,
                 vec![
                     "/usr/bin/find".into(),
                     base.clone(),
@@ -1639,7 +1662,7 @@ impl AgentManager {
             .await
     }
 
-    pub async fn handle_file_delete(&self, task: AgentTask) -> Result<()> {
+    pub async fn handle_file_delete(&self, task: SessionTask) -> Result<()> {
         let path = task
             .payload
             .get("path")
@@ -1650,22 +1673,22 @@ impl AgentManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&task.agent_name)
+            .is_container_healthy(&task.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .task_fail(&task.id, "agent is sleeping".to_string())
+                    .task_fail(&task.id, "session is sleeping".to_string())
                     .await;
             }
         }
-        let full_path = format!("/agent/{}", safe);
+        let full_path = format!("/session/{}", safe);
         // Ensure it's a regular file
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &task.agent_name,
+                &task.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1686,7 +1709,7 @@ impl AgentManager {
         let (rm_code, _out, err) = self
             .docker_manager
             .exec_collect(
-                &task.agent_name,
+                &task.session_name,
                 vec!["/bin/rm".into(), "-f".into(), full_path.clone()],
             )
             .await?;

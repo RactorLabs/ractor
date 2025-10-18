@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::{
-    AgentResponse, AppState, CreateResponseRequest, ResponseView, UpdateResponseRequest,
+    AppState, CreateResponseRequest, ResponseView, SessionResponse, UpdateResponseRequest,
 };
 use crate::shared::rbac::PermissionContext;
 
@@ -22,24 +22,25 @@ pub struct ListQuery {
 
 pub async fn list_responses(
     State(state): State<Arc<AppState>>,
-    Path(agent_name): Path<String>,
+    Path(session_name): Path<String>,
     Query(query): Query<ListQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<ResponseView>>> {
-    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
-    let list = AgentResponse::find_by_agent(&state.db, &agent_name, query.limit, query.offset)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
+    let list =
+        SessionResponse::find_by_session(&state.db, &session_name, query.limit, query.offset)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
 
     let result = list
         .into_iter()
         .map(|r| ResponseView {
             id: r.id,
-            agent_name: r.agent_name,
+            session_name: r.session_name,
             status: r.status,
             input_content: extract_input_content(&r.input),
             output_content: extract_output_content(&r.output),
@@ -56,14 +57,14 @@ pub async fn get_response_global_by_id(
     Path(id): Path<String>,
     _auth: Extension<AuthContext>,
 ) -> ApiResult<Json<ResponseView>> {
-    // Look up response directly by id (no agent required)
-    if let Some(cur) = AgentResponse::find_by_id(&state.db, &id)
+    // Look up response directly by id (no session required)
+    if let Some(cur) = SessionResponse::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
         let view = ResponseView {
             id: cur.id,
-            agent_name: cur.agent_name,
+            session_name: cur.session_name,
             status: cur.status,
             input_content: extract_input_content(&cur.input),
             output_content: extract_output_content(&cur.output),
@@ -91,30 +92,30 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 
 pub async fn create_response(
     State(state): State<Arc<AppState>>,
-    Path(agent_name): Path<String>,
+    Path(session_name): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateResponseRequest>,
 ) -> ApiResult<Json<ResponseView>> {
     use tokio::time::{sleep, Duration, Instant};
 
-    let agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+    let session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
     // Soft limit guard: block when history usage since cutoff meets/exceeds limit
     let limit_tokens = soft_limit_tokens();
-    let used_tokens = agent.last_context_length;
+    let used_tokens = session.last_context_length;
     if used_tokens >= limit_tokens {
         return Err(ApiError::Conflict(format!(
-            "Context is full ({} / {} tokens). Clear context via POST /api/v0/agents/{}/context/clear and try again.",
-            used_tokens, limit_tokens, agent_name
+            "Context is full ({} / {} tokens). Clear context via POST /api/v0/sessions/{}/context/clear and try again.",
+            used_tokens, limit_tokens, session_name
         )));
     }
 
-    // Block new responses when agent is busy
-    if agent.state == crate::shared::models::constants::AGENT_STATE_BUSY {
-        return Err(ApiError::Conflict("Agent is busy".to_string()));
+    // Block new responses when session is busy
+    if session.state == crate::shared::models::constants::SESSION_STATE_BUSY {
+        return Err(ApiError::Conflict("Session is busy".to_string()));
     }
 
     // Resolve creator
@@ -123,28 +124,28 @@ pub async fn create_response(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // If agent is sleeping, only owner or admin can implicitly wake via this path
+    // If session is sleeping, only owner or admin can implicitly wake via this path
     let is_admin = is_admin_principal(&auth, &state).await;
-    if agent.state == crate::shared::models::constants::AGENT_STATE_SLEPT
+    if session.state == crate::shared::models::constants::SESSION_STATE_SLEPT
         && !is_admin
-        && agent.created_by != *created_by
+        && session.created_by != *created_by
     {
         return Err(ApiError::Forbidden(
-            "You can only wake your own agents.".to_string(),
+            "You can only wake your own sessions.".to_string(),
         ));
     }
 
-    // If agent is idle (or still init), mark busy to signal work enqueued
-    if agent.state == crate::shared::models::constants::AGENT_STATE_IDLE
-        || agent.state == crate::shared::models::constants::AGENT_STATE_INIT
+    // If session is idle (or still init), mark busy to signal work enqueued
+    if session.state == crate::shared::models::constants::SESSION_STATE_IDLE
+        || session.state == crate::shared::models::constants::SESSION_STATE_INIT
     {
-        sqlx::query(r#"UPDATE agents SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)
-            .bind(crate::shared::models::constants::AGENT_STATE_BUSY)
-            .bind(&agent_name)
-            .bind(agent.state)
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)
+            .bind(crate::shared::models::constants::SESSION_STATE_BUSY)
+            .bind(&session_name)
+            .bind(session.state)
             .execute(&*state.db)
             .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update agent state: {}", e)))?;
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
     }
 
     // Generate response id that Controller will use when inserting the DB row
@@ -159,11 +160,11 @@ pub async fn create_response(
     });
     sqlx::query(
         r#"
-        INSERT INTO agent_tasks (agent_name, task_type, created_by, payload, status)
+        INSERT INTO session_tasks (session_name, task_type, created_by, payload, status)
         VALUES (?, 'create_response', ?, ?, 'pending')
         "#,
     )
-    .bind(&agent_name)
+    .bind(&session_name)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -186,14 +187,14 @@ pub async fn create_response(
             }
 
             // Reload current response by the preassigned id
-            match AgentResponse::find_by_id(&state.db, &response_id).await {
+            match SessionResponse::find_by_id(&state.db, &response_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
                     if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled"
                     {
                         return Ok(Json(ResponseView {
                             id: cur.id,
-                            agent_name: cur.agent_name,
+                            session_name: cur.session_name,
                             status: cur.status,
                             input_content: extract_input_content(&cur.input),
                             output_content: extract_output_content(&cur.output),
@@ -222,7 +223,7 @@ pub async fn create_response(
     let now = chrono::Utc::now().to_rfc3339();
     Ok(Json(ResponseView {
         id: response_id,
-        agent_name: agent_name,
+        session_name: session_name,
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
         output_content: vec![],
@@ -252,23 +253,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    agent_name: &str,
+    session_name: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<i64, ApiError> {
     // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ? AND created_at >= ?"#,
         )
-            .bind(agent_name)
+            .bind(session_name)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM agent_responses WHERE agent_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ?"#,
         )
-            .bind(agent_name)
+            .bind(session_name)
             .fetch_all(pool)
             .await
     }
@@ -502,34 +503,34 @@ async fn estimate_history_tokens_since(
 
 pub async fn update_response(
     State(state): State<Arc<AppState>>,
-    Path((agent_name, response_id)): Path<(String, String)>,
+    Path((session_name, response_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
     Json(req): Json<UpdateResponseRequest>,
 ) -> ApiResult<Json<ResponseView>> {
-    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
     // Check belongs
-    if let Some(existing) = AgentResponse::find_by_id(&state.db, &response_id)
+    if let Some(existing) = SessionResponse::find_by_id(&state.db, &response_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
-        if existing.agent_name != agent_name {
+        if existing.session_name != session_name {
             return Err(ApiError::NotFound("Response not found".to_string()));
         }
     } else {
         return Err(ApiError::NotFound("Response not found".to_string()));
     }
 
-    let updated = AgentResponse::update_by_id(&state.db, &response_id, req)
+    let updated = SessionResponse::update_by_id(&state.db, &response_id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update response: {}", e)))?;
 
     Ok(Json(ResponseView {
         id: updated.id,
-        agent_name: updated.agent_name,
+        session_name: updated.session_name,
         status: updated.status,
         input_content: extract_input_content(&updated.input),
         output_content: extract_output_content(&updated.output),
@@ -541,23 +542,23 @@ pub async fn update_response(
 
 pub async fn get_response_by_id(
     State(state): State<Arc<AppState>>,
-    Path((agent_name, response_id)): Path<(String, String)>,
+    Path((session_name, response_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<ResponseView>> {
-    // Ensure agent exists
-    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+    // Ensure session exists
+    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
-    let cur = crate::shared::models::AgentResponse::find_by_id(&state.db, &response_id)
+    let cur = crate::shared::models::SessionResponse::find_by_id(&state.db, &response_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch response: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Response not found".to_string()))?;
 
     Ok(Json(ResponseView {
         id: cur.id,
-        agent_name: cur.agent_name,
+        session_name: cur.session_name,
         status: cur.status,
         input_content: extract_input_content(&cur.input),
         output_content: extract_output_content(&cur.output),
@@ -569,18 +570,18 @@ pub async fn get_response_by_id(
 
 pub async fn get_response_count(
     State(state): State<Arc<AppState>>,
-    Path(agent_name): Path<String>,
+    Path(session_name): Path<String>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let _agent = crate::shared::models::Agent::find_by_name(&state.db, &agent_name)
+    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Agent not found".to_string()))?;
-    let count = AgentResponse::count_by_agent(&state.db, &agent_name)
+        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+    let count = SessionResponse::count_by_session(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count responses: {}", e)))?;
     Ok(Json(
-        serde_json::json!({ "count": count, "agent_name": agent_name }),
+        serde_json::json!({ "count": count, "session_name": session_name }),
     ))
 }
 

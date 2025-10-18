@@ -27,7 +27,7 @@
       setToken(token);
       setPrincipalType('Admin');
       setOperatorName(operator);
-      goto('/agents');
+      goto('/sessions');
     } catch (e) {
       error = e.message;
     } finally {
@@ -46,7 +46,7 @@
         const t = getToken();
         const res = await fetch('/api/v0/auth', { headers: { 'Authorization': `Bearer ${t || ''}` } });
         if (res.ok) {
-          goto('/agents');
+          goto('/sessions');
           return;
         }
         // Invalid token – clear and stay on login

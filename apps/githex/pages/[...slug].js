@@ -75,7 +75,7 @@ function renderOutputItems(items) {
   if (!Array.isArray(items) || items.length === 0) {
     return (
       <p className="output-panel__empty">
-        The agent did not return any analysis content.
+        The session did not return any analysis content.
       </p>
     );
   }
@@ -156,7 +156,7 @@ function sanitizeSlug(value) {
     .slice(0, 48) || 'repo';
 }
 
-function createAgentName(owner, name) {
+function createSessionName(owner, name) {
   const ownerPart = sanitizeSlug(owner);
   const namePart = sanitizeSlug(name);
   const suffix = Math.random().toString(36).slice(2, 8);
@@ -168,7 +168,7 @@ export default function RepoPage({
   owner,
   name,
   repoUrl,
-  agentName,
+  sessionName,
   response: initialResponse,
   responseId: initialResponseId,
   setupError,
@@ -178,21 +178,21 @@ export default function RepoPage({
   const normalizedInitial = useMemo(() => normalizeResponse(initialResponse), [initialResponse]);
   const [response, setResponse] = useState(normalizedInitial);
   const derivedResponseId = response?.id || initialResponseId || null;
-  const derivedAgentName = response?.agent_name || agentName || null;
+  const derivedSessionName = response?.session_name || sessionName || null;
   const [isPolling, setIsPolling] = useState(() => Boolean(derivedResponseId && !isTerminal((normalizedInitial?.status) || 'pending')));
   const [pollError, setPollError] = useState(null);
 
   // Single-route mode: keep URL as /owner/repo; no response id in URL
 
   useEffect(() => {
-    if (!derivedAgentName || !derivedResponseId || !isPolling) {
+    if (!derivedSessionName || !derivedResponseId || !isPolling) {
       return undefined;
     }
 
     let cancelled = false;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/ractor/responses/${encodeURIComponent(derivedAgentName)}/${encodeURIComponent(derivedResponseId)}`);
+        const res = await fetch(`/api/ractor/responses/${encodeURIComponent(derivedSessionName)}/${encodeURIComponent(derivedResponseId)}`);
         if (!res.ok) {
           throw new Error(`Polling failed with status ${res.status}`);
         }
@@ -208,7 +208,7 @@ export default function RepoPage({
       } catch (err) {
         if (!cancelled) {
           console.error('[GitHex] Polling error', err);
-          setPollError('Temporary issue polling agent status…');
+          setPollError('Temporary issue polling session status…');
         }
       }
     }, 2500);
@@ -217,7 +217,7 @@ export default function RepoPage({
       cancelled = true;
       clearInterval(interval);
     };
-  }, [derivedAgentName, derivedResponseId, isPolling]);
+  }, [derivedSessionName, derivedResponseId, isPolling]);
 
   const status = (response?.status || 'pending').toLowerCase();
   const commentary = useMemo(() => {
@@ -239,7 +239,7 @@ export default function RepoPage({
 
   const isFailed = status === 'failed';
   const isCancelled = status === 'cancelled';
-  const missingSetup = setupError || !derivedAgentName || !derivedResponseId;
+  const missingSetup = setupError || !derivedSessionName || !derivedResponseId;
 
   const repoDetails = useMemo(() => {
     if (!repoStats || typeof repoStats !== 'object') {
@@ -390,9 +390,9 @@ export default function RepoPage({
     let message;
     if (isTerminal(status)) {
       if (isFailed) {
-        message = `The agent reported a failure while analyzing ${owner}/${name}. Check Ractor logs for more detail.`;
+        message = `The session reported a failure while analyzing ${owner}/${name}. Check Ractor logs for more detail.`;
       } else if (isCancelled) {
-        message = `The agent cancelled the request before completion. Try again later.`;
+        message = `The session cancelled the request before completion. Try again later.`;
       } else {
         message = `Analysis completed for ${owner}/${name}.`;
       }
@@ -446,7 +446,7 @@ export default function RepoPage({
           <p className="response-status__message response-status__message--standalone" aria-live="polite">{statusInfo.message}</p>
         </div>
         <footer className="repo-footer">
-          powered by <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+          powered by <a href="https://remotesession.com" target="_blank" rel="noreferrer">remotesession.com</a>
         </footer>
       </main>
     );
@@ -483,12 +483,12 @@ export default function RepoPage({
           <section className="output-panel" aria-live="polite">
             {isFailed && (
               <p className="output-panel__error">
-                The agent reported a failure while analyzing {owner}/{name}. Check Ractor logs for more detail.
+                The session reported a failure while analyzing {owner}/{name}. Check Ractor logs for more detail.
               </p>
             )}
             {isCancelled && (
               <p className="output-panel__error">
-                The agent cancelled the request before completion. Try again later.
+                The session cancelled the request before completion. Try again later.
               </p>
             )}
             {!isFailed && !isCancelled && renderOutputItems(outputItems)}
@@ -496,7 +496,7 @@ export default function RepoPage({
         )}
       </div>
       <footer className="repo-footer">
-        powered by <a href="https://remoteagent.com" target="_blank" rel="noreferrer">remoteagent.com</a>
+        powered by <a href="https://remotesession.com" target="_blank" rel="noreferrer">remotesession.com</a>
       </footer>
     </main>
   );
@@ -592,7 +592,7 @@ export async function getServerSideProps(context) {
         owner,
         name,
         repoUrl,
-        agentName: null,
+        sessionName: null,
         response: null,
         responseId: null,
         setupError: 'Required Ractor credentials are missing.',
@@ -613,12 +613,12 @@ export async function getServerSideProps(context) {
 
   // No response id in URL — resolve or create response internally
 
-  // Either reuse an existing agent by tag or create a fresh one,
+  // Either reuse an existing session by tag or create a fresh one,
   // then resolve/create a response and render on this page
   const tagValue = `${owner}/${name}`;
-  // Try to find existing agent by tag
+  // Try to find existing session by tag
   try {
-    const listRes = await fetch(`${base}/api/v0/agents?tags=${encodeURIComponent(tagValue)}&limit=1`, { headers });
+    const listRes = await fetch(`${base}/api/v0/sessions?tags=${encodeURIComponent(tagValue)}&limit=1`, { headers });
     if (listRes.ok) {
       const page = await listRes.json();
       const found = Array.isArray(page.items) && page.items.length ? page.items[0] : null;
@@ -626,13 +626,13 @@ export async function getServerSideProps(context) {
         // Try to use the most recent response; if none, create a new one
         let chosen = null;
         try {
-          const cntRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses/count`, { headers });
+          const cntRes = await fetch(`${base}/api/v0/sessions/${encodeURIComponent(found.name)}/responses/count`, { headers });
           if (cntRes.ok) {
             const cntObj = await cntRes.json();
             const total = Number(cntObj?.count || 0);
             if (total > 0) {
               const batchOffset = Math.max(0, total - 10);
-              const lastBatch = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses?limit=10&offset=${batchOffset}`, { headers });
+              const lastBatch = await fetch(`${base}/api/v0/sessions/${encodeURIComponent(found.name)}/responses?limit=10&offset=${batchOffset}`, { headers });
               if (lastBatch.ok) {
                 const list = await lastBatch.json();
                 if (Array.isArray(list) && list.length > 0) {
@@ -659,7 +659,7 @@ export async function getServerSideProps(context) {
               owner,
               name,
               repoUrl,
-              agentName: found.name,
+              sessionName: found.name,
               response: responseView,
               responseId: responseView.id,
               setupError: null,
@@ -667,7 +667,7 @@ export async function getServerSideProps(context) {
             }
           };
         }
-        // No responses found; create a new response for the existing agent
+        // No responses found; create a new response for the existing session
         const messageBody = {
           input: {
             content: [
@@ -675,7 +675,7 @@ export async function getServerSideProps(context) {
             ]
           }
         };
-        const responseRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(found.name)}/responses`, { method: 'POST', headers, body: JSON.stringify(messageBody) });
+        const responseRes = await fetch(`${base}/api/v0/sessions/${encodeURIComponent(found.name)}/responses`, { method: 'POST', headers, body: JSON.stringify(messageBody) });
         if (!responseRes.ok) throw new Error('Failed to enqueue response');
         const response = await responseRes.json();
         return {
@@ -683,7 +683,7 @@ export async function getServerSideProps(context) {
             owner,
             name,
             repoUrl,
-            agentName: found.name,
+            sessionName: found.name,
             response,
             responseId: response.id,
             setupError: null,
@@ -693,15 +693,15 @@ export async function getServerSideProps(context) {
       }
     }
   } catch (e) {
-    console.warn('[GitHex] Agent reuse check failed:', e);
+    console.warn('[GitHex] Session reuse check failed:', e);
   }
 
-  const agentName = createAgentName(owner, name);
+  const sessionName = createSessionName(owner, name);
 
   try {
-    const agentPayload = {
-      name: agentName,
-      description: `GitHex agent for ${owner}/${name}`,
+    const sessionPayload = {
+      name: sessionName,
+      description: `GitHex session for ${owner}/${name}`,
       tags: ['githex', 'analysis', tagValue],
       metadata: {
         source: 'githex',
@@ -712,20 +712,20 @@ export async function getServerSideProps(context) {
         }
       },
       instructions:
-        'You are GitHex, a GitHub Repo Explorer agent. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags. Never use the word "roast" in your responses.',
+        'You are GitHex, a GitHub Repo Explorer session. Clone the assigned repository, inspect its structure, configuration, and scripts, and craft a witty yet evidence-based critique pointing out flaws or red flags. Never use the word "roast" in your responses.',
       busy_timeout_seconds: 1800
     };
 
-    const createAgentRes = await fetch(`${base}/api/v0/agents`, {
+    const createSessionRes = await fetch(`${base}/api/v0/sessions`, {
       method: 'POST',
       headers,
-      body: JSON.stringify(agentPayload)
+      body: JSON.stringify(sessionPayload)
     });
 
-    if (!createAgentRes.ok) {
-      const text = await createAgentRes.text();
-      console.error('[GitHex] Failed to create agent:', createAgentRes.status, text);
-      throw new Error('Failed to create agent');
+    if (!createSessionRes.ok) {
+      const text = await createSessionRes.text();
+      console.error('[GitHex] Failed to create session:', createSessionRes.status, text);
+      throw new Error('Failed to create session');
     }
 
     const messageBody = {
@@ -739,7 +739,7 @@ export async function getServerSideProps(context) {
       }
     };
 
-    const responseRes = await fetch(`${base}/api/v0/agents/${encodeURIComponent(agentName)}/responses`, {
+    const responseRes = await fetch(`${base}/api/v0/sessions/${encodeURIComponent(sessionName)}/responses`, {
       method: 'POST',
       headers,
       body: JSON.stringify(messageBody)
@@ -757,7 +757,7 @@ export async function getServerSideProps(context) {
         owner,
         name,
         repoUrl,
-        agentName,
+        sessionName,
         response,
         responseId: response.id,
         setupError: null,
@@ -765,7 +765,7 @@ export async function getServerSideProps(context) {
       }
     };
   } catch (error) {
-    console.error('[GitHex] Error preparing agent workflow:', error);
+    console.error('[GitHex] Error preparing session workflow:', error);
     const repoLabel = encodeURIComponent(`${owner}/${name}`);
     return {
       redirect: {

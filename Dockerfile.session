@@ -13,13 +13,13 @@ RUN apt-get update && \
 # Create Python symlink
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# Create agent user
-RUN useradd -m -s /bin/bash agent && \
-    echo 'agent ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Create session user
+RUN useradd -m -s /bin/bash session && \
+    echo 'session ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-USER agent
-WORKDIR /home/agent
-ENV HOME=/home/agent
+USER session
+WORKDIR /home/session
+ENV HOME=/home/session
 
 # Install Node.js via NVM
 RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash && \
@@ -34,15 +34,15 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 # Create global symlinks as root
 USER root
-RUN export NVM_DIR="/home/agent/.nvm" && \
+RUN export NVM_DIR="/home/session/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
     NODE_VERSION=$(nvm version default) && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/node /usr/local/bin/node && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/npm /usr/local/bin/npm && \
-    ln -sf /home/agent/.cargo/bin/cargo /usr/local/bin/cargo && \
-    ln -sf /home/agent/.cargo/bin/rustc /usr/local/bin/rustc
+    ln -sf /home/session/.cargo/bin/cargo /usr/local/bin/cargo && \
+    ln -sf /home/session/.cargo/bin/rustc /usr/local/bin/rustc
 
-USER agent
+USER session
 
 # Setup environment for interactive and non-interactive shells
 RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
@@ -53,32 +53,32 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '. "$HOME/.cargo/env"' >> ~/.profile
 
 # Set environment variables for runtime
-ENV NVM_DIR=/home/agent/.nvm
+ENV NVM_DIR=/home/session/.nvm
 
 # Copy pre-built binary from local build
 USER root
-COPY target/release/ractor-agent /usr/local/bin/ractor-agent
+COPY target/release/ractor-session /usr/local/bin/ractor-session
 
-# Create agent directory structure with proper permissions
+# Create session directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /agent/code /agent/logs /agent/content /agent/template && \
-    touch /agent/.env && \
-    chown -R agent:agent /agent && \
-    chmod -R 755 /agent && \
-    chmod 600 /agent/.env
+RUN mkdir -p /session/code /session/logs /session/content /session/template && \
+    touch /session/.env && \
+    chown -R session:session /session && \
+    chmod -R 755 /session && \
+    chmod 600 /session/.env
 
-# Seed built-in templates under an immutable path; controller will copy into /agent/template as needed
+# Seed built-in templates under an immutable path; controller will copy into /session/template as needed
 USER root
 RUN mkdir -p /opt/ractor/templates
-COPY assets/agent/template/simple.html /opt/ractor/templates/simple.html
-RUN chown -R agent:agent /opt/ractor
-USER agent
+COPY assets/session/template/simple.html /opt/ractor/templates/simple.html
+RUN chown -R session:session /opt/ractor
+USER session
 
-# Switch back to agent user and set working directory to /agent
-USER agent
-WORKDIR /agent
+# Switch back to session user and set working directory to /session
+USER session
+WORKDIR /session
 
-# Configure environment variables for agent structure
-ENV RACTOR_AGENT_DIR=/agent
+# Configure environment variables for session structure
+ENV RACTOR_SESSION_DIR=/session
 
-CMD ["ractor-agent", "--api-url", "http://ractor_api:9000", "--agent-name", "unknown", "--api-key", "unknown"]
+CMD ["ractor-session", "--api-url", "http://ractor_api:9000", "--session-name", "unknown", "--api-key", "unknown"]

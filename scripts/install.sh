@@ -207,7 +207,7 @@ print_status "  1. Link CLI for development:    ./scripts/link.sh"
 print_status "  2. Build services:              ./scripts/build.sh"
 print_status "  3. Start services:              ractor start"
 print_status "  4. Test authentication:         ractor auth login --user admin --pass admin"
-print_status "  5. Start agent:                 ractor agent create"
+print_status "  5. Start session:                 ractor session create"
 
 echo ""
 print_status "💡 Development workflow:"
