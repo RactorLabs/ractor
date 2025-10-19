@@ -15,7 +15,7 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, CreateSessionRequest, PublishSessionRequest, RemixSessionRequest,
+    AppState, BranchSessionRequest, CreateSessionRequest, PublishSessionRequest,
     RestoreSessionRequest, Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
@@ -1691,18 +1691,18 @@ pub async fn create_session(
     ))
 }
 
-pub async fn remix_session(
+pub async fn branch_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RemixSessionRequest>,
+    Json(req): Json<BranchSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Admins require explicit permission; non-admins can remix according to publish/ownership checks
+    // Admins require explicit permission; non-admins can branch according to publish/ownership checks
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to remix session".to_string())
+                ApiError::Forbidden("Insufficient permissions to branch session".to_string())
             })?;
     }
 
@@ -1712,20 +1712,20 @@ pub async fn remix_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find parent session by ID or name (admin can remix any session, users can remix published sessions)
+    // Find parent session by ID or name (admin can branch any session, users can branch published sessions)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for remix (permission check below)
+    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for branch (permission check below)
 
-    // Check remix permissions for non-owners
+    // Check branch permissions for non-owners
     if parent.created_by != *username && !is_admin {
-        // Non-owner, non-admin can only remix if session is published
+        // Non-owner, non-admin can only branch if session is published
         if !parent.is_published {
             return Err(ApiError::Forbidden(
-                "You can only remix your own sessions or published sessions".to_string(),
+                "You can only branch your own sessions or published sessions".to_string(),
             ));
         }
 
-        // Check published remix permissions
+        // Check published branch permissions
         let publish_perms = parent.publish_permissions.as_object().ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("Invalid publish permissions format"))
         })?;
@@ -1738,7 +1738,7 @@ pub async fn remix_session(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Code remix not permitted for this published session".to_string(),
+                "Code branch not permitted for this published session".to_string(),
             ));
         }
         if req.env
@@ -1748,26 +1748,26 @@ pub async fn remix_session(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Environment remix not permitted for this published session".to_string(),
+                "Environment branch not permitted for this published session".to_string(),
             ));
         }
         // Content is always allowed - no permission check needed
     }
 
-    // Get the principal name for task creation (remixer becomes owner)
+    // Get the principal name for task creation (brancher becomes owner)
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Store the remix options before moving req into Session::remix
+    // Store the branch options before moving req into Session::branch
     let copy_code = req.code;
     let copy_env = req.env;
     // Content is always copied
     let copy_content = true;
     let initial_prompt = req.prompt.clone();
 
-    let session = Session::remix(&state.db, &parent.name, req.clone(), created_by)
+    let session = Session::branch(&state.db, &parent.name, req.clone(), created_by)
         .await
         .map_err(|e| {
             // Provide a clearer error on duplicate name conflicts
@@ -1787,12 +1787,12 @@ pub async fn remix_session(
                     }
                 }
             }
-            ApiError::Internal(anyhow::anyhow!("Failed to remix session: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to branch session: {}", e))
         })?;
 
-    // Add task to queue for session manager to create container with remix options
+    // Add task to queue for session manager to create container with branch options
     let task_payload = serde_json::json!({
-        "remix": true,
+        "branch": true,
         "parent_session_name": parent.name,
         "copy_code": copy_code,
         "copy_env": copy_env,
@@ -1818,7 +1818,7 @@ pub async fn remix_session(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session task: {}", e)))?;
 
-    tracing::info!("Created session task for remixed session {}", session.name);
+    tracing::info!("Created session task for branched session {}", session.name);
 
     Ok(Json(
         SessionResponse::from_session(session, &state.db).await?,

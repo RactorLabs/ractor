@@ -438,15 +438,15 @@ impl SessionManager {
         info!("Creating session {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
               session_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a remix session from task payload
-        let is_remix = task
+        // Check if this is a branch session from task payload
+        let is_branch = task
             .payload
-            .get("remix")
+            .get("branch")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // For remix sessions, extract prompt from task payload
-        let remix_prompt = if is_remix {
+        // For branch sessions, extract prompt from task payload
+        let branch_prompt = if is_branch {
             task.payload
                 .get("prompt")
                 .and_then(|v| v.as_str())
@@ -455,12 +455,12 @@ impl SessionManager {
             None
         };
 
-        if is_remix {
+        if is_branch {
             let parent_session_name = task
                 .payload
                 .get("parent_session_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for remix"))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for branch"))?;
 
             let copy_data = task
                 .payload
@@ -483,41 +483,41 @@ impl SessionManager {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            // For remix sessions, get principal info from remix task payload
-            let remix_principal = task
+            // For branch sessions, get principal info from branch task payload
+            let branch_principal = task
                 .payload
                 .get("principal")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal);
-            let remix_principal_type_str = task
+            let branch_principal_type_str = task
                 .payload
                 .get("principal_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal_type_str);
 
             info!(
-                "DEBUG: Remix task payload principal: {:?}, principal_type: {:?}",
+                "DEBUG: Branch task payload principal: {:?}, principal_type: {:?}",
                 task.payload.get("principal"),
                 task.payload.get("principal_type")
             );
             info!(
-                "DEBUG: Using remix_principal: {}, remix_principal_type_str: {}",
-                remix_principal, remix_principal_type_str
+                "DEBUG: Using branch_principal: {}, branch_principal_type_str: {}",
+                branch_principal, branch_principal_type_str
             );
-            let remix_principal_type = match remix_principal_type_str {
+            let branch_principal_type = match branch_principal_type_str {
                 "Admin" => SubjectType::Admin,
                 "User" => SubjectType::Subject,
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating remix session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
-                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, remix_principal, remix_principal_type_str);
+            info!("Creating branch session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
+                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, branch_principal, branch_principal_type_str);
 
-            // For remix sessions, create container with selective volume copy from parent
-            // Generate fresh token for remix session
-            let remix_token = self
-                .generate_session_token(remix_principal, remix_principal_type, &session_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate remix session token: {}", e))?;
+            // For branch sessions, create container with selective volume copy from parent
+            // Generate fresh token for branch session
+            let branch_token = self
+                .generate_session_token(branch_principal, branch_principal_type, &session_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate branch session token: {}", e))?;
 
             self.docker_manager
                 .create_container_with_selective_copy_and_tokens(
@@ -527,9 +527,9 @@ impl SessionManager {
                     copy_code,
                     copy_env,
                     copy_content,
-                    remix_token,
-                    remix_principal.to_string(),
-                    remix_principal_type_str.to_string(),
+                    branch_token,
+                    branch_principal.to_string(),
+                    branch_principal_type_str.to_string(),
                     task.created_at,
                 )
                 .await?;
@@ -552,7 +552,7 @@ impl SessionManager {
         }
 
         // Send prompt if provided (BEFORE setting state to IDLE)
-        let prompt_to_send = prompt.or(remix_prompt);
+        let prompt_to_send = prompt.or(branch_prompt);
         if let Some(prompt) = prompt_to_send {
             info!("Sending prompt to session {}: {}", session_name, prompt);
 

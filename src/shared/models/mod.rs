@@ -8,7 +8,7 @@ pub mod response;
 pub mod state_helpers;
 
 pub use session::{
-    CreateSessionRequest, PublishSessionRequest, RemixSessionRequest, RestoreSessionRequest,
+    BranchSessionRequest, CreateSessionRequest, PublishSessionRequest, RestoreSessionRequest,
     Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 // legacy message exports removed

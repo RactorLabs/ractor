@@ -58,7 +58,7 @@ pub struct CreateSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RemixSessionRequest {
+pub struct BranchSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
     #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
@@ -637,10 +637,10 @@ impl Session {
         Ok(session)
     }
 
-    pub async fn remix(
+    pub async fn branch(
         pool: &sqlx::MySqlPool,
         parent_name: &str,
-        req: RemixSessionRequest,
+        req: BranchSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Get parent session
@@ -662,7 +662,7 @@ impl Session {
             "#,
         )
         .bind(&req.name)
-        .bind(created_by) // Use actual remixer as owner
+        .bind(created_by) // Use actual brancher as owner
         .bind(&parent.description)
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))

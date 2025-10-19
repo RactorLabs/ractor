@@ -33,7 +33,7 @@ export function getCommonSchemas() {
       { name: 'created_by', type: 'string', desc: 'Owner username' },
       { name: 'state', type: 'string', desc: 'init|idle|busy|slept' },
       { name: 'description', type: 'string|null', desc: 'Optional description' },
-      { name: 'parent_session_name', type: 'string|null', desc: 'Parent session name if remixed' },
+      { name: 'parent_session_name', type: 'string|null', desc: 'Parent session name if branched' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Last activity timestamp' },
       { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata' },
@@ -456,7 +456,7 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/sessions/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last wake or creation).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"session_name":"demo","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/remix', auth: 'bearer', desc: 'Remix session (create a new session from parent).', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/branch', auth: 'bearer', desc: 'Branch session (create a new session from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent session name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
@@ -464,11 +464,11 @@ export function getApiDocs(base) {
         { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Copy env (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/remix -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/branch -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/publish', auth: 'bearer', desc: 'Publish session.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code remix (default true)' },
-        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env remix (default true)' },
+        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code branch (default true)' },
+        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env branch (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/publish -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"content":true}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","is_published":true,"published_at":"2025-01-01T12:30:00Z",...}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/unpublish', auth: 'bearer', desc: 'Unpublish session.', params: [

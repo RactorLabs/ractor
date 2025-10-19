@@ -206,7 +206,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         parent_session_name: &str,
     ) -> Result<String> {
         info!(
-            "Creating remix session {} with volume copy from {}",
+            "Creating branch session {} with volume copy from {}",
             session_name, parent_session_name
         );
 
@@ -336,7 +336,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         copy_env: bool,
         copy_content: bool,
     ) -> Result<String> {
-        info!("Creating remix session {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
+        info!("Creating branch session {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
               session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content);
 
         // First create the session volume (without starting container)
@@ -550,7 +550,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
-            "Creating remix session {} with selective copy from {} and fresh tokens",
+            "Creating branch session {} with selective copy from {} and fresh tokens",
             session_name, parent_session_name
         );
 
@@ -742,7 +742,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         };
 
         info!(
-            "Creating remix container with {} user env and fresh system tokens",
+            "Creating branch container with {} user env and fresh system tokens",
             env.len()
         );
 

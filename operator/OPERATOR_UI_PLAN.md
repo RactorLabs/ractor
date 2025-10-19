@@ -8,7 +8,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Rac
   - Login page (Operator authentication)
   - Sessions list and details
   - Session chat-style responses (send + poll)
-  - Session state/actions (wake, sleep, idle, busy, remix, publish)
+  - Session state/actions (wake, sleep, idle, busy, branch, publish)
   - Basic profile/settings for the logged-in operator
 
 ## References
@@ -135,7 +135,7 @@ Deliverables:
 - [ ] POST /api/v0/sessions/{name}/idle (docs)
 - [ ] POST /api/v0/sessions/{name}/sleep (docs)
 - [ ] POST /api/v0/sessions/{name}/wake (docs + action UI)
-- [ ] POST /api/v0/sessions/{name}/remix (docs)
+- [ ] POST /api/v0/sessions/{name}/branch (docs)
 - [ ] POST /api/v0/sessions/{name}/publish (docs)
 - [ ] POST /api/v0/sessions/{name}/unpublish (docs)
 - [ ] DELETE /api/v0/sessions/{name} (docs)

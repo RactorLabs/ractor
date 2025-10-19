@@ -665,33 +665,33 @@
     }
   }
 
-  // Remix modal state and actions
-  let showRemixModal = false;
-  let remixName = '';
-  function openRemixModal() {
+  // Branch modal state and actions
+  let showBranchModal = false;
+  let branchName = '';
+  function openBranchModal() {
     const cur = String(name || '').trim();
-    remixName = nextRemixName(cur);
-    showRemixModal = true;
+    branchName = nextBranchName(cur);
+    showBranchModal = true;
   }
-  function closeRemixModal() { showRemixModal = false; }
-  let remixError = null;
-  async function confirmRemix() {
+  function closeBranchModal() { showBranchModal = false; }
+  let branchError = null;
+  async function confirmBranch() {
     try {
-      const newName = String(remixName || '').trim();
+      const newName = String(branchName || '').trim();
       const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
       if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/remix`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/branch`, {
         method: 'POST',
         body: JSON.stringify({ name: newName, code: true, env: true, content: true })
       });
       if (!res.ok) {
-        remixError = res?.data?.message || res?.data?.error || `Remix failed (HTTP ${res.status})`;
+        branchError = res?.data?.message || res?.data?.error || `Branch failed (HTTP ${res.status})`;
         return;
       }
-      showRemixModal = false;
+      showBranchModal = false;
       goto(`/sessions/${encodeURIComponent(newName)}`);
     } catch (e) {
-      remixError = e.message || String(e);
+      branchError = e.message || String(e);
     }
   }
 
@@ -1435,14 +1435,14 @@
     }
   }
 
-  // Remix action: open modal instead of prompt
-  function remixSession() { openRemixModal(); }
+  // Branch action: open modal instead of prompt
+  function branchSession() { openBranchModal(); }
 
   // Delete action: open modal instead of prompt
   function deleteSession() { openDeleteModal(); }
 
-  // Generate a default remix name by adding or incrementing a numeric suffix
-  function nextRemixName(cur) {
+  // Generate a default branch name by adding or incrementing a numeric suffix
+  function nextBranchName(cur) {
     const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
     const basic = (s) => (s && typeof s === 'string') ? s.toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
     let s = basic(cur).replace(/^-+/, '').replace(/-+$/, '');
@@ -1592,31 +1592,31 @@
   </div>
 {/if}
 
-<!-- Remix Modal -->
-{#if showRemixModal}
+<!-- Branch Modal -->
+{#if showBranchModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Remix Session</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeRemixModal}></button>
+          <h5 class="modal-title">Branch Session</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeBranchModal}></button>
         </div>
         <div class="modal-body">
-          {#if remixError}
-            <div class="alert alert-danger small">{remixError}</div>
+          {#if branchError}
+            <div class="alert alert-danger small">{branchError}</div>
           {/if}
-          <label class="form-label" for="remix-name">New Session Name</label>
+          <label class="form-label" for="branch-name">New Session Name</label>
           <input
-            id="remix-name"
+            id="branch-name"
             class="form-control"
-            bind:value={remixName}
-            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmRemix(); } }}
+            bind:value={branchName}
+            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmBranch(); } }}
           />
           <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeRemixModal}>Cancel</button>
-          <button class="btn btn-theme" on:click={confirmRemix}>Remix</button>
+          <button class="btn btn-outline-secondary" on:click={closeBranchModal}>Cancel</button>
+          <button class="btn btn-theme" on:click={confirmBranch}>Branch</button>
         </div>
       </div>
     </div>
@@ -1680,7 +1680,7 @@
             <!-- Public URL in main card -->
             
             <!-- Tags removed from detail page -->
-            <!-- In-card actions (publish, remix, sleep/wake, kebab) -->
+            <!-- In-card actions (publish, branch, sleep/wake, kebab) -->
             <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
@@ -1725,7 +1725,7 @@
                     <i class="fa fa-ellipsis-h"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={remixSession}><i class="fa fa-random me-2"></i>Remix</button></li>
+                    <li><button class="dropdown-item" on:click={branchSession}><i class="fa fa-code-branch me-2"></i>Branch</button></li>
                     <li><button class="dropdown-item" on:click={openEditTags}><i class="fa fa-tags me-2"></i>Edit Tags</button></li>
                     <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fa fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
