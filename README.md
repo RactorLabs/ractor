@@ -81,9 +81,5 @@ ractor start mysql api operator content controller gateway
 ```
 
 6) Verify
-- Operator UI: http://localhost:8000
-- API: http://localhost:9000
-
-## Architecture
-
-
+- Operator UI: http://localhost
+- API:  http://localhost/api
