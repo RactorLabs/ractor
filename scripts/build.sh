@@ -51,9 +51,7 @@ usage() {
   echo "  operator    Build the operator UI image"
   echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
-  echo "  app_githex  Build the GitHex app image"
-  echo "  app_askrepo Build the AskRepo app image"
-  echo "  all         Build all components (api, session, controller, operator, content, gateway, app_githex, app_askrepo)"
+  echo "  all         Build all components (api, session, controller, operator, content, gateway)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -62,7 +60,6 @@ usage() {
   echo "Examples:"
   echo "  $0                            Build all components"
   echo "  $0 api controller             Build only api and controller"
-  echo "  $0 app_githex                 Build only the GitHex app image"
   echo "  $0 --no-cache api             Build api without cache"
 }
 
@@ -99,7 +96,7 @@ fi
 
 # Expand 'all' to actual components (ensure session precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "session" "controller" "operator" "content" "gateway" "app_githex" "app_askrepo")
+  COMPONENTS=("api" "session" "controller" "operator" "content" "gateway")
 fi
 
 print_status "Building Ractor Docker images"
@@ -177,14 +174,6 @@ for component in "${COMPONENTS[@]}"; do
     image_name="ractor_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
     ;;
-  app_githex)
-    image_name="ractor_app_githex:${TAG}"
-    dockerfile="Dockerfile.githex"
-    ;;
-  app_askrepo)
-    image_name="ractor_app_askrepo:${TAG}"
-    dockerfile="Dockerfile.askrepo"
-    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -226,12 +215,6 @@ for component in "${COMPONENTS[@]}"; do
   api | controller | session | operator | content | gateway)
     echo "  ractor_${component}:${TAG}"
     ;;
-  app_githex)
-    echo "  ractor_app_githex:${TAG}"
-    ;;
-  app_askrepo)
-    echo "  ractor_app_askrepo:${TAG}"
-    ;;
   esac
 done
 
@@ -240,9 +223,3 @@ print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
 echo "  ractor start"
-if [[ " ${COMPONENTS[*]} " =~ " app_githex " ]]; then
-  echo "  ractor start app_githex  # GitHex app is opt-in and never starts automatically"
-fi
-if [[ " ${COMPONENTS[*]} " =~ " app_askrepo " ]]; then
-  echo "  ractor start app_askrepo # AskRepo app is opt-in and never starts automatically"
-fi

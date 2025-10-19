@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data', 'ractor_app_githex', 'ractor_app_askrepo']) {
+  for (const v of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway, app_githex, app_askrepo (apps start only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway (apps start only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -118,7 +118,6 @@ module.exports = (program) => {
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
     .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
-    .option('--githex-port <port>', 'Host port for GitHex (maps to 8001)', '8001')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
@@ -127,9 +126,7 @@ module.exports = (program) => {
       '\nExamples:\n' +
       '  $ ractor start                                # Start full stack\n' +
       '  $ ractor start api controller                 # Start API + controller\n' +
-      '  $ ractor start mysql                          # Ensure MySQL is up\n' +
-      '  $ ractor start app_githex                     # Start the GitHex app container\n' +
-      '  $ ractor start app_askrepo                    # Start the AskRepo polling app\n')
+      '  $ ractor start mysql                          # Ensure MySQL is up\n')
     .option('--controller-session-image <image>', 'Controller SESSION_IMAGE')
     .option('--controller-session-cpu-limit <n>', 'Controller SESSION_CPU_LIMIT', '0.5')
     .option('--controller-session-memory-limit <bytes>', 'Controller SESSION_MEMORY_LIMIT', '536870912')
@@ -202,7 +199,7 @@ module.exports = (program) => {
 
         // Enforce startup order: mysql → ollama → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway', 'app_githex', 'app_askrepo'];
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -257,8 +254,6 @@ module.exports = (program) => {
           }
           return fallback;
         };
-        const githexHostPort = String(preferEnv('githexPort', 'GITHEX_PORT', '8001'));
-
         // Helpers for container state
         async function containerRunning(name) {
           try { const res = await docker(['ps','-q','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
@@ -671,148 +666,6 @@ module.exports = (program) => {
               break;
             }
 
-            case 'app_githex': {
-              const containerName = 'ractor_app_githex';
-              console.log(chalk.blue('[INFO] ') + 'Ensuring GitHex app is running (opt-in component)...');
-
-              const imageRef = await resolveRactorImage('app_githex', 'ractor_app_githex', 'registry.digitalocean.com/ractor/ractor_app_githex', tag);
-              const desiredId = await imageId(imageRef);
-
-              if (await containerExists(containerName)) {
-                const running = await containerRunning(containerName);
-                const currentId = await containerImageId(containerName);
-                if (currentId && desiredId && currentId !== desiredId) {
-                  console.log(chalk.blue('[INFO] ') + 'GitHex image changed; recreating container to apply updates...');
-                  try { await docker(['rm', '-f', containerName]); } catch (_) {}
-                } else {
-                  if (running) {
-                    console.log(chalk.green('[SUCCESS] ') + `GitHex already running on port ${githexHostPort}`);
-                    console.log();
-                    break;
-                  }
-                  await docker(['start', containerName]);
-                  console.log(chalk.green('[SUCCESS] ') + `GitHex started (http://localhost:${githexHostPort})`);
-                  console.log();
-                  break;
-                }
-              }
-
-              const portNumber = Number.parseInt(githexHostPort, 10);
-              if (!Number.isNaN(portNumber) && await portInUse(portNumber)) {
-                console.log(chalk.yellow('[WARNING] ') + `Port ${githexHostPort} is already in use on the host. GitHex may fail to bind.`);
-              }
-
-              if (!process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN) {
-                console.error(chalk.red('[ERROR] ') + 'RACTOR_APPS_GITHEX_ADMIN_TOKEN is required to start GitHex. Set the token in your environment and try again.');
-                process.exit(1);
-              }
-
-              if (!process.env.RACTOR_HOST_URL) {
-                console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_URL is required to start GitHex. Export it in your environment to match the Ractor API base URL.');
-                process.exit(1);
-              }
-
-              const args = ['run'];
-              if (detached) args.push('-d');
-              args.push(
-                '--name', containerName,
-                '--network', 'ractor_network',
-                '-p', `${githexHostPort}:8001`,
-                '-v', 'ractor_app_githex:/app/storage',
-                '-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`,
-                '-e', `RACTOR_APPS_GITHEX_ADMIN_TOKEN=${process.env.RACTOR_APPS_GITHEX_ADMIN_TOKEN}`
-              );
-
-              args.push(imageRef);
-              await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + `GitHex app container started (http://localhost:${githexHostPort})`);
-              console.log();
-              break;
-            }
-
-            case 'app_askrepo': {
-              const containerName = 'ractor_app_askrepo';
-              console.log(chalk.blue('[INFO] ') + 'Ensuring AskRepo app is running (opt-in component)...');
-
-              const requiredEnv = [
-                'RACTOR_HOST_URL',
-                'RACTOR_APPS_ASKREPO_ADMIN_TOKEN',
-                'RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN',
-                'RACTOR_APPS_ASKREPO_TWITTER_USER_ID'
-              ];
-              const missing = requiredEnv.filter((name) => !process.env[name] || process.env[name].trim() === '');
-              if (missing.length) {
-                console.error(
-                  chalk.red('[ERROR] ') +
-                    `Missing required environment variables for AskRepo: ${missing.join(', ')}.`
-                );
-                console.error(chalk.red('[ERROR] ') + 'Export the values and retry.');
-                process.exit(1);
-              }
-
-              const imageRef = await resolveRactorImage(
-                'app_askrepo',
-                'ractor_app_askrepo',
-                'registry.digitalocean.com/ractor/ractor_app_askrepo',
-                tag
-              );
-              const desiredId = await imageId(imageRef);
-
-              if (await containerExists(containerName)) {
-                const running = await containerRunning(containerName);
-                const currentId = await containerImageId(containerName);
-                if (currentId && desiredId && currentId !== desiredId) {
-                  console.log(chalk.blue('[INFO] ') + 'AskRepo image changed; recreating container to apply updates...');
-                  try { await docker(['rm', '-f', containerName]); } catch (_) {}
-                } else {
-                  if (running) {
-                    console.log(chalk.green('[SUCCESS] ') + 'AskRepo already running (background poller).');
-                    console.log();
-                    break;
-                  }
-                  await docker(['start', containerName]);
-                  console.log(chalk.green('[SUCCESS] ') + 'AskRepo started (logs: docker logs ractor_app_askrepo -f)');
-                  console.log();
-                  break;
-                }
-              }
-
-              const args = ['run'];
-              if (detached) args.push('-d');
-              args.push(
-                '--name', containerName,
-                '--network', 'ractor_network',
-                '-v', 'ractor_app_askrepo:/app/data',
-                '-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`,
-                '-e', `RACTOR_APPS_ASKREPO_ADMIN_TOKEN=${process.env.RACTOR_APPS_ASKREPO_ADMIN_TOKEN}`,
-                '-e', `RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN=${process.env.RACTOR_APPS_ASKREPO_TWITTER_BEARER_TOKEN}`,
-                '-e', `RACTOR_APPS_ASKREPO_TWITTER_USER_ID=${process.env.RACTOR_APPS_ASKREPO_TWITTER_USER_ID}`
-              );
-
-              const optionalEnv = [
-                'RACTOR_APPS_ASKREPO_TWITTER_API_BASE',
-                'RACTOR_APPS_ASKREPO_POLL_INTERVAL_SECS',
-                'RACTOR_APPS_ASKREPO_TWITTER_SINCE_ID',
-                'RACTOR_APPS_ASKREPO_TWITTER_API_KEY',
-                'RACTOR_APPS_ASKREPO_TWITTER_API_SECRET',
-                'RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN',
-                'RACTOR_APPS_ASKREPO_TWITTER_ACCESS_TOKEN_SECRET'
-              ];
-              for (const name of optionalEnv) {
-                const value = process.env[name];
-                if (value && value.trim() !== '') {
-                  args.push('-e', `${name}=${value}`);
-                }
-              }
-
-              args.push(imageRef);
-              await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + 'AskRepo app container started (background poller)');
-              console.log(chalk.blue('[INFO] ') + 'Monitor logs with: docker logs ractor_app_askrepo -f');
-              console.log();
-              break;
-            }
-
             default:
               console.log(chalk.yellow('[WARNING] ') + `Unknown component: ${comp}. Skipping...`);
           }
@@ -844,12 +697,6 @@ module.exports = (program) => {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
           } catch(_) {}
-          if (components.includes('app_githex')) {
-            console.log(`  • GitHex: http://localhost:${githexHostPort}`);
-          }
-          if (components.includes('app_askrepo')) {
-            console.log('  • AskRepo: docker logs ractor_app_askrepo -f');
-          }
           try {
             const m = await docker(['ps','--filter','name=mysql','--format','{{.Names}}'], { silent: true });
             if (m.stdout.trim()) {

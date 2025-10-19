@@ -14,14 +14,12 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Rebuild Ractor components via ./scripts/rebuild.sh')
-    .argument('[args...]', 'Components: api, controller, session, operator, content, gateway, app_githex, app_askrepo (apps are opt-in). Flags are passed through.')
-    .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway, app_githex, app_askrepo\n' +
+    .argument('[args...]', 'Components: api, controller, session, operator, content, gateway. Flags are passed through.')
+    .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway\n' +
       '\nExamples:\n' +
       '  $ ractor rebuild                    # rebuild all components (script default)\n' +
       '  $ ractor rebuild controller         # rebuild controller\n' +
-      '  $ ractor rebuild api session          # rebuild multiple components\n' +
-      '  $ ractor rebuild app_githex         # rebuild the GitHex app container\n' +
-      '  $ ractor rebuild app_askrepo        # rebuild the AskRepo app container')
+      '  $ ractor rebuild api session          # rebuild multiple components')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
@@ -30,7 +28,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are Ractor components
-        const allowed = new Set(['api','controller','session','operator','content','gateway','app_githex','app_askrepo']);
+        const allowed = new Set(['api','controller','session','operator','content','gateway']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
           console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, session, operator, content, gateway`);

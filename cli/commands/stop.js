@@ -26,7 +26,7 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove Ractor component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, app_githex, app_askrepo, sessions (all session containers). If omitted, stops core Ractor components; stop app components explicitly.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, sessions (all session containers). If omitted, stops core Ractor components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only Ractor component containers.\n' +
@@ -36,8 +36,6 @@ module.exports = (program) => {
       '  $ ractor stop                     # stop all Ractor components\n' +
       '  $ ractor stop api controller      # stop specific components\n' +
       '  $ ractor stop operator content    # stop UI components\n' +
-      '  $ ractor stop app_githex          # stop the GitHex app container\n' +
-      '  $ ractor stop app_askrepo         # stop the AskRepo polling app\n' +
       '  $ ractor stop sessions              # stop all session containers\n')
     .action(async (components, _opts, cmd) => {
       try {
@@ -46,7 +44,7 @@ module.exports = (program) => {
           components = ['gateway','controller','operator','content','api'];
         }
         // Validate component names (only Ractor components)
-        const allowed = new Set(['api','controller','operator','content','gateway','app_githex','app_askrepo','sessions']);
+        const allowed = new Set(['api','controller','operator','content','gateway','sessions']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
           console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, content, gateway, sessions`);
@@ -58,9 +56,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { api: 'ractor_api', controller: 'ractor_controller', operator: 'ractor_operator', content: 'ractor_content', gateway: 'ractor_gateway', app_githex: 'ractor_app_githex', app_askrepo: 'ractor_app_askrepo' };
+        const map = { api: 'ractor_api', controller: 'ractor_controller', operator: 'ractor_operator', content: 'ractor_content', gateway: 'ractor_gateway' };
         const includeSessions = components.includes('sessions');
-        const order = ['gateway','app_githex','app_askrepo','controller','operator','content','api'];
+        const order = ['gateway','controller','operator','content','api'];
         const toStop = components.filter(c => c !== 'sessions');
         const ordered = order.filter((c) => toStop.includes(c));
 
