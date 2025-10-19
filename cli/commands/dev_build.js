@@ -14,14 +14,12 @@ module.exports = (program) => {
   program
     .command('build')
     .description('[development only] Build Ractor images via ./scripts/build.sh')
-    .argument('[args...]', 'Components: api, controller, session, operator, content, gateway, app_githex, app_askrepo (apps are opt-in). Flags are passed through (e.g., -n, --no-cache).')
-    .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway, app_githex, app_askrepo\n' +
+    .argument('[args...]', 'Components: api, controller, session, operator, content, gateway. Flags are passed through (e.g., -n, --no-cache).')
+    .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway\n' +
       '\nExamples:\n' +
       '  $ ractor build                       # builds all (script default)\n' +
       '  $ ractor build api controller        # build only api and controller\n' +
       '  $ ractor build operator content      # build Operator UI and Content\n' +
-      '  $ ractor build app_githex            # build the GitHex app image\n' +
-      '  $ ractor build app_askrepo           # build the AskRepo app image\n' +
       '  $ ractor build -- -n --no-cache      # pass flags through to script')
     .action(async (args = []) => {
       try {
@@ -31,7 +29,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are Ractor components (or 'all')
-        const allowed = new Set(['api','controller','session','operator','content','gateway','app_githex','app_askrepo','all']);
+        const allowed = new Set(['api','controller','session','operator','content','gateway','all']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
           console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, session, operator, content, gateway`);

@@ -12,9 +12,7 @@ class DockerManager {
       session: 'registry.digitalocean.com/ractor/ractor_session:latest',
       operator: 'registry.digitalocean.com/ractor/ractor_operator:latest',
       gateway: 'registry.digitalocean.com/ractor/ractor_gateway:latest',
-      content: 'registry.digitalocean.com/ractor/ractor_content:latest',
-      app_githex: 'registry.digitalocean.com/ractor/ractor_app_githex:latest',
-      app_askrepo: 'registry.digitalocean.com/ractor/ractor_app_askrepo:latest'
+      content: 'registry.digitalocean.com/ractor/ractor_content:latest'
     };
   }
 

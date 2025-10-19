@@ -55,8 +55,6 @@ usage() {
   echo "  operator    Push the operator image"
   echo "  content     Push the content image"
   echo "  gateway     Push the gateway image"
-  echo "  app_githex  Push the GitHex app image"
-  echo "  app_askrepo Push the AskRepo app image"
   echo "  all         Push all components (default)"
   echo ""
   echo "Options:"
@@ -104,7 +102,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "session" "operator" "content" "gateway" "app_githex" "app_askrepo")
+  COMPONENTS=("api" "controller" "session" "operator" "content" "gateway")
 fi
 
 print_status "Pushing Ractor Docker images"
@@ -151,12 +149,6 @@ for component in "${COMPONENTS[@]}"; do
   gateway)
     image_name="${REGISTRY}/ractor_gateway:${TAG}"
     ;;
-  app_githex)
-    image_name="${REGISTRY}/ractor_app_githex:${TAG}"
-    ;;
-  app_askrepo)
-    image_name="${REGISTRY}/ractor_app_askrepo:${TAG}"
-    ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
     continue
@@ -166,13 +158,7 @@ for component in "${COMPONENTS[@]}"; do
   print_status "Pushing $component ($image_name)..."
 
   # Check if local image exists (built by build.sh uses project version)
-  if [ "$component" = "app_githex" ]; then
-    local_image="ractor_app_githex:${TAG}"
-  elif [ "$component" = "app_askrepo" ]; then
-    local_image="ractor_app_askrepo:${TAG}"
-  else
-    local_image="ractor_${component}:${TAG}"
-  fi
+  local local_image="ractor_${component}:${TAG}"
   if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${local_image}$"; then
     print_error "Local image $local_image not found. Build it first with:"
     print_error "  ./scripts/build.sh $component"
@@ -187,13 +173,7 @@ for component in "${COMPONENTS[@]}"; do
   fi
 
   # Also tag as 'latest' if we're pushing a version tag
-  if [ "$component" = "app_githex" ]; then
-    latest_image="${REGISTRY}/ractor_app_githex:latest"
-  elif [ "$component" = "app_askrepo" ]; then
-    latest_image="${REGISTRY}/ractor_app_askrepo:latest"
-  else
-    latest_image="${REGISTRY}/ractor_${component}:latest"
-  fi
+  latest_image="${REGISTRY}/ractor_${component}:latest"
   if [ "$TAG" != "latest" ]; then
     print_status "Tagging $local_image as $latest_image..."
     if ! docker tag "$local_image" "$latest_image"; then
@@ -235,18 +215,6 @@ for component in "${COMPONENTS[@]}"; do
     echo "  ${REGISTRY}/ractor_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/ractor_${component}:latest"
-    fi
-    ;;
-  app_githex)
-    echo "  ${REGISTRY}/ractor_app_githex:${TAG}"
-    if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/ractor_app_githex:latest"
-    fi
-    ;;
-  app_askrepo)
-    echo "  ${REGISTRY}/ractor_app_askrepo:${TAG}"
-    if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/ractor_app_askrepo:latest"
     fi
     ;;
   esac
