@@ -31,21 +31,15 @@ Ractor is a Rust-first platform for orchestrating long-lived, stateful agent ses
 
 - Docker (20.10+)
 - Node.js 16+ and npm (Node 20 recommended)
-- Rust 1.82+ (for local builds/tools)
-- OS: Linux, macOS, or Windows (WSL2 for Windows dev). GPU host recommended on Linux (Ubuntu 22.04)
+- Rust 1.82+ (only required for contributors building the Rust services locally)
+- OS: Linux only (Ubuntu 22.04 LTS recommended at the moment)
 - GPU: NVIDIA H100 80GB recommended (A100 80GB / L40S 48GB work) with NVIDIA drivers and NVIDIA Container Toolkit
+
+> macOS and Windows hosts are not yet supported; use a Linux workstation or server (Ubuntu 22.04 LTS recommended).
 
 ## Quick Start (GPU-required, model-first)
 
-1) Prepare and verify GPU
-
-```bash
-# NVIDIA driver + NVIDIA Container Toolkit installed
-# Verify GPU access from Docker:
-docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi
-```
-
-2) Install the CLI
+1) Install the CLI
 
 ```bash
 # From this repo
@@ -54,7 +48,15 @@ npm install -g ./cli
 npm install -g @ractor/cli
 ```
 
-3) Start the LLM and pre-pull the model
+2) Verify host prerequisites
+
+```bash
+ractor doctor
+```
+
+- If any checks fail, run `ractor fix` (with `--pull` or other flags as needed) and re-run `ractor doctor`.
+
+3) (Optional) Warm up the LLM
 
 ```bash
 # Start only the LLM service on GPU with a model
@@ -67,7 +69,7 @@ docker exec ollama ollama pull gpt-oss:120b
 #   add to the command above: --ollama-memory 64g --ollama-shm-size 64g --ollama-context-length 131072
 ```
 
-4) Configure host branding (optional; defaults to `Ractor` + `http://localhost` if unset)
+4) Configure host branding (optional; defaults to `Ractor` + `http://localhost` if unset) and any host overrides
 
 ```bash
 # macOS/Linux
@@ -76,10 +78,19 @@ export RACTOR_HOST_NAME="Acme Labs"
 export RACTOR_HOST_URL="https://operator.acme.dev"
 ```
 
+Optional: run the exposed host port on a value other than `80` (update `RACTOR_HOST_URL` so links stay correct).
+
+```bash
+export RACTOR_HOST_PORT=8080
+export RACTOR_HOST_URL="http://localhost:8080"
+```
+
+If you previously started the gateway, run `ractor stop gateway` before `ractor start ...` so the new port mapping is applied.
+
 5) Start Ractor core services
 
 ```bash
-ractor start mysql api operator content controller gateway
+ractor start
 ```
 
 6) Verify
