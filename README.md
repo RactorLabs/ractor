@@ -14,7 +14,7 @@
 
 ## What is Ractor
 
-Ractor is an infrastructure runtime for long-lived, stateful agent sessions. It turns computer-use workflows into durable, observable services with guardrails and an operator UI.
+Ractor is a Rust-first platform for orchestrating long-lived, stateful agent sessions. It provisions Docker-isolated workspaces with persistent storage, wires them to Ollama-powered tooling, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
 
 ## Why Ractor
 
