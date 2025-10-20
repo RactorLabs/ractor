@@ -76,22 +76,11 @@ export RACTOR_HOST_NAME="Acme Labs"
 export RACTOR_HOST_URL="https://operator.acme.dev"
 ```
 
-```powershell
-# Windows PowerShell
-$env:RACTOR_HOST_NAME = "Acme Labs"
-$env:RACTOR_HOST_URL  = "https://operator.acme.dev"
-```
-
 Optional: run the gateway on a different host port (update `RACTOR_HOST_URL` so links stay correct).
 
 ```bash
 export RACTOR_GATEWAY_PORT=8080
 export RACTOR_HOST_URL="http://localhost:8080"
-```
-
-```powershell
-$env:RACTOR_GATEWAY_PORT = "8080"
-$env:RACTOR_HOST_URL     = "http://localhost:8080"
 ```
 
 If you previously started the gateway, run `ractor stop gateway` before `ractor start ...` so the new port mapping is applied.
