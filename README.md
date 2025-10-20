@@ -13,30 +13,32 @@
 </p>
 
 ## What is Ractor
+
 Ractor is an infrastructure runtime for long-lived, stateful agent sessions. It turns computer-use workflows into durable, observable services with guardrails and an operator UI.
 
 ## Why Ractor
-- Built-in sandbox — Per-session container and volume with file/network guardrails and a private `.env` to run code safely.
-- Persistent memory — `/session` state, files, and logs survive restarts; no cold starts.
-- Agent + tools in every session — An agent runtime with a tool registry (bash, file edits, package/env helpers, etc.).
-- Observability — Structured service/request logs and per-session logs you can tail or ship.
-- Operator-first — UI for status, logs, timeouts, and lifecycle actions (pause/kill/resume/sleep/wake).
-- API-first — Clean REST endpoints for sessions, responses, files, operators, and auth.
-- Portable dev→prod — Same Docker images locally and in CI/CD; one CLI to build/run.
-- Rust core — Fast, memory-safe services with structured logging.
+
+- Session isolation & persistence — Each session runs inside a managed Docker container with a dedicated `/session` volume and private `.env`, created by the controller and reused across sleep/wake cycles.
+- Built-in agent tooling — The session runtime ships a tool registry (bash execution, file editing, plan management, publish/sleep helpers, etc.) so agents can automate real workflows safely.
+- Observability & lifecycle control — Controller and session services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (sleep, wake, remix, publish) for operators.
+- API coverage — The Rust API service exposes REST endpoints for sessions, responses, operators, files, and auth, enabling external orchestration or integration.
+- LLM integration — Sessions talk to Ollama via `OLLAMA_HOST`/`OLLAMA_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
+- Unified CLI workflow — The Node.js `ractor` CLI manages MySQL, Ollama, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
+- Portable dev→prod — Docker images built via `./scripts/build.sh` are the same ones the CLI pulls or runs in CI/CD, keeping local and production stacks aligned.
+- Rust-first core — API, controller, session, and content services are Rust 2021 binaries with structured logging and consistent error handling.
 
 ## Requirements
-- Docker with Buildx (20.10+)
-- Node.js 20+ and npm
+
+- Docker (20.10+)
+- Node.js 16+ and npm (Node 20 recommended)
 - Rust 1.82+ (for local builds/tools)
 - OS: Linux, macOS, or Windows (WSL2 for Windows dev). GPU host recommended on Linux (Ubuntu 22.04)
 - GPU: NVIDIA H100 80GB recommended (A100 80GB / L40S 48GB work) with NVIDIA drivers and NVIDIA Container Toolkit
-- LLM runtime: Ollama (the CLI runs it as container name `ollama`)
 
 ## Quick Start (GPU-required, model-first)
 
-
 1) Prepare and verify GPU
+
 ```bash
 # NVIDIA driver + NVIDIA Container Toolkit installed
 # Verify GPU access from Docker:
@@ -44,6 +46,7 @@ docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi
 ```
 
 2) Install the CLI
+
 ```bash
 # From this repo
 npm install -g ./cli
@@ -52,6 +55,7 @@ npm install -g @ractor/cli
 ```
 
 3) Start the LLM and pre-pull the model
+
 ```bash
 # Start only the LLM service on GPU with a model
 ractor start --require-gpu --ollama-model gpt-oss:120b ollama
@@ -63,22 +67,22 @@ docker exec ollama ollama pull gpt-oss:120b
 #   add to the command above: --ollama-memory 64g --ollama-shm-size 64g --ollama-context-length 131072
 ```
 
-4) Configure host branding (required for the Operator UI)
+4) Configure host branding (optional; defaults to `Ractor` + `http://localhost` if unset)
+
 ```bash
 # macOS/Linux
-export RACTOR_HOST_NAME="Ractor"
-export RACTOR_HOST_URL="http://localhost"
-
-# Windows PowerShell
-$env:RACTOR_HOST_NAME = "Ractor"
-$env:RACTOR_HOST_URL  = "http://localhost"
+# Override defaults when you need custom branding or a non-localhost URL
+export RACTOR_HOST_NAME="Acme Labs"
+export RACTOR_HOST_URL="https://operator.acme.dev"
 ```
 
 5) Start Ractor core services
+
 ```bash
 ractor start mysql api operator content controller gateway
 ```
 
 6) Verify
-- Operator UI: http://localhost
-- API:  http://localhost/api
+
+- Operator UI: <http://localhost>
+- API:  <http://localhost/api>
