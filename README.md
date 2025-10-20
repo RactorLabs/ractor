@@ -88,7 +88,7 @@ If you previously started the gateway, run `ractor stop gateway` before `ractor 
 5) Start Ractor core services
 
 ```bash
-ractor start mysql api operator content controller gateway
+ractor start
 ```
 
 6) Verify
