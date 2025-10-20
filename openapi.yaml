@@ -1,0 +1,1220 @@
+openapi: 3.0.3
+info:
+  title: Ractor API
+  version: 0.5.3
+  description: |
+    Ractor is an infrastructure runtime for long-lived, stateful agent sessions.
+    This spec documents the core REST endpoints used by the Operator UI and the
+    session runtime.
+servers:
+  - url: http://localhost:9000/api/v0
+    description: Local
+  - url: https://{host}/api/v0
+    description: Hosted
+    variables:
+      host:
+        default: api.example.com
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Public
+  - name: Auth
+  - name: Security
+  - name: Operators
+  - name: Sessions
+  - name: Responses
+  - name: Files
+
+paths:
+  /version:
+    get:
+      summary: API version
+      responses:
+        '200':
+          description: Version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: { type: string }
+                  api: { type: string }
+
+  /operators/{name}/login:
+    post:
+      tags: [Public]
+      summary: Operator login (password)
+      security: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /published/sessions:
+    get:
+      tags: [Public]
+      summary: List published sessions
+      security: []
+      responses:
+        '200':
+          description: Published sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Session' }
+
+  /published/sessions/{name}:
+    get:
+      tags: [Public]
+      summary: Get published session by name
+      security: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Published session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /auth:
+    get:
+      tags: [Auth]
+      summary: Current principal
+      responses:
+        '200':
+          description: Principal info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { type: string }
+                  type: { type: string, enum: [User, Admin] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/token:
+    post:
+      tags: [Auth]
+      summary: Create token for a principal (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTokenRequest'
+      responses:
+        '200':
+          description: Token created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /blocklist:
+    get:
+      tags: [Security]
+      summary: List blocked principals (admin)
+      responses:
+        '200':
+          description: Blocked principals
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BlockedPrincipal' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /blocklist/block:
+    post:
+      tags: [Security]
+      summary: Block a principal (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockRequest' }
+      responses:
+        '200':
+          description: Block status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocked: { type: boolean }
+                  created: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /blocklist/unblock:
+    post:
+      tags: [Security]
+      summary: Unblock a principal (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlockRequest' }
+      responses:
+        '200':
+          description: Unblock status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  blocked: { type: boolean }
+                  deleted: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /operators:
+    get:
+      tags: [Operators]
+      summary: List operators (admin sees all; others see self)
+      responses:
+        '200':
+          description: Operators
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Operator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Operators]
+      summary: Create operator (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOperatorRequest' }
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Operator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /operators/{name}:
+    get:
+      tags: [Operators]
+      summary: Get operator (self or admin)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Operator
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Operator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Operators]
+      summary: Update operator (admin)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOperatorRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Operator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Operators]
+      summary: Delete operator (admin)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /operators/{name}/password:
+    put:
+      tags: [Operators]
+      summary: Update own password (or admin)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePasswordRequest' }
+      responses:
+        '204': { description: Updated }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions:
+    get:
+      tags: [Sessions]
+      summary: List sessions (admin all; others own)
+      parameters:
+        - in: query
+          name: state
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: tags
+          description: Repeatable tag filter. Use tags=alpha&tags=beta.
+          schema:
+            type: array
+            items: { type: string }
+          style: form
+          explode: true
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Paginated sessions
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedSessions' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Sessions]
+      summary: Create session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSessionRequest' }
+      responses:
+        '200':
+          description: Created session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sessions/{name}:
+    get:
+      tags: [Sessions]
+      summary: Get session by name
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Sessions]
+      summary: Update session metadata/timeouts
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSessionRequest' }
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [Sessions]
+      summary: Delete session
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions/{name}/state:
+    put:
+      tags: [Sessions]
+      summary: Update session state (internal)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSessionStateRequest' }
+      responses:
+        '200':
+          description: Updated state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state: { type: string }
+
+  /sessions/{name}/busy:
+    post:
+      tags: [Sessions]
+      summary: Mark session busy (session container)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Busy state applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  state: { type: string }
+
+  /sessions/{name}/idle:
+    post:
+      tags: [Sessions]
+      summary: Mark session idle (session container)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Idle state applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  state: { type: string }
+
+  /sessions/{name}/sleep:
+    post:
+      tags: [Sessions]
+      summary: Sleep session (destroy container; keep volume)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SleepSessionRequest' }
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions/{name}/cancel:
+    post:
+      tags: [Responses]
+      summary: Cancel latest in‑progress response and set session idle
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Cancellation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  session: { type: string }
+                  cancelled: { type: boolean }
+        # 404 is reserved for missing session; handler returns 200 with cancelled=false otherwise
+
+  /sessions/{name}/wake:
+    post:
+      tags: [Sessions]
+      summary: Wake session (recreate container)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RestoreSessionRequest' }
+      responses:
+        '200':
+          description: Updated session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /sessions/{name}/branch:
+    post:
+      tags: [Sessions]
+      summary: Branch a session into a new one
+      parameters:
+        - in: path
+          name: name
+          required: true
+          x-stainless-param: parent_name
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchSessionRequest' }
+      responses:
+        '200':
+          description: New session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /sessions/{name}/context:
+    get:
+      tags: [Sessions]
+      summary: Get context usage
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionContextUsage' }
+
+  /sessions/{name}/context/clear:
+    post:
+      tags: [Sessions]
+      summary: Clear context (set new cutoff)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Updated usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionContextUsage' }
+
+  /sessions/{name}/context/compact:
+    post:
+      tags: [Sessions]
+      summary: Compact context (summarize)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Updated usage
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SessionContextUsage' }
+
+  /sessions/{name}/context/usage:
+    post:
+      tags: [Sessions]
+      summary: Report latest context length (tokens)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tokens: { type: integer, minimum: 0 }
+              required: [tokens]
+      responses:
+        '200':
+          description: Acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  last_context_length: { type: integer }
+
+  /sessions/{name}/publish:
+    post:
+      tags: [Sessions]
+      summary: Publish session content/env/code (as permitted)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublishSessionRequest' }
+      responses:
+        '200': { description: Published }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        # No 409 emitted by current implementation
+
+  /sessions/{name}/unpublish:
+    post:
+      tags: [Sessions]
+      summary: Unpublish session content
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Unpublished }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        # No 409 emitted by current implementation
+
+  /sessions/{name}/runtime:
+    get:
+      tags: [Sessions]
+      summary: Total runtime (seconds)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Runtime
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session_name: { type: string }
+                  total_runtime_seconds: { type: integer }
+                  current_session_seconds: { type: integer }
+
+  /sessions/{name}/responses:
+    get:
+      tags: [Responses]
+      summary: List responses for a session
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: Responses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResponseView' }
+    post:
+      tags: [Responses]
+      summary: Create a response (user input)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateResponseRequest' }
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResponseView' }
+        '504':
+          description: Timed out waiting for completion (background=false)
+
+  /sessions/{name}/responses/{id}:
+    get:
+      tags: [Responses]
+      summary: Get a response by id
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResponseView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Responses]
+      summary: Update a response (status/output append)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateResponseRequest' }
+      responses:
+        '200':
+          description: Updated response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResponseView' }
+
+  /sessions/{name}/responses/count:
+    get:
+      tags: [Responses]
+      summary: Count responses for a session
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: { type: integer }
+
+  /responses/{id}:
+    get:
+      tags: [Responses]
+      summary: Get a response by id (global)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResponseView' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /sessions/{name}/files/read/{path}:
+    get:
+      tags: [Files]
+      summary: Read a file from session volume (<= 25MB)
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: path
+          required: true
+          description: Relative path under /session (no leading slash)
+          schema: { type: string }
+      responses:
+        '200':
+          description: File contents
+          headers:
+            x-ractor-file-size:
+              schema: { type: integer }
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Session is sleeping }
+        '413': { description: File too large }
+
+  /sessions/{name}/files/metadata/{path}:
+    get:
+      tags: [Files]
+      summary: File metadata
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileMetadata' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /sessions/{name}/files/list:
+    get:
+      tags: [Files]
+      summary: List session root directory
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Directory entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileList' }
+
+  /sessions/{name}/files/list/{path}:
+    get:
+      tags: [Files]
+      summary: List directory
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: path
+          required: true
+          schema: { type: string }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Directory entries
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileList' }
+
+  /sessions/{name}/files/delete/{path}:
+    delete:
+      tags: [Files]
+      summary: Delete a regular file
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema: { type: string }
+        - in: path
+          name: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Delete result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted: { type: boolean }
+                  path: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    Unauthorized: { description: Unauthorized }
+    Forbidden: { description: Forbidden }
+    NotFound: { description: Not found }
+    BadRequest: { description: Bad request }
+    Conflict: { description: Conflict }
+  schemas:
+    Operator:
+      type: object
+      properties:
+        user: { type: string }
+        description: { type: string, nullable: true }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        last_login_at: { type: string, format: date-time, nullable: true }
+
+    CreateOperatorRequest:
+      type: object
+      required: [user, pass]
+      properties:
+        user: { type: string }
+        pass: { type: string }
+        description: { type: string }
+
+    UpdateOperatorRequest:
+      type: object
+      properties:
+        description: { type: string, nullable: true }
+        active: { type: boolean, nullable: true }
+
+    UpdatePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string }
+        new_password: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [pass]
+      properties:
+        pass: { type: string }
+        ttl_hours: { type: integer, nullable: true }
+
+    CreateTokenRequest:
+      type: object
+      required: [principal, type]
+      properties:
+        principal: { type: string }
+        type: { type: string, enum: [User, Admin] }
+        ttl_hours: { type: integer, nullable: true }
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string }
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_at: { type: string, format: date-time }
+        user: { type: string }
+        role:
+          type: string
+          enum: [user, admin]
+
+    Session:
+      type: object
+      properties:
+        name: { type: string }
+        created_by: { type: string }
+        state:
+          type: string
+          enum: [init, idle, busy, slept]
+          description: Session lifecycle state
+        description: { type: string, nullable: true }
+        parent_session_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: string, format: date-time, nullable: true }
+        metadata: { type: object }
+        tags:
+          type: array
+          items: { type: string }
+        is_published: { type: boolean }
+        published_at: { type: string, format: date-time, nullable: true }
+        published_by: { type: string, nullable: true }
+        publish_permissions: { type: object }
+        idle_timeout_seconds: { type: integer }
+        busy_timeout_seconds: { type: integer }
+        idle_from: { type: string, format: date-time, nullable: true }
+        busy_from: { type: string, format: date-time, nullable: true }
+        context_cutoff_at: { type: string, format: date-time, nullable: true }
+        last_context_length: { type: integer }
+
+    PaginatedSessions:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Session' }
+        total: { type: integer }
+        limit: { type: integer }
+        offset: { type: integer }
+        page: { type: integer }
+        pages: { type: integer }
+
+    CreateSessionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        metadata: { type: object, default: {} }
+        description: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+        env:
+          type: object
+          additionalProperties: { type: string }
+        instructions: { type: string, nullable: true }
+        setup: { type: string, nullable: true }
+        prompt: { type: string, nullable: true }
+        idle_timeout_seconds: { type: integer, nullable: true }
+        busy_timeout_seconds: { type: integer, nullable: true }
+
+    UpdateSessionRequest:
+      type: object
+      properties:
+        metadata: { type: object, nullable: true }
+        description: { type: string, nullable: true }
+        tags:
+          type: array
+          items: { type: string }
+          nullable: true
+        idle_timeout_seconds: { type: integer, nullable: true }
+        busy_timeout_seconds: { type: integer, nullable: true }
+
+    UpdateSessionStateRequest:
+      type: object
+      properties:
+        state:
+          type: string
+          description: New session state
+          enum: [init, idle, busy, slept]
+
+    BranchSessionRequest:
+      type: object
+      required: [name]
+      properties:
+        metadata: { type: object, nullable: true }
+        name: { type: string }
+        code: { type: boolean, default: true }
+        env: { type: boolean, default: true }
+        content: { type: boolean, default: true }
+        prompt: { type: string, nullable: true }
+
+    PublishSessionRequest:
+      type: object
+      properties:
+        code: { type: boolean, default: true }
+        env: { type: boolean, default: true }
+        content: { type: boolean, default: true }
+
+    RestoreSessionRequest:
+      type: object
+      properties:
+        prompt: { type: string, nullable: true }
+
+    SleepSessionRequest:
+      type: object
+      properties:
+        delay_seconds: { type: integer, minimum: 5, default: 5 }
+        note: { type: string, nullable: true }
+
+    SessionContextUsage:
+      type: object
+      properties:
+        session: { type: string }
+        soft_limit_tokens: { type: integer }
+        used_tokens_estimated: { type: integer }
+        used_percent: { type: number, format: double }
+        basis: { type: string }
+        cutoff_at: { type: string, format: date-time, nullable: true }
+        measured_at: { type: string, format: date-time }
+        total_messages_considered: { type: integer }
+
+    CreateResponseRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: object
+          description: "Recommended: { content: [{ type: 'text', content: string }] }"
+        background:
+          type: boolean
+          default: true
+
+    UpdateResponseRequest:
+      type: object
+      properties:
+        status: { type: string, nullable: true }
+        input: { type: object, nullable: true }
+        output: { type: object, nullable: true, description: 'Merged; items appended' }
+
+    ResponseView:
+      type: object
+      properties:
+        id: { type: string }
+        session_name: { type: string }
+        status: { type: string }
+        input_content:
+          type: array
+          items: { type: object }
+        output_content:
+          type: array
+          items: { type: object }
+        segments:
+          type: array
+          items: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BlockRequest:
+      type: object
+      required: [principal]
+      properties:
+        principal: { type: string }
+        type: { type: string, enum: [User, Admin], nullable: true }
+
+    BlockedPrincipal:
+      type: object
+      properties:
+        principal: { type: string }
+        principal_type: { type: string, enum: [User, Admin] }
+        created_at: { type: string, format: date-time }
+
+    FileMetadata:
+      type: object
+      properties:
+        kind: { type: string, enum: [file, dir, symlink] }
+        size: { type: integer }
+        mode: { type: string, description: 'octal permissions, e.g., 0644' }
+        mtime: { type: string, format: date-time }
+        link_target: { type: string, nullable: true }
+
+    FileEntry:
+      type: object
+      properties:
+        name: { type: string }
+        kind: { type: string, enum: [file, dir, symlink] }
+        size: { type: integer }
+        mode: { type: string }
+        mtime: { type: string, format: date-time }
+
+    FileList:
+      type: object
+      properties:
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/FileEntry' }
+        offset: { type: integer }
+        limit: { type: integer }
+        next_offset: { type: integer, nullable: true }
+        total: { type: integer }
