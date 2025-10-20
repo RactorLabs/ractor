@@ -45,13 +45,16 @@ Ractor is a Rust-first platform for orchestrating long-lived, stateful agent ses
 docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi
 ```
 
-2) Install the CLI
+2) Install the CLI and verify prerequisites
 
 ```bash
 # From this repo
 npm install -g ./cli
 # or from npm
 npm install -g @ractor/cli
+
+# Verify Docker/GPU/toolchain availability
+ractor doctor
 ```
 
 3) (Optional) Warm up the LLM
