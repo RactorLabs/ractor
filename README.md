@@ -6,7 +6,7 @@
 <p align="center">
   <a href="https://ractorlabs.com/"><img src="https://img.shields.io/badge/website-ractorlabs.com-0A66C2?logo=google-chrome&logoColor=white" alt="Website" /></a>
   <a href="https://x.com/ractorlabs"><img src="https://img.shields.io/badge/Follow-@ractorlabs-000000?logo=x&logoColor=white" alt="Follow on X" /></a>
-  <a href="https://discord.gg/bUNKNtxey7"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
+  <a href="https://discord.gg/jTpP6PgZtt"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
   <a href="https://github.com/Ractorlabs/ractor/releases"><img src="https://img.shields.io/github/v/release/Ractorlabs/ractor?display_name=tag&sort=semver" alt="Release" /></a>
   <a href="https://github.com/Ractorlabs/ractor/actions/workflows/build.yml"><img src="https://github.com/Ractorlabs/ractor/actions/workflows/build.yml/badge.svg" alt="Build" /></a>
 
