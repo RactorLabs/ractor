@@ -4,7 +4,7 @@
 
 - `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `session/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `ractor-api`, `ractor-controller`, `ractor-session`, `ractor-content`.
 - `cli/`: Node.js CLI (`ractor`).
-- `scripts/`: Dev automation (`build.sh`, `link.sh`).
+- `scripts/`: Dev automation (`build.sh`, `link.sh`, `install.sh`, `rebuild.sh`, `publish.sh`, `release.sh`, `bump.sh`, `push.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
 - `assets/`: Static assets.
 
@@ -20,7 +20,7 @@
 
 ## Contributor Workflow Rules
 
-- Use the CLI for service management: `ractor start|stop|doctor`.
+- Use the CLI for service management: `ractor start|stop|doctor|reset|clean|pull|fix` (plus `dev_build`/`dev_rebuild` shortcuts for local Docker image work).
 - Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh`.
 - Always run `./scripts/link.sh` before invoking the `ractor` CLI during development.
 - Keep changes minimal and consistent with existing patterns; prefer editing within current modules.
@@ -71,7 +71,7 @@ Note on commit message formatting:
 - Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
 
--## Session Lifecycle & API
+## Session Lifecycle & API
 
 - Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session updates).
 - The session runtime, on boot, calls the API to report state:
@@ -97,7 +97,7 @@ Note on commit message formatting:
 - Coordinate actions: wait for explicit maintainer instruction before running long/destructive ops, publishing, or committing.
 - Commit policy: never reference AI/assistants; no emojis; write professional, imperative, conventional commits.
 - Pre‑commit checklist: `cargo fmt --check`, `cargo clippy`, `cargo build --release`, `cargo test`, and verify services start.
-- Licensing: repository is intentionally unlicensed; do not add or suggest license files.
+- Licensing: the project ships under the Server Side Public License (SSPL); see `LICENSE.md` for terms and do not introduce conflicting licenses.
 
 #### Required Elements
 
@@ -118,39 +118,3 @@ Note on commit message formatting:
 - Only skip Bootstrap when explicitly requested
 - When building custom CSS frameworks  
 - When working with existing non-Bootstrap projects
-
-## Command Playbooks (.claude/commands)
-
-### Commit
-
-- Review: `git status`, `git diff`, `git log --oneline -5`.
-- Stage: `git add .`.
-- Message: conventional type + concise subject; detailed body if helpful; no AI/emojis.
-- Verify: `git status`. Do not push without approval.
-
-### Bump (version management)
-
-- Preferred: run the helper (repairs docs badge safely and builds Operator):
-  - `bash scripts/bump.sh 0.X.Y` or just `bash scripts/bump.sh` to bump patch
-- What it updates:
-  - `Cargo.toml` (top-level `version = "x.y.z"`)
-  - `cli/package.json` (`version` field)
-  - Operator docs badge in `operator/src/routes/docs/+page.svelte` (`const API_VERSION = 'x.y.z (v0)';`)
-- The script avoids node_modules/lockfiles and repairs the docs badge line if it was ever corrupted by prior bumps.
-- If doing manually, audit occurrences (avoid lockfiles and node_modules):
-  - `prev=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)`
-  - `rg -n --hidden -S "$prev" -g '!target/**' -g '!**/node_modules/**'`
-  - Update the docs badge with a targeted replace to avoid syntax errors:
-    - `perl -0777 -pe "s/(const\s+API_VERSION\s*=\s*')\d+\.\d+\.\d+(\s*\(v0\)';)/\1$new\2/" -i operator/src/routes/docs/+page.svelte`
-  
-- After bump: the script runs `cargo build --release` and builds the Operator (`npm ci|install && npm run build`).
-- It stages, commits, and pushes changes automatically.
-
-### Release
-
-- Update docs: top-level README, Operator docs page (version badge), CLI README, CLAUDE.md.
-- Stage/commit docs: `git add .` then a clear docs commit.
-- Stage/commit remaining changes as needed.
-- Get version from `Cargo.toml`; tag without prefix: `git tag 0.X.Y`.
-- Push: `git push origin main && git push origin 0.X.Y` (triggers CI).
-- After release: run Bump to prepare the next version and commit those updates.
