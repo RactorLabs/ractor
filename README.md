@@ -32,8 +32,10 @@ Ractor is a Rust-first platform for orchestrating long-lived, stateful agent ses
 - Docker (20.10+)
 - Node.js 16+ and npm (Node 20 recommended)
 - Rust 1.82+ (for local builds/tools)
-- OS: Linux, macOS, or Windows (WSL2 for Windows dev). GPU host recommended on Linux (Ubuntu 22.04)
+- OS: Linux only (Ubuntu 22.04 LTS recommended at the moment)
 - GPU: NVIDIA H100 80GB recommended (A100 80GB / L40S 48GB work) with NVIDIA drivers and NVIDIA Container Toolkit
+
+> macOS and Windows hosts are not yet supported; use a Linux workstation or server (Ubuntu 22.04 LTS recommended).
 
 ## Quick Start (GPU-required, model-first)
 
