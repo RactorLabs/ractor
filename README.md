@@ -45,19 +45,24 @@ Ractor is a Rust-first platform for orchestrating long-lived, stateful agent ses
 docker run --rm --gpus all nvidia/cuda:12.3.2-base-ubuntu22.04 nvidia-smi
 ```
 
-2) Install the CLI and verify prerequisites
+2) Install the CLI
 
 ```bash
 # From this repo
 npm install -g ./cli
 # or from npm
 npm install -g @ractor/cli
+```
 
-# Verify Docker/GPU/toolchain availability
+3) Verify host prerequisites
+
+```bash
 ractor doctor
 ```
 
-3) (Optional) Warm up the LLM
+- If any checks fail, run `ractor fix` (with `--pull` or other flags as needed) and re-run `ractor doctor`.
+
+4) (Optional) Warm up the LLM
 
 ```bash
 # Start only the LLM service on GPU with a model
@@ -70,7 +75,7 @@ docker exec ollama ollama pull gpt-oss:120b
 #   add to the command above: --ollama-memory 64g --ollama-shm-size 64g --ollama-context-length 131072
 ```
 
-4) Configure host branding (optional; defaults to `Ractor` + `http://localhost` if unset) and any host overrides
+5) Configure host branding (optional; defaults to `Ractor` + `http://localhost` if unset) and any host overrides
 
 ```bash
 # macOS/Linux
@@ -88,13 +93,13 @@ export RACTOR_HOST_URL="http://localhost:8080"
 
 If you previously started the gateway, run `ractor stop gateway` before `ractor start ...` so the new port mapping is applied.
 
-5) Start Ractor core services
+6) Start Ractor core services
 
 ```bash
 ractor start
 ```
 
-6) Verify
+7) Verify
 
 - Operator UI: <http://localhost>
 - API:  <http://localhost/api>
