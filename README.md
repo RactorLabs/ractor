@@ -54,7 +54,7 @@ npm install -g ./cli
 npm install -g @ractor/cli
 ```
 
-3) Start the LLM and pre-pull the model
+3) (Optional) Warm up the LLM
 
 ```bash
 # Start only the LLM service on GPU with a model
