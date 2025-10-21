@@ -254,6 +254,21 @@ module.exports = (program) => {
           }
           return fallback;
         };
+        const hostPort = (() => {
+          const raw = process.env.RACTOR_HOST_PORT;
+          if (raw === undefined || raw.trim() === '') return '80';
+          const trimmed = raw.trim();
+          if (!/^\d+$/.test(trimmed)) {
+            console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_PORT must be a positive integer.');
+            process.exit(1);
+          }
+          const numeric = parseInt(trimmed, 10);
+          if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 65535) {
+            console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_PORT must be between 1 and 65535.');
+            process.exit(1);
+          }
+          return String(numeric);
+        })();
         // Helpers for container state
         async function containerRunning(name) {
           try { const res = await docker(['ps','-q','--filter',`name=${name}`], { silent: true }); return !!res.stdout.trim(); } catch(_) { return false; }
@@ -645,23 +660,57 @@ module.exports = (program) => {
             }
 
             case 'gateway': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring gateway (NGINX) is running on port 80...');
-              if (await containerRunning('ractor_gateway')) { console.log(chalk.green('[SUCCESS] ') + 'Gateway already running'); console.log(); break; }
-              if (await containerExists('ractor_gateway')) {
-                await docker(['start','ractor_gateway']);
-                console.log(chalk.green('[SUCCESS] ') + 'Gateway started');
+              const hostPortNumber = parseInt(hostPort, 10);
+              const inspectGatewayHostPort = async () => {
+                try {
+                  const res = await docker(
+                    [
+                      'inspect',
+                      'ractor_gateway',
+                      '--format',
+                      '{{range $k,$v := .HostConfig.PortBindings}}{{if eq $k "80/tcp"}}{{(index $v 0).HostPort}}{{end}}{{end}}',
+                    ],
+                    { silent: true }
+                  );
+                  return (res.stdout || '').trim();
+                } catch (_) {
+                  return '';
+                }
+              };
+              console.log(chalk.blue('[INFO] ') + `Ensuring gateway (NGINX) is running on port ${hostPort}...`);
+              if (await containerRunning('ractor_gateway')) {
+                const boundPort = await inspectGatewayHostPort();
+                console.log(chalk.green('[SUCCESS] ') + `Gateway already running (port ${boundPort || hostPort})`);
                 console.log();
                 break;
               }
-              if (await portInUse(80)) {
-                console.log(chalk.yellow('[WARNING] ') + 'Port 80 is already in use on the host. Gateway will fail to bind.');
+              if (await containerExists('ractor_gateway')) {
+                const boundPort = await inspectGatewayHostPort();
+                if (boundPort && boundPort !== hostPort) {
+                  console.log(chalk.blue('[INFO] ') + `Existing gateway is bound to port ${boundPort}; recreating container for port ${hostPort}.`);
+                  try {
+                    await docker(['rm', '-f', 'ractor_gateway']);
+                  } catch (e) {
+                    console.log(chalk.yellow('[WARNING] ') + `Failed to remove existing gateway container: ${e.message}`);
+                    console.log();
+                    break;
+                  }
+                } else {
+                  await docker(['start','ractor_gateway']);
+                  console.log(chalk.green('[SUCCESS] ') + `Gateway started (port ${boundPort || hostPort})`);
+                  console.log();
+                  break;
+                }
+              }
+              if (await portInUse(hostPortNumber)) {
+                console.log(chalk.yellow('[WARNING] ') + `Port ${hostPort} is already in use on the host. Gateway will fail to bind.`);
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','ractor_gateway','--network','ractor_network','-p','80:80');
+              args.push('--name','ractor_gateway','--network','ractor_network','-p',`${hostPort}:80`);
               args.push(await resolveRactorImage('gateway','ractor_gateway','registry.digitalocean.com/ractor/ractor_gateway', tag));
               await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + 'Gateway container started (port 80)');
+              console.log(chalk.green('[SUCCESS] ') + `Gateway container started (port ${hostPort})`);
               console.log();
               break;
             }
@@ -688,11 +737,11 @@ module.exports = (program) => {
           try {
             const g = await docker(['ps','--filter','name=ractor_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
-              console.log(`  • Gateway: ${RACTOR_HOST_URL}/`);
-              console.log(`  • Operator UI: ${RACTOR_HOST_URL}/`);
-              console.log(`  • API via Gateway: ${RACTOR_HOST_URL}/api`);
-
-              console.log(`  • Content: ${RACTOR_HOST_URL}/content`);
+              const gatewayBaseUrl = hostPort === '80' ? RACTOR_HOST_URL : withPort(RACTOR_HOST_URL, hostPort);
+              console.log(`  • Gateway: ${gatewayBaseUrl}/`);
+              console.log(`  • Operator UI: ${gatewayBaseUrl}/`);
+              console.log(`  • API via Gateway: ${gatewayBaseUrl}/api`);
+              console.log(`  • Content: ${gatewayBaseUrl}/content`);
             } else {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }
