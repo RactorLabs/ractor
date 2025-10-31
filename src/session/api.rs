@@ -29,12 +29,12 @@ pub struct Session {
     // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
 
-pub struct RactorClient {
+pub struct TsbxClient {
     client: Client,
     config: Arc<Config>,
 }
 
-impl RactorClient {
+impl TsbxClient {
     pub fn new(config: Arc<Config>) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))

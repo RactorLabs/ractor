@@ -1,6 +1,6 @@
-# Ractor Operator UI Plan
+# TaskSandbox Operator UI Plan
 
-Goal: Build a complete Operator web UI that documents and interacts with the Ractor Server REST APIs. The documentation pages are public (no auth). Interactive pages require authentication and use a cookie-stored JWT for API calls.
+Goal: Build a complete Operator web UI that documents and interacts with the TaskSandbox Server REST APIs. The documentation pages are public (no auth). Interactive pages require authentication and use a cookie-stored JWT for API calls.
 
 ## Scope overview
 - API documentation (public): Cover every endpoint under `GET /api/v0/**` with clear method, path, params, request/response examples, and notes.
@@ -29,9 +29,9 @@ Goal: Build a complete Operator web UI that documents and interacts with the Rac
 ## Architecture decisions
 - API base URL: default to same origin (`/api/v0`) with option to override via Vite env (e.g. `VITE_API_BASE`); use relative paths by default for Docker deployment behind a reverse proxy.
 - Auth token storage: use a cookie set by the client after login:
-  - Name: `ractor_token`
+  - Name: `tsbx_token`
   - Attributes: `path=/; sameSite=Lax`; set `secure` in production. (Note: httpOnly cookies cannot be set from JS; for now we prefer simple client-set cookies. Consider server-set httpOnly cookies as a future hardening.)
-  - Also store `ractor_operator` for operator name/identity.
+  - Also store `tsbx_operator` for operator name/identity.
 - API client: a small wrapper around `fetch`:
   - Prepends `/api/v0` if missing
   - Attaches `Authorization: Bearer <token>` header when cookie present
@@ -67,8 +67,8 @@ Deliverables:
 - `/login` page styled per template (see HUD startup login page styles).
 - Submit to `POST /api/v0/operators/{name}/login` with `{ pass }`.
 - On success:
-  - Save JWT to cookie `ractor_token`
-  - Save operator name to cookie `ractor_operator`
+  - Save JWT to cookie `tsbx_token`
+  - Save operator name to cookie `tsbx_operator`
   - Redirect to `/app/sessions`
 - Auth guard:
   - Create `src/routes/app/+layout.svelte` that checks token cookie on mount and redirects to `/login` when missing/invalid.

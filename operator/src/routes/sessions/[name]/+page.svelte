@@ -72,12 +72,12 @@
   let chat = [];
   // Toggle display of thinking (analysis/commentary) text; persisted via cookie
   let showThinking = false;
-  const SHOW_THINKING_COOKIE = 'ractor_showThinking';
+  const SHOW_THINKING_COOKIE = 'tsbx_showThinking';
   let thinkingPrefLoaded = false;
   // Toggle display of tool calls/results; persisted via cookie
   let showTools = true;
-  const SHOW_TOOLS_COOKIE = 'ractor_showTools';
-  const FM_AUTO_REFRESH_COOKIE = 'ractor_filesAutoRefresh';
+  const SHOW_TOOLS_COOKIE = 'tsbx_showTools';
+  const FM_AUTO_REFRESH_COOKIE = 'tsbx_filesAutoRefresh';
   let toolsPrefLoaded = false;
   function getCookie(name) {
     try {

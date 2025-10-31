@@ -1,4 +1,4 @@
-# @ractor/cli
+# @tsbx/cli
 
 Remote Sessionic Work Orchestrator - CLI for Computer use sessions
 
@@ -8,4 +8,4 @@ See this repository's README for installation instructions, setup guides, and do
 
 ## Support
 
-- **🐦 Community**: [x.com/ractor](https://x.com/ractor)
+- **🐦 Community**: [x.com/tsbx](https://x.com/tsbx)

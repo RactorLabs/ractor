@@ -15,8 +15,8 @@ else
 fi
 
 # Default registry prefix (DigitalOcean Container Registry)
-# Example full image name: registry.digitalocean.com/ractor/ractor_api:TAG
-DEFAULT_REGISTRY="registry.digitalocean.com/ractor"
+# Example full image name: registry.digitalocean.com/tsbx/tsbx_api:TAG
+DEFAULT_REGISTRY="registry.digitalocean.com/tsbx"
 
 # Colors for output
 RED='\033[0;31m'
@@ -46,7 +46,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Push Docker images for Ractor components to registry"
+  echo "Push Docker images for TaskSandbox components to registry"
   echo ""
   echo "Components:"
   echo "  api         Push the api image"
@@ -105,7 +105,7 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("api" "controller" "session" "operator" "content" "gateway")
 fi
 
-print_status "Pushing Ractor Docker images"
+print_status "Pushing TaskSandbox Docker images"
 print_status "Tag: $TAG"
 print_status "Registry: $REGISTRY"
 print_status "Components: ${COMPONENTS[*]}"
@@ -132,22 +132,22 @@ echo ""
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api)
-    image_name="${REGISTRY}/ractor_api:${TAG}"
+    image_name="${REGISTRY}/tsbx_api:${TAG}"
     ;;
   controller)
-    image_name="${REGISTRY}/ractor_controller:${TAG}"
+    image_name="${REGISTRY}/tsbx_controller:${TAG}"
     ;;
   session)
-    image_name="${REGISTRY}/ractor_session:${TAG}"
+    image_name="${REGISTRY}/tsbx_session:${TAG}"
     ;;
   operator)
-    image_name="${REGISTRY}/ractor_operator:${TAG}"
+    image_name="${REGISTRY}/tsbx_operator:${TAG}"
     ;;
   content)
-    image_name="${REGISTRY}/ractor_content:${TAG}"
+    image_name="${REGISTRY}/tsbx_content:${TAG}"
     ;;
   gateway)
-    image_name="${REGISTRY}/ractor_gateway:${TAG}"
+    image_name="${REGISTRY}/tsbx_gateway:${TAG}"
     ;;
   *)
     print_warning "Unknown component: $component. Skipping..."
@@ -158,7 +158,7 @@ for component in "${COMPONENTS[@]}"; do
   print_status "Pushing $component ($image_name)..."
 
   # Check if local image exists (built by build.sh uses project version)
-  local local_image="ractor_${component}:${TAG}"
+  local local_image="tsbx_${component}:${TAG}"
   if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${local_image}$"; then
     print_error "Local image $local_image not found. Build it first with:"
     print_error "  ./scripts/build.sh $component"
@@ -173,7 +173,7 @@ for component in "${COMPONENTS[@]}"; do
   fi
 
   # Also tag as 'latest' if we're pushing a version tag
-  latest_image="${REGISTRY}/ractor_${component}:latest"
+  latest_image="${REGISTRY}/tsbx_${component}:latest"
   if [ "$TAG" != "latest" ]; then
     print_status "Tagging $local_image as $latest_image..."
     if ! docker tag "$local_image" "$latest_image"; then
@@ -212,9 +212,9 @@ print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api | controller | session | operator | content | gateway)
-    echo "  ${REGISTRY}/ractor_${component}:${TAG}"
+    echo "  ${REGISTRY}/tsbx_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
-      echo "  ${REGISTRY}/ractor_${component}:latest"
+      echo "  ${REGISTRY}/tsbx_${component}:latest"
     fi
     ;;
   esac

@@ -248,7 +248,7 @@ impl SessionManager {
         Ok(slept_count)
     }
 
-    /// Generate a session-specific RACTOR token for the given principal
+    /// Generate a session-specific TSBX token for the given principal
     fn generate_session_token(
         &self,
         principal: &str,
@@ -261,7 +261,7 @@ impl SessionManager {
             sub_type: principal_type,
             exp: exp.timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
-            iss: "ractor-session-manager".to_string(),
+            iss: "tsbx-session-manager".to_string(),
         };
 
         let token = encode(
@@ -424,7 +424,7 @@ impl SessionManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic token for this session (for Ractor auth)
+        // Generate dynamic token for this session (for tsbx auth)
         info!("Generating dynamic token for session {}", session_name);
         let session_token = self
             .generate_session_token(principal, principal_type, &session_name)
@@ -1131,17 +1131,17 @@ impl SessionManager {
             }
         }
 
-        let session_container = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let session_container = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         // First, create the content directory in the content container
         let public_dir = format!("/content/{}", session_name);
         info!(
-            "Executing: docker exec ractor_content mkdir -p {}",
+            "Executing: docker exec tsbx_content mkdir -p {}",
             public_dir
         );
 
         let mkdir_output = tokio::process::Command::new("docker")
-            .args(&["exec", "ractor_content", "mkdir", "-p", &public_dir])
+            .args(&["exec", "tsbx_content", "mkdir", "-p", &public_dir])
             .output()
             .await
             .map_err(|e| {
@@ -1201,7 +1201,7 @@ impl SessionManager {
             .args(&[
                 "cp",
                 &format!("{}//.", temp_dir),
-                &format!("ractor_content:/content/{}/", session_name),
+                &format!("tsbx_content:/content/{}/", session_name),
             ])
             .output()
             .await
@@ -1234,13 +1234,13 @@ impl SessionManager {
         // Remove content directory for this session from the content container
         let public_path = format!("/content/{}", session_name);
         info!(
-            "Executing: docker exec ractor_content rm -rf {}",
+            "Executing: docker exec tsbx_content rm -rf {}",
             public_path
         );
 
         // Remove the published directory from content container
         let remove_output = tokio::process::Command::new("docker")
-            .args(&["exec", "ractor_content", "rm", "-rf", &public_path])
+            .args(&["exec", "tsbx_content", "rm", "-rf", &public_path])
             .output()
             .await
             .map_err(|e| {

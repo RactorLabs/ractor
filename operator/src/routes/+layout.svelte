@@ -22,8 +22,8 @@
     document.querySelector('body').classList.add('app-init');
     // Expose host name and host URL for client-side usage
     if (typeof window !== 'undefined') {
-      window.__RACTOR_HOST_NAME__ = (data && data.hostName) ? data.hostName : getHostName();
-      window.__RACTOR_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : getHostUrl();
+      window.__TSBX_HOST_NAME__ = (data && data.hostName) ? data.hostName : getHostName();
+      window.__TSBX_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : getHostUrl();
     }
 
     // Disable auto-capitalization in all text inputs/textareas/contenteditable fields

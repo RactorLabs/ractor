@@ -4,15 +4,15 @@ const path = require('path');
 class DockerManager {
   constructor() {
     // Use published Docker images from DigitalOcean Container Registry
-    // Registry namespace: registry.digitalocean.com/ractor
+    // Registry namespace: registry.digitalocean.com/tsbx
     this.images = {
       mysql: 'mysql:8.0',
-      api: 'registry.digitalocean.com/ractor/ractor_api:latest',
-      controller: 'registry.digitalocean.com/ractor/ractor_controller:latest',
-      session: 'registry.digitalocean.com/ractor/ractor_session:latest',
-      operator: 'registry.digitalocean.com/ractor/ractor_operator:latest',
-      gateway: 'registry.digitalocean.com/ractor/ractor_gateway:latest',
-      content: 'registry.digitalocean.com/ractor/ractor_content:latest'
+      api: 'registry.digitalocean.com/tsbx/tsbx_api:latest',
+      controller: 'registry.digitalocean.com/tsbx/tsbx_controller:latest',
+      session: 'registry.digitalocean.com/tsbx/tsbx_session:latest',
+      operator: 'registry.digitalocean.com/tsbx/tsbx_operator:latest',
+      gateway: 'registry.digitalocean.com/tsbx/tsbx_gateway:latest',
+      content: 'registry.digitalocean.com/tsbx/tsbx_content:latest'
     };
   }
 
@@ -54,16 +54,16 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['mysql', 'ractor_api', 'ractor_operator', 'ractor_content', 'ractor_controller', 'ractor_gateway'];
+    const serviceList = services.length > 0 ? services : ['mysql', 'tsbx_api', 'tsbx_operator', 'tsbx_content', 'tsbx_controller', 'tsbx_gateway'];
     
     // Map service names to component names
     const componentMap = {
-      'ractor_api': 'api',
-      'ractor_controller': 'controller',
+      'tsbx_api': 'api',
+      'tsbx_controller': 'controller',
       'mysql': 'mysql',
-      'ractor_operator': 'operator',
-      'ractor_gateway': 'gateway',
-      'ractor_content': 'content'
+      'tsbx_operator': 'operator',
+      'tsbx_gateway': 'gateway',
+      'tsbx_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -87,13 +87,13 @@ class DockerManager {
 
     // Create network if it doesn't exist
     try {
-      await this.execDocker(['network', 'inspect', 'ractor_network'], { silent: true });
+      await this.execDocker(['network', 'inspect', 'tsbx_network'], { silent: true });
     } catch (error) {
-      await this.execDocker(['network', 'create', 'ractor_network']);
+      await this.execDocker(['network', 'create', 'tsbx_network']);
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data']) {
+    for (const volume of ['mysql_data', 'tsbx_content_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -111,8 +111,8 @@ class DockerManager {
   async startService(component) {
     // Stop and remove existing container
     try {
-      await this.execDocker(['stop', `ractor_${component}`], { silent: true });
-      await this.execDocker(['rm', `ractor_${component}`], { silent: true });
+      await this.execDocker(['stop', `tsbx_${component}`], { silent: true });
+      await this.execDocker(['rm', `tsbx_${component}`], { silent: true });
     } catch (error) {
       // Container doesn't exist, that's fine
     }
@@ -122,13 +122,13 @@ class DockerManager {
         await this.execDocker([
           'run', '-d',
           '--name', 'mysql',
-          '--network', 'ractor_network',
+          '--network', 'tsbx_network',
           '-p', '3307:3306',
           '-v', 'mysql_data:/var/lib/mysql',
           '-e', 'MYSQL_ROOT_PASSWORD=root',
-          '-e', 'MYSQL_DATABASE=ractor',
-          '-e', 'MYSQL_USER=ractor',
-          '-e', 'MYSQL_PASSWORD=ractor',
+          '-e', 'MYSQL_DATABASE=tsbx',
+          '-e', 'MYSQL_USER=tsbx',
+          '-e', 'MYSQL_PASSWORD=tsbx',
           '--health-cmd', 'mysqladmin ping -h localhost -u root -proot',
           '--health-interval', '10s',
           '--health-timeout', '5s',
@@ -151,46 +151,46 @@ class DockerManager {
       case 'operator':
         await this.execDocker([
           'run', '-d',
-          '--name', 'ractor_operator',
-          '--network', 'ractor_network',
-          '-v', 'ractor_content_data:/content',
-          '-v', 'ractor_operator_data:/app/logs',
-          ...(process.env.RACTOR_HOST_NAME ? ['-e', `RACTOR_HOST_NAME=${process.env.RACTOR_HOST_NAME}`] : []),
-          ...(process.env.RACTOR_HOST_URL ? ['-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`] : []),
+          '--name', 'tsbx_operator',
+          '--network', 'tsbx_network',
+          '-v', 'tsbx_content_data:/content',
+          '-v', 'tsbx_operator_data:/app/logs',
+          ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
+          ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           this.images.operator
         ]);
-        console.log('🚀 ractor_operator started');
+        console.log('🚀 tsbx_operator started');
         break;
       case 'content':
         await this.execDocker([
           'run', '-d',
-          '--name', 'ractor_content',
-          '--network', 'ractor_network',
-          '-v', 'ractor_content_data:/content',
-          this.images.content || 'registry.digitalocean.com/ractor/ractor_content:latest'
+          '--name', 'tsbx_content',
+          '--network', 'tsbx_network',
+          '-v', 'tsbx_content_data:/content',
+          this.images.content || 'registry.digitalocean.com/tsbx/tsbx_content:latest'
         ]);
-        console.log('🚀 ractor_content started');
+        console.log('🚀 tsbx_content started');
         break;
 
       case 'gateway':
         await this.execDocker([
           'run', '-d',
-          '--name', 'ractor_gateway',
-          '--network', 'ractor_network',
+          '--name', 'tsbx_gateway',
+          '--network', 'tsbx_network',
           '-p', '80:80',
           this.images.gateway
         ]);
-        console.log('🚀 ractor_gateway started (port 80)');
+        console.log('🚀 tsbx_gateway started (port 80)');
         break;
 
       case 'api':
         await this.execDocker([
           'run', '-d',
-          '--name', 'ractor_api',
-          '--network', 'ractor_network',
+          '--name', 'tsbx_api',
+          '--network', 'tsbx_network',
           '-p', '9000:9000',
-          '-v', 'ractor_api_data:/app/logs',
-          '-e', 'DATABASE_URL=mysql://ractor:ractor@mysql:3306/ractor',
+          '-v', 'tsbx_api_data:/app/logs',
+          '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
           this.images.api
@@ -200,15 +200,15 @@ class DockerManager {
       case 'controller':
         await this.execDocker([
           'run', '-d',
-          '--name', 'ractor_controller',
-          '--network', 'ractor_network',
+          '--name', 'tsbx_controller',
+          '--network', 'tsbx_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
-          '-v', 'ractor_controller_data:/app/logs',
-          '-e', 'DATABASE_URL=mysql://ractor:ractor@mysql:3306/ractor',
+          '-v', 'tsbx_controller_data:/app/logs',
+          '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
-          ...(process.env.RACTOR_HOST_NAME ? ['-e', `RACTOR_HOST_NAME=${process.env.RACTOR_HOST_NAME}`] : []),
-          ...(process.env.RACTOR_HOST_URL ? ['-e', `RACTOR_HOST_URL=${process.env.RACTOR_HOST_URL}`] : []),
+          ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
+          ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SESSION_IMAGE=${this.images.session}`,
           '-e', 'SESSION_CPU_LIMIT=0.5',
           '-e', 'SESSION_MEMORY_LIMIT=536870912',
@@ -241,16 +241,16 @@ class DockerManager {
   // Stop services
   async stop(services = [], cleanup = false) {
     // Default to stopping gateway, controller, operator and api
-    const serviceList = services.length > 0 ? services : ['ractor_gateway', 'ractor_controller', 'ractor_operator', 'ractor_content', 'ractor_api'];
+    const serviceList = services.length > 0 ? services : ['tsbx_gateway', 'tsbx_controller', 'tsbx_operator', 'tsbx_content', 'tsbx_api'];
     
     // Map service names to component names
     const componentMap = {
-      'ractor_api': 'api',
-      'ractor_controller': 'controller',
+      'tsbx_api': 'api',
+      'tsbx_controller': 'controller',
       'mysql': 'mysql',
-      'ractor_operator': 'operator',
-      'ractor_gateway': 'gateway',
-      'ractor_content': 'content'
+      'tsbx_operator': 'operator',
+      'tsbx_gateway': 'gateway',
+      'tsbx_content': 'content'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -258,8 +258,8 @@ class DockerManager {
     // Stop in reverse order
     for (const component of components.reverse()) {
       try {
-        await this.execDocker(['stop', `ractor_${component}`], { silent: true });
-        await this.execDocker(['rm', `ractor_${component}`], { silent: true });
+        await this.execDocker(['stop', `tsbx_${component}`], { silent: true });
+        await this.execDocker(['rm', `tsbx_${component}`], { silent: true });
       } catch (error) {
         // Container might not exist
       }
@@ -274,7 +274,7 @@ class DockerManager {
   // Get service status
   async status() {
     try {
-      const result = await this.execDocker(['ps', '--filter', 'name=ractor_', '--format', 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'], { silent: true });
+      const result = await this.execDocker(['ps', '--filter', 'name=tsbx_', '--format', 'table {{.Names}}\\t{{.Status}}\\t{{.Ports}}'], { silent: true });
       return result.stdout;
     } catch (error) {
       return null;
@@ -287,12 +287,12 @@ class DockerManager {
     const versionedImages = {};
     for (const [component, image] of Object.entries(this.images)) {
       if (component !== 'mysql') {
-        // For ractor images, use the specified version tag
-        if (image.startsWith('registry.digitalocean.com/ractor/') || image.startsWith('ractor/')) {
+        // For tsbx images, use the specified version tag
+        if (image.startsWith('registry.digitalocean.com/tsbx/') || image.startsWith('tsbx/')) {
           const [repo] = image.split(':');
           versionedImages[component] = `${repo}:${version}`;
         } else {
-          // For non-ractor images, use original (like python:3.11-slim)
+          // For non-tsbx images, use original (like python:3.11-slim)
           versionedImages[component] = image;
         }
       }
@@ -331,7 +331,7 @@ class DockerManager {
   // Clean up session containers
   async cleanupContainers() {
     try {
-      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=ractor_session_'], { silent: true });
+      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=tsbx_session_'], { silent: true });
       
       if (result.stdout.trim()) {
         const containerIds = result.stdout.trim().split('\n').filter(id => id);

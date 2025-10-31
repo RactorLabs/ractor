@@ -30,7 +30,7 @@ pub fn create_operator_jwt(
         sub_type: SubjectType::Admin,
         exp: exp.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
-        iss: "ractor-rbac".to_string(),
+        iss: "tsbx-rbac".to_string(),
     };
 
     let token = encode(

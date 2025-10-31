@@ -5,8 +5,8 @@ export function setPageTitle(title) {
     // Prefer runtime global; else SSR-injected meta; else branding fallback
     let name = '';
     try {
-      if (typeof window !== 'undefined' && window.__RACTOR_HOST_NAME__) {
-        name = window.__RACTOR_HOST_NAME__;
+      if (typeof window !== 'undefined' && window.__TSBX_HOST_NAME__) {
+        name = window.__TSBX_HOST_NAME__;
       }
     } catch (_) {}
     if (!name) {

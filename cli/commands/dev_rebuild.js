@@ -13,13 +13,13 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('rebuild')
-    .description('[development only] Rebuild Ractor components via ./scripts/rebuild.sh')
+    .description('[development only] Rebuild TaskSandbox components via ./scripts/rebuild.sh')
     .argument('[args...]', 'Components: api, controller, session, operator, content, gateway. Flags are passed through.')
     .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway\n' +
       '\nExamples:\n' +
-      '  $ ractor rebuild                    # rebuild all components (script default)\n' +
-      '  $ ractor rebuild controller         # rebuild controller\n' +
-      '  $ ractor rebuild api session          # rebuild multiple components')
+      '  $ tsbx rebuild                    # rebuild all components (script default)\n' +
+      '  $ tsbx rebuild controller         # rebuild controller\n' +
+      '  $ tsbx rebuild api session          # rebuild multiple components')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
@@ -27,7 +27,7 @@ module.exports = (program) => {
           console.error('[ERROR] scripts/rebuild.sh not found. This command is for development only.');
           process.exit(1);
         }
-        // Validate non-flag args are Ractor components
+        // Validate non-flag args are TaskSandbox components
         const allowed = new Set(['api','controller','session','operator','content','gateway']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {

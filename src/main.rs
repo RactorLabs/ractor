@@ -1,7 +1,7 @@
 fn main() {
     eprintln!("Use one of the service binaries:");
-    eprintln!("  ractor-api");
-    eprintln!("  ractor-controller");
-    eprintln!("  ractor-session");
+    eprintln!("  tsbx-api");
+    eprintln!("  tsbx-controller");
+    eprintln!("  tsbx-session");
     std::process::exit(1);
 }

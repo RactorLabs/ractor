@@ -62,10 +62,10 @@ for COMPONENT in "${ORDERED[@]}"; do
   # 2) Stop the running container (when applicable)
   if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Stopping $COMPONENT..."
-    if command -v ractor >/dev/null 2>&1; then
-      ractor stop "$COMPONENT" || true
+    if command -v tsbx >/dev/null 2>&1; then
+      tsbx stop "$COMPONENT" || true
     else
-      echo "[WARNING] ractor CLI not found; skipping stop for $COMPONENT" >&2
+      echo "[WARNING] tsbx CLI not found; skipping stop for $COMPONENT" >&2
     fi
   else
     if [[ "$COMPONENT" == "session" ]]; then
@@ -78,10 +78,10 @@ for COMPONENT in "${ORDERED[@]}"; do
   # 3) Start the container so it picks up the freshly built image
   if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Starting $COMPONENT..."
-    if command -v ractor >/dev/null 2>&1; then
-      ractor start "$COMPONENT" || true
+    if command -v tsbx >/dev/null 2>&1; then
+      tsbx start "$COMPONENT" || true
     else
-      echo "[WARNING] ractor CLI not found; skipping start for $COMPONENT" >&2
+      echo "[WARNING] tsbx CLI not found; skipping start for $COMPONENT" >&2
     fi
   else
     if [[ "$COMPONENT" == "session" ]]; then

@@ -1,4 +1,4 @@
-// API documentation data source for Ractor UI
+// API documentation data source for TaskSandbox UI
 // Covers endpoints defined in src/server/rest/routes.rs
 import { getHostUrl } from '../branding.js';
 
@@ -572,7 +572,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/sessions/{name}/files/read/{path...}',
         auth: 'bearer',
-        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-Ractor-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if session is sleeping; 404 if not found; 400 for invalid paths.',
+        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-TaskSandbox-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if session is sleeping; 404 if not found; 400 for invalid paths.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
@@ -622,9 +622,9 @@ export function getApiDocs(base) {
   {
     id: 'content',
     title: 'Content (Public)',
-    description: 'Static content served by ractor-content service, mounted under /content.',
+    description: 'Static content served by tsbx-content service, mounted under /content.',
     endpoints: [
-      { method: 'GET', path: '/content/health', auth: 'public', desc: 'Health endpoint for the content server.', params: [], example: `curl -s ${BASE}/content/health`, resp: { schema: 'Empty' }, responses: [ { status: 200, body: `{"status":"healthy","service":"ractor-content"}` } ] },
+      { method: 'GET', path: '/content/health', auth: 'public', desc: 'Health endpoint for the content server.', params: [], example: `curl -s ${BASE}/content/health`, resp: { schema: 'Empty' }, responses: [ { status: 200, body: `{"status":"healthy","service":"tsbx-content"}` } ] },
       { method: 'GET', path: '/content/', auth: 'public', desc: 'Root of published content. Returns 200 with no body.', params: [], example: `curl -i ${BASE}/content/`, resp: { schema: 'Empty' }, responses: [ { status: 200 } ] },
       { method: 'GET', path: '/content/{path...}', auth: 'public', desc: 'Serve static files from published content. 404 returns a small HTML page indicating no content.', params: [ { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path within content volume (e.g., {session}/index.html)' } ], example: `curl -i ${BASE}/content/<session>/index.html`, resp: { schema: 'Empty' }, responses: [ { status: 200 }, { status: 404, body: '<html>...No Content...</html>' } ] }
     ]

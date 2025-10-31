@@ -34,7 +34,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Install development dependencies for Ractor"
+    echo "Install development dependencies for TaskSandbox"
     echo ""
     echo "Options:"
     echo "  -v, --verbose           Show detailed output"
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "🔧 Installing Ractor development dependencies"
+print_status "🔧 Installing TaskSandbox development dependencies"
 
 # Change to project root
 cd "$PROJECT_ROOT"
@@ -205,13 +205,13 @@ echo ""
 print_status "Next steps:"
 print_status "  1. Link CLI for development:    ./scripts/link.sh"
 print_status "  2. Build services:              ./scripts/build.sh"
-print_status "  3. Start services:              ractor start"
-print_status "  4. Test authentication:         ractor auth login --user admin --pass admin"
-print_status "  5. Start session:                 ractor session create"
+print_status "  3. Start services:              tsbx start"
+print_status "  4. Test authentication:         tsbx auth login --user admin --pass admin"
+print_status "  5. Start session:                 tsbx session create"
 
 echo ""
 print_status "💡 Development workflow:"
 print_status "  • Edit code in src/ or cli/"
 print_status "  • Rebuild services: ./scripts/build.sh"
 print_status "  • CLI changes are live (if linked)"
-print_status "  • Stop/Start services: ractor stop && ractor start"
+print_status "  • Stop/Start services: tsbx stop && tsbx start"

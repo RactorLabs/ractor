@@ -13,14 +13,14 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('build')
-    .description('[development only] Build Ractor images via ./scripts/build.sh')
+    .description('[development only] Build TaskSandbox images via ./scripts/build.sh')
     .argument('[args...]', 'Components: api, controller, session, operator, content, gateway. Flags are passed through (e.g., -n, --no-cache).')
     .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway\n' +
       '\nExamples:\n' +
-      '  $ ractor build                       # builds all (script default)\n' +
-      '  $ ractor build api controller        # build only api and controller\n' +
-      '  $ ractor build operator content      # build Operator UI and Content\n' +
-      '  $ ractor build -- -n --no-cache      # pass flags through to script')
+      '  $ tsbx build                       # builds all (script default)\n' +
+      '  $ tsbx build api controller        # build only api and controller\n' +
+      '  $ tsbx build operator content      # build Operator UI and Content\n' +
+      '  $ tsbx build -- -n --no-cache      # pass flags through to script')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'build.sh');
@@ -28,7 +28,7 @@ module.exports = (program) => {
           console.error('[ERROR] scripts/build.sh not found. This command is for development only.');
           process.exit(1);
         }
-        // Validate non-flag args are Ractor components (or 'all')
+        // Validate non-flag args are TaskSandbox components (or 'all')
         const allowed = new Set(['api','controller','session','operator','content','gateway','all']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {

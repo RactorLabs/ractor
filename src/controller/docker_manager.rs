@@ -21,7 +21,7 @@ pub struct DockerManager {
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
     let mut lines = String::from(
-        "# Ractor session environment\n# Managed by Ractor controller; do not modify without explicit approval.\n",
+        "# TaskSandbox session environment\n# Managed by TaskSandbox controller; do not modify without explicit approval.\n",
     );
     let mut entries: Vec<_> = env.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -51,7 +51,7 @@ impl DockerManager {
             docker,
             db_pool,
             session_image: std::env::var("SESSION_IMAGE")
-                .unwrap_or_else(|_| "ractor_session:latest".to_string()),
+                .unwrap_or_else(|_| "tsbx_session:latest".to_string()),
             cpu_limit: std::env::var("SESSION_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
@@ -65,13 +65,13 @@ impl DockerManager {
 
     // NEW: Create session volume with explicit naming
     async fn create_session_volume(&self, session_name: &str) -> Result<String> {
-        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.session_name".to_string(), session_name.to_string());
-        labels.insert("ractor.type".to_string(), "session_volume".to_string());
+        labels.insert("tsbx.session_name".to_string(), session_name.to_string());
+        labels.insert("tsbx.type".to_string(), "session_volume".to_string());
         labels.insert(
-            "ractor.created_at".to_string(),
+            "tsbx.created_at".to_string(),
             chrono::Utc::now().to_rfc3339(),
         );
 
@@ -90,12 +90,12 @@ impl DockerManager {
 
     // Get session volume name (derived from session name). Docker volume names must be lowercase.
     fn get_session_volume_name(&self, session_name: &str) -> String {
-        format!("ractor_session_data_{}", session_name.to_ascii_lowercase())
+        format!("tsbx_session_data_{}", session_name.to_ascii_lowercase())
     }
 
     // Get session container name (derived from session name). Docker container names must be lowercase.
     fn get_session_container_name(&self, session_name: &str) -> String {
-        format!("ractor_session_{}", session_name.to_ascii_lowercase())
+        format!("tsbx_session_{}", session_name.to_ascii_lowercase())
     }
 
     // Check if session volume exists
@@ -129,8 +129,8 @@ sudo chmod 600 /session/.env
 sudo chown -R session:session /session
 sudo chmod -R 755 /session
 # Seed default HTML template if missing
-if [ ! -f /session/template/simple.html ] && [ -f /opt/ractor/templates/simple.html ]; then
-  sudo cp /opt/ractor/templates/simple.html /session/template/simple.html && sudo chown session:session /session/template/simple.html;
+if [ ! -f /session/template/simple.html ] && [ -f /opt/tsbx/templates/simple.html ]; then
+  sudo cp /opt/tsbx/templates/simple.html /session/template/simple.html && sudo chown session:session /session/template/simple.html;
 fi
 echo 'Session directories created (code, .env, logs, content, template)'
 ";
@@ -185,7 +185,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
     // NEW: Cleanup session volume
     pub async fn cleanup_session_volume(&self, session_name: &str) -> Result<()> {
         let expected_volume_name =
-            format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+            format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
@@ -215,10 +215,10 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Then copy data from parent volume to new volume using Docker command
         let parent_volume = format!(
-            "ractor_session_data_{}",
+            "tsbx_session_data_{}",
             parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying volume data from {} to {}",
@@ -226,7 +226,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -252,7 +252,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     }
                 ]),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -344,10 +344,10 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "ractor_session_data_{}",
+            "tsbx_session_data_{}",
             parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -394,7 +394,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -417,7 +417,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     },
                 ]),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -544,7 +544,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         copy_code: bool,
         copy_env: bool,
         copy_content: bool,
-        ractor_token: String,
+        tsbx_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
@@ -559,10 +559,10 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!(
-            "ractor_session_data_{}",
+            "tsbx_session_data_{}",
             parent_session_name.to_ascii_lowercase()
         );
-        let new_volume = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Copying selective data from {} to {}",
@@ -609,7 +609,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         let copy_command = copy_commands.join(" && ");
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("ractor_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -632,7 +632,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                         ..Default::default()
                     },
                 ]),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -753,7 +753,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 Some(env),
                 instructions,
                 setup,
-                ractor_token,
+                tsbx_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -775,7 +775,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
     // Helper method to read a file from a volume
     async fn read_file_from_volume(&self, volume_name: &str, file_path: &str) -> Result<String> {
         let read_container_name = format!(
-            "ractor_read_file_{}",
+            "tsbx_read_file_{}",
             Uuid::new_v4().to_string()[..8].to_string()
         );
 
@@ -798,7 +798,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                     read_only: Some(true),
                     ..Default::default()
                 }]),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 ..Default::default()
             }),
             ..Default::default()
@@ -885,7 +885,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
-        ractor_token: String,
+        tsbx_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
@@ -896,7 +896,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 Some(env),
                 instructions,
                 setup,
-                ractor_token,
+                tsbx_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -914,7 +914,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
     pub async fn wake_container(&self, session_name: &str) -> Result<String> {
         // Read existing env from the volume
-        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
         info!(
             "Waking container for session {} - reading env from volume {}",
             session_name, volume_name
@@ -960,13 +960,13 @@ echo 'Session directories created (code, .env, logs, content, template)'
     pub async fn wake_container_with_tokens(
         &self,
         session_name: &str,
-        ractor_token: String,
+        tsbx_token: String,
         principal: String,
         principal_type: String,
         task_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user env from the volume (but generate fresh system tokens)
-        let volume_name = format!("ractor_session_data_{}", session_name.to_ascii_lowercase());
+        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
         info!(
             "Waking container for session {} with fresh tokens",
             session_name
@@ -1006,7 +1006,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 env,
                 instructions,
                 setup,
-                ractor_token,
+                tsbx_token,
                 principal,
                 principal_type,
                 Some(task_created_at),
@@ -1022,7 +1022,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
@@ -1043,17 +1043,17 @@ echo 'Session directories created (code, .env, logs, content, template)'
         };
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.session".to_string(), session_name.to_string());
-        labels.insert("ractor.managed".to_string(), "true".to_string());
-        labels.insert("ractor.volume".to_string(), session_volume.clone());
+        labels.insert("tsbx.session".to_string(), session_name.to_string());
+        labels.insert("tsbx.managed".to_string(), "true".to_string());
+        labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
         // Get user token from env (added automatically by session manager)
         let user_token = env_map
             .as_ref()
-            .and_then(|s| s.get("RACTOR_TOKEN"))
+            .and_then(|s| s.get("TSBX_TOKEN"))
             .cloned()
             .unwrap_or_else(|| {
-                warn!("No RACTOR_TOKEN found in env, Host authentication may fail");
+                warn!("No TSBX_TOKEN found in env, Host authentication may fail");
                 "missing-token".to_string()
             });
 
@@ -1070,17 +1070,17 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Set environment variables for the session structure
         let mut env_vars = vec![
-            format!("RACTOR_API_URL=http://ractor_api:9000"),
-            format!("RACTOR_SESSION_NAME={}", session_name),
-            format!("RACTOR_SESSION_DIR=/session"),
+            format!("TSBX_API_URL=http://tsbx_api:9000"),
+            format!("TSBX_SESSION_NAME={}", session_name),
+            format!("TSBX_SESSION_DIR=/session"),
         ];
 
         // Propagate host branding and URL to sessions (provided by start script)
-        let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
-        let host_url = std::env::var("RACTOR_HOST_URL")
-            .expect("RACTOR_HOST_URL must be set by the start script");
-        env_vars.push(format!("RACTOR_HOST_NAME={}", host_name));
-        env_vars.push(format!("RACTOR_HOST_URL={}", host_url));
+        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+        let host_url = std::env::var("TSBX_HOST_URL")
+            .expect("TSBX_HOST_URL must be set by the start script");
+        env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
+        env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
@@ -1102,32 +1102,32 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env_vars.push("RACTOR_HAS_SETUP=true".to_string());
+            env_vars.push("TSBX_HAS_SETUP=true".to_string());
         }
 
         // Add principal information as environment variables
         if let Some(env_map) = &env_map {
-            // Extract principal info from RACTOR_TOKEN if available
-            if let Some(_token) = env_map.get("RACTOR_TOKEN") {
+            // Extract principal info from TSBX_TOKEN if available
+            if let Some(_token) = env_map.get("TSBX_TOKEN") {
                 // Set environment variables for Host principal logging
                 env_vars.push(format!(
-                    "RACTOR_PRINCIPAL={}",
+                    "TSBX_PRINCIPAL={}",
                     env_map
-                        .get("RACTOR_PRINCIPAL")
+                        .get("TSBX_PRINCIPAL")
                         .unwrap_or(&"unknown".to_string())
                 ));
                 env_vars.push(format!(
-                    "RACTOR_PRINCIPAL_TYPE={}",
+                    "TSBX_PRINCIPAL_TYPE={}",
                     env_map
-                        .get("RACTOR_PRINCIPAL_TYPE")
+                        .get("TSBX_PRINCIPAL_TYPE")
                         .unwrap_or(&"unknown".to_string())
                 ));
             }
 
             // Add user env as environment variables, but do NOT override
-            // system-managed values like RACTOR_TOKEN or OLLAMA_HOST.
+            // system-managed values like TSBX_TOKEN or OLLAMA_HOST.
             for (key, value) in env_map {
-                if key == "RACTOR_TOKEN" || key == "OLLAMA_HOST" {
+                if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for session {}",
                         key, session_name
@@ -1135,7 +1135,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                     continue;
                 }
                 env_vars.push(format!("{}={}", key, value));
-                if key != "RACTOR_PRINCIPAL" && key != "RACTOR_PRINCIPAL_TYPE" {
+                if key != "TSBX_PRINCIPAL" && key != "TSBX_PRINCIPAL_TYPE" {
                     info!(
                         "Adding env entry {} as environment variable for session {}",
                         key, session_name
@@ -1146,9 +1146,9 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "ractor-session".to_string(),
+            "tsbx-session".to_string(),
             "--api-url".to_string(),
-            "http://ractor_api:9000".to_string(),
+            "http://tsbx_api:9000".to_string(),
             "--session-name".to_string(),
             session_name.to_string(),
         ];
@@ -1169,7 +1169,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 cpu_period: Some(100000),
                 memory: Some(self.memory_limit),
                 memory_swap: Some(self.memory_limit),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
@@ -1215,12 +1215,12 @@ echo 'Session directories created (code, .env, logs, content, template)'
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
-        ractor_token: String,
+        tsbx_token: String,
         principal: String,
         principal_type: String,
         task_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         // No content port mapping; preview server is removed.
 
@@ -1244,9 +1244,9 @@ echo 'Session directories created (code, .env, logs, content, template)'
         };
 
         let mut labels = HashMap::new();
-        labels.insert("ractor.session".to_string(), session_name.to_string());
-        labels.insert("ractor.managed".to_string(), "true".to_string());
-        labels.insert("ractor.volume".to_string(), session_volume.clone());
+        labels.insert("tsbx.session".to_string(), session_name.to_string());
+        labels.insert("tsbx.managed".to_string(), "true".to_string());
+        labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
         // Configure volume mounts
         let mounts = vec![bollard::models::Mount {
@@ -1261,21 +1261,21 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Set environment variables for the session structure
         let mut env_vars = vec![
-            format!("RACTOR_API_URL=http://ractor_api:9000"),
-            format!("RACTOR_SESSION_NAME={}", session_name),
-            format!("RACTOR_SESSION_DIR=/session"),
+            format!("TSBX_API_URL=http://tsbx_api:9000"),
+            format!("TSBX_SESSION_NAME={}", session_name),
+            format!("TSBX_SESSION_DIR=/session"),
             // Set the generated system tokens directly as environment variables
-            format!("RACTOR_TOKEN={}", ractor_token),
-            format!("RACTOR_PRINCIPAL={}", principal),
-            format!("RACTOR_PRINCIPAL_TYPE={}", principal_type),
+            format!("TSBX_TOKEN={}", tsbx_token),
+            format!("TSBX_PRINCIPAL={}", principal),
+            format!("TSBX_PRINCIPAL_TYPE={}", principal_type),
         ];
 
         // Propagate host branding and URL to sessions (provided by start script)
-        let host_name = std::env::var("RACTOR_HOST_NAME").unwrap_or_else(|_| "Ractor".to_string());
-        let host_url = std::env::var("RACTOR_HOST_URL")
-            .expect("RACTOR_HOST_URL must be set by the start script");
-        env_vars.push(format!("RACTOR_HOST_NAME={}", host_name));
-        env_vars.push(format!("RACTOR_HOST_URL={}", host_url));
+        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+        let host_url = std::env::var("TSBX_HOST_URL")
+            .expect("TSBX_HOST_URL must be set by the start script");
+        env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
+        env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
         // Configure Ollama host for model inference (required; no default)
         let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
@@ -1290,21 +1290,21 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Add hint about setup script availability to avoid unnecessary waiting
         if setup.is_some() {
-            env_vars.push("RACTOR_HAS_SETUP=true".to_string());
+            env_vars.push("TSBX_HAS_SETUP=true".to_string());
         }
 
         // Add task creation timestamp for message processing
         if let Some(timestamp) = task_created_at {
-            env_vars.push(format!("RACTOR_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
+            env_vars.push(format!("TSBX_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
-        info!("Set RACTOR_TOKEN and OLLAMA_HOST as environment variables");
+        info!("Set TSBX_TOKEN and OLLAMA_HOST as environment variables");
 
-        // Add user env as environment variables (but NOT RACTOR_TOKEN or OLLAMA_HOST)
+        // Add user env as environment variables (but NOT TSBX_TOKEN or OLLAMA_HOST)
         if let Some(env_map) = &env_map_opt {
             for (key, value) in env_map {
-                // Skip if user provided their own RACTOR_TOKEN or OLLAMA_HOST - we use system-managed values
-                if key == "RACTOR_TOKEN" || key == "OLLAMA_HOST" {
+                // Skip if user provided their own TSBX_TOKEN or OLLAMA_HOST - we use system-managed values
+                if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead",
                         key
@@ -1321,9 +1321,9 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "ractor-session".to_string(),
+            "tsbx-session".to_string(),
             "--api-url".to_string(),
-            "http://ractor_api:9000".to_string(),
+            "http://tsbx_api:9000".to_string(),
             "--session-name".to_string(),
             session_name.to_string(),
         ];
@@ -1344,7 +1344,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 cpu_period: Some(100000),
                 memory: Some(self.memory_limit),
                 memory_swap: Some(self.memory_limit),
-                network_mode: Some("ractor_network".to_string()),
+                network_mode: Some("tsbx_network".to_string()),
                 mounts: Some(mounts),
                 port_bindings: None,
                 extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
@@ -1387,7 +1387,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
     // Sleep container but retain persistent volume (for session pause/sleep)
     pub async fn sleep_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         info!("Sleeping container {}", container_name);
 
@@ -1425,7 +1425,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
     // Delete container and remove persistent volume (for session deletion)
     pub async fn delete_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         info!("Deleting container {}", container_name);
 
@@ -1476,7 +1476,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
     // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
 
     pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         info!(
             "Executing command in container {}: {}",
@@ -1514,7 +1514,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         session_name: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
         let exec_config = CreateExecOptions {
             cmd: Some(cmd),
             attach_stdout: Some(true),
@@ -1552,7 +1552,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
     }
 
     pub async fn publish_content(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
         let public_path = format!("/content/{}", session_name);
 
         info!(
@@ -1562,7 +1562,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Ensure directory exists inside content container
         let mkdir_output = std::process::Command::new("docker")
-            .args(&["exec", "ractor_content", "mkdir", "-p", &public_path])
+            .args(&["exec", "tsbx_content", "mkdir", "-p", &public_path])
             .output();
         if let Err(e) = mkdir_output {
             return Err(anyhow::anyhow!("Failed to create content directory: {}", e));
@@ -1573,7 +1573,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
             "docker",
             "cp",
             &format!("{}:/session/content/.", container_name),
-            &format!("ractor_content:{}/", public_path),
+            &format!("tsbx_content:{}/", public_path),
         ];
         match std::process::Command::new(copy_cmd[0])
             .args(&copy_cmd[1..])
@@ -1623,7 +1623,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
         // Remove public directory from server container using docker exec
         let output = std::process::Command::new("docker")
-            .args(&["exec", "ractor_content", "rm", "-rf", &public_path])
+            .args(&["exec", "tsbx_content", "rm", "-rf", &public_path])
             .output()
             .map_err(|e| {
                 anyhow::anyhow!(
@@ -1657,7 +1657,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
 
     /// Check if an session container exists and is running healthily
     pub async fn is_container_healthy(&self, session_name: &str) -> Result<bool> {
-        let container_name = format!("ractor_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {
