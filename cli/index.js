@@ -19,7 +19,7 @@ const rebuildShortcut = require('./commands/dev_rebuild');
 const program = new Command();
 
 program
-  .name('ractor')
+  .name('tsbx')
   .description('Remote Sessionic Work Orchestrator - CLI for Computer use sessions')
   .version(pkg.version, '-v, --version', 'output the version number');
 

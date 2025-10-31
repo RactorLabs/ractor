@@ -160,7 +160,7 @@ pub async fn create_token(
         },
         exp: expiration.timestamp() as usize,
         iat: Utc::now().timestamp() as usize,
-        iss: "ractor-rbac".to_string(),
+        iss: "tsbx-rbac".to_string(),
     };
 
     // Sign JWT

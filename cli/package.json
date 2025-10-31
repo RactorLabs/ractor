@@ -1,10 +1,10 @@
 {
-  "name": "@ractor/cli",
+  "name": "@tsbx/cli",
   "version": "0.10.12",
-  "description": "Ractor CLI - Computer use sessions",
+  "description": "TaskSandbox CLI - Computer use sessions",
   "main": "index.js",
   "bin": {
-    "ractor": "./index.js"
+    "tsbx": "./index.js"
   },
   "scripts": {
     "start": "node index.js"
@@ -16,7 +16,7 @@
     "remote-work",
     "manual-work"
   ],
-  "author": "Ractor Team",
+  "author": "TaskSandbox Team",
   "license": "UNLICENSED",
   "dependencies": {
     "chalk": "^4.1.2",

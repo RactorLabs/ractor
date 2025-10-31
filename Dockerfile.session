@@ -57,7 +57,7 @@ ENV NVM_DIR=/home/session/.nvm
 
 # Copy pre-built binary from local build
 USER root
-COPY target/release/ractor-session /usr/local/bin/ractor-session
+COPY target/release/tsbx-session /usr/local/bin/tsbx-session
 
 # Create session directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
@@ -69,9 +69,9 @@ RUN mkdir -p /session/code /session/logs /session/content /session/template && \
 
 # Seed built-in templates under an immutable path; controller will copy into /session/template as needed
 USER root
-RUN mkdir -p /opt/ractor/templates
-COPY assets/session/template/simple.html /opt/ractor/templates/simple.html
-RUN chown -R session:session /opt/ractor
+RUN mkdir -p /opt/tsbx/templates
+COPY assets/session/template/simple.html /opt/tsbx/templates/simple.html
+RUN chown -R session:session /opt/tsbx
 USER session
 
 # Switch back to session user and set working directory to /session
@@ -79,6 +79,6 @@ USER session
 WORKDIR /session
 
 # Configure environment variables for session structure
-ENV RACTOR_SESSION_DIR=/session
+ENV TSBX_SESSION_DIR=/session
 
-CMD ["ractor-session", "--api-url", "http://ractor_api:9000", "--session-name", "unknown", "--api-key", "unknown"]
+CMD ["tsbx-session", "--api-url", "http://tsbx_api:9000", "--session-name", "unknown", "--api-key", "unknown"]

@@ -34,7 +34,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Publish the Ractor CLI npm package"
+    echo "Publish the TaskSandbox CLI npm package"
     echo ""
     echo "Options:"
     echo "  --dry-run               Show what would be published without actually publishing"
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "Publishing Ractor NPM CLI package"
+print_status "Publishing TaskSandbox NPM CLI package"
 print_status "Tag: $NPM_TAG"
 print_status "Dry run: $DRY_RUN"
 
@@ -195,6 +195,6 @@ if [ "$DRY_RUN" = false ]; then
     print_status ""
     print_status "Next steps:"
     print_status "  • Test installation: npm install -g $package_name"
-    print_status "  • Verify CLI works: ractor --help"
+    print_status "  • Verify CLI works: tsbx --help"
     print_status "  • Update documentation if needed"
 fi

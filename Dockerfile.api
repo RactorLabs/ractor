@@ -10,16 +10,16 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Create directories
-RUN mkdir -p /app/logs /var/lib/ractor/volumes
+RUN mkdir -p /app/logs /var/lib/tsbx/volumes
 
 # Copy static files that rarely change
 COPY db ./db
 
 # Copy the pre-built binary from local build
-COPY target/release/ractor-api /usr/local/bin/ractor-api
+COPY target/release/tsbx-api /usr/local/bin/tsbx-api
 
 # Expose ports
 EXPOSE 9000
 
 # Start the API
-CMD ["ractor-api"]
+CMD ["tsbx-api"]
