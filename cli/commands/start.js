@@ -47,14 +47,14 @@ function readProjectVersionOrLatest() {
 
 async function ensureNetwork() {
   try {
-    await docker(['network', 'inspect', 'ractor_network'], { silent: true });
+    await docker(['network', 'inspect', 'tsbx_network'], { silent: true });
   } catch (_) {
-    await docker(['network', 'create', 'ractor_network']);
+    await docker(['network', 'create', 'tsbx_network']);
   }
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'ractor_content_data', 'ollama_data', 'ractor_api_data', 'ractor_operator_data', 'ractor_controller_data']) {
+  for (const v of ['mysql_data', 'tsbx_content_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -101,19 +101,19 @@ module.exports = (program) => {
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
-    .option('--mysql-database <db>', 'MySQL database name', 'ractor')
-    .option('--mysql-user <user>', 'MySQL user', 'ractor')
-    .option('--mysql-password <pw>', 'MySQL user password', 'ractor')
+    .option('--mysql-database <db>', 'MySQL database name', 'tsbx')
+    .option('--mysql-user <user>', 'MySQL user', 'tsbx')
+    .option('--mysql-password <pw>', 'MySQL user password', 'tsbx')
     // API options
-    .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://ractor:ractor@mysql:3306/ractor')
+    .option('--api-database-url <url>', 'API DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--api-jwt-secret <secret>', 'API JWT_SECRET')
     .option('--api-rust-log <level>', 'API RUST_LOG', 'info')
-    .option('--api-ractor-host <host>', 'API RACTOR_HOST')
-    .option('--api-ractor-port <port>', 'API RACTOR_PORT')
+    .option('--api-tsbx-host <host>', 'API TSBX_HOST')
+    .option('--api-tsbx-port <port>', 'API TSBX_PORT')
     .option('--api-api-port <port>', 'Host port for API (maps to 9000)', '9000')
     .option('--api-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
     // Controller options
-    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://ractor:ractor@mysql:3306/ractor')
+    .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
@@ -124,9 +124,9 @@ module.exports = (program) => {
       '  • Does not stop or remove any containers.\n' +
       '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
       '\nExamples:\n' +
-      '  $ ractor start                                # Start full stack\n' +
-      '  $ ractor start api controller                 # Start API + controller\n' +
-      '  $ ractor start mysql                          # Ensure MySQL is up\n')
+      '  $ tsbx start                                # Start full stack\n' +
+      '  $ tsbx start api controller                 # Start API + controller\n' +
+      '  $ tsbx start mysql                          # Ensure MySQL is up\n')
     .option('--controller-session-image <image>', 'Controller SESSION_IMAGE')
     .option('--controller-session-cpu-limit <n>', 'Controller SESSION_CPU_LIMIT', '0.5')
     .option('--controller-session-memory-limit <bytes>', 'Controller SESSION_MEMORY_LIMIT', '536870912')
@@ -137,8 +137,8 @@ module.exports = (program) => {
         const tag = readProjectVersionOrLatest();
 
         // Resolve host branding and URL only here (script-level default allowed)
-        const RACTOR_HOST_NAME = process.env.RACTOR_HOST_NAME || 'Ractor';
-        const RACTOR_HOST_URL = (process.env.RACTOR_HOST_URL || 'http://localhost').replace(/\/$/, '');
+        const TSBX_HOST_NAME = process.env.TSBX_HOST_NAME || 'TaskSandbox';
+        const TSBX_HOST_URL = (process.env.TSBX_HOST_URL || 'http://localhost').replace(/\/$/, '');
 
         function withPort(baseUrl, port) {
           try {
@@ -159,7 +159,7 @@ module.exports = (program) => {
           } catch (_) { return false; }
         }
 
-        async function resolveRactorImage(component, localShortName, remoteRepo, tag) {
+        async function resolveTaskSandboxImage(component, localShortName, remoteRepo, tag) {
           const localName = `${localShortName}:${tag}`;
           if (await imageExistsLocally(localName)) {
             console.log(chalk.blue('[INFO] ') + `${component}: using local image ${localName}`);
@@ -187,7 +187,7 @@ module.exports = (program) => {
 
         // Note: resolve images lazily per requested component to avoid unnecessary pulls
 
-        console.log(chalk.blue('[INFO] ') + 'Starting Ractor services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + 'Starting TaskSandbox services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
@@ -225,7 +225,7 @@ module.exports = (program) => {
         if (options.pull) {
           console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
           try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
-          // Ractor images are resolved lazily when each component starts.
+          // TaskSandbox images are resolved lazily when each component starts.
           console.log();
         }
 
@@ -255,16 +255,16 @@ module.exports = (program) => {
           return fallback;
         };
         const hostPort = (() => {
-          const raw = process.env.RACTOR_HOST_PORT;
+          const raw = process.env.TSBX_HOST_PORT;
           if (raw === undefined || raw.trim() === '') return '80';
           const trimmed = raw.trim();
           if (!/^\d+$/.test(trimmed)) {
-            console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_PORT must be a positive integer.');
+            console.error(chalk.red('[ERROR] ') + 'TSBX_HOST_PORT must be a positive integer.');
             process.exit(1);
           }
           const numeric = parseInt(trimmed, 10);
           if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 65535) {
-            console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_PORT must be between 1 and 65535.');
+            console.error(chalk.red('[ERROR] ') + 'TSBX_HOST_PORT must be between 1 and 65535.');
             process.exit(1);
           }
           return String(numeric);
@@ -304,13 +304,13 @@ module.exports = (program) => {
               if (detached) args.push('-d');
               args.push(
                 '--name','mysql',
-                '--network','ractor_network',
+                '--network','tsbx_network',
                 '-p', `${String(options.mysqlPort || '3307')}:3306`,
                 '-v','mysql_data:/var/lib/mysql',
                 '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
-                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'ractor'}`,
-                '-e',`MYSQL_USER=${options.mysqlUser || 'ractor'}`,
-                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'ractor'}`,
+                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'tsbx'}`,
+                '-e',`MYSQL_USER=${options.mysqlUser || 'tsbx'}`,
+                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'tsbx'}`,
                 '--health-cmd','mysqladmin ping -h localhost -u root -proot',
                 '--health-interval','10s',
                 '--health-timeout','5s',
@@ -434,7 +434,7 @@ module.exports = (program) => {
 
               const args = ['run','-d',
                 '--name','ollama',
-                '--network','ractor_network',
+                '--network','tsbx_network',
               ];
               if (hostPublish) args.push('-p','11434:11434');
               args.push(
@@ -462,7 +462,7 @@ module.exports = (program) => {
               if (hostPublish) {
                 console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
                 while (Date.now() - start < timeoutMs) {
-              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(RACTOR_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
+              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(TSBX_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
                   await new Promise(r=>setTimeout(r,2000));
                 }
               } else {
@@ -491,25 +491,25 @@ module.exports = (program) => {
 
             case 'api': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring API is running...');
-              if (await containerRunning('ractor_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
-              if (await containerExists('ractor_api')) {
-                await docker(['start','ractor_api']);
+              if (await containerRunning('tsbx_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
+              if (await containerExists('tsbx_api')) {
+                await docker(['start','tsbx_api']);
                 console.log(chalk.green('[SUCCESS] ') + 'API started');
                 console.log();
                 break;
               }
-              const API_IMAGE = await resolveRactorImage('api','ractor_api','registry.digitalocean.com/ractor/ractor_api', tag);
+              const API_IMAGE = await resolveTaskSandboxImage('api','tsbx_api','registry.digitalocean.com/tsbx/tsbx_api', tag);
               const args = ['run','-d',
-                '--name','ractor_api',
-                '--network','ractor_network',
-                '-v', 'ractor_api_data:/app/logs',
-                '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://ractor:ractor@mysql:3306/ractor'}`,
+                '--name','tsbx_api',
+                '--network','tsbx_network',
+                '-v', 'tsbx_api_data:/app/logs',
+                '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
-                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
-                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`,
-                ...(options.apiRactorHost ? ['-e', `RACTOR_HOST=${options.apiRactorHost}`] : []),
-                ...(options.apiRactorPort ? ['-e', `RACTOR_PORT=${options.apiRactorPort}`] : []),
+                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
+                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
+                ...(options.apiTaskSandboxHost ? ['-e', `TSBX_HOST=${options.apiTaskSandboxHost}`] : []),
+                ...(options.apiTaskSandboxPort ? ['-e', `TSBX_PORT=${options.apiTaskSandboxPort}`] : []),
                 API_IMAGE
               ];
               await docker(args);
@@ -524,9 +524,9 @@ module.exports = (program) => {
               const DESIRED_OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
 
               // If container exists, verify env matches; recreate if not
-              if (await containerExists('ractor_controller')) {
+              if (await containerExists('tsbx_controller')) {
                 try {
-                  const inspect = await execCmd('docker', ['inspect','ractor_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
+                  const inspect = await execCmd('docker', ['inspect','tsbx_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
                   const currentEnv = (inspect.stdout || '').split('\n').filter(Boolean);
                   const envMap = Object.fromEntries(currentEnv.map(e => {
                     const idx = e.indexOf('=');
@@ -536,9 +536,9 @@ module.exports = (program) => {
                   const needsRecreate = !currentHost || currentHost !== DESIRED_OLLAMA_HOST;
                   if (needsRecreate) {
                     console.log(chalk.blue('[INFO] ') + `Recreating controller to apply OLLAMA_HOST=${DESIRED_OLLAMA_HOST}`);
-                    try { await docker(['rm','-f','ractor_controller']); } catch (_) {}
-                  } else if (!(await containerRunning('ractor_controller'))) {
-                    await docker(['start','ractor_controller']);
+                    try { await docker(['rm','-f','tsbx_controller']); } catch (_) {}
+                  } else if (!(await containerRunning('tsbx_controller'))) {
+                    await docker(['start','tsbx_controller']);
                     console.log(chalk.green('[SUCCESS] ') + 'Controller started');
                     console.log();
                     break;
@@ -554,8 +554,8 @@ module.exports = (program) => {
               // Default OLLAMA_HOST to internal service always
               const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
-              const sessionImage = options.controllerSessionImage || await resolveRactorImage('session','ractor_session','registry.digitalocean.com/ractor/ractor_session', tag);
-              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://ractor:ractor@mysql:3306/ractor';
+              const sessionImage = options.controllerSessionImage || await resolveTaskSandboxImage('session','tsbx_session','registry.digitalocean.com/tsbx/tsbx_session', tag);
+              const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
               const model = (() => {
@@ -566,10 +566,10 @@ module.exports = (program) => {
                 return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:120b';
               })();
               const args = ['run','-d',
-                '--name','ractor_controller',
-                '--network','ractor_network',
+                '--name','tsbx_controller',
+                '--network','tsbx_network',
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
-                '-v','ractor_controller_data:/app/logs',
+                '-v','tsbx_controller_data:/app/logs',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
@@ -578,8 +578,8 @@ module.exports = (program) => {
                 '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
                 '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
                 '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
-                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
-                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`,
+                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
+                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`SESSION_IMAGE=${sessionImage}`,
                 '-e',`SESSION_CPU_LIMIT=${options.controllerSessionCpuLimit || '0.5'}`,
                 '-e',`SESSION_MEMORY_LIMIT=${(getOptionSource('controllerSessionMemoryLimit')==='cli' ? options.controllerSessionMemoryLimit : (process.env.SESSION_MEMORY_LIMIT || options.controllerSessionMemoryLimit || '536870912'))}`,
@@ -587,7 +587,7 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
-              args.push(await resolveRactorImage('controller','ractor_controller','registry.digitalocean.com/ractor/ractor_controller', tag));
+              args.push(await resolveTaskSandboxImage('controller','tsbx_controller','registry.digitalocean.com/tsbx/tsbx_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
@@ -597,25 +597,25 @@ module.exports = (program) => {
             case 'operator': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
 
-              if (!process.env.RACTOR_HOST_NAME || !process.env.RACTOR_HOST_URL) {
-                console.error(chalk.red('[ERROR] ') + 'RACTOR_HOST_NAME and RACTOR_HOST_URL must be set before starting ractor_operator.');
+              if (!process.env.TSBX_HOST_NAME || !process.env.TSBX_HOST_URL) {
+                console.error(chalk.red('[ERROR] ') + 'TSBX_HOST_NAME and TSBX_HOST_URL must be set before starting tsbx_operator.');
                 process.exit(1);
               }
 
-              if (await containerExists('ractor_operator')) {
+              if (await containerExists('tsbx_operator')) {
                 // If container exists, ensure it matches the desired image; recreate if not
-                const running = await containerRunning('ractor_operator');
-                const currentId = await containerImageId('ractor_operator');
-              const desiredId = await imageId(await resolveRactorImage('operator','ractor_operator','registry.digitalocean.com/ractor/ractor_operator', tag));
+                const running = await containerRunning('tsbx_operator');
+                const currentId = await containerImageId('tsbx_operator');
+              const desiredId = await imageId(await resolveTaskSandboxImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
                 if (currentId && desiredId && currentId !== desiredId) {
                   console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
-                  try { await docker(['rm','-f','ractor_operator']); } catch (_) {}
+                  try { await docker(['rm','-f','tsbx_operator']); } catch (_) {}
                 } else if (running) {
                   console.log(chalk.green('[SUCCESS] ') + 'Operator already running');
                   console.log();
                   break;
                 } else if (!running && currentId && desiredId && currentId === desiredId) {
-                  await docker(['start','ractor_operator']);
+                  await docker(['start','tsbx_operator']);
                   console.log(chalk.green('[SUCCESS] ') + 'Operator started');
                   console.log();
                   break;
@@ -626,14 +626,14 @@ module.exports = (program) => {
               const args = ['run'];
               if (detached) args.push('-d');
               args.push(
-                '--name','ractor_operator',
-                '--network','ractor_network',
-                '-v','ractor_content_data:/content',
-                '-v','ractor_operator_data:/app/logs',
-                '-e',`RACTOR_HOST_NAME=${RACTOR_HOST_NAME}`,
-                '-e',`RACTOR_HOST_URL=${RACTOR_HOST_URL}`
+                '--name','tsbx_operator',
+                '--network','tsbx_network',
+                '-v','tsbx_content_data:/content',
+                '-v','tsbx_operator_data:/app/logs',
+                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
+                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
               );
-              args.push(await resolveRactorImage('operator','ractor_operator','registry.digitalocean.com/ractor/ractor_operator', tag));
+              args.push(await resolveTaskSandboxImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
@@ -642,17 +642,17 @@ module.exports = (program) => {
 
             case 'content': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Content service is running...');
-              if (await containerRunning('ractor_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
-              if (await containerExists('ractor_content')) {
-                await docker(['start','ractor_content']);
+              if (await containerRunning('tsbx_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
+              if (await containerExists('tsbx_content')) {
+                await docker(['start','tsbx_content']);
                 console.log(chalk.green('[SUCCESS] ') + 'Content started');
                 console.log();
                 break;
               }
-              const CONTENT_IMAGE = await resolveRactorImage('content','ractor_content','registry.digitalocean.com/ractor/ractor_content', tag);
+              const CONTENT_IMAGE = await resolveTaskSandboxImage('content','tsbx_content','registry.digitalocean.com/tsbx/tsbx_content', tag);
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','ractor_content','--network','ractor_network','-v','ractor_content_data:/content', CONTENT_IMAGE);
+              args.push('--name','tsbx_content','--network','tsbx_network','-v','tsbx_content_data:/content', CONTENT_IMAGE);
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Content service container started');
               console.log();
@@ -666,7 +666,7 @@ module.exports = (program) => {
                   const res = await docker(
                     [
                       'inspect',
-                      'ractor_gateway',
+                      'tsbx_gateway',
                       '--format',
                       '{{range $k,$v := .HostConfig.PortBindings}}{{if eq $k "80/tcp"}}{{(index $v 0).HostPort}}{{end}}{{end}}',
                     ],
@@ -678,25 +678,25 @@ module.exports = (program) => {
                 }
               };
               console.log(chalk.blue('[INFO] ') + `Ensuring gateway (NGINX) is running on port ${hostPort}...`);
-              if (await containerRunning('ractor_gateway')) {
+              if (await containerRunning('tsbx_gateway')) {
                 const boundPort = await inspectGatewayHostPort();
                 console.log(chalk.green('[SUCCESS] ') + `Gateway already running (port ${boundPort || hostPort})`);
                 console.log();
                 break;
               }
-              if (await containerExists('ractor_gateway')) {
+              if (await containerExists('tsbx_gateway')) {
                 const boundPort = await inspectGatewayHostPort();
                 if (boundPort && boundPort !== hostPort) {
                   console.log(chalk.blue('[INFO] ') + `Existing gateway is bound to port ${boundPort}; recreating container for port ${hostPort}.`);
                   try {
-                    await docker(['rm', '-f', 'ractor_gateway']);
+                    await docker(['rm', '-f', 'tsbx_gateway']);
                   } catch (e) {
                     console.log(chalk.yellow('[WARNING] ') + `Failed to remove existing gateway container: ${e.message}`);
                     console.log();
                     break;
                   }
                 } else {
-                  await docker(['start','ractor_gateway']);
+                  await docker(['start','tsbx_gateway']);
                   console.log(chalk.green('[SUCCESS] ') + `Gateway started (port ${boundPort || hostPort})`);
                   console.log();
                   break;
@@ -707,8 +707,8 @@ module.exports = (program) => {
               }
               const args = ['run'];
               if (detached) args.push('-d');
-              args.push('--name','ractor_gateway','--network','ractor_network','-p',`${hostPort}:80`);
-              args.push(await resolveRactorImage('gateway','ractor_gateway','registry.digitalocean.com/ractor/ractor_gateway', tag));
+              args.push('--name','tsbx_gateway','--network','tsbx_network','-p',`${hostPort}:80`);
+              args.push(await resolveTaskSandboxImage('gateway','tsbx_gateway','registry.digitalocean.com/tsbx/tsbx_gateway', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + `Gateway container started (port ${hostPort})`);
               console.log();
@@ -725,19 +725,19 @@ module.exports = (program) => {
         console.log();
         let status = '';
         try {
-          const res = await docker(['ps','--filter','name=ractor_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true });
+          const res = await docker(['ps','--filter','name=tsbx_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true });
           status = res.stdout;
         } catch(_) {}
         if (status && status.trim()) {
           console.log(status);
           console.log();
-          console.log(chalk.green('[SUCCESS] ') + '🎉 Ractor services are now running!');
+          console.log(chalk.green('[SUCCESS] ') + '🎉 TaskSandbox services are now running!');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Service URLs:');
           try {
-            const g = await docker(['ps','--filter','name=ractor_gateway','--format','{{.Names}}'], { silent: true });
+            const g = await docker(['ps','--filter','name=tsbx_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
-              const gatewayBaseUrl = hostPort === '80' ? RACTOR_HOST_URL : withPort(RACTOR_HOST_URL, hostPort);
+              const gatewayBaseUrl = hostPort === '80' ? TSBX_HOST_URL : withPort(TSBX_HOST_URL, hostPort);
               console.log(`  • Gateway: ${gatewayBaseUrl}/`);
               console.log(`  • Operator UI: ${gatewayBaseUrl}/`);
               console.log(`  • API via Gateway: ${gatewayBaseUrl}/api`);
@@ -754,17 +754,17 @@ module.exports = (program) => {
           } catch(_) {}
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Next steps:');
-          console.log('  • Check logs: docker logs ractor_api -f');
-          console.log('  • Authenticate: ractor login -u admin -p admin');
-          console.log('  • Check version: ractor api version');
-          console.log('  • Start session: ractor session create');
+          console.log('  • Check logs: docker logs tsbx_api -f');
+          console.log('  • Authenticate: tsbx login -u admin -p admin');
+          console.log('  • Check version: tsbx api version');
+          console.log('  • Start session: tsbx session create');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Container management:');
-          console.log("  • Stop services: ractor stop");
+          console.log("  • Stop services: tsbx stop");
           console.log("  • View logs: docker logs <container_name>");
-          console.log("  • Check status: docker ps --filter 'name=ractor_'");
+          console.log("  • Check status: docker ps --filter 'name=tsbx_'");
         } else {
-          console.error(chalk.red('[ERROR] ') + 'No Ractor containers are running');
+          console.error(chalk.red('[ERROR] ') + 'No TaskSandbox containers are running');
           process.exit(1);
         }
       } catch (error) {

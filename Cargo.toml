@@ -1,5 +1,5 @@
 [package]
-name = "ractor"
+name = "tsbx"
 version = "0.10.12"
 edition = "2021"
 
@@ -39,17 +39,17 @@ globset = "0.4"
 base64 = "0.22"
 
 [[bin]]
-name = "ractor-api"
+name = "tsbx-api"
 path = "src/api/main.rs"
 
 [[bin]]
-name = "ractor-controller" 
+name = "tsbx-controller" 
 path = "src/controller/main.rs"
 
 [[bin]]
-name = "ractor-session"
+name = "tsbx-session"
 path = "src/session/main.rs"
 
 [[bin]]
-name = "ractor-content"
+name = "tsbx-content"
 path = "src/content/main.rs"

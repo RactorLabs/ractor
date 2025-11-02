@@ -57,7 +57,7 @@ jobs:
           # Re-login to DOCR to avoid short-lived token expiry during long builds
           doctl registry login --expiry-seconds 1800
           chmod +x ./scripts/push.sh
-          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/ractor
+          ./scripts/push.sh --tag ${{ steps.get_version.outputs.VERSION }} --registry registry.digitalocean.com/tsbx
           
       - name: Publish CLI to npm
         working-directory: ./cli
@@ -71,23 +71,23 @@ jobs:
         run: |
           gh release create ${{ steps.get_version.outputs.VERSION }} \
             --title "Release ${{ steps.get_version.outputs.VERSION }}" \
-            --notes "## Ractor ${{ steps.get_version.outputs.VERSION }}
+            --notes "## TaskSandbox ${{ steps.get_version.outputs.VERSION }}
           
           ### Published Packages
           - **Docker Images (DOCR)**:
-            - \`registry.digitalocean.com/ractor/ractor_api:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_controller:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_session:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_operator:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_content:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_gateway:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/ractor/ractor_app_githex:${{ steps.get_version.outputs.VERSION }}\`
-          - **npm Package**: \`@ractor/cli@${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_api:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_controller:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_session:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_operator:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_content:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_gateway:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_app_githex:${{ steps.get_version.outputs.VERSION }}\`
+          - **npm Package**: \`@tsbx/cli@${{ steps.get_version.outputs.VERSION }}\`
           
           ### Installation
           \`\`\`bash
-          npm install -g @ractor/cli@${{ steps.get_version.outputs.VERSION }}
-          ractor start
+          npm install -g @tsbx/cli@${{ steps.get_version.outputs.VERSION }}
+          tsbx start
           \`\`\`
           
           All images are also tagged as \`:latest\` at DOCR"

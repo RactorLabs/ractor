@@ -42,7 +42,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Build Docker images for Ractor components"
+  echo "Build Docker images for TaskSandbox components"
   echo ""
   echo "Components:"
   echo "  api         Build the api image"
@@ -99,7 +99,7 @@ if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
   COMPONENTS=("api" "session" "controller" "operator" "content" "gateway")
 fi
 
-print_status "Building Ractor Docker images"
+print_status "Building TaskSandbox Docker images"
 if [[ -n "${PROJECT_VERSION:-}" ]]; then
   print_status "Tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
 else
@@ -137,19 +137,19 @@ echo ""
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api)
-    image_name="ractor_api:${TAG}"
+    image_name="tsbx_api:${TAG}"
     dockerfile="Dockerfile.api"
     ;;
   controller)
-    image_name="ractor_controller:${TAG}"
+    image_name="tsbx_controller:${TAG}"
     dockerfile="Dockerfile.controller"
     ;;
   session)
-    image_name="ractor_session:${TAG}"
+    image_name="tsbx_session:${TAG}"
     dockerfile="Dockerfile.session"
     ;;
   operator)
-    image_name="ractor_operator:${TAG}"
+    image_name="tsbx_operator:${TAG}"
     dockerfile="Dockerfile.operator"
     # Build Operator (npm) outside Docker for speed and reproducibility
     print_status "Cleaning Operator build caches (.svelte-kit, build, Vite cache)"
@@ -161,17 +161,17 @@ for component in "${COMPONENTS[@]}"; do
     print_status "Installing production deps for runtime (npm ci --omit=dev)"
     (cd operator && npm ci --omit=dev)
     # If an Operator container exists, remove it so the next start uses the fresh image
-    if docker ps -a --format '{{.Names}}' | grep -q '^ractor_operator$'; then
-      print_status "Removing existing ractor_operator container to avoid stale UI"
-      docker rm -f ractor_operator >/dev/null 2>&1 || true
+    if docker ps -a --format '{{.Names}}' | grep -q '^tsbx_operator$'; then
+      print_status "Removing existing tsbx_operator container to avoid stale UI"
+      docker rm -f tsbx_operator >/dev/null 2>&1 || true
     fi
     ;;
   content)
-    image_name="ractor_content:${TAG}"
+    image_name="tsbx_content:${TAG}"
     dockerfile="Dockerfile.content"
     ;;
   gateway)
-    image_name="ractor_gateway:${TAG}"
+    image_name="tsbx_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
     ;;
   *)
@@ -213,7 +213,7 @@ print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
   api | controller | session | operator | content | gateway)
-    echo "  ractor_${component}:${TAG}"
+    echo "  tsbx_${component}:${TAG}"
     ;;
   esac
 done
@@ -222,4 +222,4 @@ echo ""
 print_status "To push images to a registry, run:"
 echo "  ./scripts/push.sh ${COMPONENTS[*]}"
 print_status "To start services with these images, run:"
-echo "  ractor start"
+echo "  tsbx start"

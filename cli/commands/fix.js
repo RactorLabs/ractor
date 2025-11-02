@@ -21,27 +21,27 @@ async function exec(cmd, args = [], opts = {}) {
 module.exports = (program) => {
   program
     .command('fix')
-    .description('Attempt to repair common Docker/env issues for Ractor')
-    .option('--pull', 'Pull Ractor Docker images')
+    .description('Attempt to repair common Docker/env issues for TaskSandbox')
+    .option('--pull', 'Pull TaskSandbox Docker images')
     .option('--prune', 'Prune dangling images/cache after cleanup')
-    .option('--sessions', 'Also force-remove all ractor session containers')
+    .option('--sessions', 'Also force-remove all tsbx session containers')
     .option('--link', 'Run ./scripts/link.sh if present (dev)')
     .addHelpText('after', '\n' +
       'This command replaces ad-hoc setup.sh steps by applying safe host-side fixes.\n' +
       '\nActions performed:\n' +
       '  • Validate Docker availability\n' +
       '  • Ensure network/volumes exist\n' +
-      '  • Remove exited ractor_* containers (optionally all sessions)\n' +
+      '  • Remove exited tsbx_* containers (optionally all sessions)\n' +
       '  • Optional: pull images, prune caches\n' +
       '  • Quick GPU accessibility test\n' +
       '\nExamples:\n' +
-      '  $ ractor fix\n' +
-      '  $ ractor fix --pull\n' +
-      '  $ ractor fix --prune --sessions\n' +
-      '  $ ractor fix --link\n')
+      '  $ tsbx fix\n' +
+      '  $ tsbx fix --pull\n' +
+      '  $ tsbx fix --prune --sessions\n' +
+      '  $ tsbx fix --link\n')
     .action(async (options) => {
       try {
-        display.showCommandBox(`${display.icons.reset} Ractor Fix`, { operation: 'Repair Docker/env for Ractor' });
+        display.showCommandBox(`${display.icons.reset} TaskSandbox Fix`, { operation: 'Repair Docker/env for TaskSandbox' });
 
         // 1) Docker availability
         display.info('[1/6] Checking Docker availability...');
@@ -53,18 +53,18 @@ module.exports = (program) => {
         display.success('Docker is available');
 
         // 2) Ensure network
-        display.info('[2/6] Ensuring network ractor_network exists...');
+        display.info('[2/6] Ensuring network tsbx_network exists...');
         try {
-          await docker.execDocker(['network', 'inspect', 'ractor_network'], { silent: true });
+          await docker.execDocker(['network', 'inspect', 'tsbx_network'], { silent: true });
           display.success('Network exists');
         } catch (_) {
-          await docker.execDocker(['network', 'create', 'ractor_network']);
+          await docker.execDocker(['network', 'create', 'tsbx_network']);
           display.success('Network created');
         }
 
         // 3) Ensure volumes
         display.info('[3/6] Ensuring required volumes exist...');
-        const volumes = ['mysql_data','ractor_content_data','ollama_data','ractor_api_data','ractor_operator_data','ractor_controller_data'];
+        const volumes = ['mysql_data','tsbx_content_data','ollama_data','tsbx_api_data','tsbx_operator_data','tsbx_controller_data'];
         for (const v of volumes) {
           try {
             await docker.execDocker(['volume','inspect', v], { silent: true });
@@ -74,10 +74,10 @@ module.exports = (program) => {
         }
         display.success('Volumes ready');
 
-        // 4) Remove exited ractor containers
-        display.info('[4/6] Removing exited ractor_* containers...');
+        // 4) Remove exited tsbx containers
+        display.info('[4/6] Removing exited tsbx_* containers...');
         try {
-          const list = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_','--filter','status=exited'], { silent: true });
+          const list = await docker.execDocker(['ps','-a','-q','--filter','name=tsbx_','--filter','status=exited'], { silent: true });
           const ids = (list.stdout || '').trim().split('\n').filter(Boolean);
           if (ids.length) {
             try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {}
@@ -91,9 +91,9 @@ module.exports = (program) => {
 
         // Optional: remove ALL session containers
         if (options.sessions) {
-          display.info('Removing ALL ractor session containers (force)...');
+          display.info('Removing ALL tsbx session containers (force)...');
           try {
-            const r = await docker.execDocker(['ps','-a','-q','--filter','name=ractor_session_'], { silent: true });
+            const r = await docker.execDocker(['ps','-a','-q','--filter','name=tsbx_session_'], { silent: true });
             const ids = (r.stdout || '').trim().split('\n').filter(Boolean);
             if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} session containers`); }
             else { display.success('No session containers found'); }
@@ -102,7 +102,7 @@ module.exports = (program) => {
 
         // 5) Optional: pull images
         if (options.pull) {
-          display.info('[5/6] Pulling Ractor images (latest)...');
+          display.info('[5/6] Pulling TaskSandbox images (latest)...');
           try { await docker.pull('latest'); display.success('Images pulled'); } catch (e) { display.warning('Image pull warning: ' + e.message); }
         } else {
           display.info('[5/6] Skipping image pull (use --pull to enable)');
@@ -135,8 +135,8 @@ module.exports = (program) => {
 
         console.log();
         display.success('Fix completed. You can now try:');
-        console.log('  • Start services: ractor start');
-        console.log('  • Check status:  docker ps --filter name=ractor_');
+        console.log('  • Start services: tsbx start');
+        console.log('  • Check status:  docker ps --filter name=tsbx_');
       } catch (error) {
         console.error(chalk.red('Error:'), error.message);
         process.exit(1);

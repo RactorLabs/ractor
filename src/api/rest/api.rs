@@ -12,7 +12,7 @@ pub async fn run_rest_server() -> Result<()> {
 
     // Write PID file for process management
     let pid = process::id();
-    let pid_file = "/tmp/ractor.pid";
+    let pid_file = "/tmp/tsbx.pid";
 
     if let Err(e) = fs::write(pid_file, pid.to_string()) {
         warn!("Could not write PID file: {}", e);
@@ -21,7 +21,7 @@ pub async fn run_rest_server() -> Result<()> {
     // Set up cleanup on exit
     let pid_file_cleanup = pid_file.to_string();
     ctrlc::set_handler(move || {
-        info!("Shutting down Ractor API...");
+        info!("Shutting down TaskSandbox API...");
         let _ = fs::remove_file(&pid_file_cleanup);
         std::process::exit(0);
     })?;
@@ -35,7 +35,7 @@ pub async fn run_rest_server() -> Result<()> {
 |  _ < (_| |\ V  V / (_) | | | (__ 
 |_| \_\__,_| \_/\_/ \___/|_|  \___|
                                   
-Starting Ractor REST API service...
+Starting TaskSandbox REST API service...
 PID: {}
 "#,
         pid
@@ -49,8 +49,8 @@ PID: {}
         std::env::var("DATABASE_URL").expect("DATABASE_URL must be set by the start script");
     let jwt_secret =
         std::env::var("JWT_SECRET").unwrap_or_else(|_| "development-secret-key".to_string());
-    let host = std::env::var("RACTOR_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
-    let port = std::env::var("RACTOR_PORT").unwrap_or_else(|_| "9000".to_string());
+    let host = std::env::var("TSBX_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let port = std::env::var("TSBX_PORT").unwrap_or_else(|_| "9000".to_string());
 
     let app_state = match init_database(&database_url, jwt_secret).await {
         Ok(state) => {
