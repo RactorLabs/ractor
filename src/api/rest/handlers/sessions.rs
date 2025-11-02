@@ -1473,7 +1473,7 @@ pub async fn compact_session_context(
         // Prefer the same variable name used by controller/session; default to Docker network hostname
         let base_url =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
-        let model = std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:120b".to_string());
+        let model = std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
         let system_prompt = "You are a helpful assistant that compresses conversation history into a concise context for future messages.\n- Keep key goals, decisions, constraints, URLs, files, and paths.\n- Remove chit‑chat and redundant steps.\n- Prefer bullet points.\n- Target 150–250 words.";
         let user_content = format!("Please summarize the following conversation so it can be used as compact context for future turns.\n\n{}", transcript);

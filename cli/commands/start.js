@@ -95,7 +95,7 @@ module.exports = (program) => {
     .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 32g)')
     .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
     .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
-    .option('--ollama-model <model>', 'Ollama model name', 'gpt-oss:120b')
+    .option('--default-model <model>', 'Default model name (used for Ollama pulls and controller)', 'gpt-oss:20b')
     .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '-1')
     .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
     // MySQL options
@@ -117,7 +117,7 @@ module.exports = (program) => {
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
     .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
-    .option('--controller-ollama-model <model>', 'Controller OLLAMA_MODEL')
+    .option('--controller-default-model <model>', 'Override controller default model (falls back to global default)')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
@@ -337,9 +337,9 @@ module.exports = (program) => {
                 console.log(chalk.green('[SUCCESS] ') + 'Ollama already running');
                 // Ensure requested model is available even when container pre-exists
                 const effectiveModel = (() => {
-                  const src = getOptionSource('ollamaModel');
-                  if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
+                  const src = getOptionSource('defaultModel');
+                  if (src === 'cli') return options.defaultModel;
+                  return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
                 })();
                 if (effectiveModel) {
                   console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
@@ -353,9 +353,9 @@ module.exports = (program) => {
                 console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
                 // Ensure requested model is available even when container pre-exists
                 const effectiveModel = (() => {
-                  const src = getOptionSource('ollamaModel');
-                  if (src === 'cli') return options.ollamaModel;
-                  return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
+                  const src = getOptionSource('defaultModel');
+                  if (src === 'cli') return options.defaultModel;
+                  return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
                 })();
                 if (effectiveModel) {
                   console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
@@ -479,9 +479,9 @@ module.exports = (program) => {
 
               // Ensure model available (best-effort)
               const effectiveModel = (() => {
-                const src = getOptionSource('ollamaModel');
-                if (src === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.ollamaModel || 'gpt-oss:120b';
+                const src = getOptionSource('defaultModel');
+                if (src === 'cli') return options.defaultModel;
+                return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
               })();
               console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
               try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
@@ -559,11 +559,11 @@ module.exports = (program) => {
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
               const model = (() => {
-                const srcCtrl = getOptionSource('controllerOllamaModel');
-                const srcOllama = getOptionSource('ollamaModel');
-                if (srcCtrl === 'cli') return options.controllerOllamaModel;
-                if (srcOllama === 'cli') return options.ollamaModel;
-                return process.env.OLLAMA_MODEL || options.controllerOllamaModel || options.ollamaModel || 'gpt-oss:120b';
+                const srcCtrl = getOptionSource('controllerDefaultModel');
+                const srcOllama = getOptionSource('defaultModel');
+                if (srcCtrl === 'cli') return options.controllerDefaultModel;
+                if (srcOllama === 'cli') return options.defaultModel;
+                return process.env.TSBX_DEFAULT_MODEL || options.controllerDefaultModel || options.defaultModel || 'gpt-oss:20b';
               })();
               const args = ['run','-d',
                 '--name','tsbx_controller',
@@ -573,7 +573,7 @@ module.exports = (program) => {
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
-                '-e',`OLLAMA_MODEL=${model}`,
+                '-e',`TSBX_DEFAULT_MODEL=${model}`,
                 // Model/runtime defaults for session calls
                 '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
                 '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
