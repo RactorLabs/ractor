@@ -7,15 +7,15 @@ mod logging;
 mod session;
 
 #[derive(Parser)]
-#[command(name = "ractor-session")]
-#[command(about = "Ractor Session - Computer Use Session inside session containers")]
+#[command(name = "tsbx-session")]
+#[command(about = "TaskSandbox Session - Computer Use Session inside session containers")]
 struct Args {
     /// API server URL
-    #[arg(long, env = "RACTOR_API_URL")]
+    #[arg(long, env = "TSBX_API_URL")]
     api_url: String,
 
     /// Session Name
-    #[arg(long, env = "RACTOR_SESSION_NAME")]
+    #[arg(long, env = "TSBX_SESSION_NAME")]
     session_name: String,
 }
 
@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Initialize service logging (write alongside session data)
-    let _ = logging::init_service_logging("/session/logs", "ractor_session");
+    let _ = logging::init_service_logging("/session/logs", "tsbx_session");
 
     // Run the Session (Computer Use Session) with comprehensive error handling
     loop {

@@ -24,7 +24,7 @@ module.exports = (program) => {
     .description('Run environment diagnostics and show GPU/Docker status')
     .action(async () => {
       try {
-        info('Ractor Doctor — checking host readiness and GPU access');
+        info('TaskSandbox Doctor — checking host readiness and GPU access');
 
         // OS detection
         const osres = await exec('bash', ['-lc', 'source /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || uname -a']);

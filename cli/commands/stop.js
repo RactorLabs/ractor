@@ -25,25 +25,25 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop and remove Ractor component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, sessions (all session containers). If omitted, stops core Ractor components; stop app components explicitly.')
+    .description('Stop and remove TaskSandbox component containers (defaults to all if none specified)')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, sessions (all session containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
-      '  • Stops and removes only Ractor component containers.\n' +
+      '  • Stops and removes only TaskSandbox component containers.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
       '  • Use component "sessions" to stop/remove all session containers.\n' +
       '\nExamples:\n' +
-      '  $ ractor stop                     # stop all Ractor components\n' +
-      '  $ ractor stop api controller      # stop specific components\n' +
-      '  $ ractor stop operator content    # stop UI components\n' +
-      '  $ ractor stop sessions              # stop all session containers\n')
+      '  $ tsbx stop                     # stop all TaskSandbox components\n' +
+      '  $ tsbx stop api controller      # stop specific components\n' +
+      '  $ tsbx stop operator content    # stop UI components\n' +
+      '  $ tsbx stop sessions              # stop all session containers\n')
     .action(async (components, _opts, cmd) => {
       try {
-        // Default to stopping all Ractor components when none specified
+        // Default to stopping all TaskSandbox components when none specified
         if (!components || components.length === 0) {
           components = ['gateway','controller','operator','content','api'];
         }
-        // Validate component names (only Ractor components)
+        // Validate component names (only TaskSandbox components)
         const allowed = new Set(['api','controller','operator','content','gateway','sessions']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
@@ -51,12 +51,12 @@ module.exports = (program) => {
           cmd.help({ error: true });
         }
 
-        console.log(chalk.blue('[INFO] ') + 'Stopping Ractor services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + 'Stopping TaskSandbox services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
 
         console.log();
 
-        const map = { api: 'ractor_api', controller: 'ractor_controller', operator: 'ractor_operator', content: 'ractor_content', gateway: 'ractor_gateway' };
+        const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', content: 'tsbx_content', gateway: 'tsbx_gateway' };
         const includeSessions = components.includes('sessions');
         const order = ['gateway','controller','operator','content','api'];
         const toStop = components.filter(c => c !== 'sessions');
@@ -106,7 +106,7 @@ module.exports = (program) => {
         if (includeSessions) {
           console.log(chalk.blue('[INFO] ') + 'Stopping session containers...');
           try {
-            const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=ractor_session_'], { silent: true });
+            const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=tsbx_session_'], { silent: true });
             const names = res.stdout.trim().split('\n').filter(Boolean);
             if (names.length) {
               try { await docker(['stop', ...names]); } catch (_) {}
@@ -126,13 +126,13 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + 'Checking remaining services...');
         console.log();
         let status = '';
-        try { const res = await docker(['ps','--filter','name=ractor_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true }); status = res.stdout; } catch(_) {}
+        try { const res = await docker(['ps','--filter','name=tsbx_','--format','table {{.Names}}\t{{.Status}}\t{{.Ports}}'], { silent: true }); status = res.stdout; } catch(_) {}
         if (status && status.trim() && status.trim() !== 'NAMES\tSTATUS\tPORTS') {
           console.log(status);
           console.log();
-          console.log(chalk.yellow('[WARNING] ') + 'Some Ractor containers are still running');
+          console.log(chalk.yellow('[WARNING] ') + 'Some TaskSandbox containers are still running');
         } else {
-          console.log(chalk.green('[SUCCESS] ') + 'No Ractor containers are running');
+          console.log(chalk.green('[SUCCESS] ') + 'No TaskSandbox containers are running');
         }
 
         console.log();

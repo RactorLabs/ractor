@@ -6,7 +6,7 @@ pub use session_manager::SessionManager;
 use anyhow::Result;
 
 pub async fn run() -> Result<()> {
-    tracing::info!("Starting Ractor Controller...");
+    tracing::info!("Starting TaskSandbox Controller...");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

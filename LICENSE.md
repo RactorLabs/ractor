@@ -1,6 +1,6 @@
 ## Server Side Public License (SSPL)
 
-Copyright (c) 2025 Ractor Labs.
+Copyright (c) 2025 RactorLabs.
 
 Licensed under the Server Side Public License (SSPL) (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
 

@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Ractor API
+  title: TaskSandbox API
   version: 0.5.3
   description: |
-    Ractor is an infrastructure runtime for long-lived, stateful agent sessions.
+    TaskSandbox is an infrastructure runtime for long-lived, stateful agent sessions.
     This spec documents the core REST endpoints used by the Operator UI and the
     session runtime.
 servers:
@@ -837,7 +837,7 @@ paths:
         '200':
           description: File contents
           headers:
-            x-ractor-file-size:
+            x-tsbx-file-size:
               schema: { type: integer }
           content:
             application/octet-stream:
