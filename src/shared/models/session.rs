@@ -797,7 +797,7 @@ impl Session {
     }
 
     pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
-        // Hard delete session row; cascades will remove responses; tasks may persist per FK changes
+        // Hard delete session row; cascades will remove responses; updates may persist per FK changes
         let result = sqlx::query(r#"DELETE FROM sessions WHERE name = ?"#)
             .bind(name)
             .execute(pool)

@@ -123,7 +123,7 @@ export function getCommonSchemas() {
     CancelAck: [
       { name: 'status', type: 'string', desc: "Always 'ok' on success" },
       { name: 'session', type: 'string', desc: 'Session name' },
-      { name: 'cancelled', type: 'boolean', desc: 'true if a pending/processing response or queued task was cancelled' },
+      { name: 'cancelled', type: 'boolean', desc: 'true if a pending/processing response or queued update was cancelled' },
     ],
     Empty: [],
   };
@@ -446,7 +446,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before sleeping (min/default 5 seconds)' },
         { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when sleep occurs' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/sleep -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested sleep"}'\n\n# The session will sleep after the delay. State may not change immediately in the response.`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle",...}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing response (or queued task) and set session to idle.', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing response (or queued update) and set session to idle.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/cancel -H "Authorization: Bearer <token>"`, resp: { schema: 'CancelAck' }, responses: [{ status: 200, body: `{"status":"ok","session":"demo","cancelled":true}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/wake', auth: 'bearer', desc: 'Wake session (optionally send a prompt).', params: [
