@@ -85,8 +85,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     INDEX idx_sessions_context_cutoff (context_cutoff_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Responses (new composite model)
-CREATE TABLE IF NOT EXISTS session_responses (
+-- Session Tasks (user conversations)
+CREATE TABLE IF NOT EXISTS session_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     session_name VARCHAR(64) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
@@ -95,11 +95,11 @@ CREATE TABLE IF NOT EXISTS session_responses (
     output JSON NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_responses_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
-    INDEX idx_session_responses_session_name (session_name),
-    INDEX idx_session_responses_created_by (created_by),
-    INDEX idx_session_responses_created_at (created_at),
-    INDEX idx_session_responses_session_created_at_id (session_name, created_at, id)
+    CONSTRAINT fk_tasks_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
+    INDEX idx_session_tasks_session_name (session_name),
+    INDEX idx_session_tasks_created_by (created_by),
+    INDEX idx_session_tasks_created_at (created_at),
+    INDEX idx_session_tasks_session_created_at_id (session_name, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Session Updates

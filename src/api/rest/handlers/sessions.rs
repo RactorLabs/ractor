@@ -19,8 +19,8 @@ use crate::shared::models::{
     RestoreSessionRequest, Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
-// Use fully-qualified names for response records to avoid name conflict with local SessionResponse
-use crate::shared::models::response as resp_model;
+// Use fully-qualified names for task records to avoid name conflict with local SessionResponse
+use crate::shared::models::task as task_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
@@ -798,8 +798,8 @@ pub async fn get_session(
     ))
 }
 
-// Cancel the latest in-progress response for an session and set session to idle
-pub async fn cancel_active_response(
+// Cancel the latest in-progress task for an session and set session to idle
+pub async fn cancel_active_task(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -826,9 +826,9 @@ pub async fn cancel_active_response(
         ));
     }
 
-    // Find latest in-progress response (processing or pending)
+    // Find latest in-progress task (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
     .bind(&session.name)
     .fetch_optional(&*state.db)
@@ -836,7 +836,7 @@ pub async fn cancel_active_response(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     let mut cancelled = false;
-    if let Some((resp_id, output)) = row {
+    if let Some((task_id, output)) = row {
         let mut new_output = output.clone();
         let mut items = new_output
             .get("items")
@@ -852,38 +852,38 @@ pub async fn cancel_active_response(
             new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
         }
         sqlx::query(
-            r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
+            r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
         )
         .bind(&new_output)
-        .bind(&resp_id)
+        .bind(&task_id)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         cancelled = true;
     }
 
-    // If no response row, try to cancel a queued create_response update (pre-insert race)
+    // If no task row, try to cancel a queued create_task update (pre-insert race)
     if !cancelled {
         if let Some((update_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
         .bind(&session.name)
         .fetch_optional(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
-            let resp_id = payload.get("response_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if !resp_id.is_empty() {
+            let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !task_id.is_empty() {
                 let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
                 let now = chrono::Utc::now();
                 let cancelled_item = serde_json::json!({"type":"cancelled","reason":"user_cancel","at": now.to_rfc3339()});
                 let output = serde_json::json!({"text":"","items":[cancelled_item]});
-                // Insert cancelled response row (idempotent behavior if it already exists)
+                // Insert cancelled task row (idempotent behavior if it already exists)
                 let _ = sqlx::query(
-                    r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                    r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
-                .bind(&resp_id)
+                .bind(&task_id)
                 .bind(&session.name)
                 .bind(&created_by)
                 .bind(&input)
@@ -955,7 +955,7 @@ async fn estimate_history_tokens_since(
     // No ordering needed for estimation; avoid sort pressure
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ? AND created_at >= ?"#,
         )
             .bind(session_name)
             .bind(cut)
@@ -963,7 +963,7 @@ async fn estimate_history_tokens_since(
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ?"#,
         )
             .bind(session_name)
             .fetch_all(pool)
@@ -975,7 +975,7 @@ async fn estimate_history_tokens_since(
     let mut msg_count: u32 = 0;
     const TOOL_RESULT_PREVIEW_MAX: usize = 100;
 
-    // Determine the single latest 'processing' response by created_at
+    // Determine the single latest 'processing' task by created_at
     let mut latest_proc: Option<DateTime<Utc>> = None;
     for row in rows.iter() {
         let status: String = row
@@ -1019,7 +1019,7 @@ async fn estimate_history_tokens_since(
 
         let status_lc = status.to_lowercase();
         if status_lc == "processing" {
-            // Only include tools for the single most recent processing response
+            // Only include tools for the single most recent processing task
             let include_tools = latest_proc
                 .and_then(|lp| {
                     row.try_get::<DateTime<Utc>, _>("created_at")
@@ -1028,7 +1028,7 @@ async fn estimate_history_tokens_since(
                 })
                 .unwrap_or(false);
             if include_tools {
-                // For the response currently being worked on, include tool_call and tool_result outputs
+                // For the task currently being worked on, include tool_call and tool_result outputs
                 if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                     for it in items {
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
@@ -1091,7 +1091,7 @@ async fn estimate_history_tokens_since(
             }
         }
         if status_lc == "completed" {
-            // Completed responses: include only the synthesized assistant message built from output_content
+            // Completed tasks: include only the synthesized assistant message built from output_content
             const MAX_TOTAL: usize = 3000;
             const MAX_ITEM: usize = 1200;
             // Extract items from the last 'output' tool_result if present
@@ -1270,11 +1270,11 @@ pub async fn clear_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was cleared
-    if let Ok(created) = resp_model::SessionResponse::create(
+    if let Ok(created) = task_model::SessionTask::create(
         &state.db,
         &session.name,
         username,
-        resp_model::CreateResponseRequest {
+        task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
         },
@@ -1282,10 +1282,10 @@ pub async fn clear_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::SessionResponse::update_by_id(
+        let _ = task_model::SessionTask::update_by_id(
             &state.db,
             &created.id,
-            resp_model::UpdateResponseRequest {
+            task_model::UpdateTaskRequest {
                 status: Some("completed".to_string()),
                 input: None,
                 output: Some(serde_json::json!({
@@ -1342,7 +1342,7 @@ pub async fn compact_session_context(
     let cutoff = session.context_cutoff_at;
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT input, output FROM session_responses WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .bind(cut)
@@ -1351,7 +1351,7 @@ pub async fn compact_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     } else {
         sqlx::query(
-            r#"SELECT input, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .fetch_all(&*state.db)
@@ -1525,11 +1525,11 @@ pub async fn compact_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was compacted, include summary as a compact_summary item
-    if let Ok(created) = resp_model::SessionResponse::create(
+    if let Ok(created) = task_model::SessionTask::create(
         &state.db,
         &session.name,
         username,
-        resp_model::CreateResponseRequest {
+        task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
         },
@@ -1537,10 +1537,10 @@ pub async fn compact_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::SessionResponse::update_by_id(
+        let _ = task_model::SessionTask::update_by_id(
             &state.db,
             &created.id,
-            resp_model::UpdateResponseRequest {
+            task_model::UpdateTaskRequest {
                 status: Some("completed".to_string()),
                 input: None,
                 output: Some(serde_json::json!({
@@ -2399,14 +2399,14 @@ pub async fn get_session_runtime(
     // Find session (admin can access any session)
     let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Fetch all responses for this session (created_at + output JSON)
+    // Fetch all tasks for this session (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#
     )
     .bind(&session.name)
     .fetch_all(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
     // Sum runtime for completed sessions; track last wake for current session inclusion
     let mut total: i64 = 0;

@@ -80,9 +80,9 @@ Note on commit message formatting:
 - Sleep/Wake actions:
   - `POST /sessions/{name}/sleep` schedules container stop and sets state to `slept`.
   - `POST /sessions/{name}/wake` restarts container and transitions via `init`.
-- Responses: `GET/POST /sessions/{name}/responses` for user↔session exchanges, stored in `session_responses`.
+- Tasks: `GET/POST /sessions/{name}/tasks` for user↔session exchanges, stored in `session_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
-  - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the response reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
+- `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
 
 ## Operator UI
 

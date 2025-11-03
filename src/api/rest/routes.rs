@@ -79,7 +79,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         .route(
             "/sessions/{name}/cancel",
-            post(handlers::sessions::cancel_active_response),
+            post(handlers::sessions::cancel_active_task),
         )
         .route(
             "/sessions/{name}/wake",
@@ -121,29 +121,19 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/sessions/{name}",
             delete(handlers::sessions::delete_session),
         )
-        // Message endpoints removed in favor of Responses
-        // Response endpoints (composite model)
+        // Task endpoints (composite model)
+        .route("/sessions/{name}/tasks", get(handlers::tasks::list_tasks))
+        .route("/sessions/{name}/tasks", post(handlers::tasks::create_task))
         .route(
-            "/sessions/{name}/responses",
-            get(handlers::responses::list_responses),
+            "/sessions/{name}/tasks/{id}",
+            get(handlers::tasks::get_task_by_id).put(handlers::tasks::update_task),
         )
         .route(
-            "/sessions/{name}/responses",
-            post(handlers::responses::create_response),
+            "/sessions/{name}/tasks/count",
+            get(handlers::tasks::get_task_count),
         )
-        .route(
-            "/sessions/{name}/responses/{id}",
-            get(handlers::responses::get_response_by_id).put(handlers::responses::update_response),
-        )
-        .route(
-            "/sessions/{name}/responses/count",
-            get(handlers::responses::get_response_count),
-        )
-        // Global response lookup by id
-        .route(
-            "/responses/{id}",
-            get(handlers::responses::get_response_global_by_id),
-        )
+        // Global task lookup by id
+        .route("/tasks/{id}", get(handlers::tasks::get_task_global_by_id))
         // Session files (read-only)
         .route(
             "/sessions/{name}/files/read/{*path}",

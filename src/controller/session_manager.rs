@@ -350,7 +350,7 @@ impl SessionManager {
             "wake_session" => self.handle_wake_session(update.clone()).await,
             "publish_session" => self.handle_publish_session(update.clone()).await,
             "unpublish_session" => self.handle_unpublish_session(update.clone()).await,
-            "create_response" => self.handle_create_response(update.clone()).await,
+            "create_task" => self.handle_create_task(update.clone()).await,
             "file_read" => self.handle_file_read(update.clone()).await,
             "file_metadata" => self.handle_file_metadata(update.clone()).await,
             "file_list" => self.handle_file_list(update.clone()).await,
@@ -560,18 +560,18 @@ impl SessionManager {
         if let Some(prompt) = prompt_to_send {
             info!("Sending prompt to session {}: {}", session_name, prompt);
 
-            // Create response record in database (pending)
-            let response_id = uuid::Uuid::new_v4().to_string();
+            // Create task record in database (pending)
+            let task_id = uuid::Uuid::new_v4().to_string();
             let input_json =
                 serde_json::json!({ "content": [ { "type": "text", "content": prompt } ] });
             let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&response_id)
+            .bind(&task_id)
             .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
@@ -579,8 +579,8 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for session {}",
-                response_id, session_name
+                "Prompt task {} created for session {}",
+                task_id, session_name
             );
         }
 
@@ -708,8 +708,8 @@ impl SessionManager {
             .await?;
 
         info!("Session {} state updated to slept", session_name);
-        // Create a chat marker response to indicate the session has slept
-        let response_id = uuid::Uuid::new_v4().to_string();
+        // Create a chat marker task to indicate the session has slept
+        let task_id = uuid::Uuid::new_v4().to_string();
         let created_by = update.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
         // Determine note: auto timeout vs user-triggered
@@ -738,9 +738,9 @@ impl SessionManager {
                 .unwrap_or("User requested sleep")
         };
 
-        // Mark the latest in-progress response as cancelled (processing or pending) (applies to any sleep reason)
-        if let Some((resp_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+        // Mark the latest in-progress task as cancelled (processing or pending) (applies to any sleep reason)
+        if let Some((task_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
+            r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
         .bind(&session_name)
         .fetch_optional(&self.pool)
@@ -764,34 +764,34 @@ impl SessionManager {
             } else {
                 new_output = serde_json::json!({"text":"","items": [ {"type":"cancelled","reason": reason, "at": now_text } ]});
             }
-            // Update response status to 'cancelled'
+            // Update task status to 'cancelled'
             let _ = sqlx::query(
-                r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
+                r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
             )
             .bind(&new_output)
-            .bind(&resp_id)
+            .bind(&task_id)
             .execute(&self.pool)
             .await;
         } else {
-            // If no response row exists yet (pre-insert race), try to find the latest create_response update and insert a cancelled response
+            // If no task row exists yet (pre-insert race), try to find the latest create_task update and insert a cancelled task
             if let Some((update_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+                r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
             )
             .bind(&session_name)
             .fetch_optional(&self.pool)
             .await
             .unwrap_or(None)
             {
-                if let Some(resp_id) = payload.get("response_id").and_then(|v| v.as_str()) {
+                if let Some(task_id) = payload.get("task_id").and_then(|v| v.as_str()) {
                     let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
                     let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
                     let output = serde_json::json!({"text":"","items":[cancelled_item]});
                     let _ = sqlx::query(
-                        r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                        r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                             VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                             ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                     )
-                    .bind(resp_id)
+                    .bind(task_id)
                     .bind(&session_name)
                     .bind(&created_by)
                     .bind(&input)
@@ -807,7 +807,7 @@ impl SessionManager {
         }
         // Determine runtime: time from last wake marker (or session.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-            r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
+            r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
         )
         .bind(&session_name)
         .fetch_all(&self.pool)
@@ -844,11 +844,11 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&created_by)
         .bind(&serde_json::json!({"text": ""}))
@@ -926,17 +926,17 @@ impl SessionManager {
             // Get the principal name from the update
             let principal = effective_principal.clone();
 
-            // Create response record in database for woken session
-            let response_id = uuid::Uuid::new_v4().to_string();
+            // Create task record in database for woken session
+            let task_id = uuid::Uuid::new_v4().to_string();
             let input_json = serde_json::json!({ "text": prompt });
             let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&response_id)
+            .bind(&task_id)
             .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
@@ -944,13 +944,13 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for woken session {}",
-                response_id, session_name
+                "Prompt task {} created for woken session {}",
+                task_id, session_name
             );
         }
 
         // Insert a chat marker indicating the session has woken
-        let response_id = uuid::Uuid::new_v4().to_string();
+        let task_id = uuid::Uuid::new_v4().to_string();
         let now_text = chrono::Utc::now().to_rfc3339();
         let reason = update
             .payload
@@ -968,11 +968,11 @@ impl SessionManager {
         });
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&effective_principal)
         .bind(&serde_json::json!({"text":""}))
@@ -985,18 +985,18 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_create_response(&self, update: SessionUpdate) -> Result<()> {
+    pub async fn handle_create_task(&self, update: SessionUpdate) -> Result<()> {
         let session_name = update.session_name.clone();
         let principal = update.created_by.clone();
 
-        info!("Handling create_response for session {}", session_name);
+        info!("Handling create_task for session {}", session_name);
 
         // Parse payload
-        let response_id = update
+        let task_id = update
             .payload
-            .get("response_id")
+            .get("task_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing response_id in payload"))?;
+            .ok_or_else(|| anyhow::anyhow!("Missing task_id in payload"))?;
         let input = update
             .payload
             .get("input")
@@ -1019,7 +1019,7 @@ impl SessionManager {
         // Wake if needed
         if wake_if_slept && state == "slept" {
             info!(
-                "Session {} slept; waking prior to inserting response",
+                "Session {} slept; waking prior to inserting task entry",
                 session_name
             );
             let wake_token = self
@@ -1044,7 +1044,7 @@ impl SessionManager {
             // Insert a wake marker for implicit wake
             let marker_id = uuid::Uuid::new_v4().to_string();
             let now_text = chrono::Utc::now().to_rfc3339();
-            // Ensure the wake marker sorts before the newly created response row by using a slightly earlier timestamp
+            // Ensure the wake marker sorts before the newly created task row by using a slightly earlier timestamp
             let marker_created_at = update
                 .created_at
                 .checked_sub_signed(chrono::Duration::milliseconds(1))
@@ -1055,7 +1055,7 @@ impl SessionManager {
             });
             sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
@@ -1070,48 +1070,45 @@ impl SessionManager {
         .await?;
         }
 
-        // If a response with this id already exists (e.g., pre-insert cancel), skip insertion
+        // If a task with this id already exists (e.g., pre-insert cancel), skip insertion
         if let Some((_existing_id, existing_status)) = sqlx::query_as::<_, (String, String)>(
-            r#"SELECT id, status FROM session_responses WHERE id = ?"#,
+            r#"SELECT id, status FROM session_tasks WHERE id = ?"#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .fetch_optional(&self.pool)
         .await?
         {
             info!(
-                "Response {} already exists with status {}, skipping insert",
-                response_id, existing_status
+                "Task {} already exists with status {}, skipping insert",
+                task_id, existing_status
             );
             return Ok(());
         }
 
-        // Insert response row
+        // Insert task row
         // To avoid identical timestamps with the implicit wake marker (second-level precision
-        // in MySQL DATETIME), create the response one second after the update's created_at.
+        // in MySQL DATETIME), create the task entry one second after the update's created_at.
         let output_json = serde_json::json!({ "text": "", "items": [] });
-        let resp_created_at = update
+        let task_created_at = update
             .created_at
             .checked_add_signed(chrono::Duration::seconds(1))
             .unwrap_or(update.created_at);
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
-        .bind(&resp_created_at)
-        .bind(&resp_created_at)
+        .bind(&task_created_at)
+        .bind(&task_created_at)
         .execute(&self.pool)
         .await?;
-        info!(
-            "Inserted response {} for session {}",
-            response_id, session_name
-        );
+        info!("Inserted task {} for session {}", task_id, session_name);
 
         Ok(())
     }

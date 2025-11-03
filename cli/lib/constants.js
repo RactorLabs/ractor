@@ -14,5 +14,5 @@ module.exports = {
   SESSION_STATE_SLEPT,
   SESSION_STATE_DELETED,
 
-  // No message roles; responses represent full exchanges
+  // No message roles; tasks represent full exchanges
 };

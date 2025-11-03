@@ -7,7 +7,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Tas
 - Interactive UI (authenticated):
   - Login page (Operator authentication)
   - Sessions list and details
-  - Session chat-style responses (send + poll)
+  - Session chat-style tasks (send + poll)
   - Session state/actions (wake, sleep, idle, busy, branch, publish)
   - Basic profile/settings for the logged-in operator
 
@@ -22,7 +22,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Tas
     - Auth: `GET /api/v0/auth`, `POST /api/v0/auth/token`
     - Operators: CRUD + password update
     - Sessions: CRUD + state transitions + publish lifecycle
-    - Responses: list/create/count
+    - Tasks: list/create/count
 - CLI 0.4.4 (tag) for flows and payload shapes:
   - `cli/lib/api.js` shows: base URL, Bearer token header, endpoint prefixing (`/api/v0`), and typical request/response handling.
 
@@ -43,7 +43,7 @@ Goal: Build a complete Operator web UI that documents and interacts with the Tas
     - `/login` (operator login)
   - Authenticated (guarded layout)
     - `/app/sessions` (list)
-    - `/app/sessions/[name]` (details + chat/responses)
+    - `/app/sessions/[name]` (details + chat/tasks)
     - `/app/profile` (basic account info)
     - `/app/settings` (basic settings)
 - UI conventions: follow existing Operator template components, SCSS, and page layout options in `appOptions`.
@@ -55,7 +55,7 @@ Deliverables:
   - Auth (public + protected)
   - Operators
   - Sessions
-  - Responses
+  - Tasks
   - Published (public catalog)
 - Implementation details:
   - Source-of-truth: a typed JSON/TS structure (`src/lib/api/docs.ts` or `static/api-docs.json`) describing each endpoint: method, path, path params, query params, body schema (concise), success/err examples.
@@ -81,10 +81,10 @@ Deliverables:
   - Actions: open details, wake/sleep/idle/busy, publish/unpublish, delete
 - `/app/sessions/[name]` page: basic info panel + messaging panel
   - Info: session metadata and quick actions (wake/sleep/etc.)
-  - Responses (chat):
-    - List: `GET /api/v0/sessions/{name}/responses`
-    - Send: `POST /api/v0/sessions/{name}/responses`
-    - Poll: periodic `GET /api/v0/sessions/{name}/responses/count` to detect changes and refresh list
+  - Tasks (chat):
+    - List: `GET /api/v0/sessions/{name}/tasks`
+    - Send: `POST /api/v0/sessions/{name}/tasks`
+    - Poll: periodic `GET /api/v0/sessions/{name}/tasks/count` to detect changes and refresh list
 - UX: use template components for layout, forms, and toasts; loading states; error banners.
 
 ## Phase 4 — Operators & Profile
@@ -108,7 +108,7 @@ Deliverables:
 3) Auth-guarded `/app` layout
 4) API client wrapper with token attachment
 5) Sessions list page
-6) Session details + responses (send/poll)
+6) Session details + tasks (send/poll)
 7) Profile page and logout
 8) Operator admin pages (optional by role)
 9) Polish: errors, toasts, pagination, filters
@@ -139,9 +139,9 @@ Deliverables:
 - [ ] POST /api/v0/sessions/{name}/publish (docs)
 - [ ] POST /api/v0/sessions/{name}/unpublish (docs)
 - [ ] DELETE /api/v0/sessions/{name} (docs)
-- [ ] GET  /api/v0/sessions/{name}/responses (docs + chat UI)
-- [ ] POST /api/v0/sessions/{name}/responses (docs + chat UI)
-- [ ] GET  /api/v0/sessions/{name}/responses/count (docs + polling)
+- [ ] GET  /api/v0/sessions/{name}/tasks (docs + chat UI)
+- [ ] POST /api/v0/sessions/{name}/tasks (docs + chat UI)
+- [ ] GET  /api/v0/sessions/{name}/tasks/count (docs + polling)
 
 ## Notes
 - Initial implementation will avoid adding new backend endpoints; only consume existing APIs.

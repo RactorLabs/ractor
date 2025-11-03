@@ -5,7 +5,7 @@ mod config;
 mod error;
 mod guardrails;
 mod ollama;
-mod response_handler;
+mod task_handler;
 mod tool_registry;
 mod tools;
 
@@ -158,15 +158,15 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
         info!("Set working directory to /session");
     }
 
-    // Initialize response handler
-    let message_handler = response_handler::ResponseHandler::new(
+    // Initialize task handler
+    let task_handler = task_handler::TaskHandler::new(
         api_client.clone(),
         ollama_client.clone(),
         guardrails.clone(),
     );
 
-    // Initialize processed message tracking to prevent reprocessing on restore
-    if let Err(e) = message_handler.initialize_processed_tracking().await {
+    // Initialize processed task tracking to prevent reprocessing on restore
+    if let Err(e) = task_handler.initialize_processed_tracking().await {
         warn!(
             "Failed to initialize processed tracking: {}, proceeding anyway",
             e
@@ -214,18 +214,18 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
         }
     }
 
-    info!("Starting response polling loop...");
+    info!("Starting task polling loop...");
 
     // Main polling loop with comprehensive error handling
     loop {
-        match message_handler.poll_and_process().await {
+        match task_handler.poll_and_process().await {
             Ok(count) => {
                 if count > 0 {
-                    info!("Processed {} responses", count);
+                    info!("Processed {} tasks", count);
                 }
             }
             Err(e) => {
-                error!("Error processing responses: {}", e);
+                error!("Error processing tasks: {}", e);
                 // Continue polling - session should never die silently
             }
         }

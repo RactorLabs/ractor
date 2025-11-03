@@ -23,7 +23,7 @@ tags:
   - name: Security
   - name: Operators
   - name: Sessions
-  - name: Responses
+  - name: Tasks
   - name: Files
 
 paths:
@@ -490,8 +490,8 @@ paths:
 
   /sessions/{name}/cancel:
     post:
-      tags: [Responses]
-      summary: Cancel latest in‑progress response and set session idle
+      tags: [Tasks]
+      summary: Cancel latest in‑progress task and set session idle
       parameters:
         - in: path
           name: name
@@ -694,10 +694,10 @@ paths:
                   total_runtime_seconds: { type: integer }
                   current_session_seconds: { type: integer }
 
-  /sessions/{name}/responses:
+  /sessions/{name}/tasks:
     get:
-      tags: [Responses]
-      summary: List responses for a session
+      tags: [Tasks]
+      summary: List tasks for a session
       parameters:
         - in: path
           name: name
@@ -711,15 +711,15 @@ paths:
           schema: { type: integer, minimum: 0, default: 0 }
       responses:
         '200':
-          description: Responses
+          description: Tasks
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/ResponseView' }
+                items: { $ref: '#/components/schemas/TaskView' }
     post:
-      tags: [Responses]
-      summary: Create a response (user input)
+      tags: [Tasks]
+      summary: Create a task (user input)
       parameters:
         - in: path
           name: name
@@ -729,20 +729,20 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateResponseRequest' }
+            schema: { $ref: '#/components/schemas/CreateTaskRequest' }
       responses:
         '200':
           description: Accepted
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ResponseView' }
+              schema: { $ref: '#/components/schemas/TaskView' }
         '504':
           description: Timed out waiting for completion (background=false)
 
-  /sessions/{name}/responses/{id}:
+  /sessions/{name}/tasks/{id}:
     get:
-      tags: [Responses]
-      summary: Get a response by id
+      tags: [Tasks]
+      summary: Get a task by id
       parameters:
         - in: path
           name: name
@@ -754,14 +754,14 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: Response
+          description: Task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ResponseView' }
+              schema: { $ref: '#/components/schemas/TaskView' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
-      tags: [Responses]
-      summary: Update a response (status/output append)
+      tags: [Tasks]
+      summary: Update a task (status/output append)
       parameters:
         - in: path
           name: name
@@ -775,18 +775,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdateResponseRequest' }
+            schema: { $ref: '#/components/schemas/UpdateTaskRequest' }
       responses:
         '200':
-          description: Updated response
+          description: Updated task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ResponseView' }
+              schema: { $ref: '#/components/schemas/TaskView' }
 
-  /sessions/{name}/responses/count:
+  /sessions/{name}/tasks/count:
     get:
-      tags: [Responses]
-      summary: Count responses for a session
+      tags: [Tasks]
+      summary: Count tasks for a session
       parameters:
         - in: path
           name: name
@@ -802,10 +802,10 @@ paths:
                 properties:
                   count: { type: integer }
 
-  /responses/{id}:
+  /tasks/{id}:
     get:
-      tags: [Responses]
-      summary: Get a response by id (global)
+      tags: [Tasks]
+      summary: Get a task by id (global)
       parameters:
         - in: path
           name: id
@@ -813,10 +813,10 @@ paths:
           schema: { type: string }
       responses:
         '200':
-          description: Response
+          description: Task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ResponseView' }
+              schema: { $ref: '#/components/schemas/TaskView' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /sessions/{name}/files/read/{path}:
@@ -1140,7 +1140,7 @@ components:
         measured_at: { type: string, format: date-time }
         total_messages_considered: { type: integer }
 
-    CreateResponseRequest:
+    CreateTaskRequest:
       type: object
       required: [input]
       properties:
@@ -1151,14 +1151,14 @@ components:
           type: boolean
           default: true
 
-    UpdateResponseRequest:
+    UpdateTaskRequest:
       type: object
       properties:
         status: { type: string, nullable: true }
         input: { type: object, nullable: true }
         output: { type: object, nullable: true, description: 'Merged; items appended' }
 
-    ResponseView:
+    TaskView:
       type: object
       properties:
         id: { type: string }
