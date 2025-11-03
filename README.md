@@ -22,7 +22,7 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 - Built-in agent tooling — The session runtime ships a tool registry (bash execution, file editing, plan management, publish/sleep helpers, etc.) so agents can automate real workflows safely.
 - Observability & lifecycle control — Controller and session services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (sleep, wake, remix, publish) for operators.
 - API coverage — The Rust API service exposes REST endpoints for sessions, responses, operators, files, and auth, enabling external orchestration or integration.
-- LLM integration — Sessions talk to Ollama via `OLLAMA_HOST`/`OLLAMA_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
+- LLM integration — Sessions talk to Ollama via `OLLAMA_HOST` and the configurable `TSBX_DEFAULT_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
 - Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, Ollama, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
 - Portable dev→prod — Docker images built via `./scripts/build.sh` are the same ones the CLI pulls or runs in CI/CD, keeping local and production stacks aligned.
 - Rust-first core — API, controller, session, and content services are Rust 2021 binaries with structured logging and consistent error handling.
@@ -60,15 +60,16 @@ tsbx doctor
 
 ```bash
 # Start only the LLM service on GPU with the default 20B model
-tsbx start --require-gpu --ollama-model gpt-oss:120b ollama
+tsbx start --require-gpu --default-model gpt-oss:20b ollama
 
 # Pre-pull to avoid first-request latency
-docker exec ollama ollama pull gpt-oss:120b
+docker exec ollama ollama pull gpt-oss:20b
 
 # (Optional) tune resources for larger models
 #   add to the command above: --ollama-memory 64g --ollama-shm-size 64g --ollama-context-length 131072
 ```
 
+> Need the 120B model? Set `TSBX_DEFAULT_MODEL=gpt-oss:120b` (or pass `--default-model`) before `tsbx start` to override the default.
 
 4) Configure host branding (optional; defaults to `TaskSandbox` + `http://localhost` if unset) and any host overrides
 

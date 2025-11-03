@@ -1088,8 +1088,8 @@ echo 'Session directories created (code, .env, logs, content, template)'
         })?;
         env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env_vars.push(format!("OLLAMA_MODEL={}", ollama_model));
+            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", ollama_model));
         let ollama_timeout =
             std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
         env_vars.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
@@ -1283,8 +1283,8 @@ echo 'Session directories created (code, .env, logs, content, template)'
         })?;
         env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
         let ollama_model =
-            std::env::var("OLLAMA_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env_vars.push(format!("OLLAMA_MODEL={}", ollama_model));
+            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", ollama_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
