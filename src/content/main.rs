@@ -31,12 +31,14 @@ async fn create_app() -> Router {
     }
 
     // Build a router that is mounted under /content
+    let static_dir = ServeDir::new("/content")
+        .append_index_html_on_directories(true)
+        .not_found_service(axum::routing::any(not_found_handler));
+
     let content_router = Router::new()
         .route("/", get(index_handler))
         .route("/health", get(health_handler))
-        .fallback_service(
-            ServeDir::new("/content").not_found_service(axum::routing::any(not_found_handler)),
-        );
+        .fallback_service(static_dir);
 
     Router::new().nest("/content", content_router)
 }
