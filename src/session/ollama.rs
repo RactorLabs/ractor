@@ -416,7 +416,8 @@ impl OllamaClient {
             Vec::new()
         };
 
-        let model = std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
+        let model =
+            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
         // For tool calling, disable thinking as it may cause parsing issues
         let include_thinking = tools.is_empty(); // Only include thinking when no tools are present
 

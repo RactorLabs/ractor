@@ -1,4 +1,4 @@
-use super::api::{TaskSandboxClient, ResponseView};
+use super::api::{ResponseView, TaskSandboxClient};
 use super::error::Result;
 use super::guardrails::Guardrails;
 use super::ollama::{ChatMessage, ModelResponse, OllamaClient};
@@ -33,7 +33,7 @@ pub struct ResponseHandler {
     ollama_client: Arc<OllamaClient>,
     guardrails: Arc<Guardrails>,
     processed_response_ids: Arc<Mutex<HashSet<String>>>,
-    task_created_at: DateTime<Utc>,
+    update_created_at: DateTime<Utc>,
     tool_registry: Arc<ToolRegistry>,
 }
 
@@ -52,12 +52,12 @@ impl ResponseHandler {
         guardrails: Arc<Guardrails>,
         tool_registry: Option<Arc<ToolRegistry>>,
     ) -> Self {
-        let task_created_at = std::env::var("TSBX_TASK_CREATED_AT")
+        let update_created_at = std::env::var("TSBX_UPDATE_CREATED_AT")
             .ok()
             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|| {
-                warn!("TSBX_TASK_CREATED_AT not found, using current time");
+                warn!("TSBX_UPDATE_CREATED_AT not found, using current time");
                 Utc::now()
             });
 
@@ -125,15 +125,15 @@ impl ResponseHandler {
             ollama_client,
             guardrails,
             processed_response_ids: Arc::new(Mutex::new(HashSet::new())),
-            task_created_at,
+            update_created_at,
             tool_registry,
         }
     }
 
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!(
-            "Initializing response tracking; task created at {}",
-            self.task_created_at
+            "Initializing response tracking; update created at {}",
+            self.update_created_at
         );
         let total = self.api_client.get_response_count().await.unwrap_or(0);
         let limit: u32 = 500;
@@ -149,7 +149,7 @@ impl ResponseHandler {
         let mut pre = HashSet::new();
         for r in &all {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
-                if t.with_timezone(&Utc) < self.task_created_at {
+                if t.with_timezone(&Utc) < self.update_created_at {
                     pre.insert(r.id.clone());
                 }
             }
@@ -178,7 +178,7 @@ impl ResponseHandler {
         let mut pending: Vec<ResponseView> = Vec::new();
         for r in &recent {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
-                if t.with_timezone(&Utc) >= self.task_created_at
+                if t.with_timezone(&Utc) >= self.update_created_at
                     && r.status.to_lowercase() == "pending"
                 {
                     let processed = self.processed_response_ids.lock().await;
@@ -1042,9 +1042,10 @@ impl ResponseHandler {
 
     async fn build_system_prompt(&self) -> String {
         // Read hosting context from environment (provided by start script)
-        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
-        let base_url_env = std::env::var("TSBX_HOST_URL")
-            .expect("TSBX_HOST_URL must be set by the start script");
+        let host_name =
+            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+        let base_url_env =
+            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
         // Fetch session info from API/DB (name, publish state)

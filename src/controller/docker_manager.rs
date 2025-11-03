@@ -547,7 +547,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         tsbx_token: String,
         principal: String,
         principal_type: String,
-        task_created_at: chrono::DateTime<chrono::Utc>,
+        update_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
             "Creating branch session {} with selective copy from {} and fresh tokens",
@@ -756,7 +756,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 tsbx_token,
                 principal,
                 principal_type,
-                Some(task_created_at),
+                Some(update_created_at),
             )
             .await?;
 
@@ -888,7 +888,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         tsbx_token: String,
         principal: String,
         principal_type: String,
-        task_created_at: chrono::DateTime<chrono::Utc>,
+        update_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
@@ -899,7 +899,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 tsbx_token,
                 principal,
                 principal_type,
-                Some(task_created_at),
+                Some(update_created_at),
             )
             .await?;
         Ok(container_name)
@@ -963,7 +963,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         tsbx_token: String,
         principal: String,
         principal_type: String,
-        task_created_at: chrono::DateTime<chrono::Utc>,
+        update_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user env from the volume (but generate fresh system tokens)
         let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
@@ -1009,7 +1009,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
                 tsbx_token,
                 principal,
                 principal_type,
-                Some(task_created_at),
+                Some(update_created_at),
             )
             .await?;
         Ok(container_name)
@@ -1076,9 +1076,10 @@ echo 'Session directories created (code, .env, logs, content, template)'
         ];
 
         // Propagate host branding and URL to sessions (provided by start script)
-        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
-        let host_url = std::env::var("TSBX_HOST_URL")
-            .expect("TSBX_HOST_URL must be set by the start script");
+        let host_name =
+            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+        let host_url =
+            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
@@ -1218,7 +1219,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         tsbx_token: String,
         principal: String,
         principal_type: String,
-        task_created_at: Option<chrono::DateTime<chrono::Utc>>,
+        update_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
         let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
@@ -1271,9 +1272,10 @@ echo 'Session directories created (code, .env, logs, content, template)'
         ];
 
         // Propagate host branding and URL to sessions (provided by start script)
-        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
-        let host_url = std::env::var("TSBX_HOST_URL")
-            .expect("TSBX_HOST_URL must be set by the start script");
+        let host_name =
+            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+        let host_url =
+            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
@@ -1293,9 +1295,9 @@ echo 'Session directories created (code, .env, logs, content, template)'
             env_vars.push("TSBX_HAS_SETUP=true".to_string());
         }
 
-        // Add task creation timestamp for message processing
-        if let Some(timestamp) = task_created_at {
-            env_vars.push(format!("TSBX_TASK_CREATED_AT={}", timestamp.to_rfc3339()));
+        // Add update creation timestamp for message processing
+        if let Some(timestamp) = update_created_at {
+            env_vars.push(format!("TSBX_UPDATE_CREATED_AT={}", timestamp.to_rfc3339()));
         }
 
         info!("Set TSBX_TOKEN and OLLAMA_HOST as environment variables");
