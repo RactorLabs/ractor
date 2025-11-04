@@ -333,7 +333,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       tags: [Sessions]
-      summary: Create session
+      summary: Start a new session
       requestBody:
         required: true
         content:
@@ -341,7 +341,7 @@ paths:
             schema: { $ref: '#/components/schemas/StartSessionRequest' }
       responses:
         '200':
-          description: Created session
+          description: Session started
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Session' }

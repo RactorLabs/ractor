@@ -6,7 +6,7 @@
   import { apiFetch } from '$lib/api/client.js';
   import { isAuthenticated } from '$lib/auth.js';
 
-  setPageTitle('Create Session');
+  setPageTitle('Start Session');
 
   // Simple readable-name generator obeying ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
   // Name format: super_power + creature (animal/bird/mythical)
@@ -103,7 +103,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
         const msg = res?.data?.message || res?.data?.error || `Create failed (HTTP ${res.status})`;
         throw new Error(msg);
       }
-      // Navigate to the created session page
+      // Navigate to the started session page
       goto(`/sessions/${encodeURIComponent(name)}`);
     } catch (e) {
       error = e.message || String(e);
@@ -120,7 +120,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
   <div class="col-xl-12">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
-        <div class="fw-bold fs-20px">Create Session</div>
+        <div class="fw-bold fs-20px">Start Session</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
           <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
@@ -163,7 +163,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
                   }
                 }}
               ></textarea>
-              <div class="form-text">Press Ctrl+Enter to create the session.</div>
+              <div class="form-text">Press Ctrl+Enter to start the session.</div>
             </div>
 
             <div class="col-12 col-md-6">

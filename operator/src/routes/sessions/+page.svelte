@@ -192,7 +192,7 @@ import { getHostUrl } from '$lib/branding.js';
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Sessions</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <a href="/sessions/create" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Create Session</a>
+    <a href="/sessions/create" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Start Session</a>
   </div>
   
   <!-- Filters row -->
@@ -250,7 +250,7 @@ import { getHostUrl } from '$lib/branding.js';
         {:else if !sessions || sessions.length === 0}
           <div class="text-body text-opacity-75">No sessions found.</div>
           <div class="mt-3">
-            <a href="/sessions/create" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Create your first session</a>
+            <a href="/sessions/create" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Start your first session</a>
           </div>
         {:else}
           <div class="row g-3">
