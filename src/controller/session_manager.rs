@@ -467,11 +467,6 @@ impl SessionManager {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for clone"))?;
 
-            let copy_data = request
-                .payload
-                .get("copy_data")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
             let copy_code = request
                 .payload
                 .get("copy_code")
@@ -515,8 +510,8 @@ impl SessionManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating cloned session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
-                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, clone_principal, clone_principal_type_str);
+            info!("Creating cloned session {} from parent {} (copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
+                  session_name, parent_session_name, copy_code, copy_env, copy_content, clone_principal, clone_principal_type_str);
 
             // For cloned sessions, create container with selective volume copy from parent
             // Generate fresh token for cloned session
@@ -528,7 +523,6 @@ impl SessionManager {
                 .create_container_with_selective_copy_and_tokens(
                     &session_name,
                     parent_session_name,
-                    copy_data,
                     copy_code,
                     copy_env,
                     copy_content,
