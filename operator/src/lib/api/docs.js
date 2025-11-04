@@ -491,7 +491,7 @@ export function getApiDocs(base) {
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
         ],
-        example: `curl -s -OJ ${BASE}/api/v0/sessions/<name>/files/read/content/index.html -H "Authorization: Bearer <token>" -D -`,
+        example: `curl -s -OJ ${BASE}/api/v0/sessions/<name>/files/read/code/report.html -H "Authorization: Bearer <token>" -D -`,
         resp: { schema: 'Empty' },
         responses: [
           { status: 200 }

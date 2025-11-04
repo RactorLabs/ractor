@@ -78,7 +78,6 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     let session_dirs = [
         "/session",
         "/session/code",
-        "/session/content",
     ];
 
     for dir in session_dirs.iter() {

@@ -61,7 +61,7 @@ COPY target/release/tsbx-session /usr/local/bin/tsbx-session
 
 # Create session directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /session/code /session/logs /session/content && \
+RUN mkdir -p /session/code /session/logs && \
     touch /session/.env && \
     chown -R session:session /session && \
     chmod -R 755 /session && \

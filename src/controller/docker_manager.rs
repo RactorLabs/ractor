@@ -122,13 +122,13 @@ impl DockerManager {
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /session/code /session/logs /session/content
+        let init_script = "sudo mkdir -p /session/code /session/logs
 sudo touch /session/.env
 sudo chown session:session /session/.env
 sudo chmod 600 /session/.env
 sudo chown -R session:session /session
 sudo chmod -R 755 /session
-echo 'Session directories created (code, .env, logs, content)'
+echo 'Session directories created (code, .env, logs)'
 ";
 
         self.execute_command(session_name, init_script).await?;
@@ -354,7 +354,7 @@ echo 'Session directories created (code, .env, logs, content)'
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
         copy_commands.push(
-            "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
+            "mkdir -p /dest/code /dest/data /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
         );
 
@@ -372,9 +372,7 @@ echo 'Session directories created (code, .env, logs, content)'
         }
 
         if copy_content {
-            copy_commands.push("if [ -d /source/content ]; then cp -a /source/content/. /dest/content/ || echo 'No content to copy'; fi".to_string());
-        } else {
-            copy_commands.push("echo 'Skipping content copy as requested'".to_string());
+            copy_commands.push("echo 'Content folder no longer exists - skipping content copy'".to_string());
         }
 
         // Always copy README.md from root if it exists
@@ -564,7 +562,7 @@ echo 'Session directories created (code, .env, logs, content)'
 
         // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
         copy_commands.push(
-            "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
+            "mkdir -p /dest/code /dest/data /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
         );
 
@@ -582,9 +580,7 @@ echo 'Session directories created (code, .env, logs, content)'
         }
 
         if copy_content {
-            copy_commands.push("if [ -d /source/content ]; then cp -a /source/content/. /dest/content/ || echo 'No content to copy'; fi".to_string());
-        } else {
-            copy_commands.push("echo 'Skipping content copy as requested'".to_string());
+            copy_commands.push("echo 'Content folder no longer exists - skipping content copy'".to_string());
         }
 
         // Always copy README.md from root if it exists
