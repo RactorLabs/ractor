@@ -31,8 +31,8 @@
   }
 
   let name = genName();
-  let stopTimeoutSeconds = 300; // default 5 minutes
-  let taskTimeoutSeconds = 3600; // default 1 hour
+let stopTimeoutSeconds = 300; // default 5 minutes
+let archiveTimeoutSeconds = 86400; // default 24 hours
   let metadataText = '{}';
   // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
   let tagsInput = '';
@@ -91,7 +91,7 @@
         metadata,
         tags: parseTags(),
         stop_timeout_seconds: Number(stopTimeoutSeconds) || 300,
-        task_timeout_seconds: Number(taskTimeoutSeconds) || 3600,
+        archive_timeout_seconds: Number(archiveTimeoutSeconds) || 86400,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
@@ -201,9 +201,9 @@
               <div class="form-text">Stop after inactivity (default 300).</div>
             </div>
             <div class="col-12 col-md-3">
-              <label class="form-label" for="task-timeout">Task Timeout (seconds)</label>
-              <input id="task-timeout" type="number" min="1" class="form-control" bind:value={taskTimeoutSeconds} />
-              <div class="form-text">Abort tasks that exceed this duration (default 3600).</div>
+              <label class="form-label" for="archive-timeout">Archive Timeout (seconds)</label>
+              <input id="archive-timeout" type="number" min="0" class="form-control" bind:value={archiveTimeoutSeconds} />
+              <div class="form-text">Reserved for future archival workflows (default 86400).</div>
             </div>
 
             <div class="col-12">

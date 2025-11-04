@@ -43,7 +43,7 @@ export function getCommonSchemas() {
       { name: 'published_by', type: 'string|null', desc: 'Who published' },
       { name: 'publish_permissions', type: 'object', desc: '{ code: boolean, env: boolean, content: boolean }' },
       { name: 'stop_timeout_seconds', type: 'int', desc: 'Stop timeout' },
-      { name: 'task_timeout_seconds', type: 'int', desc: 'Task timeout' },
+      { name: 'archive_timeout_seconds', type: 'int', desc: 'Archive timeout placeholder' },
       { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When idle started' },
       { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When busy started' },
       { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff timestamp if set' },
@@ -63,6 +63,8 @@ export function getCommonSchemas() {
       { name: 'input_content', type: 'array', desc: "User input content items (e.g., [{ type: 'text', content: 'hello' }]). Preferred input shape uses 'content' array; legacy { text: string } is accepted but not echoed in input_content." },
       { name: 'output_content', type: 'array', desc: "Final content items extracted from segments (typically the 'output' tool_result payload)" },
       { name: 'segments', type: 'array', desc: 'All step-by-step segments/items: commentary, tool calls/results, system markers, final' },
+      { name: 'timeout_seconds', type: 'int|null', desc: 'Per-task timeout in seconds when provided' },
+      { name: 'timeout_at', type: 'string|null (RFC3339)', desc: 'When the task will time out automatically if still pending/processing' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
     ],
@@ -316,7 +318,7 @@ export function getApiDocs(base) {
     "published_by": "admin",
     "publish_permissions": {"code": true, "env": false, "content": true},
     "stop_timeout_seconds": 300,
-    "task_timeout_seconds": 3600,
+    "archive_timeout_seconds": 86400,
     "idle_from": "2025-01-01T12:10:00Z",
     "busy_from": null
   }
@@ -352,7 +354,7 @@ export function getApiDocs(base) {
   "published_by": "admin",
   "publish_permissions": {"code": true, "env": false, "content": true},
   "stop_timeout_seconds": 300,
-  "task_timeout_seconds": 3600,
+  "archive_timeout_seconds": 86400,
   "idle_from": "2025-01-01T12:10:00Z",
   "busy_from": null
 }`
@@ -407,7 +409,7 @@ export function getApiDocs(base) {
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
-      ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
+      ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
       { method: 'POST', path: '/api/v0/sessions', auth: 'bearer', desc: 'Create session.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
@@ -418,19 +420,19 @@ export function getApiDocs(base) {
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
         { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Stop timeout seconds (default 300)' },
-        { in: 'body', name: 'task_timeout_seconds', type: 'int|null', required: false, desc: 'Task timeout seconds (default 3600)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo session"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
+        { in: 'body', name: 'archive_timeout_seconds', type: 'int|null', required: false, desc: 'Archive timeout seconds (default 86400)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo session"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":null,"busy_from":null}` }] },
       { method: 'GET', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Get session by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
+      ], example: `curl -s ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Update session by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Update description' },
         { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: "Replace tags array; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces" },
         { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Update stop timeout seconds' },
-        { in: 'body', name: 'task_timeout_seconds', type: 'int|null', required: false, desc: 'Update task timeout seconds' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
+        { in: 'body', name: 'archive_timeout_seconds', type: 'int|null', required: false, desc: 'Update archive timeout seconds' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/sessions/{name}/state', auth: 'bearer', desc: 'Update session state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|stopped)' }
@@ -488,28 +490,30 @@ export function getApiDocs(base) {
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max responses (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<name>/tasks?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject', array: true }, responses: [{ status: 200, body: `[{"id":"uuid","session_name":"demo","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
+      ], example: `curl -s ${BASE}/api/v0/sessions/<name>/tasks?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject', array: true }, responses: [{ status: 200, body: `[{"id":"uuid","session_name":"demo","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/tasks', auth: 'bearer', desc: 'Create a task (user input). Supports blocking when background=false.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'input', type: 'object', required: true, desc: "User input; preferred shape: { content: [{ type: 'text', content: string }] }. Legacy: { text: string } also accepted." },
-        { in: 'body', name: 'background', type: 'boolean', required: false, desc: "Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed|cancelled). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending)." }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`, resp: { schema: 'TaskObject' }, responses: [
-        { status: 200, body: `{"id":"uuid","session_name":"demo","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"created_at":"...","updated_at":"..."}` },
+        { in: 'body', name: 'background', type: 'boolean', required: false, desc: "Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed|cancelled). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending)." },
+        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Optional per-task timeout. When set (>0), the controller auto-cancels the task once elapsed.' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false,"timeout_seconds":600}'`, resp: { schema: 'TaskObject' }, responses: [
+        { status: 200, body: `{"id":"uuid","session_name":"demo","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` },
         { status: 504, body: `{"message":"Timed out waiting for response to complete"}` }
       ] },
       { method: 'GET', path: '/api/v0/sessions/{name}/tasks/{id}', auth: 'bearer', desc: 'Get a single task by id.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'path', name: 'id', type: 'string', required: true, desc: 'Task id' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/tasks/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject' }, responses: [
-        { status: 200, body: `{"id":"uuid","session_name":"demo","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[{"type":"tool_call","tool":"search","args":{}}],"created_at":"...","updated_at":"..."}` }
+        { status: 200, body: `{"id":"uuid","session_name":"demo","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[{"type":"tool_call","tool":"search","args":{}}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` }
       ] },
       { method: 'PUT', path: '/api/v0/sessions/{name}/tasks/{id}', auth: 'bearer', desc: 'Update a task record. Used to append output.items and mark status.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'path', name: 'id', type: 'string', required: true, desc: 'Task id' },
         { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'", required: false, desc: 'Status update' },
         { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update; replaces existing input JSON' },
-        { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; shape: { text?: string, items?: [] }' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name>/tasks/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","channel":"final","text":"done"}]}}'`, resp: { schema: 'TaskObject' }, responses: [{ status: 200, body: `{"id":"uuid","session_name":"demo","status":"completed","input_content":[],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"created_at":"...","updated_at":"..."}` }] },
+        { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; shape: { text?: string, items?: [] }' },
+        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears)' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name>/tasks/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","channel":"final","text":"done"}]}}'`, resp: { schema: 'TaskObject' }, responses: [{ status: 200, body: `{"id":"uuid","session_name":"demo","status":"completed","input_content":[],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"...","updated_at":"..."}` }] },
       { method: 'GET', path: '/api/v0/sessions/{name}/tasks/count', auth: 'bearer', desc: 'Get task count for session.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/tasks/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"session_name":"demo"}` }] }

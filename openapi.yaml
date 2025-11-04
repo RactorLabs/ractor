@@ -1042,7 +1042,7 @@ components:
         published_by: { type: string, nullable: true }
         publish_permissions: { type: object }
         stop_timeout_seconds: { type: integer }
-        task_timeout_seconds: { type: integer }
+        archive_timeout_seconds: { type: integer }
         idle_from: { type: string, format: date-time, nullable: true }
         busy_from: { type: string, format: date-time, nullable: true }
         context_cutoff_at: { type: string, format: date-time, nullable: true }
@@ -1077,7 +1077,7 @@ components:
         setup: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
         stop_timeout_seconds: { type: integer, nullable: true }
-        task_timeout_seconds: { type: integer, nullable: true }
+        archive_timeout_seconds: { type: integer, nullable: true }
 
     UpdateSessionRequest:
       type: object
@@ -1089,7 +1089,7 @@ components:
           items: { type: string }
           nullable: true
         stop_timeout_seconds: { type: integer, nullable: true }
-        task_timeout_seconds: { type: integer, nullable: true }
+        archive_timeout_seconds: { type: integer, nullable: true }
 
     UpdateSessionStateRequest:
       type: object
@@ -1150,6 +1150,10 @@ components:
         background:
           type: boolean
           default: true
+        timeout_seconds:
+          type: integer
+          nullable: true
+          description: Optional per-task timeout in seconds (>0 enables auto-cancel)
 
     UpdateTaskRequest:
       type: object
@@ -1157,6 +1161,7 @@ components:
         status: { type: string, nullable: true }
         input: { type: object, nullable: true }
         output: { type: object, nullable: true, description: 'Merged; items appended' }
+        timeout_seconds: { type: integer, nullable: true, description: 'Reset per-task timeout; set <=0 to clear' }
 
     TaskView:
       type: object
@@ -1173,6 +1178,8 @@ components:
         segments:
           type: array
           items: { type: object }
+        timeout_seconds: { type: integer, nullable: true }
+        timeout_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 

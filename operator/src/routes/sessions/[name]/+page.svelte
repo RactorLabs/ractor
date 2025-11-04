@@ -637,27 +637,27 @@
   // Edit timeouts modal state and helpers
   let showTimeoutsModal = false;
   let stopTimeoutInput = 0;
-  let taskTimeoutInput = 0;
+  let archiveTimeoutInput = 0;
   function openEditTimeouts() {
     const stop = Number(session?.stop_timeout_seconds ?? 0);
-    const task = Number(session?.task_timeout_seconds ?? 0);
+    const archive = Number(session?.archive_timeout_seconds ?? 0);
     stopTimeoutInput = Number.isFinite(stop) && stop >= 0 ? stop : 0;
-    taskTimeoutInput = Number.isFinite(task) && task >= 0 ? task : 0;
+    archiveTimeoutInput = Number.isFinite(archive) && archive >= 0 ? archive : 0;
     showTimeoutsModal = true;
   }
   function closeEditTimeouts() { showTimeoutsModal = false; }
   async function saveTimeouts() {
     try {
       const stop = Math.max(0, Math.floor(Number(stopTimeoutInput || 0)));
-      const task = Math.max(0, Math.floor(Number(taskTimeoutInput || 0)));
-      const body = { stop_timeout_seconds: stop, task_timeout_seconds: task };
+      const archive = Math.max(0, Math.floor(Number(archiveTimeoutInput || 0)));
+      const body = { stop_timeout_seconds: stop, archive_timeout_seconds: archive };
       const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
       // Update local session snapshot
       session = res.data || session;
       if (session) {
         session.stop_timeout_seconds = stop;
-        session.task_timeout_seconds = task;
+        session.archive_timeout_seconds = archive;
       }
       showTimeoutsModal = false;
     } catch (e) {
@@ -930,17 +930,27 @@
     } catch(_) { return 0; }
   }
   function hasTaskTimeoutSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'task_timeout'); } catch(_) { return false; }
+    try {
+      return segmentsOf(m).some(
+        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
+      );
+    } catch(_) { return false; }
   }
   function taskTimeoutNoteFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'task_timeout');
-      return s ? segNote(s) : '';
+      const s = segmentsOf(m).find(
+        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
+      );
+      if (!s) return '';
+      const note = segNote(s);
+      return note || 'Per-task timeout';
     } catch(_) { return ''; }
   }
   function taskTimeoutRuntimeFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'task_timeout');
+      const s = segmentsOf(m).find(
+        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
+      );
       const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
       return Number.isFinite(v) && v >= 0 ? v : 0;
     } catch(_) { return 0; }
@@ -955,11 +965,17 @@
     } catch(_) { return ''; }
   }
   function hasCancelledSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'cancelled'); } catch(_) { return false; }
+    try {
+      return segmentsOf(m).some(
+        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() !== 'task_timeout'
+      );
+    } catch(_) { return false; }
   }
   function cancelledReasonFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'cancelled');
+      const s = segmentsOf(m).find(
+        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() !== 'task_timeout'
+      );
       return s ? String(s?.reason || '').trim() : '';
     } catch(_) { return ''; }
   }
@@ -1566,9 +1582,9 @@
               <div class="form-text">Time of inactivity before auto-stop. 0 disables the stop timeout.</div>
             </div>
             <div class="col-12 col-md-6">
-              <label class="form-label" for="task-timeout">Task Timeout (seconds)</label>
-              <input id="task-timeout" type="number" min="0" step="1" class="form-control" bind:value={taskTimeoutInput} />
-              <div class="form-text">Max time to stay busy before reset. 0 disables the task timeout.</div>
+              <label class="form-label" for="archive-timeout">Archive Timeout (seconds)</label>
+              <input id="archive-timeout" type="number" min="0" step="1" class="form-control" bind:value={archiveTimeoutInput} />
+              <div class="form-text">Reserved for future archival workflows. 0 disables the archive timeout.</div>
             </div>
           </div>
         </div>
@@ -1762,7 +1778,7 @@
             <div class="card-body small">
               <!-- Last Activity removed per design -->
               <div class="mt-1">Stop Timeout: {fmtDuration(session.stop_timeout_seconds)}</div>
-              <div class="mt-1">Task Timeout: {fmtDuration(session.task_timeout_seconds)}</div>
+              <div class="mt-1">Archive Timeout: {fmtDuration(session.archive_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
