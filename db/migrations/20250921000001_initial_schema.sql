@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     
     -- Timeout functionality (idle/busy)
     stop_timeout_seconds INT NOT NULL DEFAULT 300,
-    task_timeout_seconds INT NOT NULL DEFAULT 3600,
+    archive_timeout_seconds INT NOT NULL DEFAULT 86400,
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
     
@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     ),
     CONSTRAINT sessions_timeout_check CHECK (
         stop_timeout_seconds > 0 AND stop_timeout_seconds <= 604800 AND
-        task_timeout_seconds > 0 AND task_timeout_seconds <= 604800
+        archive_timeout_seconds > 0 AND archive_timeout_seconds <= 31536000
     ),
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_name) REFERENCES sessions(name) ON DELETE SET NULL,
     
@@ -93,12 +93,15 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
     input JSON NOT NULL,
     output JSON NOT NULL,
+    timeout_seconds INT NULL,
+    timeout_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_tasks_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
     INDEX idx_session_tasks_session_name (session_name),
     INDEX idx_session_tasks_created_by (created_by),
     INDEX idx_session_tasks_created_at (created_at),
+    INDEX idx_session_tasks_timeout_at (timeout_at),
     INDEX idx_session_tasks_session_created_at_id (session_name, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

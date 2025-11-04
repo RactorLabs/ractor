@@ -51,7 +51,7 @@ pub struct SessionResponse {
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
     pub stop_timeout_seconds: i32,
-    pub task_timeout_seconds: i32,
+    pub archive_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
@@ -155,7 +155,7 @@ impl SessionResponse {
             published_by: session.published_by,
             publish_permissions: session.publish_permissions,
             stop_timeout_seconds: session.stop_timeout_seconds,
-            task_timeout_seconds: session.task_timeout_seconds,
+            archive_timeout_seconds: session.archive_timeout_seconds,
             idle_from: session.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: session.busy_from.map(|dt| dt.to_rfc3339()),
             context_cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
@@ -732,7 +732,7 @@ pub async fn list_sessions(
         SELECT name, created_by, state, description, parent_session_name,
                created_at, last_activity_at, metadata, tags,
                is_published, published_at, published_by, publish_permissions,
-               stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+               stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
         FROM sessions
         {} 
@@ -1283,6 +1283,7 @@ pub async fn clear_session_context(
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
+            timeout_seconds: None,
         },
     )
     .await
@@ -1298,6 +1299,7 @@ pub async fn clear_session_context(
                     "text": "",
                     "items": [ { "type": "context_cleared", "cutoff_at": cutoff_now } ]
                 })),
+                timeout_seconds: None,
             },
         )
         .await;
@@ -1538,6 +1540,7 @@ pub async fn compact_session_context(
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
+            timeout_seconds: None,
         },
     )
     .await
@@ -1556,6 +1559,7 @@ pub async fn compact_session_context(
                         { "type": "compact_summary", "content": summary_text }
                     ]
                 })),
+                timeout_seconds: None,
             },
         )
         .await;

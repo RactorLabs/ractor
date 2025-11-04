@@ -44,6 +44,8 @@ pub async fn list_tasks(
             input_content: extract_input_content(&r.input),
             output_content: extract_output_content(&r.output),
             segments: extract_segments(&r.output),
+            timeout_seconds: r.timeout_seconds,
+            timeout_at: r.timeout_at.map(|dt| dt.to_rfc3339()),
             created_at: r.created_at.to_rfc3339(),
             updated_at: r.updated_at.to_rfc3339(),
         })
@@ -68,6 +70,8 @@ pub async fn get_task_global_by_id(
             input_content: extract_input_content(&cur.input),
             output_content: extract_output_content(&cur.output),
             segments: extract_segments(&cur.output),
+            timeout_seconds: cur.timeout_seconds,
+            timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
             created_at: cur.created_at.to_rfc3339(),
             updated_at: cur.updated_at.to_rfc3339(),
         };
@@ -117,6 +121,14 @@ pub async fn create_task(
         return Err(ApiError::Conflict("Session is busy".to_string()));
     }
 
+    if let Some(timeout) = req.timeout_seconds {
+        if timeout < 0 {
+            return Err(ApiError::BadRequest(
+                "timeout_seconds must be a non-negative integer".to_string(),
+            ));
+        }
+    }
+
     // Resolve creator
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -155,7 +167,8 @@ pub async fn create_task(
         "task_id": task_id,
         "input": req.input,
         "restart_if_stopped": true,
-        "background": req.background.unwrap_or(true)
+        "background": req.background.unwrap_or(true),
+        "timeout_seconds": req.timeout_seconds
     });
     sqlx::query(
         r#"
@@ -198,6 +211,8 @@ pub async fn create_task(
                             input_content: extract_input_content(&cur.input),
                             output_content: extract_output_content(&cur.output),
                             segments: extract_segments(&cur.output),
+                            timeout_seconds: cur.timeout_seconds,
+                            timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
                             created_at: cur.created_at.to_rfc3339(),
                             updated_at: cur.updated_at.to_rfc3339(),
                         }));
@@ -219,16 +234,24 @@ pub async fn create_task(
     }
 
     // Non-blocking request: return a stub TaskView acknowledging enqueued work
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = chrono::Utc::now();
+    let timeout_seconds = req.timeout_seconds.filter(|v| *v > 0);
+    let timeout_at = timeout_seconds.and_then(|secs| {
+        now.checked_add_signed(chrono::Duration::seconds(secs as i64))
+            .map(|dt| dt.to_rfc3339())
+    });
+    let created_at = now.to_rfc3339();
     Ok(Json(TaskView {
         id: task_id,
-        session_name: session_name,
+        session_name,
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
         output_content: vec![],
         segments: vec![],
-        created_at: now.clone(),
-        updated_at: now,
+        timeout_seconds,
+        timeout_at,
+        created_at: created_at.clone(),
+        updated_at: created_at,
     }))
 }
 
@@ -523,6 +546,14 @@ pub async fn update_task(
         return Err(ApiError::NotFound("Task not found".to_string()));
     }
 
+    if let Some(timeout) = req.timeout_seconds {
+        if timeout < 0 {
+            return Err(ApiError::BadRequest(
+                "timeout_seconds must be a non-negative integer".to_string(),
+            ));
+        }
+    }
+
     let updated = SessionTask::update_by_id(&state.db, &task_id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update task: {}", e)))?;
@@ -534,6 +565,8 @@ pub async fn update_task(
         input_content: extract_input_content(&updated.input),
         output_content: extract_output_content(&updated.output),
         segments: extract_segments(&updated.output),
+        timeout_seconds: updated.timeout_seconds,
+        timeout_at: updated.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
     }))
@@ -562,6 +595,8 @@ pub async fn get_task_by_id(
         input_content: extract_input_content(&cur.input),
         output_content: extract_output_content(&cur.output),
         segments: extract_segments(&cur.output),
+        timeout_seconds: cur.timeout_seconds,
+        timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: cur.created_at.to_rfc3339(),
         updated_at: cur.updated_at.to_rfc3339(),
     }))

@@ -8,9 +8,11 @@ pub struct SessionTask {
     pub id: String,
     pub session_name: String,
     pub created_by: String,
-    pub status: String, // pending | processing | completed | failed | timedout
+    pub status: String, // pending | processing | completed | failed | cancelled
     pub input: serde_json::Value,
     pub output: serde_json::Value,
+    pub timeout_seconds: Option<i32>,
+    pub timeout_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -20,6 +22,8 @@ pub struct CreateTaskRequest {
     pub input: serde_json::Value, // { content: [{ type: 'text', content: string }] }
     #[serde(default)]
     pub background: Option<bool>, // default true; when false, API blocks until terminal
+    #[serde(default)]
+    pub timeout_seconds: Option<i32>, // per-task auto-timeout; None disables
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +34,8 @@ pub struct UpdateTaskRequest {
     pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub output: Option<serde_json::Value>,
+    #[serde(default)]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +49,8 @@ pub struct TaskView {
     pub output_content: Vec<Value>,
     #[serde(default)]
     pub segments: Vec<Value>,
+    pub timeout_seconds: Option<i32>,
+    pub timeout_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -58,6 +66,8 @@ impl SessionTask {
         let now = Utc::now();
 
         let status = "pending".to_string();
+        let timeout_seconds = req.timeout_seconds.filter(|v| *v > 0);
+        let timeout_at = timeout_seconds.map(|secs| now + chrono::Duration::seconds(secs as i64));
         // Initialize output with empty structure
         let initial_output = serde_json::json!({
             "text": "",
@@ -67,8 +77,8 @@ impl SessionTask {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
@@ -77,6 +87,8 @@ impl SessionTask {
         .bind(&status)
         .bind(&req.input)
         .bind(&initial_output)
+        .bind(timeout_seconds)
+        .bind(timeout_at)
         .bind(&now)
         .bind(&now)
         .execute(pool)
@@ -89,6 +101,8 @@ impl SessionTask {
             status,
             input: req.input,
             output: initial_output,
+            timeout_seconds,
+            timeout_at,
             created_at: now,
             updated_at: now,
         })
@@ -104,7 +118,7 @@ impl SessionTask {
         let offset = offset.unwrap_or(0);
         sqlx::query_as::<_, SessionTask>(
             r#"
-            SELECT id, session_name, created_by, status, input, output, created_at, updated_at
+            SELECT id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
             FROM session_tasks
             WHERE session_name = ?
             ORDER BY created_at ASC, id ASC
@@ -136,7 +150,7 @@ impl SessionTask {
         id: &str,
     ) -> Result<Option<SessionTask>, sqlx::Error> {
         sqlx::query_as::<_, SessionTask>(
-            r#"SELECT id, session_name, created_by, status, input, output, created_at, updated_at FROM session_tasks WHERE id = ?"#
+            r#"SELECT id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM session_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -195,13 +209,32 @@ impl SessionTask {
             task.output = serde_json::Value::Object(merged);
         }
 
+        let mut timeout_updated = false;
+        if let Some(timeout) = req.timeout_seconds {
+            timeout_updated = true;
+            if timeout > 0 {
+                task.timeout_seconds = Some(timeout);
+            } else {
+                task.timeout_seconds = None;
+            }
+        }
+
         let now = Utc::now();
+        if timeout_updated {
+            if let Some(timeout) = task.timeout_seconds {
+                task.timeout_at = Some(now + chrono::Duration::seconds(timeout as i64));
+            } else {
+                task.timeout_at = None;
+            }
+        }
         sqlx::query(
-            r#"UPDATE session_tasks SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE session_tasks SET status=?, input=?, output=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&task.status)
         .bind(&task.input)
         .bind(&task.output)
+        .bind(task.timeout_seconds)
+        .bind(task.timeout_at)
         .bind(&now)
         .bind(&task.id)
         .execute(pool)

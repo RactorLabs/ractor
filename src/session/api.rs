@@ -21,7 +21,7 @@ pub struct Session {
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
     pub stop_timeout_seconds: i32,
-    pub task_timeout_seconds: i32,
+    pub archive_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
@@ -131,6 +131,7 @@ impl TaskSandboxClient {
         let req = CreateTaskRequest {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
             background: None,
+            timeout_seconds: None,
         };
         let response = self
             .client
@@ -181,6 +182,7 @@ impl TaskSandboxClient {
             status,
             input: None,
             output: Some(serde_json::Value::Object(output)),
+            timeout_seconds: None,
         };
         let response = self
             .client
@@ -514,6 +516,10 @@ pub struct TaskView {
     pub output_content: Option<Vec<serde_json::Value>>,
     #[serde(default)]
     pub segments: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub timeout_seconds: Option<i32>,
+    #[serde(default)]
+    pub timeout_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -523,6 +529,8 @@ pub struct CreateTaskRequest {
     pub input: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -533,4 +541,6 @@ pub struct UpdateTaskRequest {
     pub input: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<i32>,
 }

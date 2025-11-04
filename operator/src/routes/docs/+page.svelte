@@ -346,7 +346,7 @@
                 <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>
                 <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, env: boolean, content: boolean &#125;</span></td></tr>
                 <tr><td class="font-monospace">stop_timeout_seconds</td><td>int</td><td>Stop timeout</td></tr>
-                <tr><td class="font-monospace">task_timeout_seconds</td><td>int</td><td>Task timeout</td></tr>
+                <tr><td class="font-monospace">archive_timeout_seconds</td><td>int</td><td>Archive timeout placeholder</td></tr>
                 <tr><td class="font-monospace">idle_from</td><td>string|null (RFC3339)</td><td>When idle started</td></tr>
                 <tr><td class="font-monospace">busy_from</td><td>string|null (RFC3339)</td><td>When busy started</td></tr>
               </tbody>
