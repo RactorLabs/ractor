@@ -410,7 +410,7 @@ export function getApiDocs(base) {
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
       ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
-      { method: 'POST', path: '/api/v0/sessions', auth: 'bearer', desc: 'Create session.', params: [
+      { method: 'POST', path: '/api/v0/sessions', auth: 'bearer', desc: 'Start a new session.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
@@ -458,7 +458,7 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/sessions/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last restart or creation).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"session_name":"demo","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/clone', auth: 'bearer', desc: 'Clone session (create a new session from parent).', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/clone', auth: 'bearer', desc: 'Clone session (start a new session from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent session name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
