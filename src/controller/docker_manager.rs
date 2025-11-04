@@ -331,13 +331,12 @@ echo 'Session directories created (code, .env, logs, content, template)'
         &self,
         session_name: &str,
         parent_session_name: &str,
-        copy_data: bool,
         copy_code: bool,
         copy_env: bool,
         copy_content: bool,
     ) -> Result<String> {
-        info!("Creating cloned session {} with selective copy from {} (data: {}, code: {}, env: {}, content: {})", 
-              session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content);
+        info!("Creating cloned session {} with selective copy from {} (code: {}, env: {}, content: {})",
+              session_name, parent_session_name, copy_code, copy_env, copy_content);
 
         // First create the session volume (without starting container)
         let session_volume = self.create_session_volume(session_name).await?;
@@ -362,10 +361,6 @@ echo 'Session directories created (code, .env, logs, content, template)'
             "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
         );
-
-        if copy_data {
-            copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
-        }
 
         if copy_code {
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
@@ -540,7 +535,6 @@ echo 'Session directories created (code, .env, logs, content, template)'
         &self,
         session_name: &str,
         parent_session_name: &str,
-        copy_data: bool,
         copy_code: bool,
         copy_env: bool,
         copy_content: bool,
@@ -577,10 +571,6 @@ echo 'Session directories created (code, .env, logs, content, template)'
             "mkdir -p /dest/code /dest/data /dest/content /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
                 .to_string(),
         );
-
-        if copy_data {
-            copy_commands.push("if [ -d /source/data ]; then cp -a /source/data/. /dest/data/ || echo 'No data to copy'; fi".to_string());
-        }
 
         if copy_code {
             copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
