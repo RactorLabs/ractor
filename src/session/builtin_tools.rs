@@ -668,59 +668,6 @@ impl Tool for FindFilenameTool {
     }
 }
 
-/// Publish tool (no confirmation required)
-pub struct PublishTool {
-    api: Arc<TaskSandboxClient>,
-}
-
-impl PublishTool {
-    pub fn new(api: Arc<TaskSandboxClient>) -> Self {
-        Self { api }
-    }
-}
-
-#[async_trait]
-impl Tool for PublishTool {
-    fn name(&self) -> &str {
-        "publish_session"
-    }
-
-    fn description(&self) -> &str {
-        "Publish the session's current content to its public URL."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "commentary": { "type": "string", "description": "Plain-text explanation of why you are publishing" },
-                "note": { "type": "string", "description": "Optional reason or note" }
-            }
-            ,"required":["commentary"]
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args
-            .get("commentary")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .is_none()
-        {
-            return Ok(
-                json!({"status":"error","tool":"publish_session","error":"commentary is required"}),
-            );
-        }
-        match self.api.publish_session().await {
-            Ok(_) => Ok(
-                json!({"status":"ok","tool":"publish_session","message":"Publish request submitted"}),
-            ),
-            Err(e) => Ok(json!({"status":"error","tool":"publish_session","error":e.to_string()})),
-        }
-    }
-}
-
 /// Stop tool (explicit user confirmation required)
 pub struct StopSessionTool {
     api: Arc<TaskSandboxClient>,
