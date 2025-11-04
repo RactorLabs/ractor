@@ -386,6 +386,7 @@ export function getApiDocs(base) {
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/clone -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
+      { method: 'DELETE', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Delete session.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X DELETE ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Empty' }, responses: [{ status: 200 }] }
     ]
@@ -531,8 +532,9 @@ export function getApiDocs(base) {
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/context/usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"tokens": 4096}'`, resp: { schema: 'Empty' }, responses: [{ status: 200, body: `{"success":true,"last_context_length":4096}` }] }
     ]
-  },
-  {
+  }
+  ];
+}
 
 export function methodClass(method) {
   switch ((method || '').toUpperCase()) {
