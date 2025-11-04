@@ -162,13 +162,16 @@ pub async fn create_task(
     // Generate task id that Controller will use when inserting the DB row
     let task_id = uuid::Uuid::new_v4().to_string();
 
+    // Default task timeout to 1 hour (3600 seconds) if not specified
+    let timeout_seconds = req.timeout_seconds.or(Some(3600));
+
     // Enqueue Controller request to restart (if needed) and create the task row
     let payload = serde_json::json!({
         "task_id": task_id,
         "input": req.input,
         "restart_if_stopped": true,
         "background": req.background.unwrap_or(true),
-        "timeout_seconds": req.timeout_seconds
+        "timeout_seconds": timeout_seconds
     });
     sqlx::query(
         r#"
@@ -235,8 +238,8 @@ pub async fn create_task(
 
     // Non-blocking request: return a stub TaskView acknowledging enqueued work
     let now = chrono::Utc::now();
-    let timeout_seconds = req.timeout_seconds.filter(|v| *v > 0);
-    let timeout_at = timeout_seconds.and_then(|secs| {
+    let timeout_seconds_value = req.timeout_seconds.or(Some(3600)).filter(|v| *v > 0);
+    let timeout_at = timeout_seconds_value.and_then(|secs| {
         now.checked_add_signed(chrono::Duration::seconds(secs as i64))
             .map(|dt| dt.to_rfc3339())
     });
@@ -248,7 +251,7 @@ pub async fn create_task(
         input_content: extract_input_content(&req.input),
         output_content: vec![],
         segments: vec![],
-        timeout_seconds,
+        timeout_seconds: timeout_seconds_value,
         timeout_at,
         created_at: created_at.clone(),
         updated_at: created_at,

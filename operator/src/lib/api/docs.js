@@ -63,7 +63,7 @@ export function getCommonSchemas() {
       { name: 'input_content', type: 'array', desc: "User input content items (e.g., [{ type: 'text', content: 'hello' }]). Preferred input shape uses 'content' array; legacy { text: string } is accepted but not echoed in input_content." },
       { name: 'output_content', type: 'array', desc: "Final content items extracted from segments (typically the 'output' tool_result payload)" },
       { name: 'segments', type: 'array', desc: 'All step-by-step segments/items: commentary, tool calls/results, system markers, final' },
-      { name: 'timeout_seconds', type: 'int|null', desc: 'Per-task timeout in seconds when provided' },
+      { name: 'timeout_seconds', type: 'int|null', desc: 'Per-task timeout in seconds (defaults to 3600/1 hour)' },
       { name: 'timeout_at', type: 'string|null (RFC3339)', desc: 'When the task will time out automatically if still pending/processing' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
@@ -495,7 +495,7 @@ export function getApiDocs(base) {
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'input', type: 'object', required: true, desc: "User input; preferred shape: { content: [{ type: 'text', content: string }] }. Legacy: { text: string } also accepted." },
         { in: 'body', name: 'background', type: 'boolean', required: false, desc: "Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed|cancelled). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending)." },
-        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Optional per-task timeout. When set (>0), the controller auto-cancels the task once elapsed.' }
+        { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout in seconds (defaults to 3600/1 hour; set to 0 to disable auto-cancel).' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false,"timeout_seconds":600}'`, resp: { schema: 'TaskObject' }, responses: [
         { status: 200, body: `{"id":"uuid","session_name":"demo","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` },
         { status: 504, body: `{"message":"Timed out waiting for response to complete"}` }
