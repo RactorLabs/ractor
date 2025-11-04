@@ -102,10 +102,10 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     INDEX idx_session_tasks_session_created_at_id (session_name, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Updates
-CREATE TABLE IF NOT EXISTS session_updates (
+-- Session Requests
+CREATE TABLE IF NOT EXISTS session_requests (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    update_type VARCHAR(50) NOT NULL,
+    request_type VARCHAR(50) NOT NULL,
     session_name VARCHAR(64) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     payload JSON NOT NULL DEFAULT ('{}'),
@@ -115,11 +115,11 @@ CREATE TABLE IF NOT EXISTS session_updates (
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,
     error TEXT,
-    -- Note: no FK to sessions; updates may reference sessions scheduled for deletion
-    INDEX idx_session_updates_status (status),
-    INDEX idx_session_updates_session_name (session_name),
-    INDEX idx_session_updates_created_by (created_by),
-    INDEX idx_session_updates_created_at (created_at)
+    -- Note: no FK to sessions; requests may reference sessions scheduled for deletion
+    INDEX idx_session_requests_status (status),
+    INDEX idx_session_requests_session_name (session_name),
+    INDEX idx_session_requests_created_by (created_by),
+    INDEX idx_session_requests_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default admin operator

@@ -73,7 +73,7 @@ Note on commit message formatting:
 
 ## Session Lifecycle & API
 
-- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session updates).
+- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session requests).
 - The session runtime, on boot, calls the API to report state:
   - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts idle timer).
   - `POST /api/v0/sessions/{name}/busy` when processing (sets `busy` and starts busy timer).

@@ -33,7 +33,7 @@ pub struct TaskHandler {
     ollama_client: Arc<OllamaClient>,
     guardrails: Arc<Guardrails>,
     processed_task_ids: Arc<Mutex<HashSet<String>>>,
-    update_created_at: DateTime<Utc>,
+    request_created_at: DateTime<Utc>,
     tool_registry: Arc<ToolRegistry>,
 }
 
@@ -52,12 +52,12 @@ impl TaskHandler {
         guardrails: Arc<Guardrails>,
         tool_registry: Option<Arc<ToolRegistry>>,
     ) -> Self {
-        let update_created_at = std::env::var("TSBX_UPDATE_CREATED_AT")
+        let request_created_at = std::env::var("TSBX_REQUEST_CREATED_AT")
             .ok()
             .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
             .map(|dt| dt.with_timezone(&Utc))
             .unwrap_or_else(|| {
-                warn!("TSBX_UPDATE_CREATED_AT not found, using current time");
+                warn!("TSBX_REQUEST_CREATED_AT not found, using current time");
                 Utc::now()
             });
 
@@ -125,15 +125,15 @@ impl TaskHandler {
             ollama_client,
             guardrails,
             processed_task_ids: Arc::new(Mutex::new(HashSet::new())),
-            update_created_at,
+            request_created_at,
             tool_registry,
         }
     }
 
     pub async fn initialize_processed_tracking(&self) -> Result<()> {
         info!(
-            "Initializing task tracking; update created at {}",
-            self.update_created_at
+            "Initializing task tracking; request created at {}",
+            self.request_created_at
         );
         let total = self.api_client.get_task_count().await.unwrap_or(0);
         let limit: u32 = 500;
@@ -146,7 +146,7 @@ impl TaskHandler {
         let mut pre = HashSet::new();
         for r in &all {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
-                if t.with_timezone(&Utc) < self.update_created_at {
+                if t.with_timezone(&Utc) < self.request_created_at {
                     pre.insert(r.id.clone());
                 }
             }
@@ -175,7 +175,7 @@ impl TaskHandler {
         let mut pending: Vec<TaskView> = Vec::new();
         for r in &recent {
             if let Ok(t) = DateTime::parse_from_rfc3339(&r.created_at) {
-                if t.with_timezone(&Utc) >= self.update_created_at
+                if t.with_timezone(&Utc) >= self.request_created_at
                     && r.status.to_lowercase() == "pending"
                 {
                     let processed = self.processed_task_ids.lock().await;

@@ -150,7 +150,7 @@ pub async fn create_task(
     // Generate task id that Controller will use when inserting the DB row
     let task_id = uuid::Uuid::new_v4().to_string();
 
-    // Enqueue Controller update to wake (if needed) and create the task row
+    // Enqueue Controller request to wake (if needed) and create the task row
     let payload = serde_json::json!({
         "task_id": task_id,
         "input": req.input,
@@ -159,7 +159,7 @@ pub async fn create_task(
     });
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'create_task', ?, ?, 'pending')
         "#,
     )
@@ -168,7 +168,7 @@ pub async fn create_task(
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create task update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create task request: {}", e)))?;
 
     // If background flag is false, block until terminal state or timeout
     let background = req.background.unwrap_or(true);
