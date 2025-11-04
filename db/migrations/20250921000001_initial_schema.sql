@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     publish_permissions JSON DEFAULT ('{"code": true, "env": true, "content": true}'),
     
     -- Timeout functionality (idle/busy)
-    idle_timeout_seconds INT NOT NULL DEFAULT 300,
-    busy_timeout_seconds INT NOT NULL DEFAULT 3600,
+    stop_timeout_seconds INT NOT NULL DEFAULT 300,
+    task_timeout_seconds INT NOT NULL DEFAULT 3600,
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
     
@@ -70,8 +70,8 @@ CREATE TABLE IF NOT EXISTS sessions (
         (is_published = true AND published_at IS NOT NULL AND published_by IS NOT NULL)
     ),
     CONSTRAINT sessions_timeout_check CHECK (
-        idle_timeout_seconds > 0 AND idle_timeout_seconds <= 604800 AND
-        busy_timeout_seconds > 0 AND busy_timeout_seconds <= 604800
+        stop_timeout_seconds > 0 AND stop_timeout_seconds <= 604800 AND
+        task_timeout_seconds > 0 AND task_timeout_seconds <= 604800
     ),
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_name) REFERENCES sessions(name) ON DELETE SET NULL,
     

@@ -204,11 +204,11 @@ impl SessionManager {
             r#"
             SELECT name
             FROM sessions
-            WHERE (state = 'idle' AND idle_from IS NOT NULL AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW())
-               OR (state = 'busy' AND busy_from IS NOT NULL AND TIMESTAMPADD(SECOND, busy_timeout_seconds, busy_from) <= NOW())
+            WHERE (state = 'idle' AND idle_from IS NOT NULL AND TIMESTAMPADD(SECOND, stop_timeout_seconds, idle_from) <= NOW())
+               OR (state = 'busy' AND busy_from IS NOT NULL AND TIMESTAMPADD(SECOND, task_timeout_seconds, busy_from) <= NOW())
             ORDER BY
-              CASE WHEN state = 'idle' THEN TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from)
-                   ELSE TIMESTAMPADD(SECOND, busy_timeout_seconds, busy_from)
+              CASE WHEN state = 'idle' THEN TIMESTAMPADD(SECOND, stop_timeout_seconds, idle_from)
+                   ELSE TIMESTAMPADD(SECOND, task_timeout_seconds, busy_from)
               END ASC
             LIMIT 50
             "#,
@@ -442,15 +442,15 @@ impl SessionManager {
         info!("Creating session {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
               session_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a branch session from request payload
-        let is_branch = request
+        // Check if this is a cloned session from request payload
+        let is_clone = request
             .payload
-            .get("branch")
+            .get("clone")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // For branch sessions, extract prompt from request payload
-        let branch_prompt = if is_branch {
+        // For cloned sessions, extract prompt from request payload
+        let clone_prompt = if is_clone {
             request
                 .payload
                 .get("prompt")
@@ -460,12 +460,12 @@ impl SessionManager {
             None
         };
 
-        if is_branch {
+        if is_clone {
             let parent_session_name = request
                 .payload
                 .get("parent_session_name")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for branch"))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for clone"))?;
 
             let copy_data = request
                 .payload
@@ -488,41 +488,41 @@ impl SessionManager {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            // For branch sessions, get principal info from branch request payload
-            let branch_principal = request
+            // For cloned sessions, get principal info from clone request payload
+            let clone_principal = request
                 .payload
                 .get("principal")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal);
-            let branch_principal_type_str = request
+            let clone_principal_type_str = request
                 .payload
                 .get("principal_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal_type_str);
 
             info!(
-                "DEBUG: Branch request payload principal: {:?}, principal_type: {:?}",
+                "DEBUG: Clone request payload principal: {:?}, principal_type: {:?}",
                 request.payload.get("principal"),
                 request.payload.get("principal_type")
             );
             info!(
-                "DEBUG: Using branch_principal: {}, branch_principal_type_str: {}",
-                branch_principal, branch_principal_type_str
+                "DEBUG: Using clone_principal: {}, clone_principal_type_str: {}",
+                clone_principal, clone_principal_type_str
             );
-            let branch_principal_type = match branch_principal_type_str {
+            let clone_principal_type = match clone_principal_type_str {
                 "Admin" => SubjectType::Admin,
                 "User" => SubjectType::Subject,
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating branch session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
-                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, branch_principal, branch_principal_type_str);
+            info!("Creating cloned session {} from parent {} (copy_data: {}, copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
+                  session_name, parent_session_name, copy_data, copy_code, copy_env, copy_content, clone_principal, clone_principal_type_str);
 
-            // For branch sessions, create container with selective volume copy from parent
-            // Generate fresh token for branch session
-            let branch_token = self
-                .generate_session_token(branch_principal, branch_principal_type, &session_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate branch session token: {}", e))?;
+            // For cloned sessions, create container with selective volume copy from parent
+            // Generate fresh token for cloned session
+            let clone_token = self
+                .generate_session_token(clone_principal, clone_principal_type, &session_name)
+                .map_err(|e| anyhow::anyhow!("Failed to generate cloned session token: {}", e))?;
 
             self.docker_manager
                 .create_container_with_selective_copy_and_tokens(
@@ -532,9 +532,9 @@ impl SessionManager {
                     copy_code,
                     copy_env,
                     copy_content,
-                    branch_token,
-                    branch_principal.to_string(),
-                    branch_principal_type_str.to_string(),
+                    clone_token,
+                    clone_principal.to_string(),
+                    clone_principal_type_str.to_string(),
                     request.created_at,
                 )
                 .await?;
@@ -557,7 +557,7 @@ impl SessionManager {
         }
 
         // Send prompt if provided (BEFORE setting state to IDLE)
-        let prompt_to_send = prompt.or(branch_prompt);
+        let prompt_to_send = prompt.or(clone_prompt);
         if let Some(prompt) = prompt_to_send {
             info!("Sending prompt to session {}: {}", session_name, prompt);
 
@@ -718,25 +718,25 @@ impl SessionManager {
             request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_stop_timeout");
         let reason = if auto {
             if prior_state.to_lowercase() == "busy" {
-                "busy_timeout"
+                "task_timeout"
             } else {
-                "idle_timeout"
+                "stop_timeout"
             }
         } else {
             "user"
         };
         let note = if auto {
-            if reason == "busy_timeout" {
-                "Busy timeout"
+            if reason == "task_timeout" {
+                "Task timeout"
             } else {
-                "Idle timeout"
+                "Stop timeout"
             }
         } else {
             request
                 .payload
                 .get("note")
                 .and_then(|v| v.as_str())
-                .unwrap_or("User requested close")
+                .unwrap_or("User requested stop")
         };
 
         // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)

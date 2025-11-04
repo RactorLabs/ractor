@@ -18,8 +18,8 @@ pub struct Session {
     pub published_at: Option<DateTime<Utc>>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
-    pub idle_timeout_seconds: i32,
-    pub busy_timeout_seconds: i32,
+    pub stop_timeout_seconds: i32,
+    pub task_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
     pub context_cutoff_at: Option<DateTime<Utc>>,
@@ -46,19 +46,19 @@ pub struct StartSessionRequest {
     #[serde(default)]
     pub prompt: Option<String>,
     #[serde(
-        default = "default_idle_timeout",
+        default = "default_stop_timeout",
         deserialize_with = "deserialize_strict_option_i32"
     )]
-    pub idle_timeout_seconds: Option<i32>,
+    pub stop_timeout_seconds: Option<i32>,
     #[serde(
-        default = "default_busy_timeout",
+        default = "default_task_timeout",
         deserialize_with = "deserialize_strict_option_i32"
     )]
-    pub busy_timeout_seconds: Option<i32>,
+    pub task_timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BranchSessionRequest {
+pub struct CloneSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
     #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
@@ -119,9 +119,9 @@ pub struct UpdateSessionRequest {
     #[serde(default, deserialize_with = "deserialize_optional_tags_vec")]
     pub tags: Option<Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
-    pub idle_timeout_seconds: Option<i32>,
+    pub stop_timeout_seconds: Option<i32>,
     #[serde(default, deserialize_with = "deserialize_strict_option_i32")]
-    pub busy_timeout_seconds: Option<i32>,
+    pub task_timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -200,10 +200,10 @@ where
     deserialize_strict_bool(deserializer)
 }
 
-fn default_idle_timeout() -> Option<i32> {
+fn default_stop_timeout() -> Option<i32> {
     Some(300)
 }
-fn default_busy_timeout() -> Option<i32> {
+fn default_task_timeout() -> Option<i32> {
     Some(3600)
 } // 1 hour
 
@@ -568,7 +568,7 @@ impl Session {
             SELECT name, created_by, state, description, parent_session_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
             FROM sessions
             ORDER BY created_at DESC
@@ -587,7 +587,7 @@ impl Session {
             SELECT name, created_by, state, description, parent_session_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
             FROM sessions
             WHERE name = ?
@@ -606,16 +606,16 @@ impl Session {
         // Use the provided name (random generation to be implemented later)
         let session_name = req.name;
 
-        // Initialize timeouts; idle_from/busy_from will be set on state transitions
-        let idle_timeout = req.idle_timeout_seconds.unwrap_or(300);
-        let busy_timeout = req.busy_timeout_seconds.unwrap_or(3600);
+        // Initialize stop/task timeouts; idle_from/busy_from will be set on state transitions
+        let stop_timeout = req.stop_timeout_seconds.unwrap_or(300);
+        let task_timeout = req.task_timeout_seconds.unwrap_or(3600);
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when session becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when session becomes busy
 
         // Insert the session using name as primary key
         sqlx::query(
             r#"
-            INSERT INTO sessions (name, created_by, description, metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from)
+            INSERT INTO sessions (name, created_by, description, metadata, tags, stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
@@ -624,8 +624,8 @@ impl Session {
         .bind(&req.description)
         .bind(&req.metadata)
         .bind(serde_json::json!(req.tags.into_iter().map(|t| t.to_lowercase()).collect::<Vec<_>>()))
-        .bind(idle_timeout)
-        .bind(busy_timeout)
+        .bind(stop_timeout)
+        .bind(task_timeout)
         .bind(idle_from)
         .bind(busy_from)
         .execute(pool)
@@ -637,10 +637,10 @@ impl Session {
         Ok(session)
     }
 
-    pub async fn branch(
+    pub async fn clone_from(
         pool: &sqlx::MySqlPool,
         parent_name: &str,
-        req: BranchSessionRequest,
+        req: CloneSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Get parent session
@@ -648,7 +648,7 @@ impl Session {
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
-        // Create new session based on parent (inherit timeouts)
+        // Create new session based on parent (inherit stop/task timeouts)
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when session becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when session becomes busy
 
@@ -656,13 +656,13 @@ impl Session {
             r#"
             INSERT INTO sessions (
                 name, created_by, description, parent_session_name,
-                metadata, tags, idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from
+                metadata, tags, stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
-        .bind(created_by) // Use actual brancher as owner
+        .bind(created_by) // Use actual cloner as owner
         .bind(&parent.description)
         .bind(parent_name)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
@@ -678,8 +678,8 @@ impl Session {
             ),
             v => v.clone(),
         })
-        .bind(parent.idle_timeout_seconds) // Inherit idle timeout from parent
-        .bind(parent.busy_timeout_seconds) // Inherit busy timeout from parent
+        .bind(parent.stop_timeout_seconds) // Inherit stop timeout from parent
+        .bind(parent.task_timeout_seconds) // Inherit task timeout from parent
         .bind(idle_from)
         .bind(busy_from)
         .execute(pool)
@@ -751,11 +751,11 @@ impl Session {
             updates.push(" tags = ?".to_string());
         }
 
-        if req.idle_timeout_seconds.is_some() {
-            updates.push(" idle_timeout_seconds = ?".to_string());
+        if req.stop_timeout_seconds.is_some() {
+            updates.push(" stop_timeout_seconds = ?".to_string());
         }
-        if req.busy_timeout_seconds.is_some() {
-            updates.push(" busy_timeout_seconds = ?".to_string());
+        if req.task_timeout_seconds.is_some() {
+            updates.push(" task_timeout_seconds = ?".to_string());
         }
 
         if updates.is_empty() {
@@ -778,11 +778,11 @@ impl Session {
             query = query.bind(serde_json::json!(lowered));
         }
 
-        if let Some(idle_timeout_seconds) = req.idle_timeout_seconds {
-            query = query.bind(idle_timeout_seconds);
+        if let Some(stop_timeout_seconds) = req.stop_timeout_seconds {
+            query = query.bind(stop_timeout_seconds);
         }
-        if let Some(busy_timeout_seconds) = req.busy_timeout_seconds {
-            query = query.bind(busy_timeout_seconds);
+        if let Some(task_timeout_seconds) = req.task_timeout_seconds {
+            query = query.bind(task_timeout_seconds);
         }
 
         query = query.bind(name);
@@ -871,7 +871,7 @@ impl Session {
             SELECT name, created_by, state, description, parent_session_name,
                    created_at, last_activity_at, metadata, tags,
                    is_published, published_at, published_by, publish_permissions,
-                   idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
             FROM sessions
             WHERE is_published = true

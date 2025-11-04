@@ -68,7 +68,7 @@ Note on commit message formatting:
 - Name-based primary key: sessions are addressed by `name` (no numeric ID).
 - Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
 - Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`env`,`content`).
-- Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
+- Timeouts: `stop_timeout_seconds`, `task_timeout_seconds` with tracking via `idle_from` and `busy_from`.
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
 
 ## Session Lifecycle & API

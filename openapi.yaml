@@ -534,10 +534,10 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /sessions/{name}/branch:
+  /sessions/{name}/clone:
     post:
       tags: [Sessions]
-      summary: Branch a session into a new one
+      summary: Clone a session into a new one
       parameters:
         - in: path
           name: name
@@ -548,7 +548,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BranchSessionRequest' }
+            schema: { $ref: '#/components/schemas/CloneSessionRequest' }
       responses:
         '200':
           description: New session
@@ -1041,8 +1041,8 @@ components:
         published_at: { type: string, format: date-time, nullable: true }
         published_by: { type: string, nullable: true }
         publish_permissions: { type: object }
-        idle_timeout_seconds: { type: integer }
-        busy_timeout_seconds: { type: integer }
+        stop_timeout_seconds: { type: integer }
+        task_timeout_seconds: { type: integer }
         idle_from: { type: string, format: date-time, nullable: true }
         busy_from: { type: string, format: date-time, nullable: true }
         context_cutoff_at: { type: string, format: date-time, nullable: true }
@@ -1076,8 +1076,8 @@ components:
         instructions: { type: string, nullable: true }
         setup: { type: string, nullable: true }
         prompt: { type: string, nullable: true }
-        idle_timeout_seconds: { type: integer, nullable: true }
-        busy_timeout_seconds: { type: integer, nullable: true }
+        stop_timeout_seconds: { type: integer, nullable: true }
+        task_timeout_seconds: { type: integer, nullable: true }
 
     UpdateSessionRequest:
       type: object
@@ -1088,8 +1088,8 @@ components:
           type: array
           items: { type: string }
           nullable: true
-        idle_timeout_seconds: { type: integer, nullable: true }
-        busy_timeout_seconds: { type: integer, nullable: true }
+        stop_timeout_seconds: { type: integer, nullable: true }
+        task_timeout_seconds: { type: integer, nullable: true }
 
     UpdateSessionStateRequest:
       type: object
@@ -1099,7 +1099,7 @@ components:
           description: New session state
           enum: [init, idle, busy, stopped]
 
-    BranchSessionRequest:
+    CloneSessionRequest:
       type: object
       required: [name]
       properties:

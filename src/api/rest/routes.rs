@@ -90,8 +90,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::sessions::get_session_runtime),
         )
         .route(
-            "/sessions/{name}/branch",
-            post(handlers::sessions::branch_session),
+            "/sessions/{name}/clone",
+            post(handlers::sessions::clone_session),
         )
         .route(
             "/sessions/{name}/context",
