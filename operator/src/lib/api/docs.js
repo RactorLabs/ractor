@@ -38,10 +38,6 @@ export function getCommonSchemas() {
       { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Last activity timestamp' },
       { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata' },
       { name: 'tags', type: 'string[]', desc: "Array of tags (letters, digits, '/', '-', '_', '.' only; stored lowercase)" },
-      { name: 'is_published', type: 'boolean', desc: 'Published state' },
-      { name: 'published_at', type: 'string|null (RFC3339)', desc: 'When published' },
-      { name: 'published_by', type: 'string|null', desc: 'Who published' },
-      { name: 'publish_permissions', type: 'object', desc: '{ code: boolean, env: boolean, content: boolean }' },
       { name: 'stop_timeout_seconds', type: 'int', desc: 'Stop timeout' },
       { name: 'archive_timeout_seconds', type: 'int', desc: 'Archive timeout placeholder' },
       { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When idle started' },
@@ -287,83 +283,6 @@ export function getApiDocs(base) {
     ]
   },
   {
-    id: 'published',
-    title: 'Published Sessions (Public)',
-    description: 'Publicly visible sessions and details.',
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/v0/published/sessions',
-        auth: 'public',
-        desc: 'List all published sessions.',
-        params: [],
-        example: `curl -s ${BASE}/api/v0/published/sessions`,
-        resp: { schema: 'Session', array: true },
-        responses: [
-          {
-            status: 200,
-            body: `[
-  {
-    "name": "demo",
-    "created_by": "admin",
-    "state": "idle",
-    "description": "Demo session",
-    "parent_session_name": null,
-    "created_at": "2025-01-01T12:00:00Z",
-    "last_activity_at": "2025-01-01T12:00:00Z",
-    "metadata": {},
-    "tags": ["example"],
-    "is_published": true,
-    "published_at": "2025-01-01T12:30:00Z",
-    "published_by": "admin",
-    "publish_permissions": {"code": true, "env": false, "content": true},
-    "stop_timeout_seconds": 300,
-    "archive_timeout_seconds": 86400,
-    "idle_from": "2025-01-01T12:10:00Z",
-    "busy_from": null
-  }
-]`
-          }
-        ]
-      },
-      {
-        method: 'GET',
-        path: '/api/v0/published/sessions/{name}',
-        auth: 'public',
-        desc: 'Get details of a published session by name.',
-        params: [
-          { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
-        ],
-        example: `curl -s ${BASE}/api/v0/published/sessions/<name>`,
-        resp: { schema: 'Session' },
-        responses: [
-          {
-            status: 200,
-            body: `{
-  "name": "demo",
-  "created_by": "admin",
-  "state": "idle",
-  "description": "Demo session",
-  "parent_session_name": null,
-  "created_at": "2025-01-01T12:00:00Z",
-  "last_activity_at": "2025-01-01T12:00:00Z",
-  "metadata": {},
-  "tags": ["example"],
-  "is_published": true,
-  "published_at": "2025-01-01T12:30:00Z",
-  "published_by": "admin",
-  "publish_permissions": {"code": true, "env": false, "content": true},
-  "stop_timeout_seconds": 300,
-  "archive_timeout_seconds": 86400,
-  "idle_from": "2025-01-01T12:10:00Z",
-  "busy_from": null
-}`
-          }
-        ]
-      }
-    ]
-  },
-  {
     id: 'operators',
     title: 'Operators',
     description: 'Operator management endpoints (protected).',
@@ -467,16 +386,6 @@ export function getApiDocs(base) {
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/clone -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/publish', auth: 'bearer', desc: 'Publish session.', params: [
-        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code cloning (default true)' },
-        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env cloning (default true)' },
-        { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/publish -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"content":true}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","is_published":true,"published_at":"2025-01-01T12:30:00Z",...}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/unpublish', auth: 'bearer', desc: 'Unpublish session.', params: [
-        { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/unpublish -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","is_published":false,"published_at":null,...}` }] },
-      { method: 'DELETE', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Delete session.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X DELETE ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Empty' }, responses: [{ status: 200 }] }
     ]
@@ -624,17 +533,6 @@ export function getApiDocs(base) {
     ]
   },
   {
-    id: 'content',
-    title: 'Content (Public)',
-    description: 'Static content served by tsbx-content service, mounted under /content.',
-    endpoints: [
-      { method: 'GET', path: '/content/health', auth: 'public', desc: 'Health endpoint for the content server.', params: [], example: `curl -s ${BASE}/content/health`, resp: { schema: 'Empty' }, responses: [ { status: 200, body: `{"status":"healthy","service":"tsbx-content"}` } ] },
-      { method: 'GET', path: '/content/', auth: 'public', desc: 'Root of published content. Returns 200 with no body.', params: [], example: `curl -i ${BASE}/content/`, resp: { schema: 'Empty' }, responses: [ { status: 200 } ] },
-      { method: 'GET', path: '/content/{path...}', auth: 'public', desc: 'Serve static files from published content. 404 returns a small HTML page indicating no content.', params: [ { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path within content volume (e.g., {session}/index.html)' } ], example: `curl -i ${BASE}/content/<session>/index.html`, resp: { schema: 'Empty' }, responses: [ { status: 200 }, { status: 404, body: '<html>...No Content...</html>' } ] }
-    ]
-  }
-  ];
-}
 
 export function methodClass(method) {
   switch ((method || '').toUpperCase()) {

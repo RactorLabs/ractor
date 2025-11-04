@@ -228,7 +228,7 @@ class DockerManager {
   // Stop services
   async stop(services = [], cleanup = false) {
     // Default to stopping gateway, controller, operator and api
-    const serviceList = services.length > 0 ? services : ['tsbx_gateway', 'tsbx_controller', 'tsbx_operator', 'tsbx_content', 'tsbx_api'];
+    const serviceList = services.length > 0 ? services : ['tsbx_gateway', 'tsbx_controller', 'tsbx_operator', 'tsbx_api'];
     
     // Map service names to component names
     const componentMap = {
@@ -236,8 +236,7 @@ class DockerManager {
       'tsbx_controller': 'controller',
       'mysql': 'mysql',
       'tsbx_operator': 'operator',
-      'tsbx_gateway': 'gateway',
-      'tsbx_content': 'content'
+      'tsbx_gateway': 'gateway'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);

@@ -414,46 +414,6 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Publish the current session by name
-    pub async fn publish_session(&self) -> Result<()> {
-        let url = format!(
-            "{}/api/v0/sessions/{}/publish",
-            self.config.api_url, self.config.session_name
-        );
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&serde_json::json!({
-                "code": true,
-                "env": true,
-                "content": true
-            }))
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT | StatusCode::CREATED => Ok(()),
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.config.session_name
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to publish session ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
 
     /// Stop the current session by name after an optional delay (seconds, min 5) with optional note
     pub async fn stop_session(
