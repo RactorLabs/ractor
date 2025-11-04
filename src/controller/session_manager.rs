@@ -691,22 +691,6 @@ impl SessionManager {
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
 
-        info!("Closing container for session {}", session_name);
-
-        // Close the Docker container but keep the persistent volume
-        self.docker_manager.stop_container(&session_name).await?;
-
-        // Update session state to stopped
-        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
-            .bind(&session_name)
-            .execute(&self.pool)
-            .await?;
-
-        info!("Session {} state updated to stopped", session_name);
-        // Create a chat marker task to indicate the session has stopped
-        let task_id = uuid::Uuid::new_v4().to_string();
-        let created_by = request.created_by.clone();
-        let now_text = chrono::Utc::now().to_rfc3339();
         // Determine note: auto timeout vs user-triggered
         let auto =
             request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_stop_timeout");
@@ -719,6 +703,38 @@ impl SessionManager {
         } else {
             "user"
         };
+        let is_task_timeout = reason == "task_timeout";
+
+        if is_task_timeout {
+            info!(
+                "Task timeout detected for session {} – cancelling task and returning to idle",
+                session_name
+            );
+            sqlx::query(
+                r#"UPDATE sessions SET state = 'idle', busy_from = NULL, idle_from = NOW(), last_activity_at = NOW() WHERE name = ?"#,
+            )
+            .bind(&session_name)
+            .execute(&self.pool)
+            .await?;
+        } else {
+            info!("Stopping container for session {}", session_name);
+
+            // Close the Docker container but keep the persistent volume
+            self.docker_manager.stop_container(&session_name).await?;
+
+            // Update session state to stopped
+            sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
+                .bind(&session_name)
+                .execute(&self.pool)
+                .await?;
+
+            info!("Session {} state updated to stopped", session_name);
+        }
+
+        // Create a chat marker task to indicate the action taken
+        let task_id = uuid::Uuid::new_v4().to_string();
+        let created_by = request.created_by.clone();
+        let now_text = chrono::Utc::now().to_rfc3339();
         let note = if auto {
             if reason == "task_timeout" {
                 "Task timeout"
@@ -830,11 +846,29 @@ impl SessionManager {
             runtime_seconds = 0;
         }
 
+        let marker = if is_task_timeout {
+            serde_json::json!({
+                "type": "task_timeout",
+                "note": note,
+                "reason": reason,
+                "by": created_by,
+                "at": now_text,
+                "runtime_seconds": runtime_seconds
+            })
+        } else {
+            serde_json::json!({
+                "type": "stopped",
+                "note": note,
+                "reason": reason,
+                "by": created_by,
+                "delay_seconds": delay_secs,
+                "at": now_text,
+                "runtime_seconds": runtime_seconds
+            })
+        };
         let output_json = serde_json::json!({
             "text": "",
-            "items": [
-                { "type": "stopped", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text, "runtime_seconds": runtime_seconds }
-            ]
+            "items": [ marker ]
         });
 
         sqlx::query(

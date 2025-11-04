@@ -929,6 +929,22 @@
       return Number.isFinite(v) && v >= 0 ? v : 0;
     } catch(_) { return 0; }
   }
+  function hasTaskTimeoutSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'task_timeout'); } catch(_) { return false; }
+  }
+  function taskTimeoutNoteFrom(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'task_timeout');
+      return s ? segNote(s) : '';
+    } catch(_) { return ''; }
+  }
+  function taskTimeoutRuntimeFrom(m) {
+    try {
+      const s = segmentsOf(m).find((x) => segType(x) === 'task_timeout');
+      const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
+      return Number.isFinite(v) && v >= 0 ? v : 0;
+    } catch(_) { return 0; }
+  }
   function hasRestartedSeg(m) {
     try { return segmentsOf(m).some((x) => segType(x) === 'restarted'); } catch(_) { return false; }
   }
@@ -2016,6 +2032,12 @@
                   {#if hasStoppedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
                     <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Stopped{#if stoppedNoteFrom(m)}&nbsp;({stoppedNoteFrom(m)}){/if}{#if stoppedRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(stoppedRuntimeFrom(m))}{/if}</span>
+                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
+                  </div>
+                  {/if}
+                  {#if hasTaskTimeoutSeg(m)}
+                  <div class="d-flex align-items-center text-body mt-3">
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Task Timeout{#if taskTimeoutNoteFrom(m)}&nbsp;({taskTimeoutNoteFrom(m)}){/if}{#if taskTimeoutRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(taskTimeoutRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
