@@ -59,22 +59,6 @@ pub struct CloneSessionRequest {
     pub metadata: Option<serde_json::Value>,
     #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
     pub name: String,
-    // Removed data field - data folder no longer exists
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub code: bool,
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub env: bool,
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub content: bool,
     #[serde(default)]
     pub prompt: Option<String>,
 }

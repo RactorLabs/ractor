@@ -591,22 +591,6 @@ impl SessionManager {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for clone"))?;
 
-            let copy_code = request
-                .payload
-                .get("copy_code")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let copy_env = request
-                .payload
-                .get("copy_env")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-            let copy_content = request
-                .payload
-                .get("copy_content")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(true);
-
             // For cloned sessions, get principal info from clone request payload
             let clone_principal = request
                 .payload
@@ -634,22 +618,19 @@ impl SessionManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating cloned session {} from parent {} (copy_code: {}, copy_env: {}, copy_content: {}) for principal {} ({})", 
-                  session_name, parent_session_name, copy_code, copy_env, copy_content, clone_principal, clone_principal_type_str);
+            info!("Creating cloned session {} from parent {} for principal {} ({})",
+                  session_name, parent_session_name, clone_principal, clone_principal_type_str);
 
-            // For cloned sessions, create container with selective volume copy from parent
+            // For cloned sessions, create container with full volume copy from parent
             // Generate fresh token for cloned session
             let clone_token = self
                 .generate_session_token(clone_principal, clone_principal_type, &session_name)
                 .map_err(|e| anyhow::anyhow!("Failed to generate cloned session token: {}", e))?;
 
             self.docker_manager
-                .create_container_with_selective_copy_and_tokens(
+                .create_container_with_full_copy_and_tokens(
                     &session_name,
                     parent_session_name,
-                    copy_code,
-                    copy_env,
-                    copy_content,
                     clone_token,
                     clone_principal.to_string(),
                     clone_principal_type_str.to_string(),

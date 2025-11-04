@@ -77,7 +77,7 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     // Initialize session directories
     let session_dirs = [
         "/session",
-        "/session/code",
+        "/session/logs",
     ];
 
     for dir in session_dirs.iter() {
@@ -96,7 +96,7 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     }
 
     // Wait for and execute setup script if it becomes available
-    let setup_script = std::path::Path::new("/session/code/setup.sh");
+    let setup_script = std::path::Path::new("/session/setup.sh");
 
     // Check if a setup script is expected based on environment variable
     let has_setup_script = std::env::var("TSBX_HAS_SETUP").is_ok();
@@ -117,9 +117,9 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     }
 
     if setup_script.exists() {
-        info!("Executing setup script: /session/code/setup.sh");
+        info!("Executing setup script: /session/setup.sh");
         match std::process::Command::new("bash")
-            .arg("/session/code/setup.sh")
+            .arg("/session/setup.sh")
             .current_dir("/session")
             .output()
         {
@@ -144,7 +144,7 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
             }
         }
     } else {
-        info!("No setup script found at /session/code/setup.sh");
+        info!("No setup script found at /session/setup.sh");
     }
 
     // Set working directory to session directory

@@ -1737,11 +1737,7 @@ pub async fn clone_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Store the clone options before moving req into Session::clone_from
-    let copy_code = req.code;
-    let copy_env = req.env;
-    // Content is always copied
-    let copy_content = true;
+    // Store the initial prompt before moving req into Session::clone_from
     let initial_prompt = req.prompt.clone();
 
     let session = Session::clone_from(&state.db, &parent.name, req.clone(), created_by)
@@ -1767,13 +1763,10 @@ pub async fn clone_session(
             ApiError::Internal(anyhow::anyhow!("Failed to clone session: {}", e))
         })?;
 
-    // Add request to queue for session manager to create container with clone options
+    // Add request to queue for session manager to create container with full volume copy
     let request_payload = serde_json::json!({
         "clone": true,
         "parent_session_name": parent.name,
-        "copy_code": copy_code,
-        "copy_env": copy_env,
-        "copy_content": copy_content,
         "prompt": initial_prompt,
         "principal": created_by,
         "principal_type": match &auth.principal {

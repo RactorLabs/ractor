@@ -120,15 +120,15 @@ impl DockerManager {
             session_name
         );
 
-        // Create base directories (no data folder in v0.4.0) with proper ownership
+        // Create base directories with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /session/code /session/logs
+        let init_script = "sudo mkdir -p /session/logs
 sudo touch /session/.env
 sudo chown session:session /session/.env
 sudo chmod 600 /session/.env
 sudo chown -R session:session /session
 sudo chmod -R 755 /session
-echo 'Session directories created (code, .env, logs)'
+echo 'Session directories created (.env, logs)'
 ";
 
         self.execute_command(session_name, init_script).await?;
@@ -146,7 +146,7 @@ echo 'Session directories created (code, .env, logs)'
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
             let write_instructions_command = format!(
-                "echo '{}' > /session/code/instructions.md",
+                "echo '{}' > /session/instructions.md",
                 escaped_instructions
             );
             self.execute_command(session_name, &write_instructions_command)
@@ -157,7 +157,7 @@ echo 'Session directories created (code, .env, logs)'
         if let Some(setup_content) = setup {
             let escaped_setup = setup_content.replace("'", "'\"'\"'");
             let write_setup_command = format!(
-                "echo '{}' > /session/code/setup.sh && chmod +x /session/code/setup.sh",
+                "echo '{}' > /session/setup.sh && chmod +x /session/setup.sh",
                 escaped_setup
             );
             self.execute_command(session_name, &write_setup_command)
@@ -323,16 +323,13 @@ echo 'Session directories created (code, .env, logs)'
         Ok(container_name)
     }
 
-    pub async fn create_container_with_selective_copy(
+    pub async fn create_container_with_full_copy(
         &self,
         session_name: &str,
         parent_session_name: &str,
-        copy_code: bool,
-        copy_env: bool,
-        copy_content: bool,
     ) -> Result<String> {
-        info!("Creating cloned session {} with selective copy from {} (code: {}, env: {}, content: {})",
-              session_name, parent_session_name, copy_code, copy_env, copy_content);
+        info!("Creating cloned session {} with full copy from {}",
+              session_name, parent_session_name);
 
         // First create the session volume (without starting container)
         let session_volume = self.create_session_volume(session_name).await?;
@@ -345,42 +342,12 @@ echo 'Session directories created (code, .env, logs)'
         let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
-            "Copying selective data from {} to {}",
+            "Copying full volume data from {} to {}",
             parent_volume, new_volume
         );
 
-        // Build copy commands based on what should be copied
-        let mut copy_commands = Vec::new();
-
-        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
-        copy_commands.push(
-            "mkdir -p /dest/code /dest/data /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
-                .to_string(),
-        );
-
-        if copy_code {
-            copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
-        }
-
-        if copy_env {
-            copy_commands.push(
-                "if [ -f /source/.env ]; then cp /source/.env /dest/.env || echo 'No env file copied'; else echo 'No env file to copy'; fi"
-                    .to_string(),
-            );
-        } else {
-            copy_commands.push("echo 'Skipping env copy as requested'".to_string());
-        }
-
-        if copy_content {
-            copy_commands.push("echo 'Content folder no longer exists - skipping content copy'".to_string());
-        }
-
-        // Always copy README.md from root if it exists
-        copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());
-
-        copy_commands.push("echo 'Selective copy completed'".to_string());
-
-        let copy_command = copy_commands.join(" && ");
+        // Copy entire /session directory from parent
+        let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
         let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
@@ -435,10 +402,10 @@ echo 'Session directories created (code, .env, logs)'
         while let Some(wait_result) = wait_stream.next().await {
             let exit_result = wait_result?;
             if exit_result.status_code == 0 {
-                info!("Selective volume copy completed successfully");
+                info!("Full volume copy completed successfully");
             } else {
                 warn!(
-                    "Selective volume copy container exited with code {}",
+                    "Full volume copy container exited with code {}",
                     exit_result.status_code
                 );
             }
@@ -464,24 +431,21 @@ echo 'Session directories created (code, .env, logs)'
             .await
             .join("");
 
-        info!("Selective copy logs: {}", log_output.trim());
+        info!("Full copy logs: {}", log_output.trim());
 
-        let env = if copy_env {
-            match self.read_env_from_volume(&new_volume).await {
-                Ok(map) => map,
-                Err(e) => {
-                    warn!(
-                        "Failed to read env file from copied volume {}: {}",
-                        new_volume, e
-                    );
-                    HashMap::new()
-                }
+        // Read env from copied volume
+        let env = match self.read_env_from_volume(&new_volume).await {
+            Ok(map) => map,
+            Err(e) => {
+                warn!(
+                    "Failed to read env file from copied volume {}: {}",
+                    new_volume, e
+                );
+                HashMap::new()
             }
-        } else {
-            HashMap::new()
         };
 
-        info!("Environment entries copied: {}", env.len());
+        info!("Environment entries in cloned session: {}", env.len());
 
         // Clean up copy container
         let _ = self
@@ -495,22 +459,16 @@ echo 'Session directories created (code, .env, logs)'
             )
             .await;
 
-        // Read instructions and setup if code was copied
-        let instructions = if copy_code {
-            self.read_file_from_volume(&new_volume, "code/instructions.md")
-                .await
-                .ok()
-        } else {
-            None
-        };
+        // Read instructions and setup from cloned volume
+        let instructions = self
+            .read_file_from_volume(&new_volume, "instructions.md")
+            .await
+            .ok();
 
-        let setup = if copy_code {
-            self.read_file_from_volume(&new_volume, "code/setup.sh")
-                .await
-                .ok()
-        } else {
-            None
-        };
+        let setup = self
+            .read_file_from_volume(&new_volume, "setup.sh")
+            .await
+            .ok();
 
         info!(
             "Creating container with {} env from copied volume",
@@ -525,20 +483,17 @@ echo 'Session directories created (code, .env, logs)'
         Ok(container_name)
     }
 
-    pub async fn create_container_with_selective_copy_and_tokens(
+    pub async fn create_container_with_full_copy_and_tokens(
         &self,
         session_name: &str,
         parent_session_name: &str,
-        copy_code: bool,
-        copy_env: bool,
-        copy_content: bool,
         tsbx_token: String,
         principal: String,
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
-            "Creating cloned session {} with selective copy from {} and fresh tokens",
+            "Creating cloned session {} with full copy from {} and fresh tokens",
             session_name, parent_session_name
         );
 
@@ -553,42 +508,12 @@ echo 'Session directories created (code, .env, logs)'
         let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
 
         info!(
-            "Copying selective data from {} to {}",
+            "Copying full volume data from {} to {}",
             parent_volume, new_volume
         );
 
-        // Build copy commands based on what should be copied
-        let mut copy_commands = Vec::new();
-
-        // Always create base directory structure with proper ownership (run as root to create dirs, then chown to session)
-        copy_commands.push(
-            "mkdir -p /dest/code /dest/data /dest/logs && touch /dest/.env && chown -R 1000:1000 /dest && chmod 600 /dest/.env"
-                .to_string(),
-        );
-
-        if copy_code {
-            copy_commands.push("if [ -d /source/code ]; then cp -a /source/code/. /dest/code/ || echo 'No code to copy'; fi".to_string());
-        }
-
-        if copy_env {
-            copy_commands.push(
-                "if [ -f /source/.env ]; then cp /source/.env /dest/.env || echo 'No env file copied'; else echo 'No env file to copy'; fi"
-                    .to_string(),
-            );
-        } else {
-            copy_commands.push("echo 'Skipping env copy as requested'".to_string());
-        }
-
-        if copy_content {
-            copy_commands.push("echo 'Content folder no longer exists - skipping content copy'".to_string());
-        }
-
-        // Always copy README.md from root if it exists
-        copy_commands.push("if [ -f /source/README.md ]; then cp /source/README.md /dest/ || echo 'No README to copy'; fi".to_string());
-
-        copy_commands.push("echo 'Selective copy completed'".to_string());
-
-        let copy_command = copy_commands.join(" && ");
+        // Copy entire /session directory from parent
+        let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
         let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
@@ -643,10 +568,10 @@ echo 'Session directories created (code, .env, logs)'
         while let Some(wait_result) = wait_stream.next().await {
             let exit_result = wait_result?;
             if exit_result.status_code == 0 {
-                info!("Selective volume copy completed successfully");
+                info!("Full volume copy completed successfully");
             } else {
                 warn!(
-                    "Selective volume copy container exited with code {}",
+                    "Full volume copy container exited with code {}",
                     exit_result.status_code
                 );
             }
@@ -672,21 +597,18 @@ echo 'Session directories created (code, .env, logs)'
             .await
             .join("");
 
-        info!("Selective copy logs: {}", log_output.trim());
+        info!("Full volume copy logs: {}", log_output.trim());
 
-        let env = if copy_env {
-            match self.read_env_from_volume(&new_volume).await {
-                Ok(map) => map,
-                Err(e) => {
-                    warn!(
-                        "Failed to read env file from copied volume {}: {}",
-                        new_volume, e
-                    );
-                    HashMap::new()
-                }
+        // Always read env from copied volume
+        let env = match self.read_env_from_volume(&new_volume).await {
+            Ok(map) => map,
+            Err(e) => {
+                warn!(
+                    "Failed to read env file from copied volume {}: {}",
+                    new_volume, e
+                );
+                HashMap::new()
             }
-        } else {
-            HashMap::new()
         };
 
         info!(
@@ -706,22 +628,16 @@ echo 'Session directories created (code, .env, logs)'
             )
             .await;
 
-        // Read instructions and setup if code was copied
-        let instructions = if copy_code {
-            self.read_file_from_volume(&new_volume, "code/instructions.md")
-                .await
-                .ok()
-        } else {
-            None
-        };
+        // Read instructions and setup from cloned volume
+        let instructions = self
+            .read_file_from_volume(&new_volume, "instructions.md")
+            .await
+            .ok();
 
-        let setup = if copy_code {
-            self.read_file_from_volume(&new_volume, "code/setup.sh")
-                .await
-                .ok()
-        } else {
-            None
-        };
+        let setup = self
+            .read_file_from_volume(&new_volume, "setup.sh")
+            .await
+            .ok();
 
         info!(
             "Creating cloned container with {} user env and fresh system tokens",
@@ -925,11 +841,11 @@ echo 'Session directories created (code, .env, logs)'
 
         // Read existing instructions and setup from volume
         let instructions = self
-            .read_file_from_volume(&volume_name, "code/instructions.md")
+            .read_file_from_volume(&volume_name, "instructions.md")
             .await
             .ok();
         let setup = self
-            .read_file_from_volume(&volume_name, "code/setup.sh")
+            .read_file_from_volume(&volume_name, "setup.sh")
             .await
             .ok();
 
@@ -974,11 +890,11 @@ echo 'Session directories created (code, .env, logs)'
 
         // Read existing instructions and setup from volume
         let instructions = self
-            .read_file_from_volume(&volume_name, "code/instructions.md")
+            .read_file_from_volume(&volume_name, "instructions.md")
             .await
             .ok();
         let setup = self
-            .read_file_from_volume(&volume_name, "code/setup.sh")
+            .read_file_from_volume(&volume_name, "setup.sh")
             .await
             .ok();
 
