@@ -97,8 +97,6 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
         }
     }
 
-    // No separate content preview server; content is published via tsbx-content.
-
     // Wait for and execute setup script if it becomes available
     let setup_script = std::path::Path::new("/session/code/setup.sh");
 

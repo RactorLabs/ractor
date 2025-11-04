@@ -53,7 +53,6 @@ usage() {
   echo "  controller  Push the controller image"
   echo "  session       Push the session image"
   echo "  operator    Push the operator image"
-  echo "  content     Push the content image"
   echo "  gateway     Push the gateway image"
   echo "  all         Push all components (default)"
   echo ""
@@ -102,7 +101,7 @@ done
 
 # Set default components if none specified
 if [ ${#COMPONENTS[@]} -eq 0 ]; then
-  COMPONENTS=("api" "controller" "session" "operator" "content" "gateway")
+  COMPONENTS=("api" "controller" "session" "operator" "gateway")
 fi
 
 print_status "Pushing TaskSandbox Docker images"
@@ -142,9 +141,6 @@ for component in "${COMPONENTS[@]}"; do
     ;;
   operator)
     image_name="${REGISTRY}/tsbx_operator:${TAG}"
-    ;;
-  content)
-    image_name="${REGISTRY}/tsbx_content:${TAG}"
     ;;
   gateway)
     image_name="${REGISTRY}/tsbx_gateway:${TAG}"
@@ -211,7 +207,7 @@ echo ""
 print_status "Pushed images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | session | operator | content | gateway)
+  api | controller | session | operator | gateway)
     echo "  ${REGISTRY}/tsbx_${component}:${TAG}"
     if [ "$TAG" != "latest" ]; then
       echo "  ${REGISTRY}/tsbx_${component}:latest"

@@ -49,9 +49,8 @@ usage() {
   echo "  controller  Build the controller image"
   echo "  session       Build the session image"
   echo "  operator    Build the operator UI image"
-  echo "  content     Build the content server image"
   echo "  gateway     Build the gateway image"
-  echo "  all         Build all components (api, session, controller, operator, content, gateway)"
+  echo "  all         Build all components (api, session, controller, operator, gateway)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -96,7 +95,7 @@ fi
 
 # Expand 'all' to actual components (ensure session precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "session" "controller" "operator" "content" "gateway")
+  COMPONENTS=("api" "session" "controller" "operator" "gateway")
 fi
 
 print_status "Building TaskSandbox Docker images"
@@ -166,10 +165,6 @@ for component in "${COMPONENTS[@]}"; do
       docker rm -f tsbx_operator >/dev/null 2>&1 || true
     fi
     ;;
-  content)
-    image_name="tsbx_content:${TAG}"
-    dockerfile="Dockerfile.content"
-    ;;
   gateway)
     image_name="tsbx_gateway:${TAG}"
     dockerfile="Dockerfile.gateway"
@@ -212,7 +207,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | session | operator | content | gateway)
+  api | controller | session | operator | gateway)
     echo "  tsbx_${component}:${TAG}"
     ;;
   esac

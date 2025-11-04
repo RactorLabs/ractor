@@ -100,13 +100,9 @@ impl TaskHandler {
                     registry
                         .register_tool(Box::new(super::builtin_tools::FindFilenameTool))
                         .await;
-                    let publish_tool = Box::new(super::builtin_tools::PublishTool::new(
-                        api_client_clone.clone(),
-                    ));
                     let stop_tool = Box::new(super::builtin_tools::StopSessionTool::new(
                         api_client_clone.clone(),
                     ));
-                    registry.register_tool(publish_tool).await;
                     registry.register_tool(stop_tool).await;
                     // Unified Output tool + validation tool
                     registry

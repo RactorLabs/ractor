@@ -11,8 +11,7 @@ class DockerManager {
       controller: 'registry.digitalocean.com/tsbx/tsbx_controller:latest',
       session: 'registry.digitalocean.com/tsbx/tsbx_session:latest',
       operator: 'registry.digitalocean.com/tsbx/tsbx_operator:latest',
-      gateway: 'registry.digitalocean.com/tsbx/tsbx_gateway:latest',
-      content: 'registry.digitalocean.com/tsbx/tsbx_content:latest'
+      gateway: 'registry.digitalocean.com/tsbx/tsbx_gateway:latest'
     };
   }
 
@@ -54,16 +53,15 @@ class DockerManager {
   // Start services using direct Docker commands with published images
   async start(services = [], pullImages = false) {
     // Default to full stack if none specified
-    const serviceList = services.length > 0 ? services : ['mysql', 'tsbx_api', 'tsbx_operator', 'tsbx_content', 'tsbx_controller', 'tsbx_gateway'];
-    
+    const serviceList = services.length > 0 ? services : ['mysql', 'tsbx_api', 'tsbx_operator', 'tsbx_controller', 'tsbx_gateway'];
+
     // Map service names to component names
     const componentMap = {
       'tsbx_api': 'api',
       'tsbx_controller': 'controller',
       'mysql': 'mysql',
       'tsbx_operator': 'operator',
-      'tsbx_gateway': 'gateway',
-      'tsbx_content': 'content'
+      'tsbx_gateway': 'gateway'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
@@ -93,7 +91,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'tsbx_content_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
+    for (const volume of ['mysql_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -153,23 +151,12 @@ class DockerManager {
           'run', '-d',
           '--name', 'tsbx_operator',
           '--network', 'tsbx_network',
-          '-v', 'tsbx_content_data:/content',
           '-v', 'tsbx_operator_data:/app/logs',
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           this.images.operator
         ]);
         console.log('🚀 tsbx_operator started');
-        break;
-      case 'content':
-        await this.execDocker([
-          'run', '-d',
-          '--name', 'tsbx_content',
-          '--network', 'tsbx_network',
-          '-v', 'tsbx_content_data:/content',
-          this.images.content || 'registry.digitalocean.com/tsbx/tsbx_content:latest'
-        ]);
-        console.log('🚀 tsbx_content started');
         break;
 
       case 'gateway':
@@ -241,7 +228,7 @@ class DockerManager {
   // Stop services
   async stop(services = [], cleanup = false) {
     // Default to stopping gateway, controller, operator and api
-    const serviceList = services.length > 0 ? services : ['tsbx_gateway', 'tsbx_controller', 'tsbx_operator', 'tsbx_content', 'tsbx_api'];
+    const serviceList = services.length > 0 ? services : ['tsbx_gateway', 'tsbx_controller', 'tsbx_operator', 'tsbx_api'];
     
     // Map service names to component names
     const componentMap = {
@@ -249,8 +236,7 @@ class DockerManager {
       'tsbx_controller': 'controller',
       'mysql': 'mysql',
       'tsbx_operator': 'operator',
-      'tsbx_gateway': 'gateway',
-      'tsbx_content': 'content'
+      'tsbx_gateway': 'gateway'
     };
 
     const components = serviceList.map(service => componentMap[service] || service);
