@@ -1037,31 +1037,17 @@ impl TaskHandler {
             std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
-        // Fetch session info from API/DB (name, publish state)
-        let (session_name_ctx, is_published_ctx, published_at_ctx) =
-            match self.api_client.get_session().await {
-                Ok(session) => {
-                    let nm = session.name.clone();
-                    let ip = session.is_published;
-                    let pa = session
-                        .published_at
-                        .clone()
-                        .unwrap_or_else(|| "".to_string());
-                    (nm, ip, pa)
-                }
-                Err(_) => (
-                    self.api_client.session_name().to_string(),
-                    false,
-                    String::new(),
-                ),
-            };
+        // Fetch session info from API/DB (name)
+        let session_name_ctx = match self.api_client.get_session().await {
+            Ok(session) => session.name.clone(),
+            Err(_) => self.api_client.session_name().to_string(),
+        };
 
         // Current timestamp in UTC for context
         let current_time_utc = chrono::Utc::now().to_rfc3339();
 
         let operator_url = format!("{}", base_url);
         let api_url = format!("{}/api", base_url);
-        let published_url = format!("{}/content/{}", base_url, session_name_ctx);
 
         // Embed Tool Commentary examples (no markdown; commentary is required plain text, using gerund form)
         let commentary_examples = r#"
@@ -1104,22 +1090,15 @@ You are running as an Session in the {host_name} system.
 - Operator URL: {operator_url}
 - API URL: {api_url}
 - Your Session Name: {session_name}
-- Published Content URL: {published_url}
-- Published: {published_flag}
-- Published At: {published_at}
 
 ### Platform Endpoints
-- Content Server: {base_url}/content — public gateway that serves published session content at a stable URL (path prefix /content).
+- Content Server: {base_url}/content — public gateway that serves session content at a stable URL (path prefix /content).
 - API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
 
-### Content and Publishing
+### Content
 - Your working content lives under /session/content/.
 - Before creating any new file under /session/content/, inspect `/session/template/` and choose the closest matching template. Only start from scratch if nothing in `/session/template/` fits.
 - When producing HTML, copy `/session/template/simple.html` (or another template from `/session/template/`) into `/session/content/` and adapt it instead of starting with an empty file, unless the user explicitly requests a different layout.
-- There is no live preview server. When the user wants to view content, publish it.
-- Publishing creates a public, stable snapshot of /session/content/ and makes it available at the Published Content URL: {published_url}.
-- Published content is meant to be safe for public access (HTML/JS/CSS and assets). Do not include environment values or sensitive data in /session/content/.
-- The public gateway serves the last published snapshot. It does not auto-update until you explicitly publish again.
 
 ### Environment Variables
 - When you need an environment variable, follow this priority order:
@@ -1138,16 +1117,6 @@ You are running as an Session in the {host_name} system.
 - STRICT: Every assistant turn MUST emit exactly one `tool_call`. Do not produce assistant text outside a tool_call payload. If you need to communicate with the user, call `output` with the message content.
 - Never produce an `output` message just to acknowledge or restate developer notes; those instructions are internal and should only influence tool choices.
 - Do NOT return thinking-only tasks. Thinking alone is not sufficient; you must issue a tool_call every turn.
-- Do NOT ask the user to start an HTTP server for /session/content.
-- Do NOT share any local or preview URLs. Only share the published URL(s) after publishing.
-- When you create or modify files under /session/content/ and the user asks to view them, perform a publish action and include the full, absolute Published URL(s).
-  - Example: {published_url}/index.html or {published_url}/dashboard/report.html
-- Use absolute URLs that include protocol and host. Do NOT use relative URLs.
-- Outside of an explicit publish action, include Published URLs only if the user asks for them or asks about publish status.
-- Publishing is an explicit action (via the Operator UI, API, or the publish tool). When asked to publish, proceed without extra confirmation.
-- IMPORTANT: Always output URLs as plain text without any code formatting. Never wrap URLs in backticks or code blocks.
-- Never share a link to any content (the Published Content URL or any file beneath it) without publishing first. Every time you plan to share a content link, first perform a publish action, then include the full Published URL.
-- Immediately publish after any change under /session/content/ (create, edit, move, or delete) to refresh the public snapshot before you reference or share any of those paths.
 - When building HTML, use the structure and class names defined in `/session/template/simple.html`; follow its styles for headers, content layout, and spacing.
 
 ### Strict Task Format (MANDATORY)
@@ -1306,21 +1275,6 @@ Note: All file and directory paths must be absolute paths under `/session`. Path
   - path (required): Absolute path of the directory to search in. It's good to restrict matches using a more specific `path`.
   - glob (required): Patterns to search for in filenames; separate multiple patterns with `; `.
 
-### Tool: publish_session
-
-- Publish the session's current content to its public URL.
-- Parameters:
-  - commentary (required): Plain-text explanation of why you are publishing.
-  - note: Optional reason or note.
-
-### Tool: stop_session
-
-- Schedule the session to stop (halt runtime but preserve data) after a short delay.
-- Parameters:
-  - commentary (required): Why you are stopping the session.
-  - note: Optional reason.
-  - delay_seconds: Delay before stopping (min/default 5).
-
 ### Tool Result Schema
 
 ### Output
@@ -1412,13 +1366,6 @@ You have complete freedom to execute commands, install packages, and create solu
             operator_url = operator_url,
             api_url = api_url,
             session_name = session_name_ctx,
-            published_url = published_url,
-            published_flag = if is_published_ctx { "true" } else { "false" },
-            published_at = if is_published_ctx && !published_at_ctx.is_empty() {
-                published_at_ctx.as_str()
-            } else {
-                "(not published)"
-            },
             current_time_utc = current_time_utc,
         ));
 

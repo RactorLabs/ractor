@@ -1,7 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::api::TaskSandboxClient;
 use super::tool_registry::Tool;
 use super::tools::{run_bash, text_edit, TextEditAction, PLAN_PATH};
 use anyhow::anyhow;
@@ -9,7 +8,6 @@ use globset::{GlobBuilder, GlobSetBuilder};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::path::Path;
-use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;

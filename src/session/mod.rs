@@ -179,13 +179,9 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
     let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
     let operator_url = format!("{}", base_url);
     let api_url = format!("{}/api", base_url);
-    let published_url = format!("{}/content/{}/", base_url, session_name);
     info!("{} environment detected", host_name);
     info!("Operator: {}", operator_url);
     info!("API: {}", api_url);
-    info!("Content folder: /session/content/ - Publish when ready to share");
-    info!("Templates folder: /session/template/ - Default HTML templates");
-    info!("Published content (when published): {}", published_url);
 
     // Set initial state thoughtfully: don't clobber a pre-set busy state
     match api_client.get_session().await {
