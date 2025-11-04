@@ -79,7 +79,6 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
         "/session",
         "/session/code",
         "/session/content",
-        "/session/template",
     ];
 
     for dir in session_dirs.iter() {

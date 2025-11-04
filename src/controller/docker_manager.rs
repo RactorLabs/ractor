@@ -122,17 +122,13 @@ impl DockerManager {
 
         // Create base directories (no data folder in v0.4.0) with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /session/code /session/logs /session/content /session/template
+        let init_script = "sudo mkdir -p /session/code /session/logs /session/content
 sudo touch /session/.env
 sudo chown session:session /session/.env
 sudo chmod 600 /session/.env
 sudo chown -R session:session /session
 sudo chmod -R 755 /session
-# Seed default HTML template if missing
-if [ ! -f /session/template/simple.html ] && [ -f /opt/tsbx/templates/simple.html ]; then
-  sudo cp /opt/tsbx/templates/simple.html /session/template/simple.html && sudo chown session:session /session/template/simple.html;
-fi
-echo 'Session directories created (code, .env, logs, content, template)'
+echo 'Session directories created (code, .env, logs, content)'
 ";
 
         self.execute_command(session_name, init_script).await?;

@@ -61,18 +61,11 @@ COPY target/release/tsbx-session /usr/local/bin/tsbx-session
 
 # Create session directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /session/code /session/logs /session/content /session/template && \
+RUN mkdir -p /session/code /session/logs /session/content && \
     touch /session/.env && \
     chown -R session:session /session && \
     chmod -R 755 /session && \
     chmod 600 /session/.env
-
-# Seed built-in templates under an immutable path; controller will copy into /session/template as needed
-USER root
-RUN mkdir -p /opt/tsbx/templates
-COPY assets/session/template/simple.html /opt/tsbx/templates/simple.html
-RUN chown -R session:session /opt/tsbx
-USER session
 
 # Switch back to session user and set working directory to /session
 USER session
