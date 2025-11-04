@@ -15,16 +15,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
     let public_routes = Router::new()
         .route("/version", get(version))
-        .route("/operators/{name}/login", post(auth::login))
-        // Public session endpoints (no auth required)
-        .route(
-            "/published/sessions",
-            get(handlers::sessions::list_published_sessions),
-        )
-        .route(
-            "/published/sessions/{name}",
-            get(handlers::sessions::get_published_session),
-        );
+        .route("/operators/{name}/login", post(auth::login));
 
     // Protected routes
     let protected_routes = Router::new()
@@ -108,14 +99,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/sessions/{name}/context/usage",
             post(handlers::sessions::update_session_context_usage),
-        )
-        .route(
-            "/sessions/{name}/publish",
-            post(handlers::sessions::publish_session),
-        )
-        .route(
-            "/sessions/{name}/unpublish",
-            post(handlers::sessions::unpublish_session),
         )
         .route(
             "/sessions/{name}",

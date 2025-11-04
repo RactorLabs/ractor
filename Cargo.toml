@@ -49,7 +49,3 @@ path = "src/controller/main.rs"
 [[bin]]
 name = "tsbx-session"
 path = "src/session/main.rs"
-
-[[bin]]
-name = "tsbx-content"
-path = "src/content/main.rs"
