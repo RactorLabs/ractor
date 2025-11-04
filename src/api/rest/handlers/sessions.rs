@@ -38,11 +38,10 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
     pub id: String, // Primary key - UUID
-    pub name: String, // Unique field, used for Docker operations
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_session_id: Option<String>, // Changed from parent_session_name
+    pub parent_session_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -138,7 +137,6 @@ impl SessionResponse {
         };
         Ok(Self {
             id: session.id,
-            name: session.name,
             created_by: session.created_by,
             state: session.state,
             description: session.description,
@@ -166,31 +164,6 @@ async fn find_session_by_id(
 ) -> Result<Session, ApiError> {
     // Try to find by id
     if let Some(session) = Session::find_by_id(&state.db, id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
-    {
-        // Admins can access any session, regular users only their own
-        if is_admin || session.created_by == created_by {
-            return Ok(session);
-        } else {
-            return Err(ApiError::Forbidden(
-                "Access denied to this session".to_string(),
-            ));
-        }
-    }
-
-    Err(ApiError::NotFound("Session not found".to_string()))
-}
-
-// Helper function to find session by name (for backwards compatibility and specific use cases)
-async fn find_session_by_name(
-    state: &AppState,
-    name: &str,
-    created_by: &str,
-    is_admin: bool,
-) -> Result<Session, ApiError> {
-    // Try to find by name directly (names are globally unique)
-    if let Some(session) = Session::find_by_name(&state.db, name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
     {
@@ -706,9 +679,8 @@ pub async fn list_sessions(
 
     if let Some(q) = query.q.as_ref().map(|s| s.trim().to_lowercase()) {
         if !q.is_empty() {
-            where_sql.push_str(" AND (LOWER(name) LIKE ? OR (description IS NOT NULL AND LOWER(description) LIKE ?)) ");
+            where_sql.push_str(" AND (description IS NOT NULL AND LOWER(description) LIKE ?) ");
             let pat = format!("%{}%", q);
-            binds.push(serde_json::Value::String(pat.clone()));
             binds.push(serde_json::Value::String(pat));
         }
     }
@@ -747,12 +719,12 @@ pub async fn list_sessions(
     // Fetch page
     let select_sql = format!(
         r#"
-        SELECT id, name, created_by, state, description, parent_session_id,
+        SELECT id, created_by, state, description, parent_session_id,
                created_at, last_activity_at, metadata, tags,
                stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
         FROM sessions
-        {} 
+        {}
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         "#,
@@ -931,7 +903,7 @@ pub async fn cancel_active_task(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e)))?;
 
     Ok(Json(
-        serde_json::json!({"status":"ok", "session": session.name, "cancelled": cancelled}),
+        serde_json::json!({"status":"ok", "session": session.id, "cancelled": cancelled}),
     ))
 }
 
@@ -1250,7 +1222,7 @@ pub async fn get_session_context(
     };
 
     let resp = SessionContextUsageResponse {
-        session: session.name,
+        session: session.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: used,
         used_percent,
@@ -1295,7 +1267,7 @@ pub async fn clear_session_context(
     // Record a history marker indicating context was cleared
     if let Ok(created) = task_model::SessionTask::create(
         &state.db,
-        &session.name,
+        &session.id,
         username,
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1326,7 +1298,7 @@ pub async fn clear_session_context(
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
     let resp = SessionContextUsageResponse {
-        session: session.name,
+        session: session.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1369,7 +1341,7 @@ pub async fn compact_session_context(
         sqlx::query(
             r#"SELECT input, output FROM session_tasks WHERE session_id = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
-        .bind(&session.name)
+        .bind(&session.id)
         .bind(cut)
         .fetch_all(&*state.db)
         .await
@@ -1378,7 +1350,7 @@ pub async fn compact_session_context(
         sqlx::query(
             r#"SELECT input, output FROM session_tasks WHERE session_id = ? ORDER BY created_at ASC"#,
         )
-        .bind(&session.name)
+        .bind(&session.id)
         .fetch_all(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
@@ -1552,7 +1524,7 @@ pub async fn compact_session_context(
     // Record a history marker indicating context was compacted, include summary as a compact_summary item
     if let Ok(created) = task_model::SessionTask::create(
         &state.db,
-        &session.name,
+        &session.id,
         username,
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1586,7 +1558,7 @@ pub async fn compact_session_context(
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
     let resp = SessionContextUsageResponse {
-        session: session.name,
+        session: session.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1657,36 +1629,6 @@ pub async fn start_session(
         .await
         .map_err(|e| {
             tracing::error!("Failed to create session: {:?}", e);
-
-            // Check for unique constraint violation on session name
-            if let sqlx::Error::Database(db_err) = &e {
-                tracing::error!(
-                    "Database error - code: {:?}, message: '{}'",
-                    db_err.code(),
-                    db_err.message()
-                );
-                if let Some(code) = db_err.code() {
-                    // Simplify the condition to catch the specific error
-                    if code == "23000" || code == "1062" {
-                        let name_display = &req.name;
-                        tracing::info!(
-                            "Detected database constraint violation for session {}",
-                            name_display
-                        );
-                        if db_err.message().contains("sessions.PRIMARY")
-                            || db_err.message().contains("unique_session_name")
-                            || db_err.message().contains("Duplicate entry")
-                        {
-                            tracing::info!("Confirmed duplicate session name constraint violation");
-                            return ApiError::Conflict(format!(
-                                "Session name '{}' already exists. Choose a different name.",
-                                name_display
-                            ));
-                        }
-                    }
-                }
-            }
-
             ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
         })?;
 
@@ -1717,7 +1659,7 @@ pub async fn start_session(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
 
-    tracing::info!("Created session request for session {}", session.name);
+    tracing::info!("Created session request for session {}", session.id);
 
     Ok(Json(
         SessionResponse::from_session(session, &state.db).await?,
@@ -1768,30 +1710,13 @@ pub async fn clone_session(
     let session = Session::clone_from(&state.db, &parent.id, req.clone(), created_by)
         .await
         .map_err(|e| {
-            // Provide a clearer error on duplicate name conflicts
-            if let sqlx::Error::Database(db_err) = &e {
-                if let Some(code) = db_err.code() {
-                    // MySQL duplicate/constraint codes: 23000 (SQLSTATE), 1062 (ER_DUP_ENTRY)
-                    if code == "23000" || code == "1062" {
-                        if db_err.message().contains("sessions.PRIMARY")
-                            || db_err.message().contains("unique_session_name")
-                            || db_err.message().contains("Duplicate entry")
-                        {
-                            return ApiError::Conflict(format!(
-                                "Session name '{}' already exists. Choose a different name.",
-                                req.name
-                            ));
-                        }
-                    }
-                }
-            }
             ApiError::Internal(anyhow::anyhow!("Failed to clone session: {}", e))
         })?;
 
     // Add request to queue for session manager to create container with full volume copy
     let request_payload = serde_json::json!({
         "clone": true,
-        "parent_session_name": parent.name,
+        "parent_session_id": parent.id,
         "prompt": initial_prompt,
         "principal": created_by,
         "principal_type": match &auth.principal {
@@ -1815,7 +1740,7 @@ pub async fn clone_session(
 
     tracing::info!(
         "Created session request for cloned session {}",
-        session.name
+        session.id
     );
 
     Ok(Json(
@@ -1922,7 +1847,7 @@ pub async fn stop_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create stop request: {}", e))
     })?;
 
-    tracing::info!("Created stop request for session {}", session.name);
+    tracing::info!("Created stop request for session {}", session.id);
 
     // Do not insert a pre-stop marker; the controller will add a single 'stopped' marker when shutdown completes
 
@@ -1981,13 +1906,13 @@ pub async fn restart_session(
     // Guard on current state to avoid races between check and update.
     let result = query(
         r#"
-        UPDATE sessions 
+        UPDATE sessions
         SET state = ?, last_activity_at = CURRENT_TIMESTAMP
         WHERE id = ? AND state = ?
         "#,
     )
     .bind(crate::shared::models::constants::SESSION_STATE_INIT)
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(crate::shared::models::constants::SESSION_STATE_STOPPED)
     .execute(&*state.db)
     .await
@@ -2029,10 +1954,10 @@ pub async fn restart_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create restart request: {}", e))
     })?;
 
-    tracing::info!("Created restart request for session {}", session.name);
+    tracing::info!("Created restart request for session {}", session.id);
 
     // Fetch updated session
-    let updated_session = Session::find_by_name(&state.db, &session.name)
+    let updated_session = Session::find_by_id(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
@@ -2079,10 +2004,6 @@ pub async fn update_session(
             let error_msg = e.to_string();
             if error_msg.contains("No fields to update") {
                 ApiError::BadRequest(error_msg)
-            } else if error_msg.contains("unique_session_name")
-                || error_msg.contains("Duplicate entry")
-            {
-                ApiError::BadRequest("A session with this name already exists".to_string())
             } else {
                 ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e))
             }
@@ -2172,7 +2093,7 @@ pub async fn delete_session(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create delete request: {}", e)))?;
 
-    tracing::info!("Created delete request for session {}", session.name);
+    tracing::info!("Created delete request for session {}", session.id);
 
     let deleted = Session::delete(&state.db, &session.id)
         .await
@@ -2185,7 +2106,7 @@ pub async fn delete_session(
     Ok(())
 }
 
-// GET /sessions/{name}/runtime — total runtime across sessions
+// GET /sessions/{id}/runtime — total runtime across sessions
 pub async fn get_session_runtime(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -2271,7 +2192,7 @@ pub async fn get_session_runtime(
     }
 
     Ok(Json(serde_json::json!({
-        "session_name": session.name,
+        "session_id": session.id,
         "total_runtime_seconds": total,
         "current_session_seconds": current_session
     })))

@@ -7,30 +7,6 @@
   import { isAuthenticated } from '$lib/auth.js';
 
   setPageTitle('Start Session');
-
-  // Simple readable-name generator obeying ^[a-z][a-z0-9-]{0,61}[a-z0-9]$
-  // Name format: super_power + creature (animal/bird/mythical)
-  const superPowers = [
-    'blaze','thunder','quantum','shadow','solar','lunar','arcane','cyber','turbo','frost','ember','vortex','echo','phantom','nova','aether','plasma','neon','storm','iron',
-    'cosmic','stellar','galactic','astral','radiant','prismatic','crystal','obsidian','onyx','azure','crimson','verdant','golden','silver','bronze','alpha','omega','gamma','delta','ultra','hyper','nano','micro','macro','zenith','apex'
-  ];
-  const creatures = [
-    'wolf','falcon','dragon','phoenix','griffin','hydra','leviathan','unicorn','pegasus','tiger','hawk','raven','lynx','otter','manticore','basilisk','sphinx','wyvern','kitsune','naga',
-    'eagle','sparrow','owl','condor','heron','ibis','crane','stork','albatross','swallow','panther','lion','leopard','cheetah','jaguar','fox','bear','stag','boar','ram',
-    'viper','cobra','python','anaconda','orca','dolphin','kraken','yeti','sasquatch','cerberus','minotaur','chimera','fenrir','banshee','kelpie','selkie'
-  ];
-  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-  function slugify(s) { return s.toLowerCase().replace(/[^a-z0-9-]/g,'').replace(/^-+|\-+$/g,''); }
-  function genName() {
-    const s = `${pick(superPowers)}-${pick(creatures)}`;
-    let name = slugify(s);
-    if (!/^[a-z]/.test(name)) name = 'a' + name;
-    if (/[^a-z0-9]$/.test(name)) name += '0';
-    if (name.length > 63) name = name.slice(0,63);
-    return name;
-  }
-
-  let name = genName();
 let stopTimeoutSeconds = 300; // default 5 minutes
 let archiveTimeoutSeconds = 86400; // default 24 hours
   let metadataText = '{}';
@@ -76,17 +52,12 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
     error = null;
     loading = true;
     try {
-      // Validate name
-      if (!/^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$/.test(name)) {
-        throw new Error('Name must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$');
-      }
       // Parse metadata
       let metadata = {};
       try { metadata = metadataText ? JSON.parse(metadataText) : {}; }
       catch (e) { throw new Error('Invalid JSON for metadata: ' + e.message); }
 
       const body = {
-        name,
         description: description?.trim() ? description : null,
         metadata,
         tags: parseTags(),
@@ -137,14 +108,6 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
         <form on:submit|preventDefault={submit}>
           <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label" for="session-name">Name</label>
-              <div class="input-group">
-                <input id="session-name" class="form-control" bind:value={name} />
-                <button class="btn btn-outline-secondary" on:click|preventDefault={() => name = genName()}>Shuffle</button>
-              </div>
-              <div class="form-text">Letters, digits, dashes; max 63.</div>
-            </div>
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>
               <input id="description" class="form-control" bind:value={description} placeholder="Short description of this session" />

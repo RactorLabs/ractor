@@ -244,7 +244,7 @@
             </thead>
             <tbody>
               <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
-              <tr><td class="font-monospace">session_name</td><td>string</td><td>Session name</td></tr>
+              <tr><td class="font-monospace">session_id</td><td>string</td><td>Session ID (UUID)</td></tr>
               <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span>, <span class="font-monospace">cancelled</span></td></tr>
               <tr><td class="font-monospace">input_content</td><td>array</td><td>User input content items (e.g., <span class="font-monospace">&#91;&#123; type: 'text', content: 'hello' &#125;&#93;</span>). Preferred input shape uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">&#123; text: string &#125;</span> is accepted.</td></tr>
               <tr><td class="font-monospace">output_content</td><td>array</td><td>Final content items extracted from <span class="font-monospace">segments</span> (typically the <span class="font-monospace">tool_result</span> with <span class="font-monospace">tool='output'</span>).</td></tr>
@@ -332,11 +332,11 @@
             <table class="table table-sm table-bordered mb-2">
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
-                <tr><td class="font-monospace">name</td><td>string</td><td>Session name (primary key)</td></tr>
+                <tr><td class="font-monospace">id</td><td>string</td><td>Session ID (UUID primary key)</td></tr>
                 <tr><td class="font-monospace">created_by</td><td>string</td><td>Owner username</td></tr>
                 <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|stopped</span></td></tr>
                 <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
-                <tr><td class="font-monospace">parent_session_name</td><td>string|null</td><td>Parent session name if cloned</td></tr>
+                <tr><td class="font-monospace">parent_session_id</td><td>string|null</td><td>Parent session ID if cloned</td></tr>
                 <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
                 <tr><td class="font-monospace">last_activity_at</td><td>string|null (RFC3339)</td><td>Last activity timestamp</td></tr>
                 <tr><td class="font-monospace">metadata</td><td>object</td><td>Arbitrary JSON metadata</td></tr>
@@ -361,7 +361,7 @@
               <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
               <tbody>
                 <tr><td class="font-monospace">count</td><td>int</td><td>Count value</td></tr>
-                <tr><td class="font-monospace">session_name</td><td>string</td><td>Session identifier the count pertains to</td></tr>
+                <tr><td class="font-monospace">session_id</td><td>string</td><td>Session ID (UUID)</td></tr>
               </tbody>
             </table>
           </div>

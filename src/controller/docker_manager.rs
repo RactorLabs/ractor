@@ -64,11 +64,11 @@ impl DockerManager {
     }
 
     // NEW: Create session volume with explicit naming
-    async fn create_session_volume(&self, session_name: &str) -> Result<String> {
-        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+    async fn create_session_volume(&self, session_id: &str) -> Result<String> {
+        let volume_name = format!("tsbx_session_data_{}", session_id);
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session_name".to_string(), session_name.to_string());
+        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
         labels.insert("tsbx.type".to_string(), "session_volume".to_string());
         labels.insert(
             "tsbx.created_at".to_string(),
@@ -88,19 +88,19 @@ impl DockerManager {
         Ok(volume_name)
     }
 
-    // Get session volume name (derived from session name). Docker volume names must be lowercase.
-    fn get_session_volume_name(&self, session_name: &str) -> String {
-        format!("tsbx_session_data_{}", session_name.to_ascii_lowercase())
+    // Get session volume name (derived from session ID)
+    fn get_session_volume_name(&self, session_id: &str) -> String {
+        format!("tsbx_session_data_{}", session_id)
     }
 
-    // Get session container name (derived from session name). Docker container names must be lowercase.
-    fn get_session_container_name(&self, session_name: &str) -> String {
-        format!("tsbx_session_{}", session_name.to_ascii_lowercase())
+    // Get session container name (derived from session ID)
+    fn get_session_container_name(&self, session_id: &str) -> String {
+        format!("tsbx_session_{}", session_id)
     }
 
     // Check if session volume exists
-    async fn session_volume_exists(&self, session_name: &str) -> Result<bool> {
-        let volume_name = self.get_session_volume_name(session_name);
+    async fn session_volume_exists(&self, session_id: &str) -> Result<bool> {
+        let volume_name = self.get_session_volume_name(session_id);
         match self.docker.inspect_volume(&volume_name).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
@@ -110,14 +110,14 @@ impl DockerManager {
     // Initialize session directory structure with env, instructions, and setup
     async fn initialize_session_structure(
         &self,
-        session_name: &str,
+        session_id: &str,
         env: &HashMap<String, String>,
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
         info!(
             "Initializing session structure for session {}",
-            session_name
+            session_id
         );
 
         // Create base directories with proper ownership
@@ -131,7 +131,7 @@ sudo chmod -R 755 /session
 echo 'Session directories created (.env, logs)'
 ";
 
-        self.execute_command(session_name, init_script).await?;
+        self.execute_command(session_id, init_script).await?;
 
         // Write env values to /session/.env
         let env_content = render_env_file(env);
@@ -139,7 +139,7 @@ echo 'Session directories created (.env, logs)'
             "cat <<'EOF_ENV' | sudo tee /session/.env >/dev/null\n{}EOF_ENV\nsudo chown session:session /session/.env\nsudo chmod 600 /session/.env\n",
             env_content
         );
-        self.execute_command(session_name, &write_env_script)
+        self.execute_command(session_id, &write_env_script)
             .await?;
 
         // Write instructions if provided
@@ -149,7 +149,7 @@ echo 'Session directories created (.env, logs)'
                 "echo '{}' > /session/instructions.md",
                 escaped_instructions
             );
-            self.execute_command(session_name, &write_instructions_command)
+            self.execute_command(session_id, &write_instructions_command)
                 .await?;
         }
 
@@ -160,7 +160,7 @@ echo 'Session directories created (.env, logs)'
                 "echo '{}' > /session/setup.sh && chmod +x /session/setup.sh",
                 escaped_setup
             );
-            self.execute_command(session_name, &write_setup_command)
+            self.execute_command(session_id, &write_setup_command)
                 .await?;
         }
 
@@ -179,9 +179,8 @@ echo 'Session directories created (.env, logs)'
     }
 
     // NEW: Cleanup session volume
-    pub async fn cleanup_session_volume(&self, session_name: &str) -> Result<()> {
-        let expected_volume_name =
-            format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+    pub async fn cleanup_session_volume(&self, session_id: &str) -> Result<()> {
+        let expected_volume_name = format!("tsbx_session_data_{}", session_id);
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
@@ -198,23 +197,20 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_volume_copy(
         &self,
-        session_name: &str,
-        parent_session_name: &str,
+        session_id: &str,
+        parent_session_id: &str,
     ) -> Result<String> {
         info!(
             "Creating cloned session {} with volume copy from {}",
-            session_name, parent_session_name
+            session_id, parent_session_id
         );
 
         // First create the container normally (this creates the empty target volume)
-        let container_name = self.create_container(session_name).await?;
+        let container_name = self.create_container(session_id).await?;
 
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!(
-            "tsbx_session_data_{}",
-            parent_session_name.to_ascii_lowercase()
-        );
-        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
+        let new_volume = format!("tsbx_session_data_{}", session_id);
 
         info!(
             "Copying volume data from {} to {}",
@@ -222,7 +218,7 @@ echo 'Session directories created (.env, logs)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -325,21 +321,18 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_full_copy(
         &self,
-        session_name: &str,
-        parent_session_name: &str,
+        session_id: &str,
+        parent_session_id: &str,
     ) -> Result<String> {
         info!("Creating cloned session {} with full copy from {}",
-              session_name, parent_session_name);
+              session_id, parent_session_id);
 
         // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_name).await?;
+        let session_volume = self.create_session_volume(session_id).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!(
-            "tsbx_session_data_{}",
-            parent_session_name.to_ascii_lowercase()
-        );
-        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
+        let new_volume = format!("tsbx_session_data_{}", session_id);
 
         info!(
             "Copying full volume data from {} to {}",
@@ -350,7 +343,7 @@ echo 'Session directories created (.env, logs)'
         let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -477,7 +470,7 @@ echo 'Session directories created (.env, logs)'
 
         // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(session_name, Some(env), instructions, setup)
+            .create_container_internal(session_id, Some(env), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -486,8 +479,7 @@ echo 'Session directories created (.env, logs)'
     pub async fn create_container_with_full_copy_and_tokens(
         &self,
         session_id: &str,
-        session_name: &str,
-        parent_session_name: &str,
+        parent_session_id: &str,
         tsbx_token: String,
         principal: String,
         principal_type: String,
@@ -495,18 +487,15 @@ echo 'Session directories created (.env, logs)'
     ) -> Result<String> {
         info!(
             "Creating cloned session {} with full copy from {} and fresh tokens",
-            session_name, parent_session_name
+            session_id, parent_session_id
         );
 
         // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_name).await?;
+        let session_volume = self.create_session_volume(session_id).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!(
-            "tsbx_session_data_{}",
-            parent_session_name.to_ascii_lowercase()
-        );
-        let new_volume = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
+        let new_volume = format!("tsbx_session_data_{}", session_id);
 
         info!(
             "Copying full volume data from {} to {}",
@@ -517,7 +506,7 @@ echo 'Session directories created (.env, logs)'
         let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_name);
+        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
 
         let config = Config {
             image: Some(self.session_image.clone()),
@@ -649,7 +638,6 @@ echo 'Session directories created (.env, logs)'
         let container_name = self
             .create_container_internal_with_tokens(
                 session_id,
-                session_name,
                 Some(env),
                 instructions,
                 setup,
@@ -768,13 +756,13 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_params(
         &self,
-        session_name: &str,
+        session_id: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_name, Some(env), instructions, setup)
+            .create_container_internal(session_id, Some(env), instructions, setup)
             .await?;
         Ok(container_name)
     }
@@ -782,7 +770,6 @@ echo 'Session directories created (.env, logs)'
     pub async fn create_container_with_params_and_tokens(
         &self,
         session_id: &str,
-        session_name: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -794,7 +781,6 @@ echo 'Session directories created (.env, logs)'
         let container_name = self
             .create_container_internal_with_tokens(
                 session_id,
-                session_name,
                 Some(env),
                 instructions,
                 setup,
@@ -807,19 +793,19 @@ echo 'Session directories created (.env, logs)'
         Ok(container_name)
     }
 
-    pub async fn create_container(&self, session_name: &str) -> Result<String> {
+    pub async fn create_container(&self, session_id: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_name, None, None, None)
+            .create_container_internal(session_id, None, None, None)
             .await?;
         Ok(container_name)
     }
 
-    pub async fn restart_container(&self, session_name: &str) -> Result<String> {
+    pub async fn restart_container(&self, session_id: &str) -> Result<String> {
         // Read existing env from the volume
-        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+        let volume_name = format!("tsbx_session_data_{}", session_id);
         info!(
             "Restarting container for session {} - reading env from volume {}",
-            session_name, volume_name
+            session_id, volume_name
         );
 
         let env = match self.read_env_from_volume(&volume_name).await {
@@ -827,7 +813,7 @@ echo 'Session directories created (.env, logs)'
                 info!(
                     "Found {} env in volume for session {}",
                     s.len(),
-                    session_name
+                    session_id
                 );
                 for key in s.keys() {
                     info!("  - Env key: {}", key);
@@ -837,7 +823,7 @@ echo 'Session directories created (.env, logs)'
             Err(e) => {
                 warn!(
                     "Could not read env from volume for session {}: {}",
-                    session_name, e
+                    session_id, e
                 );
                 None
             }
@@ -854,7 +840,7 @@ echo 'Session directories created (.env, logs)'
             .ok();
 
         let container_name = self
-            .create_container_internal(session_name, env, instructions, setup)
+            .create_container_internal(session_id, env, instructions, setup)
             .await?;
         Ok(container_name)
     }
@@ -862,17 +848,16 @@ echo 'Session directories created (.env, logs)'
     pub async fn restart_container_with_tokens(
         &self,
         session_id: &str,
-        session_name: &str,
         tsbx_token: String,
         principal: String,
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         // Read existing user env from the volume (but generate fresh system tokens)
-        let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
+        let volume_name = format!("tsbx_session_data_{}", session_id);
         info!(
             "Restarting container for session {} with fresh tokens",
-            session_name
+            session_id
         );
 
         let env = match self.read_env_from_volume(&volume_name).await {
@@ -880,14 +865,14 @@ echo 'Session directories created (.env, logs)'
                 info!(
                     "Found {} user env in volume for session {}",
                     s.len(),
-                    session_name
+                    session_id
                 );
                 Some(s)
             }
             Err(e) => {
                 warn!(
                     "Could not read env from volume for session {}: {}",
-                    session_name, e
+                    session_id, e
                 );
                 None
             }
@@ -906,7 +891,6 @@ echo 'Session directories created (.env, logs)'
         let container_name = self
             .create_container_internal_with_tokens(
                 session_id,
-                session_name,
                 env,
                 instructions,
                 setup,
@@ -921,12 +905,12 @@ echo 'Session directories created (.env, logs)'
 
     async fn create_container_internal(
         &self,
-        session_name: &str,
+        session_id: &str,
         env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_id);
 
         // No content port mapping; preview server is removed.
 
@@ -937,17 +921,17 @@ echo 'Session directories created (.env, logs)'
             container_name, container_image
         );
 
-        info!("Creating container for session {}", session_name);
+        info!("Creating container for session {}", session_id);
 
         // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_name).await? {
-            self.get_session_volume_name(session_name)
+        let session_volume = if self.session_volume_exists(session_id).await? {
+            self.get_session_volume_name(session_id)
         } else {
-            self.create_session_volume(session_name).await?
+            self.create_session_volume(session_id).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session".to_string(), session_name.to_string());
+        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
         labels.insert("tsbx.managed".to_string(), "true".to_string());
         labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
@@ -975,7 +959,7 @@ echo 'Session directories created (.env, logs)'
         // Set environment variables for the session structure
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
-            format!("TSBX_SESSION_NAME={}", session_name),
+            format!("SESSION_ID={}", session_id),
             format!("TSBX_SESSION_DIR=/session"),
         ];
 
@@ -1035,7 +1019,7 @@ echo 'Session directories created (.env, logs)'
                 if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for session {}",
-                        key, session_name
+                        key, session_id
                     );
                     continue;
                 }
@@ -1043,7 +1027,7 @@ echo 'Session directories created (.env, logs)'
                 if key != "TSBX_PRINCIPAL" && key != "TSBX_PRINCIPAL_TYPE" {
                     info!(
                         "Adding env entry {} as environment variable for session {}",
-                        key, session_name
+                        key, session_id
                     );
                 }
             }
@@ -1054,15 +1038,15 @@ echo 'Session directories created (.env, logs)'
             "tsbx-session".to_string(),
             "--api-url".to_string(),
             "http://tsbx_api:9000".to_string(),
-            "--session-name".to_string(),
-            session_name.to_string(),
+            "--session-id".to_string(),
+            session_id.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
                 "session-{}",
-                &session_name[..session_name.len().min(8)]
+                &session_id[..session_id.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env_vars),
@@ -1099,7 +1083,7 @@ echo 'Session directories created (.env, logs)'
             let empty_env: HashMap<String, String> = HashMap::new();
             let env_ref = env_map.as_ref().unwrap_or(&empty_env);
             self.initialize_session_structure(
-                session_name,
+                session_id,
                 env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1117,7 +1101,6 @@ echo 'Session directories created (.env, logs)'
     async fn create_container_internal_with_tokens(
         &self,
         session_id: &str,
-        session_name: &str,
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -1126,7 +1109,7 @@ echo 'Session directories created (.env, logs)'
         principal_type: String,
         request_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_id);
 
         // No content port mapping; preview server is removed.
 
@@ -1139,18 +1122,18 @@ echo 'Session directories created (.env, logs)'
 
         info!(
             "Creating container for session {} with fresh tokens",
-            session_name
+            session_id
         );
 
         // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_name).await? {
-            self.get_session_volume_name(session_name)
+        let session_volume = if self.session_volume_exists(session_id).await? {
+            self.get_session_volume_name(session_id)
         } else {
-            self.create_session_volume(session_name).await?
+            self.create_session_volume(session_id).await?
         };
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session".to_string(), session_name.to_string());
+        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
         labels.insert("tsbx.managed".to_string(), "true".to_string());
         labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
@@ -1169,7 +1152,6 @@ echo 'Session directories created (.env, logs)'
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
             format!("SESSION_ID={}", session_id),
-            format!("TSBX_SESSION_NAME={}", session_name),
             format!("TSBX_SESSION_DIR=/session"),
             // Set the generated system tokens directly as environment variables
             format!("TSBX_TOKEN={}", tsbx_token),
@@ -1225,7 +1207,7 @@ echo 'Session directories created (.env, logs)'
                 env_vars.push(format!("{}={}", key, value));
                 info!(
                     "Adding user env entry {} as environment variable for session {}",
-                    key, session_name
+                    key, session_id
                 );
             }
         }
@@ -1235,15 +1217,15 @@ echo 'Session directories created (.env, logs)'
             "tsbx-session".to_string(),
             "--api-url".to_string(),
             "http://tsbx_api:9000".to_string(),
-            "--session-name".to_string(),
-            session_name.to_string(),
+            "--session-id".to_string(),
+            session_id.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
                 "session-{}",
-                &session_name[..session_name.len().min(8)]
+                &session_id[..session_id.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env_vars),
@@ -1281,7 +1263,7 @@ echo 'Session directories created (.env, logs)'
             let empty_env: HashMap<String, String> = HashMap::new();
             let env_ref = env_map_opt.as_ref().unwrap_or(&empty_env);
             self.initialize_session_structure(
-                session_name,
+                session_id,
                 env_ref,
                 instructions.as_deref(),
                 setup.as_deref(),
@@ -1297,8 +1279,8 @@ echo 'Session directories created (.env, logs)'
     }
 
     // Stop container but retain persistent volume (for session pause/stop)
-    pub async fn stop_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+    pub async fn stop_container(&self, session_id: &str) -> Result<()> {
+        let container_name = format!("tsbx_session_{}", session_id);
 
         info!("Stopping container {}", container_name);
 
@@ -1335,8 +1317,8 @@ echo 'Session directories created (.env, logs)'
     }
 
     // Delete container and remove persistent volume (for session deletion)
-    pub async fn delete_container(&self, session_name: &str) -> Result<()> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+    pub async fn delete_container(&self, session_id: &str) -> Result<()> {
+        let container_name = format!("tsbx_session_{}", session_id);
 
         info!("Deleting container {}", container_name);
 
@@ -1354,10 +1336,10 @@ echo 'Session directories created (.env, logs)'
                 info!("Container {} deleted", container_name);
 
                 // Cleanup the session volume
-                if let Err(e) = self.cleanup_session_volume(session_name).await {
+                if let Err(e) = self.cleanup_session_volume(session_id).await {
                     warn!(
                         "Failed to cleanup session volume for {}: {}",
-                        session_name, e
+                        session_id, e
                     );
                 }
 
@@ -1368,10 +1350,10 @@ echo 'Session directories created (.env, logs)'
                     warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
 
                     // Still try to cleanup the session volume
-                    if let Err(e) = self.cleanup_session_volume(session_name).await {
+                    if let Err(e) = self.cleanup_session_volume(session_id).await {
                         warn!(
                             "Failed to cleanup session volume for {}: {}",
-                            session_name, e
+                            session_id, e
                         );
                     }
 
@@ -1386,8 +1368,8 @@ echo 'Session directories created (.env, logs)'
 
     // Removed legacy destroy_container (deprecated). Use stop_container or delete_container.
 
-    pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+    pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {
+        let container_name = format!("tsbx_session_{}", session_id);
 
         info!(
             "Executing command in container {}: {}",
@@ -1422,10 +1404,10 @@ echo 'Session directories created (.env, logs)'
     // Execute a command and collect stdout/stderr bytes with exit code
     pub async fn exec_collect(
         &self,
-        session_name: &str,
+        session_id: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+        let container_name = format!("tsbx_session_{}", session_id);
         let exec_config = CreateExecOptions {
             cmd: Some(cmd),
             attach_stdout: Some(true),
@@ -1462,9 +1444,9 @@ echo 'Session directories created (.env, logs)'
         Ok((code, out_buf, err_buf))
     }
 
-    /// Check if an session container exists and is running healthily
-    pub async fn is_container_healthy(&self, session_name: &str) -> Result<bool> {
-        let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
+    /// Check if a session container exists and is running healthily
+    pub async fn is_container_healthy(&self, session_id: &str) -> Result<bool> {
+        let container_name = format!("tsbx_session_{}", session_id);
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {
@@ -1479,32 +1461,32 @@ echo 'Session directories created (.env, logs)'
                             // Container exists but is not running
                             info!(
                                 "Session {} container exists but is not running",
-                                session_name
+                                session_id
                             );
                             return Ok(false);
                         }
                     }
                 }
                 // Container state is unclear, assume unhealthy
-                warn!("Session {} container state is unclear", session_name);
+                warn!("Session {} container state is unclear", session_id);
                 Ok(false)
             }
             Err(bollard::errors::Error::DockerResponseServerError {
                 status_code: 404, ..
             }) => {
                 // Container doesn't exist
-                info!("Session {} container does not exist", session_name);
+                info!("Session {} container does not exist", session_id);
                 Ok(false)
             }
             Err(e) => {
                 // Other Docker API error
                 error!(
                     "Failed to inspect session {} container: {}",
-                    session_name, e
+                    session_id, e
                 );
                 Err(anyhow::anyhow!(
                     "Docker API error for session {}: {}",
-                    session_name,
+                    session_id,
                     e
                 ))
             }

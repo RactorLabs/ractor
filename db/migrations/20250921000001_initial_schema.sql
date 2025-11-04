@@ -36,7 +36,6 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 -- Sessions - UUID-based architecture with timeout functionality
 CREATE TABLE IF NOT EXISTS sessions (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    name VARCHAR(64) NOT NULL UNIQUE,
     created_by VARCHAR(255) NOT NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
     description TEXT NULL,
@@ -57,7 +56,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_context_length BIGINT NOT NULL DEFAULT 0,
 
     -- Constraints
-    CONSTRAINT sessions_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
     CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'stopped')),
     CONSTRAINT sessions_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT sessions_timeout_check CHECK (
@@ -67,7 +65,6 @@ CREATE TABLE IF NOT EXISTS sessions (
     CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
 
     -- Indexes
-    INDEX idx_sessions_name (name),
     INDEX idx_sessions_created_by (created_by),
     INDEX idx_sessions_state (state),
     INDEX idx_sessions_parent_session_id (parent_session_id),

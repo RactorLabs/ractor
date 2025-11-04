@@ -100,15 +100,15 @@ import { getHostUrl } from '$lib/branding.js';
     await refresh();
   }
   async function cloneSession(session) {
-    const newName = prompt('New Session Name for Clone');
-    if (!newName) return;
-    const body = { name: newName.trim(), code: true, env: true, content: true };
+    const ok = confirm(`Clone session '${(session.id || '').substring(0, 8)}'?`);
+    if (!ok) return;
+    const body = { code: true, env: true, content: true };
     const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/clone`, { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { error = res?.data?.message || 'Clone failed'; return; }
     await refresh();
   }
   async function deleteSession(session) {
-    const ok = confirm(`Delete session '${session.name}'? This cannot be undone.`);
+    const ok = confirm(`Delete session '${(session.id || '').substring(0, 8)}'? This cannot be undone.`);
     if (!ok) return;
     const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
@@ -192,7 +192,7 @@ import { getHostUrl } from '$lib/branding.js';
       <div class="col-12 col-md-6">
         <div class="input-group input-group-sm flex-nowrap">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
-          <input class="form-control" placeholder="Search by name or description" bind:value={q} name="q" autocapitalize="none" />
+          <input class="form-control" placeholder="Search by ID or description" bind:value={q} name="q" autocapitalize="none" />
         </div>
       </div>
       <div class="col-6 col-md-3">
@@ -249,7 +249,7 @@ import { getHostUrl } from '$lib/branding.js';
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px" href={'/sessions/' + encodeURIComponent(a.id || '')}>{a.name || '-'}</a>
+                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sessions/' + encodeURIComponent(a.id || '')} title={a.id || '-'}>{(a.id || '-').substring(0, 8)}</a>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}

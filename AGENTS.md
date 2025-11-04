@@ -65,12 +65,12 @@ Note on commit message formatting:
 
 ## Data Model Highlights (Sessions)
 
-- UUID-based primary key: sessions are addressed by `id` (CHAR(36) UUID).
-- Each session has a unique `name` field (VARCHAR(64)) used for Docker container/volume naming and display.
+- UUID-based primary key: sessions are identified exclusively by `id` (CHAR(36) UUID).
 - Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
 - Parent sessions: `parent_session_id` (CHAR(36)) references parent session's UUID.
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
+- Docker resources: Container names are `tsbx_session_{id}`, volume names are `tsbx_session_data_{id}`.
 
 ## Session Lifecycle & API
 
@@ -84,12 +84,14 @@ Note on commit message formatting:
 - Tasks: `GET/POST /sessions/{id}/tasks` for user↔session exchanges, stored in `session_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
 - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
-- All API routes use session UUID `id` for addressing, but Docker operations use the session `name`.
+- All API routes and Docker operations use session UUID `id` exclusively.
 
 ## Operator UI
 
-- Primary routes live under `/sessions` (list, start, details/chat). Legacy `/app/*` routes have been removed.
+- Primary routes live under `/sessions` (list, create, details/chat). Legacy `/app/*` routes have been removed.
+- Sessions are displayed by their ID (shortened to first 8 characters, with full ID on hover).
 - Session pages show tags and support "Remix", "Edit Tags", "Delete" via modals. Stop/Restart buttons appear only when actionable.
+- No name input required when creating or cloning sessions - IDs are auto-generated.
 
 ## Session-Specific Instructions
 

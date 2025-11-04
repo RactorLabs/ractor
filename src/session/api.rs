@@ -10,7 +10,6 @@ use tracing::{debug, info};
 #[derive(Debug, Clone, Deserialize)]
 pub struct Session {
     pub id: String, // UUID primary key
-    pub name: String, // Unique name
     pub created_by: String,
     pub state: String,
     pub parent_session_id: Option<String>,
@@ -43,10 +42,6 @@ impl TaskSandboxClient {
         Self { client, config, session_id }
     }
 
-    // Expose session name for prompts/logging
-    pub fn session_name(&self) -> &str {
-        &self.config.session_name
-    }
 
     /// Get a task by id for current session
     pub async fn get_task_by_id(&self, id: &str) -> Result<TaskView> {
@@ -98,7 +93,7 @@ impl TaskSandboxClient {
         match response.status() {
             StatusCode::OK => {
                 let session = response.json::<Session>().await?;
-                debug!("Fetched session info for: {}", session.name);
+                debug!("Fetched session info for: {}", session.id);
                 Ok(session)
             }
             StatusCode::UNAUTHORIZED => {
@@ -106,7 +101,7 @@ impl TaskSandboxClient {
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
                 "Session {} not found",
-                self.config.session_name
+                self.session_id
             ))),
             status => {
                 let error_text = response
@@ -317,7 +312,7 @@ impl TaskSandboxClient {
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
                 "Session {} not found",
-                self.config.session_name
+                self.session_id
             ))),
             status => {
                 let error_text = response
@@ -356,7 +351,7 @@ impl TaskSandboxClient {
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
                 "Session {} not found",
-                self.config.session_name
+                self.session_id
             ))),
             status => {
                 let error_text = response
@@ -449,7 +444,7 @@ impl TaskSandboxClient {
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
                 "Session {} not found",
-                self.config.session_name
+                self.session_id
             ))),
             status => {
                 let error_text = response
@@ -467,14 +462,14 @@ impl TaskSandboxClient {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {
     pub id: String,
-    pub session_name: String,
+    pub session_id: String,
     pub status: String,
     #[serde(default)]
-    pub input_content: Option<Vec<serde_json::Value>>,
+    pub input_content: Vec<serde_json::Value>,
     #[serde(default)]
-    pub output_content: Option<Vec<serde_json::Value>>,
+    pub output_content: Vec<serde_json::Value>,
     #[serde(default)]
-    pub segments: Option<Vec<serde_json::Value>>,
+    pub segments: Vec<serde_json::Value>,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
     #[serde(default)]

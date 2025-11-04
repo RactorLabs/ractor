@@ -74,4 +74,4 @@ WORKDIR /session
 # Configure environment variables for session structure
 ENV TSBX_SESSION_DIR=/session
 
-CMD ["tsbx-session", "--api-url", "http://tsbx_api:9000", "--session-name", "unknown", "--api-key", "unknown"]
+CMD ["tsbx-session", "--api-url", "http://tsbx_api:9000", "--session-id", "unknown", "--api-key", "unknown"]

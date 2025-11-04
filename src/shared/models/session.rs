@@ -5,11 +5,10 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
     pub id: String, // Primary key - UUID
-    pub name: String, // Unique field, used for Docker operations
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_session_id: Option<String>, // Changed from parent_session_name
+    pub parent_session_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
@@ -26,8 +25,6 @@ pub struct Session {
 pub struct StartSessionRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
-    #[serde(deserialize_with = "deserialize_required_name")] // Required for now
-    pub name: String,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
@@ -58,8 +55,6 @@ pub struct StartSessionRequest {
 pub struct CloneSessionRequest {
     #[serde(default)]
     pub metadata: Option<serde_json::Value>,
-    #[serde(deserialize_with = "deserialize_required_name")] // Name is now required
-    pub name: String,
     #[serde(default)]
     pub prompt: Option<String>,
 }
@@ -526,7 +521,7 @@ impl Session {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, name, created_by, state, description, parent_session_id,
+            SELECT id, created_by, state, description, parent_session_id,
                    created_at, last_activity_at, metadata, tags,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
@@ -538,32 +533,13 @@ impl Session {
         .await
     }
 
-    pub async fn find_by_name(
-        pool: &sqlx::MySqlPool,
-        name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
-            r#"
-            SELECT id, name, created_by, state, description, parent_session_id,
-                   created_at, last_activity_at, metadata, tags,
-                   stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
-                   last_context_length
-            FROM sessions
-            WHERE name = ?
-            "#,
-        )
-        .bind(name)
-        .fetch_optional(pool)
-        .await
-    }
-
     pub async fn find_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
     ) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT id, name, created_by, state, description, parent_session_id,
+            SELECT id, created_by, state, description, parent_session_id,
                    created_at, last_activity_at, metadata, tags,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
@@ -581,8 +557,8 @@ impl Session {
         req: StartSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
-        // Use the provided name (random generation to be implemented later)
-        let session_name = req.name;
+        // Generate UUID for new session
+        let session_id = uuid::Uuid::new_v4().to_string();
 
         // Initialize stop/archive timeouts; idle_from/busy_from will be set on state transitions
         let stop_timeout = req.stop_timeout_seconds.unwrap_or(300);
@@ -590,14 +566,14 @@ impl Session {
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when session becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when session becomes busy
 
-        // Insert the session - MySQL will auto-generate UUID for id
+        // Insert the session with explicit UUID
         sqlx::query(
             r#"
-            INSERT INTO sessions (name, created_by, description, parent_session_id, metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from)
+            INSERT INTO sessions (id, created_by, description, parent_session_id, metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
-        .bind(&session_name)
+        .bind(&session_id)
         .bind(created_by)
         .bind(&req.description)
         .bind(&req.parent_session_id)
@@ -611,7 +587,7 @@ impl Session {
         .await?;
 
         // Fetch the created session
-        let session = Self::find_by_name(pool, &session_name).await?.unwrap();
+        let session = Self::find_by_id(pool, &session_id).await?.unwrap();
 
         Ok(session)
     }
@@ -627,6 +603,9 @@ impl Session {
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
+        // Generate UUID for cloned session
+        let session_id = uuid::Uuid::new_v4().to_string();
+
         // Create new session based on parent (inherit stop/archive timeouts)
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when session becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when session becomes busy
@@ -634,13 +613,13 @@ impl Session {
         sqlx::query(
             r#"
             INSERT INTO sessions (
-                name, created_by, description, parent_session_id,
+                id, created_by, description, parent_session_id,
                 metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&req.name)
+        .bind(&session_id)
         .bind(created_by) // Use actual cloner as owner
         .bind(&parent.description)
         .bind(parent_id)
@@ -665,7 +644,7 @@ impl Session {
         .await?;
 
         // Fetch the created session
-        let session = Self::find_by_name(pool, &req.name).await?.unwrap();
+        let session = Self::find_by_id(pool, &session_id).await?.unwrap();
 
         Ok(session)
     }

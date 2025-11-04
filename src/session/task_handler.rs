@@ -223,8 +223,8 @@ impl TaskHandler {
     async fn process_task(&self, task: &TaskView) -> Result<()> {
         // Validate first text item from input_content, if any
         let mut input_text = "".to_string();
-        if let Some(arr) = task.input_content.as_ref() {
-            for it in arr {
+        if !task.input_content.is_empty() {
+            for it in &task.input_content {
                 let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 if t.eq_ignore_ascii_case("text") {
                     if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
@@ -823,8 +823,8 @@ impl TaskHandler {
             let status_lc = r.status.to_lowercase();
 
             // Input content
-            if let Some(arr) = r.input_content.as_ref() {
-                for it in arr {
+            if !r.input_content.is_empty() {
+                for it in &r.input_content {
                     let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     if t.eq_ignore_ascii_case("text") {
                         if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
@@ -841,7 +841,8 @@ impl TaskHandler {
                 }
             }
             // Include prior tool calls/results with truncated payloads for context
-            if let Some(seg_items) = r.segments.as_ref() {
+            if !r.segments.is_empty() {
+                let seg_items = &r.segments;
                 let total_tool_results = seg_items
                     .iter()
                     .filter(|seg| {
@@ -915,14 +916,13 @@ impl TaskHandler {
 
             // For completed tasks, include a compact assistant message synthesized from output_content
             if status_lc == "completed" {
-                if let Some(arr) = r.output_content.as_ref() {
-                    if !arr.is_empty() {
-                        // Build a concise assistant content from output items
-                        const MAX_TOTAL: usize = 3000; // total max chars from all items
-                        const MAX_ITEM: usize = 1200; // per-item max chars
-                        let mut used: usize = 0;
-                        let mut parts: Vec<String> = Vec::new();
-                        for it in arr.iter() {
+                if !r.output_content.is_empty() {
+                    // Build a concise assistant content from output items
+                    const MAX_TOTAL: usize = 3000; // total max chars from all items
+                    const MAX_ITEM: usize = 1200; // per-item max chars
+                    let mut used: usize = 0;
+                    let mut parts: Vec<String> = Vec::new();
+                    for it in r.output_content.iter() {
                             if used >= MAX_TOTAL {
                                 break;
                             }
@@ -984,35 +984,33 @@ impl TaskHandler {
                                 name: None,
                                 tool_call_id: None,
                             });
-                        } else {
-                            // If no output_content, check for a compact_summary segment
-                            if let Some(items) = r.segments.as_ref() {
-                                for it in items.iter() {
-                                    let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                                    if t.eq_ignore_ascii_case("compact_summary") {
-                                        if let Some(s) = it.get("content").and_then(|v| v.as_str())
-                                        {
-                                            let summary = s.trim().to_string();
-                                            if !summary.is_empty() {
-                                                convo.push(ChatMessage {
-                                                    role: "assistant".to_string(),
-                                                    content: summary,
-                                                    name: None,
-                                                    tool_call_id: None,
-                                                });
-                                            }
-                                        }
-                                        break;
+                        }
+                } else {
+                    // If no output_content, check for a compact_summary segment
+                    if !r.segments.is_empty() {
+                        for it in r.segments.iter() {
+                            let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                            if t.eq_ignore_ascii_case("compact_summary") {
+                                if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
+                                    let summary = s.trim().to_string();
+                                    if !summary.is_empty() {
+                                        convo.push(ChatMessage {
+                                            role: "assistant".to_string(),
+                                            content: summary,
+                                            name: None,
+                                            tool_call_id: None,
+                                        });
                                     }
                                 }
+                                break;
                             }
                         }
                     }
                 }
             }
         }
-        if let Some(arr) = current.input_content.as_ref() {
-            for it in arr {
+        if !current.input_content.is_empty() {
+            for it in &current.input_content {
                 let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 if t.eq_ignore_ascii_case("text") {
                     if let Some(s) = it.get("content").and_then(|v| v.as_str()) {
@@ -1037,10 +1035,10 @@ impl TaskHandler {
             std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
-        // Fetch session info from API/DB (name)
-        let session_name_ctx = match self.api_client.get_session().await {
-            Ok(session) => session.name.clone(),
-            Err(_) => self.api_client.session_name().to_string(),
+        // Fetch session info from API/DB (ID)
+        let session_id_ctx = match self.api_client.get_session().await {
+            Ok(session) => session.id.clone(),
+            Err(_) => "unknown".to_string(),
         };
 
         // Current timestamp in UTC for context
@@ -1089,7 +1087,7 @@ You are running as an Session in the {host_name} system.
 - Current Time (UTC): {current_time_utc}
 - Operator URL: {operator_url}
 - API URL: {api_url}
-- Your Session Name: {session_name}
+- Your Session ID: {session_id}
 
 ### Platform Endpoints
 - API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
@@ -1355,7 +1353,7 @@ You have complete freedom to execute commands, install packages, and create solu
             base_url = base_url,
             operator_url = operator_url,
             api_url = api_url,
-            session_name = session_name_ctx,
+            session_id = session_id_ctx,
             current_time_utc = current_time_utc,
         ));
 

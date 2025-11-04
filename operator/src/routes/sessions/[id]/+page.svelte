@@ -61,13 +61,13 @@
     return `<pre class="mb-0">${esc(s)}</pre>`;
   }
 
-  // Note: 'name' param now contains the session ID (not the display name)
-  let name = '';
-  $: name = $page.params.name;
+  // Note: 'id' param contains the session ID
+  let sessionId = '';
+  $: sessionId = $page.params.id;
 
   let session = null;
-  // Update page title once session loads to show actual name
-  $: setPageTitle(session?.name || 'Session');
+  // Update page title to show session ID (shortened)
+  $: setPageTitle(session?.id ? `Session ${session.id.substring(0, 8)}` : 'Session');
   let stateStr = '';
   // Chat rendering derived from Tasks
   let chat = [];
@@ -200,7 +200,7 @@
       const segs = [...(target.segs || []), target.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       // Attempt delete (not supported in read-only API; will likely fail)
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/files/delete/${relEnc}`, { method: 'DELETE' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/files/delete/${relEnc}`, { method: 'DELETE' });
       if (!res.ok) {
         throw new Error(res?.data?.message || res?.data?.error || 'Delete not supported');
       }
@@ -265,8 +265,8 @@
     try {
       let path = fmPathStr();
       let url;
-      if (!path) url = `/sessions/${encodeURIComponent(name)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
-      else url = `/sessions/${encodeURIComponent(name)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      if (!path) url = `/sessions/${encodeURIComponent(sessionId)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      else url = `/sessions/${encodeURIComponent(sessionId)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
       const res = await apiFetch(url);
       if (seq !== fmListSeq) return; // outdated
       if (!res.ok) {
@@ -345,7 +345,7 @@
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/sessions/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const url = `/api/v0/sessions/${encodeURIComponent(sessionId)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: fmPreviewAbort ? fmPreviewAbort.signal : undefined });
       if (!res.ok) {
         fmPreviewError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Open failed (HTTP ${res.status})`));
@@ -402,7 +402,7 @@
       const segs = [...fmSegments, entry?.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/sessions/${encodeURIComponent(name)}/files/read/${relEnc}`;
+      const url = `/api/v0/sessions/${encodeURIComponent(sessionId)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
       if (!res.ok) { fmError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Download failed (HTTP ${res.status})`)); return; }
       const blob = await res.blob();
@@ -519,7 +519,7 @@
   async function fetchContextUsage() {
     try {
       ctxLoading = true;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context`);
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context`);
       if (res.ok) {
         ctx = res.data || null;
         // Update banner flag if over soft limit
@@ -532,7 +532,7 @@
   }
   async function clearContext() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context/clear`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context/clear`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Clear failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -548,7 +548,7 @@
     try {
       isCompacting = true;
       ctxLoading = true;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/context/compact`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context/compact`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -624,7 +624,7 @@
   async function saveTags() {
     try {
       const tags = parseTagsInput();
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
       // Update local session tags
       session = res.data || session;
@@ -652,7 +652,7 @@
       const stop = Math.max(0, Math.floor(Number(stopTimeoutInput || 0)));
       const archive = Math.max(0, Math.floor(Number(archiveTimeoutInput || 0)));
       const body = { stop_timeout_seconds: stop, archive_timeout_seconds: archive };
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
       // Update local session snapshot
       session = res.data || session;
@@ -668,23 +668,17 @@
 
   // Clone modal state and actions
   let showCloneModal = false;
-  let cloneName = '';
   let cloneError = null;
   function openCloneModal() {
-    const cur = String(name || '').trim();
-    cloneName = nextCloneName(cur);
     cloneError = null;
     showCloneModal = true;
   }
   function closeCloneModal() { showCloneModal = false; }
   async function confirmClone() {
     try {
-      const newName = String(cloneName || '').trim();
-      const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
-      if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/clone`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/clone`, {
         method: 'POST',
-        body: JSON.stringify({ name: newName, code: true, env: true, content: true })
+        body: JSON.stringify({ code: true, env: true, content: true })
       });
       if (!res.ok) {
         cloneError = res?.data?.message || res?.data?.error || `Clone failed (HTTP ${res.status})`;
@@ -704,7 +698,7 @@
   let deleteConfirm = '';
   function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
   function closeDeleteModal() { showDeleteModal = false; }
-  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.name || name || '').trim();
+  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.id || name || '').trim();
 
   // Stop modal state and actions
   let showStopModal = false;
@@ -723,7 +717,7 @@
   }
 
   async function fetchSession() {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`);
+    const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`);
     if (res.ok && res.data) {
       session = res.data;
     }
@@ -733,7 +727,7 @@
   async function fetchRuntime(force = false) {
     try {
       if (!force && Date.now() - _runtimeFetchedAt < 10000) return; // throttle to 10s
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/runtime`);
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/runtime`);
       if (res.ok) {
         const v = Number(res?.data?.total_runtime_seconds ?? 0);
         if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
@@ -745,7 +739,7 @@
   }
 
   async function fetchTasks() {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/tasks?limit=200`);
+    const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/tasks?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
       // Only auto-stick if near bottom before refresh
@@ -1349,7 +1343,7 @@
     if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Session is busy'; } return; }
     sending = true;
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/tasks`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/tasks`, {
         method: 'POST',
         body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
       });
@@ -1391,7 +1385,7 @@
       const body = { delay_seconds: delaySeconds };
       const t = String(note || '').trim();
       if (t) body['note'] = t;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST', body: JSON.stringify(body) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/stop`, { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Stop failed (HTTP ${res.status})`);
       // Do not optimistically flip state; let polling update when controller stops it
       error = null;
@@ -1402,7 +1396,7 @@
 
   async function restartSession() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/restart`, { method: 'POST', body: JSON.stringify({}) });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/restart`, { method: 'POST', body: JSON.stringify({}) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Restart failed (HTTP ${res.status})`);
       // Optimistically set to init; controller will flip to idle/busy
       if (session) session = { ...(session || {}), state: 'init' };
@@ -1426,7 +1420,7 @@
 
   async function cancelActive() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
+      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
       await fetchSession();
       await fetchTasks();
@@ -1441,48 +1435,7 @@
   // Delete action: open modal instead of prompt
   function deleteSession() { openDeleteModal(); }
 
-  // Generate a default clone name by adding or incrementing a numeric suffix
-  function nextCloneName(cur) {
-    const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
-    const basic = (s) => (s && typeof s === 'string') ? s.toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
-    let s = basic(cur).replace(/^-+/, '').replace(/-+$/, '');
-    if (!s) return 'new-session-1';
 
-    // If ends with -digits, increment, else add -1
-    const m = s.match(/^(.*?)-(\d+)$/);
-    let candidate;
-    if (m) {
-      const base = m[1];
-      const num = parseInt(m[2] || '0', 10) + 1;
-      candidate = `${base}-${num}`;
-    } else {
-      candidate = `${s}-1`;
-    }
-
-    // Enforce max length 63 by trimming base if needed
-    if (candidate.length > 63) {
-      const parts = candidate.split('-');
-      const suffix = parts.pop();
-      let base = parts.join('-');
-      const keep = Math.max(1, 63 - 1 - String(suffix).length); // at least 1 char + '-' + suffix
-      base = base.slice(0, keep).replace(/-+$/, '');
-      candidate = `${base}-${suffix}`;
-    }
-
-    // Ensure it matches the platform constraints, else fallback
-    if (!valid.test(candidate)) {
-      // Pad start if needed and strip invalid ending
-      candidate = candidate.replace(/^[^a-z]+/, 'a').replace(/[^a-z0-9]$/, '0');
-      if (!valid.test(candidate)) {
-        candidate = 'new-session-1';
-      }
-    }
-    return candidate;
-  }
-
-  
-
-  
 
   onMount(async () => {
     if (!isAuthenticated()) { goto('/login'); return; }
@@ -1605,16 +1558,7 @@
           {#if cloneError}
             <div class="alert alert-danger small">{cloneError}</div>
           {/if}
-          <label class="form-label" for="clone-name">New Session Name</label>
-          <input
-            id="clone-name"
-            class="form-control"
-            bind:value={cloneName}
-            placeholder="new-session"
-            maxlength="63"
-            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmClone(); } }}
-          />
-          <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
+          <p class="mb-0">This will create a copy of the current session with a new auto-generated ID.</p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeCloneModal}>Cancel</button>
@@ -1635,8 +1579,8 @@
           <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold">{session?.name || name}</span> to confirm permanent deletion.</p>
-          <input class="form-control" bind:value={deleteConfirm} placeholder={session?.name || name} />
+          <p class="mb-2">Type <span class="fw-bold font-monospace">{session?.id || name}</span> to confirm permanent deletion.</p>
+          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={session?.id || name} />
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
@@ -1667,7 +1611,7 @@
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if session}
-                <a class="fw-bold text-decoration-none fs-22px" href={'/sessions/' + encodeURIComponent(session.id || '')}>{session.name || '-'}</a>
+                <a class="fw-bold text-decoration-none fs-22px font-monospace" href={'/sessions/' + encodeURIComponent(session.id || '')} title={session.id || '-'}>{(session.id || '-').substring(0, 8)}</a>
               {:else}
                 <div class="fw-bold fs-22px">Loading...</div>
               {/if}

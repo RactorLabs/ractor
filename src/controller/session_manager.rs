@@ -142,34 +142,34 @@ impl SessionManager {
     /// Ensure the session container is running and healthy; restart if needed and wait up to timeout_secs
     pub async fn ensure_session_running(
         &self,
-        session_name: &str,
+        session_id: &str,
         timeout_secs: u64,
     ) -> Result<()> {
         // Quick healthy check
-        match self.docker_manager.is_container_healthy(session_name).await {
+        match self.docker_manager.is_container_healthy(session_id).await {
             Ok(true) => return Ok(()),
             Ok(false) => {}
             Err(e) => {
-                tracing::warn!("health check error for {}: {}", session_name, e);
+                tracing::warn!("health check error for {}: {}", session_id, e);
             }
         }
 
         // If DB says stopped or container absent, restart
         if let Some((state,)) =
-            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sessions WHERE name = ?"#)
-                .bind(session_name)
+            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sessions WHERE id = ?"#)
+                .bind(session_id)
                 .fetch_optional(&self.pool)
                 .await?
         {
             if state.to_lowercase() == "stopped" {
-                tracing::info!("Session {} is stopped; restarting container", session_name);
-                let _ = self.docker_manager.restart_container(session_name).await?;
+                tracing::info!("Session ID {} is stopped; restarting container", session_id);
+                let _ = self.docker_manager.restart_container(session_id).await?;
             }
         } else {
             // No row; nothing we can do
             tracing::warn!(
-                "Session {} not found in DB during ensure_session_running",
-                session_name
+                "Session ID {} not found in DB during ensure_session_running",
+                session_id
             );
         }
 
@@ -177,7 +177,7 @@ impl SessionManager {
         let mut waited = 0u64;
         let step = 500u64; // ms
         while waited / 1000 < timeout_secs {
-            if let Ok(true) = self.docker_manager.is_container_healthy(session_name).await {
+            if let Ok(true) = self.docker_manager.is_container_healthy(session_id).await {
                 return Ok(());
             }
             tokio::time::sleep(std::time::Duration::from_millis(step)).await;
@@ -185,7 +185,7 @@ impl SessionManager {
         }
         Err(anyhow::anyhow!(
             "session {} not ready in {}s",
-            session_name,
+            session_id,
             timeout_secs
         ))
     }
@@ -193,10 +193,10 @@ impl SessionManager {
     /// Proxy exec with stdout/stderr collection
     pub async fn exec_collect(
         &self,
-        session_name: &str,
+        session_id: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        self.docker_manager.exec_collect(session_name, cmd).await
+        self.docker_manager.exec_collect(session_id, cmd).await
     }
 
     // No external API key required for local Ollama
@@ -228,7 +228,7 @@ impl SessionManager {
         // Find sessions that need auto-stop due to idle timeout
         let sessions_to_stop: Vec<(String,)> = sqlx::query_as(
             r#"
-            SELECT name
+            SELECT id
             FROM sessions
             WHERE state = 'idle'
               AND idle_from IS NOT NULL
@@ -243,38 +243,26 @@ impl SessionManager {
 
         let mut stopped_count = 0;
 
-        for (session_name,) in sessions_to_stop {
-            info!("Auto-stopping session {} due to timeout", session_name);
+        for (session_id,) in sessions_to_stop {
+            info!("Auto-stopping session ID {} due to timeout", session_id);
 
-            // Look up session to get its UUID
-            let session_id_opt: Option<(String,)> = sqlx::query_as(
-                "SELECT id FROM sessions WHERE name = ?"
-            )
-            .bind(&session_name)
-            .fetch_optional(&self.pool)
-            .await?;
+            // Create stop request for the session
+            let request_id = uuid::Uuid::new_v4().to_string();
+            sqlx::query(r#"
+                INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+                VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
+                "#)
+            .bind(&request_id)
+            .bind(&session_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session ID {}: {}", session_id, e))?;
 
-            if let Some((session_id,)) = session_id_opt {
-                // Create stop request for the session
-                let request_id = uuid::Uuid::new_v4().to_string();
-                sqlx::query(r#"
-                    INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
-                    VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
-                    "#)
-                .bind(&request_id)
-                .bind(&session_id)
-                .execute(&self.pool)
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session {}: {}", session_name, e))?;
-
-                info!(
-                    "Created auto-stop request {} for session {}",
-                    request_id, session_name
-                );
-                stopped_count += 1;
-            } else {
-                warn!("Session {} not found in database during auto-stop", session_name);
-            }
+            info!(
+                "Created auto-stop request {} for session ID {}",
+                request_id, session_id
+            );
+            stopped_count += 1;
         }
 
         if stopped_count > 0 {
@@ -306,21 +294,6 @@ impl SessionManager {
 
         let mut cancelled = 0usize;
         for (task_id, session_id, output_json, created_at) in timed_out {
-            // Look up session name from session_id for logging and state update
-            let session_name_opt: Option<(String,)> = sqlx::query_as(
-                "SELECT name FROM sessions WHERE id = ?"
-            )
-            .bind(&session_id)
-            .fetch_optional(&self.pool)
-            .await?;
-
-            let session_name = match session_name_opt {
-                Some((name,)) => name,
-                None => {
-                    warn!("Session with id {} not found during task timeout processing", session_id);
-                    continue;
-                }
-            };
             let now = chrono::Utc::now();
             let now_text = now.to_rfc3339();
             let runtime_seconds = (now - created_at).num_seconds();
@@ -392,16 +365,16 @@ impl SessionManager {
                     busy_from = NULL,
                     idle_from = NOW(),
                     last_activity_at = NOW()
-                WHERE name = ? AND state = 'busy'
+                WHERE id = ? AND state = 'busy'
                 "#,
             )
-            .bind(&session_name)
+            .bind(&session_id)
             .execute(&self.pool)
             .await?;
 
             info!(
-                "Cancelled task {} for session {} due to per-task timeout",
-                task_id, session_name
+                "Cancelled task {} for session ID {} due to per-task timeout",
+                task_id, session_id
             );
         }
 
@@ -413,7 +386,7 @@ impl SessionManager {
         &self,
         principal: &str,
         principal_type: SubjectType,
-        session_name: &str,
+        session_id: &str,
     ) -> Result<String> {
         let exp = chrono::Utc::now() + chrono::Duration::hours(24);
         let claims = RbacClaims {
@@ -432,8 +405,8 @@ impl SessionManager {
         .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
 
         info!(
-            "Generated session token for principal: {} (session: {})",
-            principal, session_name
+            "Generated session token for principal: {} (session ID: {})",
+            principal, session_id
         );
         Ok(token)
     }
@@ -536,11 +509,14 @@ impl SessionManager {
 
     pub async fn handle_start_session(&self, request: SessionRequest) -> Result<()> {
         // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+        let session = sqlx::query_as::<_, Session>(
+            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
+             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+        )
             .bind(&request.session_id)
             .fetch_one(&self.pool)
             .await?;
-        let session_name = session.name.clone();
 
         // Parse the payload to get session creation parameters
         let env = request
@@ -592,18 +568,18 @@ impl SessionManager {
         };
 
         // Generate dynamic token for this session (for TaskSandbox auth)
-        info!("Generating dynamic token for session {}", session_name);
+        info!("Generating dynamic token for session ID {}", &session.id);
         let session_token = self
-            .generate_session_token(principal, principal_type, &session_name)
+            .generate_session_token(principal, principal_type, &session.id)
             .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
 
         info!(
-            "Generated dynamic tokens for session {} (principal: {})",
-            session_name, principal
+            "Generated dynamic tokens for session ID {} (principal: {})",
+            &session.id, principal
         );
 
-        info!("Creating session {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
-              session_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating session ID {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}",
+              &session.id, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
         // Check if this is a cloned session from request payload
         let is_clone = request
@@ -624,11 +600,11 @@ impl SessionManager {
         };
 
         if is_clone {
-            let parent_session_name = request
+            let parent_session_id = request
                 .payload
-                .get("parent_session_name")
+                .get("parent_session_id")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for clone"))?;
+                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_id for clone"))?;
 
             // For cloned sessions, get principal info from clone request payload
             let clone_principal = request
@@ -657,20 +633,19 @@ impl SessionManager {
                 _ => SubjectType::Subject,
             };
 
-            info!("Creating cloned session {} from parent {} for principal {} ({})",
-                  session_name, parent_session_name, clone_principal, clone_principal_type_str);
+            info!("Creating cloned session ID {} from parent ID {} for principal {} ({})",
+                  &session.id, parent_session_id, clone_principal, clone_principal_type_str);
 
             // For cloned sessions, create container with full volume copy from parent
             // Generate fresh token for cloned session
             let clone_token = self
-                .generate_session_token(clone_principal, clone_principal_type, &session_name)
+                .generate_session_token(clone_principal, clone_principal_type, &session.id)
                 .map_err(|e| anyhow::anyhow!("Failed to generate cloned session token: {}", e))?;
 
             self.docker_manager
                 .create_container_with_full_copy_and_tokens(
                     &session.id,
-                    &session_name,
-                    parent_session_name,
+                    parent_session_id,
                     clone_token,
                     clone_principal.to_string(),
                     clone_principal_type_str.to_string(),
@@ -678,13 +653,12 @@ impl SessionManager {
                 )
                 .await?;
         } else {
-            info!("Creating new session {}", session_name);
+            info!("Creating new session ID {}", &session.id);
 
             // For regular sessions, create container with session parameters and generated tokens
             self.docker_manager
                 .create_container_with_params_and_tokens(
                     &session.id,
-                    &session_name,
                     env,
                     instructions,
                     setup,
@@ -699,7 +673,7 @@ impl SessionManager {
         // Send prompt if provided (BEFORE setting state to IDLE)
         let prompt_to_send = prompt.or(clone_prompt);
         if let Some(prompt) = prompt_to_send {
-            info!("Sending prompt to session {}: {}", session_name, prompt);
+            info!("Sending prompt to session ID {}: {}", &session.id, prompt);
 
             // Create task record in database (pending)
             let task_id = uuid::Uuid::new_v4().to_string();
@@ -722,16 +696,16 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt task {} created for session {}",
-                task_id, session_name
+                "Prompt task {} created for session ID {}",
+                task_id, &session.id
             );
         }
 
         // Set session state to INIT after container creation only if it hasn't changed yet.
         // This avoids overwriting an session that already set itself to IDLE.
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE name = ? AND state = 'init'"#)
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ? AND state = 'init'"#)
             .bind(SESSION_STATE_INIT)
-            .bind(&session_name)
+            .bind(&session.id)
             .execute(&self.pool)
             .await?;
 
@@ -739,15 +713,8 @@ impl SessionManager {
     }
 
     pub async fn handle_delete_session(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
-        info!("Deleting container and volume for session {}", session_name);
-        self.docker_manager.delete_container(&session_name).await?;
+        info!("Deleting container and volume for session ID {}", &request.session_id);
+        self.docker_manager.delete_container(&request.session_id).await?;
 
         // No need to update session state - DELETE endpoint performs hard delete of session row
 
@@ -755,21 +722,14 @@ impl SessionManager {
     }
 
     pub async fn handle_execute_command(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
         let command = request.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
-        info!("Executing command in session {}: {}", session_name, command);
+        info!("Executing command in session ID {}: {}", &request.session_id, command);
         let _output = self
             .docker_manager
-            .execute_command(&session_name, command)
+            .execute_command(&request.session_id, command)
             .await?;
 
         // Note: command_results table does not exist in schema
@@ -824,11 +784,14 @@ impl SessionManager {
 
     pub async fn handle_stop_session(&self, request: SessionRequest) -> Result<()> {
         // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+        let session = sqlx::query_as::<_, Session>(
+            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
+             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+        )
             .bind(&request.session_id)
             .fetch_one(&self.pool)
             .await?;
-        let session_name = session.name.clone();
 
         // Optional delay before closing (in seconds), minimum 5 seconds
         let delay_secs = request
@@ -839,15 +802,15 @@ impl SessionManager {
             .unwrap_or(5);
         if delay_secs > 0 {
             info!(
-                "Delaying close for session {} by {} seconds",
-                session_name, delay_secs
+                "Delaying close for session ID {} by {} seconds",
+                &session.id, delay_secs
             );
             sleep(Duration::from_secs(delay_secs)).await;
         }
         // Capture prior state and created_at for runtime measurement
         let session_row_opt: Option<(chrono::DateTime<Utc>, String)> =
-            sqlx::query_as(r#"SELECT created_at, state FROM sessions WHERE name = ?"#)
-                .bind(&session_name)
+            sqlx::query_as(r#"SELECT created_at, state FROM sessions WHERE id = ?"#)
+                .bind(&session.id)
                 .fetch_optional(&self.pool)
                 .await?;
         let (session_created_at, prior_state) = session_row_opt
@@ -870,28 +833,28 @@ impl SessionManager {
 
         if is_task_timeout {
             info!(
-                "Task timeout detected for session {} – cancelling task and returning to idle",
-                session_name
+                "Task timeout detected for session ID {} – cancelling task and returning to idle",
+                &session.id
             );
             sqlx::query(
-                r#"UPDATE sessions SET state = 'idle', busy_from = NULL, idle_from = NOW(), last_activity_at = NOW() WHERE name = ?"#,
+                r#"UPDATE sessions SET state = 'idle', busy_from = NULL, idle_from = NOW(), last_activity_at = NOW() WHERE id = ?"#,
             )
-            .bind(&session_name)
+            .bind(&session.id)
             .execute(&self.pool)
             .await?;
         } else {
-            info!("Stopping container for session {}", session_name);
+            info!("Stopping container for session ID {}", &session.id);
 
             // Close the Docker container but keep the persistent volume
-            self.docker_manager.stop_container(&session_name).await?;
+            self.docker_manager.stop_container(&session.id).await?;
 
             // Update session state to stopped
-            sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
-                .bind(&session_name)
+            sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE id = ?"#)
+                .bind(&session.id)
                 .execute(&self.pool)
                 .await?;
 
-            info!("Session {} state updated to stopped", session_name);
+            info!("Session ID {} state updated to stopped", &session.id);
         }
 
         // Create a chat marker task to indicate the action taken
@@ -1053,11 +1016,14 @@ impl SessionManager {
 
     pub async fn handle_restart_session(&self, request: SessionRequest) -> Result<()> {
         // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+        let session = sqlx::query_as::<_, Session>(
+            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
+             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+        )
             .bind(&request.session_id)
             .fetch_one(&self.pool)
             .await?;
-        let session_name = session.name.clone();
 
         // Prefer explicitly provided principal/principal_type from payload (owner),
         // fall back to request.created_by as a regular subject.
@@ -1074,12 +1040,12 @@ impl SessionManager {
             .unwrap_or("User")
             .to_string();
 
-        info!("Restarting container for session {}", session_name);
+        info!("Restarting container for session ID {}", &session.id);
 
         // Generate fresh tokens for restarted session
         info!(
-            "Generating fresh tokens for restarted session {}",
-            session_name
+            "Generating fresh tokens for restarted session ID {}",
+            &session.id
         );
         let restart_token = self
             .generate_session_token(
@@ -1088,19 +1054,18 @@ impl SessionManager {
                     "Admin" => SubjectType::Admin,
                     _ => SubjectType::Subject,
                 },
-                &session_name,
+                &session.id,
             )
             .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
 
         // All restarted sessions were stopped (container destroyed), so recreate container
         info!(
-            "Session {} was stopped, restarting container with persistent volume and fresh tokens",
-            session_name
+            "Session ID {} was stopped, restarting container with persistent volume and fresh tokens",
+            &session.id
         );
         self.docker_manager
             .restart_container_with_tokens(
                 &session.id,
-                &session_name,
                 restart_token,
                 effective_principal.clone(),
                 effective_principal_type.clone(),
@@ -1110,19 +1075,19 @@ impl SessionManager {
 
         // Update last_activity_at and clear idle_from/busy_from since session is being restarted (will set to idle later)
         sqlx::query(
-            r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
+            r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE id = ?"#,
         )
-        .bind(&session_name)
+        .bind(&session.id)
         .execute(&self.pool)
         .await?;
 
-        info!("Container restarted for session {}", session_name);
+        info!("Container restarted for session ID {}", &session.id);
 
         // Send prompt if provided
         if let Some(prompt) = request.payload.get("prompt").and_then(|v| v.as_str()) {
             info!(
-                "Sending prompt to restarted session {}: {}",
-                session_name, prompt
+                "Sending prompt to restarted session ID {}: {}",
+                &session.id, prompt
             );
 
             // Get the principal name from the request
@@ -1146,8 +1111,8 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt task {} created for rerestarted session {}",
-                task_id, session_name
+                "Prompt task {} created for restarted session ID {}",
+                task_id, &session.id
             );
         }
 
@@ -1189,15 +1154,18 @@ impl SessionManager {
 
     pub async fn handle_create_task(&self, request: SessionRequest) -> Result<()> {
         // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+        let session = sqlx::query_as::<_, Session>(
+            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
+             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+        )
             .bind(&request.session_id)
             .fetch_one(&self.pool)
             .await?;
-        let session_name = session.name.clone();
 
         let principal = request.created_by.clone();
 
-        info!("Handling create_task for session {}", session_name);
+        info!("Handling create_task for session ID {}", &session.id);
 
         // Parse payload
         let task_id = request
@@ -1225,8 +1193,8 @@ impl SessionManager {
 
         // Inspect session state
         let state_opt: Option<(String,)> =
-            sqlx::query_as(r#"SELECT state FROM sessions WHERE name = ?"#)
-                .bind(&session_name)
+            sqlx::query_as(r#"SELECT state FROM sessions WHERE id = ?"#)
+                .bind(&session.id)
                 .fetch_optional(&self.pool)
                 .await?;
         let state = state_opt.map(|t| t.0).unwrap_or_default();
@@ -1234,16 +1202,15 @@ impl SessionManager {
         // Restart if needed
         if restart_if_stopped && state == "stopped" {
             info!(
-                "Session {} stopped; restarting prior to inserting task entry",
-                session_name
+                "Session ID {} stopped; restarting prior to inserting task entry",
+                &session.id
             );
             let restart_token = self
-                .generate_session_token(&principal, SubjectType::Subject, &session_name)
+                .generate_session_token(&principal, SubjectType::Subject, &session.id)
                 .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
             self.docker_manager
                 .restart_container_with_tokens(
                     &session.id,
-                    &session_name,
                     restart_token,
                     principal.clone(),
                     "User".to_string(),
@@ -1251,9 +1218,9 @@ impl SessionManager {
                 )
                 .await?;
             sqlx::query(
-                r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
+                r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE id = ?"#,
             )
-            .bind(&session_name)
+            .bind(&session.id)
             .execute(&self.pool)
             .await?;
 
@@ -1330,7 +1297,7 @@ impl SessionManager {
         .bind(&task_created_at)
         .execute(&self.pool)
         .await?;
-        info!("Inserted task {} for session {}", task_id, session_name);
+        info!("Inserted task {} for session ID {}", task_id, &session.id);
 
         Ok(())
     }
@@ -1340,10 +1307,10 @@ impl SessionManager {
         // Find all sessions that are not stopped (active sessions)
         let active_sessions: Vec<(String, String)> = sqlx::query_as(
             r#"
-            SELECT name, state
+            SELECT id, state
             FROM sessions
             WHERE state != 'stopped'
-            ORDER BY name
+            ORDER BY id
             "#,
         )
         .fetch_all(&self.pool)
@@ -1359,11 +1326,11 @@ impl SessionManager {
         );
         let mut recovered_count = 0;
 
-        for (session_name, current_state) in active_sessions {
+        for (session_id, current_state) in active_sessions {
             // Check if container exists and is running
             match self
                 .docker_manager
-                .is_container_healthy(&session_name)
+                .is_container_healthy(&session_id)
                 .await
             {
                 Ok(true) => {
@@ -1373,25 +1340,25 @@ impl SessionManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Session {} container is unhealthy or missing, marking as stopped for recovery",
-                        session_name
+                        "Session ID {} container is unhealthy or missing, marking as stopped for recovery",
+                        session_id
                     );
 
                     // Mark session as stopped so it can be restarted later
                     if let Err(e) =
-                        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
-                            .bind(&session_name)
+                        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE id = ?"#)
+                            .bind(&session_id)
                             .execute(&self.pool)
                             .await
                     {
                         error!(
-                            "Failed to mark unhealthy session {} as stopped: {}",
-                            session_name, e
+                            "Failed to mark unhealthy session ID {} as stopped: {}",
+                            session_id, e
                         );
                     } else {
                         info!(
-                            "Session {} marked as stopped due to container failure (was: {})",
-                            session_name, current_state
+                            "Session ID {} marked as stopped due to container failure (was: {})",
+                            session_id, current_state
                         );
                         recovered_count += 1;
                     }
@@ -1399,8 +1366,8 @@ impl SessionManager {
                 Err(e) => {
                     // Health check failed, likely Docker connection issues
                     error!(
-                        "Health check failed for session {}: {}, will retry next cycle",
-                        session_name, e
+                        "Health check failed for session ID {}: {}, will retry next cycle",
+                        session_id, e
                     );
                 }
             }
@@ -1465,13 +1432,6 @@ impl SessionManager {
     }
 
     pub async fn handle_file_read(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
         let path = request
             .payload
             .get("path")
@@ -1483,7 +1443,7 @@ impl SessionManager {
         // Do not auto-open for file APIs; require running container
         match self
             .docker_manager
-            .is_container_healthy(&session_name)
+            .is_container_healthy(&request.session_id)
             .await
         {
             Ok(true) => {}
@@ -1498,7 +1458,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1529,7 +1489,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec!["/bin/cat".into(), full_path.clone()],
             )
             .await?;
@@ -1550,13 +1510,6 @@ impl SessionManager {
     }
 
     pub async fn handle_file_metadata(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
         let path = request
             .payload
             .get("path")
@@ -1567,7 +1520,7 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&session_name)
+            .is_container_healthy(&request.session_id)
             .await
         {
             Ok(true) => {}
@@ -1582,7 +1535,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1632,13 +1585,6 @@ impl SessionManager {
     }
 
     pub async fn handle_file_list(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
         let path = request
             .payload
             .get("path")
@@ -1663,7 +1609,7 @@ impl SessionManager {
         };
         match self
             .docker_manager
-            .is_container_healthy(&session_name)
+            .is_container_healthy(&request.session_id)
             .await
         {
             Ok(true) => {}
@@ -1684,7 +1630,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec![
                     "/usr/bin/find".into(),
                     base.clone(),
@@ -1756,13 +1702,6 @@ impl SessionManager {
     }
 
     pub async fn handle_file_delete(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-        let session_name = session.name.clone();
-
         let path = request
             .payload
             .get("path")
@@ -1773,7 +1712,7 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&session_name)
+            .is_container_healthy(&request.session_id)
             .await
         {
             Ok(true) => {}
@@ -1788,7 +1727,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1811,7 +1750,7 @@ impl SessionManager {
         let (rm_code, _out, err) = self
             .docker_manager
             .exec_collect(
-                &session_name,
+                &request.session_id,
                 vec!["/bin/rm".into(), "-f".into(), full_path.clone()],
             )
             .await?;
