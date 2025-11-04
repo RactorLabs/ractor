@@ -45,7 +45,7 @@
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
 - PRs must include: summary, test plan, breaking changes (if any), and linked issues.
 - Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `tsbx start api`.
-- Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
+- Etiquette: no emojis, no AI-assistant references in commits or PR descriptions; imperative subject (<50 chars) with details in body when needed.
 - Branch naming: `type/short-description` (e.g., `feat/session-timeout`).
 
 Note on commit message formatting:
@@ -95,7 +95,7 @@ Note on commit message formatting:
 - Use the CLI for service control and avoid ad‑hoc `docker build/run` sequences.
 - Link the CLI before usage: `./scripts/link.sh`, then prefer `tsbx ...` commands for checks (e.g., `tsbx --version`).
 - Coordinate actions: wait for explicit maintainer instruction before running long/destructive ops, publishing, or committing.
-- Commit policy: never reference AI/assistants; no emojis; write professional, imperative, conventional commits.
+- Commit and PR policy: never reference AI/assistants in commits or PR descriptions; no emojis; write professional, imperative, conventional commits.
 - Pre‑commit checklist: `cargo fmt --check`, `cargo clippy`, `cargo build --release`, `cargo test`, and verify services start.
 - Licensing: the project ships under the Server Side Public License (SSPL); see `LICENSE.md` for terms and do not introduce conflicting licenses.
 
