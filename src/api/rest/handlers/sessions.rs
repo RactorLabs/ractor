@@ -1710,7 +1710,7 @@ pub async fn start_session(
         VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -1912,7 +1912,7 @@ pub async fn stop_session(
         VALUES (?, 'stop_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(&created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -2019,7 +2019,7 @@ pub async fn restart_session(
         VALUES (?, 'restart_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(username)
     .bind(&restart_payload)
     .execute(&*state.db)
@@ -2166,7 +2166,7 @@ pub async fn delete_session(
         VALUES (?, 'delete_session', ?, '{}', 'pending')
         "#,
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(username)
     .execute(&*state.db)
     .await

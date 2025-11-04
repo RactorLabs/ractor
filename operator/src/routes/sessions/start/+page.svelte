@@ -103,8 +103,9 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
         const msg = res?.data?.message || res?.data?.error || `Create failed (HTTP ${res.status})`;
         throw new Error(msg);
       }
-      // Navigate to the started session page
-      goto(`/sessions/${encodeURIComponent(name)}`);
+      // Navigate to the started session page using the session ID from the response
+      const newSession = res.data;
+      goto(`/sessions/${encodeURIComponent(newSession.id)}`);
     } catch (e) {
       error = e.message || String(e);
     } finally {

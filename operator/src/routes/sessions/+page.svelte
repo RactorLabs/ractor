@@ -79,7 +79,7 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function stopSession(name) {
+  async function stopSession(session) {
     let delaySeconds = 5;
     try {
       const input = prompt('Stop in how many seconds? (min 5)', '5');
@@ -88,29 +88,29 @@ import { getHostUrl } from '$lib/branding.js';
         if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
       }
     } catch (_) {}
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
     if (!res.ok) { error = res?.data?.message || 'Stop failed'; return; }
     // Give the controller time to perform delayed stop before refreshing
     await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
     await refresh();
   }
-  async function restartSession(name) {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/restart`, { method: 'POST', body: JSON.stringify({}) });
+  async function restartSession(session) {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/restart`, { method: 'POST', body: JSON.stringify({}) });
     if (!res.ok) { error = res?.data?.message || 'Restart failed'; return; }
     await refresh();
   }
-  async function cloneSession(name) {
+  async function cloneSession(session) {
     const newName = prompt('New Session Name for Clone');
     if (!newName) return;
     const body = { name: newName.trim(), code: true, env: true, content: true };
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/clone`, { method: 'POST', body: JSON.stringify(body) });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/clone`, { method: 'POST', body: JSON.stringify(body) });
     if (!res.ok) { error = res?.data?.message || 'Clone failed'; return; }
     await refresh();
   }
-  async function deleteSession(name) {
-    const ok = confirm(`Delete session '${name}'? This cannot be undone.`);
+  async function deleteSession(session) {
+    const ok = confirm(`Delete session '${session.name}'? This cannot be undone.`);
     if (!ok) return;
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
     await refresh();
   }
@@ -249,7 +249,7 @@ import { getHostUrl } from '$lib/branding.js';
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px" href={'/sessions/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
+                      <a class="fw-bold text-decoration-none fs-18px" href={'/sessions/' + encodeURIComponent(a.id || '')}>{a.name || '-'}</a>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
@@ -274,12 +274,12 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSession(a.name)} aria-label="Stop session">
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSession(a)} aria-label="Stop session">
                             <i class="bi bi-stop-circle me-1"></i><span>Stop</span>
                           </button>
                         {/if}
                         {#if String(a.state||'').toLowerCase() === 'stopped'}
-                          <button class="btn btn-outline-success btn-sm" on:click={() => restartSession(a.name)} aria-label="Restart session">
+                          <button class="btn btn-outline-success btn-sm" on:click={() => restartSession(a)} aria-label="Restart session">
                             <i class="bi bi-arrow-repeat me-1"></i><span>Restart</span>
                           </button>
                         {/if}
@@ -288,10 +288,10 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => cloneSession(a.name)}><i class="fa fa-clone me-2"></i>Clone</button></li>
-                            <li><button class="dropdown-item" on:click={() => goto('/sessions/' + encodeURIComponent(a.name))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => cloneSession(a)}><i class="fa fa-clone me-2"></i>Clone</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/sessions/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteSession(a.name)}><i class="bi bi-trash me-2"></i>Delete</button></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteSession(a)}><i class="bi bi-trash me-2"></i>Delete</button></li>
                           </ul>
                         </div>
                       </div>

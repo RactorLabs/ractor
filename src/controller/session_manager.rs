@@ -767,23 +767,21 @@ impl SessionManager {
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
         info!("Executing command in session {}: {}", session_name, command);
-        let output = self
+        let _output = self
             .docker_manager
             .execute_command(&session_name, command)
             .await?;
 
-        sqlx::query(
-            r#"
-            INSERT INTO command_results (id, session_name, command, output, created_at)
-            VALUES (?, ?, ?, ?, NOW())
-            "#,
-        )
-        .bind(uuid::Uuid::new_v4().to_string())
-        .bind(session_name)
-        .bind(command)
-        .bind(output)
-        .execute(&self.pool)
-        .await?;
+        // Note: command_results table does not exist in schema
+        // If command result tracking is needed, add migration to create:
+        // CREATE TABLE command_results (
+        //   id CHAR(36) PRIMARY KEY,
+        //   session_id CHAR(36) NOT NULL,
+        //   command TEXT NOT NULL,
+        //   output TEXT,
+        //   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        //   CONSTRAINT fk_command_results_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        // )
 
         Ok(())
     }

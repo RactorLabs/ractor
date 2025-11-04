@@ -61,12 +61,13 @@
     return `<pre class="mb-0">${esc(s)}</pre>`;
   }
 
+  // Note: 'name' param now contains the session ID (not the display name)
   let name = '';
   $: name = $page.params.name;
-  // Keep document title as just the session name (no prefix)
-  $: setPageTitle(name || 'Session');
 
   let session = null;
+  // Update page title once session loads to show actual name
+  $: setPageTitle(session?.name || 'Session');
   let stateStr = '';
   // Chat rendering derived from Tasks
   let chat = [];
@@ -690,7 +691,9 @@
         return;
       }
       showCloneModal = false;
-      goto(`/sessions/${encodeURIComponent(newName)}`);
+      // Navigate to the new session using its ID from the response
+      const newSession = res.data;
+      goto(`/sessions/${encodeURIComponent(newSession.id)}`);
     } catch (e) {
       cloneError = e.message || String(e);
     }
@@ -701,7 +704,7 @@
   let deleteConfirm = '';
   function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
   function closeDeleteModal() { showDeleteModal = false; }
-  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(name || '').trim();
+  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.name || name || '').trim();
 
   // Stop modal state and actions
   let showStopModal = false;
@@ -1632,8 +1635,8 @@
           <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold">{name}</span> to confirm permanent deletion.</p>
-          <input class="form-control" bind:value={deleteConfirm} placeholder={name} />
+          <p class="mb-2">Type <span class="fw-bold">{session?.name || name}</span> to confirm permanent deletion.</p>
+          <input class="form-control" bind:value={deleteConfirm} placeholder={session?.name || name} />
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
@@ -1664,9 +1667,9 @@
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if session}
-                <a class="fw-bold text-decoration-none fs-22px" href={'/sessions/' + encodeURIComponent(session.name || '')}>{session.name || '-'}</a>
+                <a class="fw-bold text-decoration-none fs-22px" href={'/sessions/' + encodeURIComponent(session.id || '')}>{session.name || '-'}</a>
               {:else}
-                <div class="fw-bold fs-22px">{name}</div>
+                <div class="fw-bold fs-22px">Loading...</div>
               {/if}
             </div>
             <div class="small text-body text-opacity-75 flex-grow-1">{session?.description || session?.desc || 'No description'}</div>
