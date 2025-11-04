@@ -66,8 +66,8 @@
   $: sessionId = $page.params.id;
 
   let session = null;
-  // Update page title to show session ID (shortened)
-  $: setPageTitle(session?.id ? `Session ${session.id.substring(0, 8)}` : 'Session');
+  // Update page title to show session ID
+  $: setPageTitle(session?.id ? `Session ${session.id}` : 'Session');
   let stateStr = '';
   // Chat rendering derived from Tasks
   let chat = [];
@@ -1611,7 +1611,7 @@
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if session}
-                <a class="fw-bold text-decoration-none fs-22px font-monospace" href={'/sessions/' + encodeURIComponent(session.id || '')} title={session.id || '-'}>{(session.id || '-').substring(0, 8)}</a>
+                <a class="fw-bold text-decoration-none fs-22px font-monospace" href={'/sessions/' + encodeURIComponent(session.id || '')}>{session.id || '-'}</a>
               {:else}
                 <div class="fw-bold fs-22px">Loading...</div>
               {/if}

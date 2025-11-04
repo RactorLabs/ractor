@@ -100,7 +100,7 @@ import { getHostUrl } from '$lib/branding.js';
     await refresh();
   }
   async function cloneSession(session) {
-    const ok = confirm(`Clone session '${(session.id || '').substring(0, 8)}'?`);
+    const ok = confirm(`Clone session '${session.id || ''}'?`);
     if (!ok) return;
     const body = { code: true, env: true, content: true };
     const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/clone`, { method: 'POST', body: JSON.stringify(body) });
@@ -108,7 +108,7 @@ import { getHostUrl } from '$lib/branding.js';
     await refresh();
   }
   async function deleteSession(session) {
-    const ok = confirm(`Delete session '${(session.id || '').substring(0, 8)}'? This cannot be undone.`);
+    const ok = confirm(`Delete session '${session.id || ''}'? This cannot be undone.`);
     if (!ok) return;
     const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
@@ -249,7 +249,7 @@ import { getHostUrl } from '$lib/branding.js';
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sessions/' + encodeURIComponent(a.id || '')} title={a.id || '-'}>{(a.id || '-').substring(0, 8)}</a>
+                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sessions/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
