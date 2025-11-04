@@ -75,8 +75,8 @@ Note on commit message formatting:
 
 - Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session requests).
 - The session runtime, on boot, calls the API to report state:
-  - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts idle timer).
-  - `POST /api/v0/sessions/{name}/busy` when processing (sets `busy` and starts busy timer).
+  - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts stop timeout).
+  - `POST /api/v0/sessions/{name}/busy` when processing (sets state to `busy` and pauses stop timeout).
 - Stop/Restart actions:
   - `POST /sessions/{name}/stop` schedules container stop and sets state to `stopped`.
   - `POST /sessions/{name}/restart` restarts container and transitions via `init`.
@@ -86,7 +86,7 @@ Note on commit message formatting:
 
 ## Operator UI
 
-- Primary routes live under `/sessions` (list, create, details/chat). Legacy `/app/*` routes have been removed.
+- Primary routes live under `/sessions` (list, start, details/chat). Legacy `/app/*` routes have been removed.
 - Session pages show tags and support “Remix”, “Edit Tags”, “Delete” via modals. Stop/Restart buttons appear only when actionable.
 - Published content is served by the `tsbx-content` service under `/content/{session}` and proxied publicly via the Gateway at port 80.
 
