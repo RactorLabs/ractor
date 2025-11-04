@@ -26,7 +26,7 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove TaskSandbox component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, content, gateway, sessions (all session containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sessions (all session containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only TaskSandbox component containers.\n' +
@@ -35,19 +35,19 @@ module.exports = (program) => {
       '\nExamples:\n' +
       '  $ tsbx stop                     # stop all TaskSandbox components\n' +
       '  $ tsbx stop api controller      # stop specific components\n' +
-      '  $ tsbx stop operator content    # stop UI components\n' +
+      '  $ tsbx stop operator            # stop UI component\n' +
       '  $ tsbx stop sessions              # stop all session containers\n')
     .action(async (components, _opts, cmd) => {
       try {
         // Default to stopping all TaskSandbox components when none specified
         if (!components || components.length === 0) {
-          components = ['gateway','controller','operator','content','api'];
+          components = ['gateway','controller','operator','api'];
         }
         // Validate component names (only TaskSandbox components)
-        const allowed = new Set(['api','controller','operator','content','gateway','sessions']);
+        const allowed = new Set(['api','controller','operator','gateway','sessions']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
-          console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, content, gateway, sessions`);
+          console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, gateway, sessions`);
           cmd.help({ error: true });
         }
 
@@ -56,9 +56,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', content: 'tsbx_content', gateway: 'tsbx_gateway' };
+        const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', gateway: 'tsbx_gateway' };
         const includeSessions = components.includes('sessions');
-        const order = ['gateway','controller','operator','content','api'];
+        const order = ['gateway','controller','operator','api'];
         const toStop = components.filter(c => c !== 'sessions');
         const ordered = order.filter((c) => toStop.includes(c));
 

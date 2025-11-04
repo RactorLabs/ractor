@@ -99,16 +99,6 @@ import { getHostUrl } from '$lib/branding.js';
     if (!res.ok) { error = res?.data?.message || 'Restart failed'; return; }
     await refresh();
   }
-  async function publishSession(name) {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: true, env: true, content: true }) });
-    if (!res.ok) { error = res?.data?.message || 'Publish failed'; return; }
-    await refresh();
-  }
-  async function unpublishSession(name) {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
-    if (!res.ok) { error = res?.data?.message || 'Unpublish failed'; return; }
-    await refresh();
-  }
   async function cloneSession(name) {
     const newName = prompt('New Session Name for Clone');
     if (!newName) return;
@@ -260,9 +250,6 @@ import { getHostUrl } from '$lib/branding.js';
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
                       <a class="fw-bold text-decoration-none fs-18px" href={'/sessions/' + encodeURIComponent(a.name || '')}>{a.name || '-'}</a>
-                      {#if a.is_published}
-                        <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
-                      {/if}
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
@@ -294,28 +281,6 @@ import { getHostUrl } from '$lib/branding.js';
                         {#if String(a.state||'').toLowerCase() === 'stopped'}
                           <button class="btn btn-outline-success btn-sm" on:click={() => restartSession(a.name)} aria-label="Restart session">
                             <i class="bi bi-arrow-repeat me-1"></i><span>Restart</span>
-                          </button>
-                        {/if}
-                        {#if a.is_published}
-                          <div class="dropdown">
-                          <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" aria-label="Published options">
-                              <i class="bi bi-globe me-1"></i><span>Published</span>
-                          </button>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                              <li>
-                                <a class="dropdown-item" href={`${getHostUrl()}/content/${a?.name || ''}/`} target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right me-2"></i>Open Public URL</a>
-                              </li>
-                              <li>
-                                <button class="dropdown-item" on:click={() => publishSession(a.name)}><i class="bi bi-cloud-arrow-up me-2"></i>Publish New Version</button>
-                              </li>
-                              <li>
-                                <button class="dropdown-item text-danger" on:click={() => unpublishSession(a.name)}><i class="bi bi-eye-slash me-2"></i>Unpublish</button>
-                              </li>
-                            </ul>
-                          </div>
-                        {:else}
-                          <button type="button" class="btn btn-outline-secondary btn-sm" on:click={() => publishSession(a.name)} aria-label="Publish content">
-                            <i class="bi bi-cloud-arrow-up me-1"></i><span>Publish</span>
                           </button>
                         {/if}
                         <div class="dropdown">

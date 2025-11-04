@@ -14,10 +14,6 @@ pub struct Session {
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
     pub tags: serde_json::Value,
-    pub is_published: bool,
-    pub published_at: Option<DateTime<Utc>>,
-    pub published_by: Option<String>,
-    pub publish_permissions: serde_json::Value,
     pub stop_timeout_seconds: i32,
     pub archive_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
@@ -81,26 +77,6 @@ pub struct CloneSessionRequest {
     pub content: bool,
     #[serde(default)]
     pub prompt: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PublishSessionRequest {
-    // Removed data field - data folder no longer exists
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub code: bool,
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub env: bool,
-    #[serde(
-        default = "default_true",
-        deserialize_with = "deserialize_strict_bool_default_true"
-    )]
-    pub content: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -567,7 +543,6 @@ impl Session {
             r#"
             SELECT name, created_by, state, description, parent_session_name,
                    created_at, last_activity_at, metadata, tags,
-                   is_published, published_at, published_by, publish_permissions,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
             FROM sessions
@@ -586,7 +561,6 @@ impl Session {
             r#"
             SELECT name, created_by, state, description, parent_session_name,
                    created_at, last_activity_at, metadata, tags,
-                   is_published, published_at, published_by, publish_permissions,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
             FROM sessions
@@ -803,83 +777,6 @@ impl Session {
             .execute(pool)
             .await?;
         Ok(result.rows_affected() > 0)
-    }
-
-    pub async fn publish(
-        pool: &sqlx::MySqlPool,
-        name: &str,
-        published_by: &str,
-        req: PublishSessionRequest,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        let publish_permissions = serde_json::json!({
-            "code": req.code,
-            "env": req.env,
-            "content": true // Content is always allowed
-        });
-
-        let result = sqlx::query(
-            r#"
-            UPDATE sessions 
-            SET is_published = true, 
-                published_at = NOW(), 
-                published_by = ?,
-                publish_permissions = ?
-            WHERE name = ?
-            "#,
-        )
-        .bind(published_by)
-        .bind(&publish_permissions)
-        .bind(name)
-        .execute(pool)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            Self::find_by_name(pool, name).await
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub async fn unpublish(
-        pool: &sqlx::MySqlPool,
-        name: &str,
-    ) -> Result<Option<Session>, sqlx::Error> {
-        let result = sqlx::query(
-            r#"
-            UPDATE sessions 
-            SET is_published = false, 
-                published_at = NULL, 
-                published_by = NULL,
-                publish_permissions = JSON_OBJECT('code', true, 'env', true)
-            WHERE name = ?
-            "#,
-        )
-        .bind(name)
-        .execute(pool)
-        .await?;
-
-        if result.rows_affected() > 0 {
-            Self::find_by_name(pool, name).await
-        } else {
-            Ok(None)
-        }
-    }
-
-    pub async fn find_published(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
-        sqlx::query_as::<_, Session>(
-            r#"
-            SELECT name, created_by, state, description, parent_session_name,
-                   created_at, last_activity_at, metadata, tags,
-                   is_published, published_at, published_by, publish_permissions,
-                   stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
-                   last_context_length
-            FROM sessions
-            WHERE is_published = true
-            ORDER BY published_at DESC
-            "#,
-        )
-        .fetch_all(pool)
-        .await
     }
 
     pub async fn clear_context_cutoff(

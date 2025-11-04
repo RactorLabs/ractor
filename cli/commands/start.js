@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'tsbx_content_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
+  for (const v of ['mysql_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,7 +85,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, content, gateway (apps start only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, gateway (apps start only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -111,7 +111,6 @@ module.exports = (program) => {
     .option('--api-tsbx-host <host>', 'API TSBX_HOST')
     .option('--api-tsbx-port <port>', 'API TSBX_PORT')
     .option('--api-api-port <port>', 'Host port for API (maps to 9000)', '9000')
-    .option('--api-public-port <port>', 'Host port for public content (maps to 8000)', '8000')
     // Controller options
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
@@ -194,12 +193,12 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
+          components = ['mysql', 'ollama', 'api', 'operator', 'controller', 'gateway'];
         }
 
         // Enforce startup order: mysql → ollama → api → controller
         // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'content', 'controller', 'gateway'];
+        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'controller', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -628,7 +627,6 @@ module.exports = (program) => {
               args.push(
                 '--name','tsbx_operator',
                 '--network','tsbx_network',
-                '-v','tsbx_content_data:/content',
                 '-v','tsbx_operator_data:/app/logs',
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
@@ -636,25 +634,6 @@ module.exports = (program) => {
               args.push(await resolveTaskSandboxImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
-              console.log();
-              break;
-            }
-
-            case 'content': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring Content service is running...');
-              if (await containerRunning('tsbx_content')) { console.log(chalk.green('[SUCCESS] ') + 'Content already running'); console.log(); break; }
-              if (await containerExists('tsbx_content')) {
-                await docker(['start','tsbx_content']);
-                console.log(chalk.green('[SUCCESS] ') + 'Content started');
-                console.log();
-                break;
-              }
-              const CONTENT_IMAGE = await resolveTaskSandboxImage('content','tsbx_content','registry.digitalocean.com/tsbx/tsbx_content', tag);
-              const args = ['run'];
-              if (detached) args.push('-d');
-              args.push('--name','tsbx_content','--network','tsbx_network','-v','tsbx_content_data:/content', CONTENT_IMAGE);
-              await docker(args);
-              console.log(chalk.green('[SUCCESS] ') + 'Content service container started');
               console.log();
               break;
             }
@@ -741,7 +720,6 @@ module.exports = (program) => {
               console.log(`  • Gateway: ${gatewayBaseUrl}/`);
               console.log(`  • Operator UI: ${gatewayBaseUrl}/`);
               console.log(`  • API via Gateway: ${gatewayBaseUrl}/api`);
-              console.log(`  • Content: ${gatewayBaseUrl}/content`);
             } else {
               console.log('  • Gateway not running; API and Operator are not exposed on host ports.');
             }

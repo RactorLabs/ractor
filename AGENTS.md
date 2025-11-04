@@ -2,9 +2,9 @@
 
 ## Project Structure & Module Organization
 
-- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `session/` (runtime), `content/` (public content server), `shared/` (common code). Binaries: `tsbx-api`, `tsbx-controller`, `tsbx-session`, `tsbx-content`.
+- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `session/` (runtime), `shared/` (common code). Binaries: `tsbx-api`, `tsbx-controller`, `tsbx-session`.
 - `cli/`: Node.js CLI (`tsbx`).
-- `scripts/`: Dev automation (`build.sh`, `link.sh`, `install.sh`, `rebuild.sh`, `publish.sh`, `release.sh`, `bump.sh`, `push.sh`).
+- `scripts/`: Dev automation (`build.sh`, `link.sh`, `install.sh`, `rebuild.sh`, `release.sh`, `bump.sh`, `push.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
 - `assets/`: Static assets.
 
@@ -13,7 +13,7 @@
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
 - Start services (Docker via CLI): `tsbx start [components...]`
-  - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Content (`8000`), Controller, Gateway (`80`).
+  - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Controller, Gateway (`80`).
   - In dev, use `./scripts/build.sh` to build images when needed.
 - Stop: `tsbx stop [components...]` (supports `sessions` to stop all session containers).
 - Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.
@@ -67,7 +67,6 @@ Note on commit message formatting:
 
 - Name-based primary key: sessions are addressed by `name` (no numeric ID).
 - Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
-- Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`env`,`content`).
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
 
@@ -87,8 +86,7 @@ Note on commit message formatting:
 ## Operator UI
 
 - Primary routes live under `/sessions` (list, start, details/chat). Legacy `/app/*` routes have been removed.
-- Session pages show tags and support “Remix”, “Edit Tags”, “Delete” via modals. Stop/Restart buttons appear only when actionable.
-- Published content is served by the `tsbx-content` service under `/content/{session}` and proxied publicly via the Gateway at port 80.
+- Session pages show tags and support "Remix", "Edit Tags", "Delete" via modals. Stop/Restart buttons appear only when actionable.
 
 ## Session-Specific Instructions
 

@@ -1120,12 +1120,6 @@
       if (glob) addTextPart(glob);
       return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filename)' };
     }
-    if (t === 'publish_session') {
-      const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
-      if (note) addTextPart(`publish ${note}`.trim());
-      else addTextPart('publish');
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'publish' };
-    }
     if (t === 'stop_session') {
       const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
       const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
@@ -1427,36 +1421,6 @@
     }
   }
 
-  async function publishSession() {
-    try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: true, env: true, content: true })
-      });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Publish failed (HTTP ${res.status})`);
-      if (session) {
-        session = { ...(session || {}), is_published: true, isPublished: true };
-      }
-      error = null;
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
-
-  async function unpublishSession() {
-    try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/unpublish`, { method: 'POST' });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Unpublish failed (HTTP ${res.status})`);
-      if (session) {
-        session = { ...(session || {}), is_published: false, isPublished: false };
-      }
-      error = null;
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
-
   async function cancelActive() {
     try {
       const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
@@ -1701,9 +1665,6 @@
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if session}
                 <a class="fw-bold text-decoration-none fs-22px" href={'/sessions/' + encodeURIComponent(session.name || '')}>{session.name || '-'}</a>
-                {#if session.is_published || session.isPublished}
-                  <a class="small ms-1 text-decoration-none text-body-secondary" href={`${getHostUrl()}/content/${session?.name || name}/`} target="_blank" rel="noopener noreferrer">(public link)</a>
-                {/if}
               {:else}
                 <div class="fw-bold fs-22px">{name}</div>
               {/if}
@@ -1730,30 +1691,6 @@
                   <button class="btn btn-outline-primary btn-sm" on:click={openStopModal} aria-label="Stop session">
                     <i class="fa fa-stop-circle me-1"></i><span>Stop</span>
                   </button>
-                {/if}
-                {#if session}
-                  {#if session.is_published || session.isPublished}
-                    <div class="dropdown">
-                      <button class="btn btn-outline-success btn-sm fw-bold dropdown-toggle published-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Published options">
-                        <i class="fa fa-globe me-1"></i><span>Published</span>
-                      </button>
-                      <ul class="dropdown-menu dropdown-menu-end">
-                        <li>
-                          <a class="dropdown-item" href={`${getHostUrl()}/content/${session?.name || name}/`} target="_blank" rel="noopener noreferrer"><i class="fa fa-external-link-alt me-2"></i>Open Public URL</a>
-                        </li>
-                        <li>
-                          <button class="dropdown-item" on:click={publishSession}><i class="fa fa-cloud-upload-alt me-2"></i>Publish New Version</button>
-                        </li>
-                        <li>
-                          <button class="dropdown-item text-danger" on:click={unpublishSession}><i class="fa fa-eye-slash me-2"></i>Unpublish</button>
-                        </li>
-                      </ul>
-                    </div>
-                {:else}
-                  <button type="button" class="btn btn-outline-secondary btn-sm" on:click={publishSession} aria-label="Publish content">
-                    <i class="fa fa-cloud-upload-alt me-1"></i><span>Publish</span>
-                  </button>
-                {/if}
                 {/if}
                 <div class="dropdown">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
@@ -2497,13 +2434,6 @@
     :global(#chat-body .chat-marker-text) {
       font-size: 0.75rem;
       color: rgba(var(--bs-body-color-rgb), .6);
-    }
-    /* Make the Published dropdown caret arrow a bit bigger */
-    :global(.published-toggle.dropdown-toggle::after) {
-      border-top-width: 0.5em;
-      border-right-width: 0.5em;
-      border-left-width: 0.5em;
-      margin-left: 0.4rem;
     }
     /* File/Folder names should not be blue like links */
     :global(.file-entry-btn),

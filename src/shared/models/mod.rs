@@ -8,8 +8,8 @@ pub mod state_helpers;
 pub mod task;
 
 pub use session::{
-    CloneSessionRequest, PublishSessionRequest, RestartSessionRequest, Session,
-    StartSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest,
+    CloneSessionRequest, RestartSessionRequest, Session, StartSessionRequest,
+    UpdateSessionRequest, UpdateSessionStateRequest,
 };
 // legacy message exports removed
 pub use task::{CreateTaskRequest, SessionTask, TaskView, UpdateTaskRequest};
