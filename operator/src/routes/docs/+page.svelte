@@ -336,7 +336,7 @@
                 <tr><td class="font-monospace">created_by</td><td>string</td><td>Owner username</td></tr>
                 <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|stopped</span></td></tr>
                 <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
-                <tr><td class="font-monospace">parent_session_name</td><td>string|null</td><td>Parent session name if branched</td></tr>
+                <tr><td class="font-monospace">parent_session_name</td><td>string|null</td><td>Parent session name if cloned</td></tr>
                 <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>
                 <tr><td class="font-monospace">last_activity_at</td><td>string|null (RFC3339)</td><td>Last activity timestamp</td></tr>
                 <tr><td class="font-monospace">metadata</td><td>object</td><td>Arbitrary JSON metadata</td></tr>
@@ -345,8 +345,8 @@
                 <tr><td class="font-monospace">published_at</td><td>string|null (RFC3339)</td><td>When published</td></tr>
                 <tr><td class="font-monospace">published_by</td><td>string|null</td><td>Who published</td></tr>
                 <tr><td class="font-monospace">publish_permissions</td><td>object</td><td>Flags object: <span class="font-monospace">&#123; code: boolean, env: boolean, content: boolean &#125;</span></td></tr>
-                <tr><td class="font-monospace">idle_timeout_seconds</td><td>int</td><td>Idle timeout</td></tr>
-                <tr><td class="font-monospace">busy_timeout_seconds</td><td>int</td><td>Busy timeout</td></tr>
+                <tr><td class="font-monospace">stop_timeout_seconds</td><td>int</td><td>Stop timeout</td></tr>
+                <tr><td class="font-monospace">task_timeout_seconds</td><td>int</td><td>Task timeout</td></tr>
                 <tr><td class="font-monospace">idle_from</td><td>string|null (RFC3339)</td><td>When idle started</td></tr>
                 <tr><td class="font-monospace">busy_from</td><td>string|null (RFC3339)</td><td>When busy started</td></tr>
               </tbody>

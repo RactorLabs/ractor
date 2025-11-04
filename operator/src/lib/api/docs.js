@@ -33,7 +33,7 @@ export function getCommonSchemas() {
       { name: 'created_by', type: 'string', desc: 'Owner username' },
       { name: 'state', type: 'string', desc: 'init|idle|busy|stopped' },
       { name: 'description', type: 'string|null', desc: 'Optional description' },
-      { name: 'parent_session_name', type: 'string|null', desc: 'Parent session name if branched' },
+      { name: 'parent_session_name', type: 'string|null', desc: 'Parent session name if cloned' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Last activity timestamp' },
       { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata' },
@@ -42,8 +42,8 @@ export function getCommonSchemas() {
       { name: 'published_at', type: 'string|null (RFC3339)', desc: 'When published' },
       { name: 'published_by', type: 'string|null', desc: 'Who published' },
       { name: 'publish_permissions', type: 'object', desc: '{ code: boolean, env: boolean, content: boolean }' },
-      { name: 'idle_timeout_seconds', type: 'int', desc: 'Idle timeout' },
-      { name: 'busy_timeout_seconds', type: 'int', desc: 'Busy timeout' },
+      { name: 'stop_timeout_seconds', type: 'int', desc: 'Stop timeout' },
+      { name: 'task_timeout_seconds', type: 'int', desc: 'Task timeout' },
       { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When idle started' },
       { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When busy started' },
       { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff timestamp if set' },
@@ -315,8 +315,8 @@ export function getApiDocs(base) {
     "published_at": "2025-01-01T12:30:00Z",
     "published_by": "admin",
     "publish_permissions": {"code": true, "env": false, "content": true},
-    "idle_timeout_seconds": 300,
-    "busy_timeout_seconds": 3600,
+    "stop_timeout_seconds": 300,
+    "task_timeout_seconds": 3600,
     "idle_from": "2025-01-01T12:10:00Z",
     "busy_from": null
   }
@@ -351,8 +351,8 @@ export function getApiDocs(base) {
   "published_at": "2025-01-01T12:30:00Z",
   "published_by": "admin",
   "publish_permissions": {"code": true, "env": false, "content": true},
-  "idle_timeout_seconds": 300,
-  "busy_timeout_seconds": 3600,
+  "stop_timeout_seconds": 300,
+  "task_timeout_seconds": 3600,
   "idle_from": "2025-01-01T12:10:00Z",
   "busy_from": null
 }`
@@ -407,7 +407,7 @@ export function getApiDocs(base) {
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
-      ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
+      ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
       { method: 'POST', path: '/api/v0/sessions', auth: 'bearer', desc: 'Create session.', params: [
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'Session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
@@ -417,20 +417,20 @@ export function getApiDocs(base) {
         { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions' },
         { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script or commands' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
-        { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Idle timeout seconds (default 300)' },
-        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Busy timeout seconds (default 3600)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo session"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
+        { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Stop timeout seconds (default 300)' },
+        { in: 'body', name: 'task_timeout_seconds', type: 'int|null', required: false, desc: 'Task timeout seconds (default 3600)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo","description":"Demo session"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":null,"busy_from":null}` }] },
       { method: 'GET', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Get session by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
+      ], example: `curl -s ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Demo session","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/sessions/{name}', auth: 'bearer', desc: 'Update session by name.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Update description' },
         { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: "Replace tags array; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces" },
-        { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Update idle timeout seconds' },
-        { in: 'body', name: 'busy_timeout_seconds', type: 'int|null', required: false, desc: 'Update busy timeout seconds' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
+        { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Update stop timeout seconds' },
+        { in: 'body', name: 'task_timeout_seconds', type: 'int|null', required: false, desc: 'Update task timeout seconds' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"task_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/sessions/{name}/state', auth: 'bearer', desc: 'Update session state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
         { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|stopped)' }
@@ -456,7 +456,7 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/sessions/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last restart or creation).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"session_name":"demo","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/branch', auth: 'bearer', desc: 'Branch session (create a new session from parent).', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/clone', auth: 'bearer', desc: 'Clone session (create a new session from parent).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Parent session name' },
         { in: 'body', name: 'name', type: 'string', required: true, desc: 'New session name; must match ^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
@@ -464,11 +464,11 @@ export function getApiDocs(base) {
         { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Copy env (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/branch -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/clone -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"demo-copy","code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo-copy","created_by":"admin","state":"init",...}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/publish', auth: 'bearer', desc: 'Publish session.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code branch (default true)' },
-        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env branch (default true)' },
+        { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Allow code cloning (default true)' },
+        { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Allow env cloning (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Publish content (default true)' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/publish -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"content":true}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","is_published":true,"published_at":"2025-01-01T12:30:00Z",...}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/unpublish', auth: 'bearer', desc: 'Unpublish session.', params: [

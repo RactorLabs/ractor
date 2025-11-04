@@ -636,28 +636,28 @@
 
   // Edit timeouts modal state and helpers
   let showTimeoutsModal = false;
-  let idleTimeoutInput = 0;
-  let busyTimeoutInput = 0;
+  let stopTimeoutInput = 0;
+  let taskTimeoutInput = 0;
   function openEditTimeouts() {
-    const idle = Number(session?.idle_timeout_seconds ?? 0);
-    const busy = Number(session?.busy_timeout_seconds ?? 0);
-    idleTimeoutInput = Number.isFinite(idle) && idle >= 0 ? idle : 0;
-    busyTimeoutInput = Number.isFinite(busy) && busy >= 0 ? busy : 0;
+    const stop = Number(session?.stop_timeout_seconds ?? 0);
+    const task = Number(session?.task_timeout_seconds ?? 0);
+    stopTimeoutInput = Number.isFinite(stop) && stop >= 0 ? stop : 0;
+    taskTimeoutInput = Number.isFinite(task) && task >= 0 ? task : 0;
     showTimeoutsModal = true;
   }
   function closeEditTimeouts() { showTimeoutsModal = false; }
   async function saveTimeouts() {
     try {
-      const idle = Math.max(0, Math.floor(Number(idleTimeoutInput || 0)));
-      const busy = Math.max(0, Math.floor(Number(busyTimeoutInput || 0)));
-      const body = { idle_timeout_seconds: idle, busy_timeout_seconds: busy };
+      const stop = Math.max(0, Math.floor(Number(stopTimeoutInput || 0)));
+      const task = Math.max(0, Math.floor(Number(taskTimeoutInput || 0)));
+      const body = { stop_timeout_seconds: stop, task_timeout_seconds: task };
       const res = await apiFetch(`/sessions/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
       // Update local session snapshot
       session = res.data || session;
       if (session) {
-        session.idle_timeout_seconds = idle;
-        session.busy_timeout_seconds = busy;
+        session.stop_timeout_seconds = stop;
+        session.task_timeout_seconds = task;
       }
       showTimeoutsModal = false;
     } catch (e) {
@@ -665,33 +665,34 @@
     }
   }
 
-  // Branch modal state and actions
-  let showBranchModal = false;
-  let branchName = '';
-  function openBranchModal() {
+  // Clone modal state and actions
+  let showCloneModal = false;
+  let cloneName = '';
+  let cloneError = null;
+  function openCloneModal() {
     const cur = String(name || '').trim();
-    branchName = nextBranchName(cur);
-    showBranchModal = true;
+    cloneName = nextCloneName(cur);
+    cloneError = null;
+    showCloneModal = true;
   }
-  function closeBranchModal() { showBranchModal = false; }
-  let branchError = null;
-  async function confirmBranch() {
+  function closeCloneModal() { showCloneModal = false; }
+  async function confirmClone() {
     try {
-      const newName = String(branchName || '').trim();
+      const newName = String(cloneName || '').trim();
       const pattern = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
       if (!pattern.test(newName)) throw new Error('Invalid name. Use ^[a-z][a-z0-9-]{0,61}[a-z0-9]$');
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/branch`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/clone`, {
         method: 'POST',
         body: JSON.stringify({ name: newName, code: true, env: true, content: true })
       });
       if (!res.ok) {
-        branchError = res?.data?.message || res?.data?.error || `Branch failed (HTTP ${res.status})`;
+        cloneError = res?.data?.message || res?.data?.error || `Clone failed (HTTP ${res.status})`;
         return;
       }
-      showBranchModal = false;
+      showCloneModal = false;
       goto(`/sessions/${encodeURIComponent(newName)}`);
     } catch (e) {
-      branchError = e.message || String(e);
+      cloneError = e.message || String(e);
     }
   }
 
@@ -1435,14 +1436,14 @@
     }
   }
 
-  // Branch action: open modal instead of prompt
-  function branchSession() { openBranchModal(); }
+  // Clone action: open modal instead of prompt
+  function cloneSession() { openCloneModal(); }
 
   // Delete action: open modal instead of prompt
   function deleteSession() { openDeleteModal(); }
 
-  // Generate a default branch name by adding or incrementing a numeric suffix
-  function nextBranchName(cur) {
+  // Generate a default clone name by adding or incrementing a numeric suffix
+  function nextCloneName(cur) {
     const valid = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
     const basic = (s) => (s && typeof s === 'string') ? s.toLowerCase().replace(/[^a-z0-9-]/g, '-') : '';
     let s = basic(cur).replace(/^-+/, '').replace(/-+$/, '');
@@ -1544,14 +1545,14 @@
         <div class="modal-body">
           <div class="row g-3">
             <div class="col-12 col-md-6">
-              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
-              <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
-              <div class="form-text">Time of inactivity before auto-stop. 0 disables idle timeout.</div>
+              <label class="form-label" for="stop-timeout">Stop Timeout (seconds)</label>
+              <input id="stop-timeout" type="number" min="0" step="1" class="form-control" bind:value={stopTimeoutInput} />
+              <div class="form-text">Time of inactivity before auto-stop. 0 disables the stop timeout.</div>
             </div>
             <div class="col-12 col-md-6">
-              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
-              <input id="busy-timeout" type="number" min="0" step="1" class="form-control" bind:value={busyTimeoutInput} />
-              <div class="form-text">Max time to stay busy before reset. 0 disables busy timeout.</div>
+              <label class="form-label" for="task-timeout">Task Timeout (seconds)</label>
+              <input id="task-timeout" type="number" min="0" step="1" class="form-control" bind:value={taskTimeoutInput} />
+              <div class="form-text">Max time to stay busy before reset. 0 disables the task timeout.</div>
             </div>
           </div>
         </div>
@@ -1592,31 +1593,33 @@
   </div>
 {/if}
 
-<!-- Branch Modal -->
-{#if showBranchModal}
+<!-- Clone Modal -->
+{#if showCloneModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Branch Session</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeBranchModal}></button>
+          <h5 class="modal-title">Clone Session</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeCloneModal}></button>
         </div>
         <div class="modal-body">
-          {#if branchError}
-            <div class="alert alert-danger small">{branchError}</div>
+          {#if cloneError}
+            <div class="alert alert-danger small">{cloneError}</div>
           {/if}
-          <label class="form-label" for="branch-name">New Session Name</label>
+          <label class="form-label" for="clone-name">New Session Name</label>
           <input
-            id="branch-name"
+            id="clone-name"
             class="form-control"
-            bind:value={branchName}
-            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmBranch(); } }}
+            bind:value={cloneName}
+            placeholder="new-session"
+            maxlength="63"
+            on:keydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmClone(); } }}
           />
           <div class="form-text">Pattern: ^[a-z][a-z0-9-]{0,61}[a-z0-9]$</div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeBranchModal}>Cancel</button>
-          <button class="btn btn-theme" on:click={confirmBranch}>Branch</button>
+          <button class="btn btn-outline-secondary" on:click={closeCloneModal}>Cancel</button>
+          <button class="btn btn-theme" on:click={confirmClone}>Clone</button>
         </div>
       </div>
     </div>
@@ -1680,7 +1683,7 @@
             <!-- Public URL in main card -->
             
             <!-- Tags removed from detail page -->
-            <!-- In-card actions (publish, branch, close/open, kebab) -->
+            <!-- In-card actions (publish, clone, stop/restart, kebab) -->
             <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
@@ -1725,7 +1728,7 @@
                     <i class="fa fa-ellipsis-h"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={branchSession}><i class="fa fa-code-branch me-2"></i>Branch</button></li>
+                    <li><button class="dropdown-item" on:click={cloneSession}><i class="fa fa-clone me-2"></i>Clone</button></li>
                     <li><button class="dropdown-item" on:click={openEditTags}><i class="fa fa-tags me-2"></i>Edit Tags</button></li>
                     <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fa fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
@@ -1742,8 +1745,8 @@
           <Card class="h-100">
             <div class="card-body small">
               <!-- Last Activity removed per design -->
-              <div class="mt-1">Idle Timeout: {fmtDuration(session.idle_timeout_seconds)}</div>
-              <div class="mt-1">Busy Timeout: {fmtDuration(session.busy_timeout_seconds)}</div>
+              <div class="mt-1">Stop Timeout: {fmtDuration(session.stop_timeout_seconds)}</div>
+              <div class="mt-1">Task Timeout: {fmtDuration(session.task_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
@@ -2225,7 +2228,7 @@
             {:else if stateStr === 'init'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to open up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to start up</div>
                 </div>
               </div>
             {:else}

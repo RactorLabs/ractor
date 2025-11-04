@@ -31,8 +31,8 @@
   }
 
   let name = genName();
-  let idleTimeoutSeconds = 300; // default 5 minutes
-  let busyTimeoutSeconds = 3600; // default 1 hour
+  let stopTimeoutSeconds = 300; // default 5 minutes
+  let taskTimeoutSeconds = 3600; // default 1 hour
   let metadataText = '{}';
   // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
   let tagsInput = '';
@@ -90,8 +90,8 @@
         description: description?.trim() ? description : null,
         metadata,
         tags: parseTags(),
-        idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
-        busy_timeout_seconds: Number(busyTimeoutSeconds) || 3600,
+        stop_timeout_seconds: Number(stopTimeoutSeconds) || 300,
+        task_timeout_seconds: Number(taskTimeoutSeconds) || 3600,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
@@ -196,14 +196,14 @@
 
             <!-- Move Timeouts and Tags after Environment Variables, before Metadata -->
             <div class="col-12 col-md-3">
-              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
-              <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
-              <div class="form-text">Stop after idle (default 300).</div>
+              <label class="form-label" for="stop-timeout">Stop Timeout (seconds)</label>
+              <input id="stop-timeout" type="number" min="1" class="form-control" bind:value={stopTimeoutSeconds} />
+              <div class="form-text">Stop after inactivity (default 300).</div>
             </div>
             <div class="col-12 col-md-3">
-              <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
-              <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
-              <div class="form-text">Stop after busy too long (default 3600).</div>
+              <label class="form-label" for="task-timeout">Task Timeout (seconds)</label>
+              <input id="task-timeout" type="number" min="1" class="form-control" bind:value={taskTimeoutSeconds} />
+              <div class="form-text">Abort tasks that exceed this duration (default 3600).</div>
             </div>
 
             <div class="col-12">

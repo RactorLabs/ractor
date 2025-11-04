@@ -15,7 +15,7 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, BranchSessionRequest, PublishSessionRequest, RestartSessionRequest, Session,
+    AppState, CloneSessionRequest, PublishSessionRequest, RestartSessionRequest, Session,
     StartSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
@@ -50,8 +50,8 @@ pub struct SessionResponse {
     pub published_at: Option<String>,
     pub published_by: Option<String>,
     pub publish_permissions: serde_json::Value,
-    pub idle_timeout_seconds: i32,
-    pub busy_timeout_seconds: i32,
+    pub stop_timeout_seconds: i32,
+    pub task_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
@@ -154,8 +154,8 @@ impl SessionResponse {
             published_at: session.published_at.map(|dt| dt.to_rfc3339()),
             published_by: session.published_by,
             publish_permissions: session.publish_permissions,
-            idle_timeout_seconds: session.idle_timeout_seconds,
-            busy_timeout_seconds: session.busy_timeout_seconds,
+            stop_timeout_seconds: session.stop_timeout_seconds,
+            task_timeout_seconds: session.task_timeout_seconds,
             idle_from: session.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: session.busy_from.map(|dt| dt.to_rfc3339()),
             context_cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
@@ -732,7 +732,7 @@ pub async fn list_sessions(
         SELECT name, created_by, state, description, parent_session_name,
                created_at, last_activity_at, metadata, tags,
                is_published, published_at, published_by, publish_permissions,
-               idle_timeout_seconds, busy_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+               stop_timeout_seconds, task_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
         FROM sessions
         {} 
@@ -1703,18 +1703,18 @@ pub async fn start_session(
     ))
 }
 
-pub async fn branch_session(
+pub async fn clone_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<BranchSessionRequest>,
+    Json(req): Json<CloneSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Admins require explicit permission; non-admins can branch according to publish/ownership checks
+    // Admins require explicit permission; non-admins can clone according to publish/ownership checks
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to branch session".to_string())
+                ApiError::Forbidden("Insufficient permissions to clone session".to_string())
             })?;
     }
 
@@ -1724,20 +1724,20 @@ pub async fn branch_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find parent session by ID or name (admin can branch any session, users can branch published sessions)
+    // Find parent session by ID or name (admin can clone any session, users can clone published sessions)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for branch (permission check below)
+    let parent = find_session_by_name(&state, &name, username, true).await?; // Allow finding any session for cloning (permission check below)
 
-    // Check branch permissions for non-owners
+    // Check clone permissions for non-owners
     if parent.created_by != *username && !is_admin {
-        // Non-owner, non-admin can only branch if session is published
+        // Non-owner, non-admin can only clone if session is published
         if !parent.is_published {
             return Err(ApiError::Forbidden(
-                "You can only branch your own sessions or published sessions".to_string(),
+                "You can only clone your own sessions or published sessions".to_string(),
             ));
         }
 
-        // Check published branch permissions
+        // Check published clone permissions
         let publish_perms = parent.publish_permissions.as_object().ok_or_else(|| {
             ApiError::Internal(anyhow::anyhow!("Invalid publish permissions format"))
         })?;
@@ -1750,7 +1750,7 @@ pub async fn branch_session(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Code branch not permitted for this published session".to_string(),
+                "Code cloning not permitted for this published session".to_string(),
             ));
         }
         if req.env
@@ -1760,26 +1760,26 @@ pub async fn branch_session(
                 .unwrap_or(false)
         {
             return Err(ApiError::Forbidden(
-                "Environment branch not permitted for this published session".to_string(),
+                "Environment cloning not permitted for this published session".to_string(),
             ));
         }
         // Content is always allowed - no permission check needed
     }
 
-    // Get the principal name for request creation (brancher becomes owner)
+    // Get the principal name for request creation (cloner becomes owner)
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Store the branch options before moving req into Session::branch
+    // Store the clone options before moving req into Session::clone_from
     let copy_code = req.code;
     let copy_env = req.env;
     // Content is always copied
     let copy_content = true;
     let initial_prompt = req.prompt.clone();
 
-    let session = Session::branch(&state.db, &parent.name, req.clone(), created_by)
+    let session = Session::clone_from(&state.db, &parent.name, req.clone(), created_by)
         .await
         .map_err(|e| {
             // Provide a clearer error on duplicate name conflicts
@@ -1799,12 +1799,12 @@ pub async fn branch_session(
                     }
                 }
             }
-            ApiError::Internal(anyhow::anyhow!("Failed to branch session: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to clone session: {}", e))
         })?;
 
-    // Add request to queue for session manager to create container with branch options
+    // Add request to queue for session manager to create container with clone options
     let request_payload = serde_json::json!({
-        "branch": true,
+        "clone": true,
         "parent_session_name": parent.name,
         "copy_code": copy_code,
         "copy_env": copy_env,
@@ -1831,7 +1831,7 @@ pub async fn branch_session(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
 
     tracing::info!(
-        "Created session request for branched session {}",
+        "Created session request for cloned session {}",
         session.name
     );
 

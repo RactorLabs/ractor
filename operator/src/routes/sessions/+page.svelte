@@ -109,12 +109,12 @@ import { getHostUrl } from '$lib/branding.js';
     if (!res.ok) { error = res?.data?.message || 'Unpublish failed'; return; }
     await refresh();
   }
-  async function branchSession(name) {
-    const newName = prompt('New Session Name for Branch');
+  async function cloneSession(name) {
+    const newName = prompt('New Session Name for Clone');
     if (!newName) return;
     const body = { name: newName.trim(), code: true, env: true, content: true };
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/branch`, { method: 'POST', body: JSON.stringify(body) });
-    if (!res.ok) { error = res?.data?.message || 'Branch failed'; return; }
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/clone`, { method: 'POST', body: JSON.stringify(body) });
+    if (!res.ok) { error = res?.data?.message || 'Clone failed'; return; }
     await refresh();
   }
   async function deleteSession(name) {
@@ -323,7 +323,7 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => branchSession(a.name)}><i class="fa fa-code-branch me-2"></i>Branch</button></li>
+                            <li><button class="dropdown-item" on:click={() => cloneSession(a.name)}><i class="fa fa-clone me-2"></i>Clone</button></li>
                             <li><button class="dropdown-item" on:click={() => goto('/sessions/' + encodeURIComponent(a.name))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
                             <li><button class="dropdown-item text-danger" on:click={() => deleteSession(a.name)}><i class="bi bi-trash me-2"></i>Delete</button></li>
