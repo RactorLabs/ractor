@@ -22,9 +22,9 @@ use rbac::{RbacClaims, SubjectType};
 use super::docker_manager::DockerManager;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct SessionUpdate {
+pub struct SessionRequest {
     id: String,
-    update_type: String,
+    request_type: String,
     session_name: String,
     created_by: String,
     payload: serde_json::Value,
@@ -64,18 +64,18 @@ impl SessionManager {
 
     pub async fn run(&self) -> Result<()> {
         info!(
-            "Session Manager started, polling for updates, auto-sleep monitoring, and health checks..."
+            "Session Manager started, polling for requests, auto-sleep monitoring, and health checks..."
         );
 
-        // Run frequent update polling; run heavier maintenance on a slower cadence
+        // Run frequent request polling; run heavier maintenance on a slower cadence
         let mut last_auto_sleep = Instant::now() - Duration::from_secs(60);
         let mut last_health = Instant::now() - Duration::from_secs(60);
         loop {
-            // Process pending updates (fast path)
-            let updates_processed = match self.process_pending_updates().await {
+            // Process pending requests (fast path)
+            let requests_processed = match self.process_pending_requests().await {
                 Ok(processed) => processed,
                 Err(e) => {
-                    error!("Error processing updates: {}", e);
+                    error!("Error processing requests: {}", e);
                     0
                 }
             };
@@ -107,7 +107,7 @@ impl SessionManager {
             }
 
             // If no work was done, short sleep before next poll (improves responsiveness)
-            if updates_processed == 0 && sessions_slept == 0 && sessions_recovered == 0 {
+            if requests_processed == 0 && sessions_slept == 0 && sessions_recovered == 0 {
                 sleep(Duration::from_millis(250)).await;
             }
         }
@@ -222,21 +222,21 @@ impl SessionManager {
         for (session_name,) in sessions_to_close {
             info!("Auto-sleeping session {} due to timeout", session_name);
 
-            // Create sleep update for the session
-            let update_id = uuid::Uuid::new_v4().to_string();
+            // Create sleep request for the session
+            let request_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+                INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
                 VALUES (?, ?, 'sleep_session', 'system', '{"reason": "auto_sleep_timeout"}', 'pending')
                 "#)
-            .bind(&update_id)
+            .bind(&request_id)
             .bind(&session_name)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-sleep update for session {}: {}", session_name, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-sleep request for session {}: {}", session_name, e))?;
 
             info!(
-                "Created auto-sleep update {} for session {}",
-                update_id, session_name
+                "Created auto-sleep request {} for session {}",
+                request_id, session_name
             );
             slept_count += 1;
         }
@@ -278,27 +278,27 @@ impl SessionManager {
         Ok(token)
     }
 
-    async fn process_pending_updates(&self) -> Result<usize> {
-        let updates = self.fetch_pending_updates().await?;
+    async fn process_pending_requests(&self) -> Result<usize> {
+        let requests = self.fetch_pending_requests().await?;
         let mut processed = 0;
 
-        for update in updates {
-            match self.process_update(update).await {
+        for request in requests {
+            match self.process_request(request).await {
                 Ok(_) => processed += 1,
-                Err(e) => error!("Failed to process update: {}", e),
+                Err(e) => error!("Failed to process request: {}", e),
             }
         }
 
         Ok(processed)
     }
 
-    async fn fetch_pending_updates(&self) -> Result<Vec<SessionUpdate>> {
+    async fn fetch_pending_requests(&self) -> Result<Vec<SessionRequest>> {
         // MySQL doesn't support RETURNING, so we need to do this in two steps
-        // First, get and lock the pending updates
-        let update_ids: Vec<(String,)> = sqlx::query_as(
+        // First, get and lock the pending requests
+        let request_ids: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT id
-            FROM session_updates
+            FROM session_requests
             WHERE status = 'pending'
             ORDER BY created_at
             LIMIT 5
@@ -308,15 +308,15 @@ impl SessionManager {
         .fetch_all(&self.pool)
         .await?;
 
-        if update_ids.is_empty() {
+        if request_ids.is_empty() {
             return Ok(vec![]);
         }
 
-        // Mark updates as processing
-        let ids: Vec<String> = update_ids.into_iter().map(|(id,)| id).collect();
+        // Mark requests as processing
+        let ids: Vec<String> = request_ids.into_iter().map(|(id,)| id).collect();
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query_str = format!(
-            "UPDATE session_updates SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
+            "UPDATE session_requests SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
         );
 
         let mut query = sqlx::query(&query_str);
@@ -325,61 +325,62 @@ impl SessionManager {
         }
         query.execute(&self.pool).await?;
 
-        // Fetch the now-processing updates
-        let query_str = format!("SELECT * FROM session_updates WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_as::<_, SessionUpdate>(&query_str);
+        // Fetch the now-processing requests
+        let query_str = format!("SELECT * FROM session_requests WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, SessionRequest>(&query_str);
         for id in &ids {
             query = query.bind(id);
         }
-        let updates = query.fetch_all(&self.pool).await?;
+        let requests = query.fetch_all(&self.pool).await?;
 
-        Ok(updates)
+        Ok(requests)
     }
 
-    async fn process_update(&self, update: SessionUpdate) -> Result<()> {
+    async fn process_request(&self, request: SessionRequest) -> Result<()> {
         info!(
-            "Processing update {} of type {}",
-            update.id, update.update_type
+            "Processing request {} of type {}",
+            request.id, request.request_type
         );
 
-        let result = match update.update_type.as_str() {
-            "create_session" => self.handle_create_session(update.clone()).await,
-            "destroy_session" => self.handle_destroy_session(update.clone()).await,
-            "execute_command" => self.handle_execute_command(update.clone()).await,
-            "sleep_session" => self.handle_sleep_session(update.clone()).await,
-            "wake_session" => self.handle_wake_session(update.clone()).await,
-            "publish_session" => self.handle_publish_session(update.clone()).await,
-            "unpublish_session" => self.handle_unpublish_session(update.clone()).await,
-            "create_response" => self.handle_create_response(update.clone()).await,
-            "file_read" => self.handle_file_read(update.clone()).await,
-            "file_metadata" => self.handle_file_metadata(update.clone()).await,
-            "file_list" => self.handle_file_list(update.clone()).await,
-            "file_delete" => self.handle_file_delete(update.clone()).await,
+        let result = match request.request_type.as_str() {
+            "create_session" => self.handle_create_session(request.clone()).await,
+            "destroy_session" => self.handle_destroy_session(request.clone()).await,
+            "execute_command" => self.handle_execute_command(request.clone()).await,
+            "sleep_session" => self.handle_sleep_session(request.clone()).await,
+            "wake_session" => self.handle_wake_session(request.clone()).await,
+            "publish_session" => self.handle_publish_session(request.clone()).await,
+            "unpublish_session" => self.handle_unpublish_session(request.clone()).await,
+            "create_task" => self.handle_create_task(request.clone()).await,
+            "file_read" => self.handle_file_read(request.clone()).await,
+            "file_metadata" => self.handle_file_metadata(request.clone()).await,
+            "file_list" => self.handle_file_list(request.clone()).await,
+            "file_delete" => self.handle_file_delete(request.clone()).await,
             _ => {
-                warn!("Unknown update type: {}", update.update_type);
-                Err(anyhow::anyhow!("Unknown update type"))
+                warn!("Unknown request type: {}", request.request_type);
+                Err(anyhow::anyhow!("Unknown request type"))
             }
         };
 
         match result {
             Ok(_) => {
-                self.mark_update_completed(&update.id).await?;
-                info!("Update {} completed successfully", update.id);
+                self.mark_request_completed(&request.id).await?;
+                info!("Request {} completed successfully", request.id);
             }
             Err(e) => {
-                self.mark_update_failed(&update.id, &e.to_string()).await?;
-                error!("Update {} failed: {}", update.id, e);
+                self.mark_request_failed(&request.id, &e.to_string())
+                    .await?;
+                error!("Request {} failed: {}", request.id, e);
             }
         }
 
         Ok(())
     }
 
-    pub async fn handle_create_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name.clone();
+    pub async fn handle_create_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name.clone();
 
         // Parse the payload to get session creation parameters
-        let env = update
+        let env = request
             .payload
             .get("env")
             .and_then(|v| v.as_object())
@@ -390,31 +391,31 @@ impl SessionManager {
             })
             .unwrap_or_default();
 
-        let instructions = update
+        let instructions = request
             .payload
             .get("instructions")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let setup = update
+        let setup = request
             .payload
             .get("setup")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let prompt = update
+        let prompt = request
             .payload
             .get("prompt")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         // Extract principal information for logging and token generation
-        let principal = update
+        let principal = request
             .payload
             .get("principal")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let principal_type_str = update
+        let principal_type_str = request
             .payload
             .get("principal_type")
             .and_then(|v| v.as_str())
@@ -441,16 +442,16 @@ impl SessionManager {
         info!("Creating session {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}", 
               session_name, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a branch session from update payload
-        let is_branch = update
+        // Check if this is a branch session from request payload
+        let is_branch = request
             .payload
             .get("branch")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        // For branch sessions, extract prompt from update payload
+        // For branch sessions, extract prompt from request payload
         let branch_prompt = if is_branch {
-            update
+            request
                 .payload
                 .get("prompt")
                 .and_then(|v| v.as_str())
@@ -460,49 +461,49 @@ impl SessionManager {
         };
 
         if is_branch {
-            let parent_session_name = update
+            let parent_session_name = request
                 .payload
                 .get("parent_session_name")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("Missing parent_session_name for branch"))?;
 
-            let copy_data = update
+            let copy_data = request
                 .payload
                 .get("copy_data")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            let copy_code = update
+            let copy_code = request
                 .payload
                 .get("copy_code")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            let copy_env = update
+            let copy_env = request
                 .payload
                 .get("copy_env")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
-            let copy_content = update
+            let copy_content = request
                 .payload
                 .get("copy_content")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true);
 
-            // For branch sessions, get principal info from branch update payload
-            let branch_principal = update
+            // For branch sessions, get principal info from branch request payload
+            let branch_principal = request
                 .payload
                 .get("principal")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal);
-            let branch_principal_type_str = update
+            let branch_principal_type_str = request
                 .payload
                 .get("principal_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or(principal_type_str);
 
             info!(
-                "DEBUG: Branch update payload principal: {:?}, principal_type: {:?}",
-                update.payload.get("principal"),
-                update.payload.get("principal_type")
+                "DEBUG: Branch request payload principal: {:?}, principal_type: {:?}",
+                request.payload.get("principal"),
+                request.payload.get("principal_type")
             );
             info!(
                 "DEBUG: Using branch_principal: {}, branch_principal_type_str: {}",
@@ -534,7 +535,7 @@ impl SessionManager {
                     branch_token,
                     branch_principal.to_string(),
                     branch_principal_type_str.to_string(),
-                    update.created_at,
+                    request.created_at,
                 )
                 .await?;
         } else {
@@ -550,7 +551,7 @@ impl SessionManager {
                     session_token,
                     principal.to_string(),
                     principal_type_str.to_string(),
-                    update.created_at,
+                    request.created_at,
                 )
                 .await?;
         }
@@ -560,18 +561,18 @@ impl SessionManager {
         if let Some(prompt) = prompt_to_send {
             info!("Sending prompt to session {}: {}", session_name, prompt);
 
-            // Create response record in database (pending)
-            let response_id = uuid::Uuid::new_v4().to_string();
+            // Create task record in database (pending)
+            let task_id = uuid::Uuid::new_v4().to_string();
             let input_json =
                 serde_json::json!({ "content": [ { "type": "text", "content": prompt } ] });
             let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&response_id)
+            .bind(&task_id)
             .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
@@ -579,8 +580,8 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for session {}",
-                response_id, session_name
+                "Prompt task {} created for session {}",
+                task_id, session_name
             );
         }
 
@@ -595,8 +596,8 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_destroy_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name;
+    pub async fn handle_destroy_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name;
 
         info!("Deleting container and volume for session {}", session_name);
         self.docker_manager.delete_container(&session_name).await?;
@@ -606,9 +607,9 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_execute_command(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name;
-        let command = update.payload["command"]
+    pub async fn handle_execute_command(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name;
+        let command = request.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
@@ -634,27 +635,27 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn mark_update_completed(&self, update_id: &str) -> Result<()> {
+    async fn mark_request_completed(&self, request_id: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_updates
+            UPDATE session_requests
             SET status = 'completed',
                 completed_at = NOW(),
                 updated_at = NOW()
             WHERE id = ?
             "#,
         )
-        .bind(update_id)
+        .bind(request_id)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    async fn mark_update_failed(&self, update_id: &str, error: &str) -> Result<()> {
+    async fn mark_request_failed(&self, request_id: &str, error: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_updates
+            UPDATE session_requests
             SET status = 'failed',
                 error = ?,
                 completed_at = NOW(),
@@ -662,7 +663,7 @@ impl SessionManager {
             WHERE id = ?
             "#,
         )
-        .bind(update_id)
+        .bind(request_id)
         .bind(error)
         .execute(&self.pool)
         .await?;
@@ -670,10 +671,10 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_sleep_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name;
+    pub async fn handle_sleep_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name;
         // Optional delay before sleeping (in seconds), minimum 5 seconds
-        let delay_secs = update
+        let delay_secs = request
             .payload
             .get("delay_seconds")
             .and_then(|v| v.as_u64())
@@ -708,13 +709,13 @@ impl SessionManager {
             .await?;
 
         info!("Session {} state updated to slept", session_name);
-        // Create a chat marker response to indicate the session has slept
-        let response_id = uuid::Uuid::new_v4().to_string();
-        let created_by = update.created_by.clone();
+        // Create a chat marker task to indicate the session has slept
+        let task_id = uuid::Uuid::new_v4().to_string();
+        let created_by = request.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
         // Determine note: auto timeout vs user-triggered
         let auto =
-            update.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
+            request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
         let reason = if auto {
             if prior_state.to_lowercase() == "busy" {
                 "busy_timeout"
@@ -731,16 +732,16 @@ impl SessionManager {
                 "Idle timeout"
             }
         } else {
-            update
+            request
                 .payload
                 .get("note")
                 .and_then(|v| v.as_str())
                 .unwrap_or("User requested sleep")
         };
 
-        // Mark the latest in-progress response as cancelled (processing or pending) (applies to any sleep reason)
-        if let Some((resp_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+        // Mark the latest in-progress task as cancelled (processing or pending) (applies to any sleep reason)
+        if let Some((task_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
+            r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
         .bind(&session_name)
         .fetch_optional(&self.pool)
@@ -764,42 +765,42 @@ impl SessionManager {
             } else {
                 new_output = serde_json::json!({"text":"","items": [ {"type":"cancelled","reason": reason, "at": now_text } ]});
             }
-            // Update response status to 'cancelled'
+            // Update task status to 'cancelled'
             let _ = sqlx::query(
-                r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
+                r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
             )
             .bind(&new_output)
-            .bind(&resp_id)
+            .bind(&task_id)
             .execute(&self.pool)
             .await;
         } else {
-            // If no response row exists yet (pre-insert race), try to find the latest create_response update and insert a cancelled response
-            if let Some((update_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            // If no task row exists yet (pre-insert race), try to find the latest create_task request and insert a cancelled task
+            if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+                r#"SELECT id, created_by, payload FROM session_requests WHERE session_name = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
             )
             .bind(&session_name)
             .fetch_optional(&self.pool)
             .await
             .unwrap_or(None)
             {
-                if let Some(resp_id) = payload.get("response_id").and_then(|v| v.as_str()) {
+                if let Some(task_id) = payload.get("task_id").and_then(|v| v.as_str()) {
                     let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
                     let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
                     let output = serde_json::json!({"text":"","items":[cancelled_item]});
                     let _ = sqlx::query(
-                        r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                        r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                             VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                             ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                     )
-                    .bind(resp_id)
+                    .bind(task_id)
                     .bind(&session_name)
                     .bind(&created_by)
                     .bind(&input)
                     .bind(&output)
                     .execute(&self.pool)
                     .await;
-                    let _ = sqlx::query(r#"UPDATE session_updates SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
-                        .bind(&update_id)
+                    let _ = sqlx::query(r#"UPDATE session_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                        .bind(&request_id)
                         .execute(&self.pool)
                         .await;
                 }
@@ -807,7 +808,7 @@ impl SessionManager {
         }
         // Determine runtime: time from last wake marker (or session.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-            r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
+            r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
         )
         .bind(&session_name)
         .fetch_all(&self.pool)
@@ -844,11 +845,11 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NOW(), NOW())
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&created_by)
         .bind(&serde_json::json!({"text": ""}))
@@ -859,17 +860,17 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_wake_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name;
+    pub async fn handle_wake_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name;
         // Prefer explicitly provided principal/principal_type from payload (owner),
-        // fall back to update.created_by as a regular subject.
-        let effective_principal = update
+        // fall back to request.created_by as a regular subject.
+        let effective_principal = request
             .payload
             .get("principal")
             .and_then(|v| v.as_str())
-            .unwrap_or(&update.created_by)
+            .unwrap_or(&request.created_by)
             .to_string();
-        let effective_principal_type = update
+        let effective_principal_type = request
             .payload
             .get("principal_type")
             .and_then(|v| v.as_str())
@@ -902,7 +903,7 @@ impl SessionManager {
                 wake_token,
                 effective_principal.clone(),
                 effective_principal_type.clone(),
-                update.created_at,
+                request.created_at,
             )
             .await?;
 
@@ -917,26 +918,26 @@ impl SessionManager {
         info!("Container woken for session {}", session_name);
 
         // Send prompt if provided
-        if let Some(prompt) = update.payload.get("prompt").and_then(|v| v.as_str()) {
+        if let Some(prompt) = request.payload.get("prompt").and_then(|v| v.as_str()) {
             info!(
                 "Sending prompt to woken session {}: {}",
                 session_name, prompt
             );
 
-            // Get the principal name from the update
+            // Get the principal name from the request
             let principal = effective_principal.clone();
 
-            // Create response record in database for woken session
-            let response_id = uuid::Uuid::new_v4().to_string();
+            // Create task record in database for woken session
+            let task_id = uuid::Uuid::new_v4().to_string();
             let input_json = serde_json::json!({ "text": prompt });
             let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NOW(), NOW())
                 "#,
             )
-            .bind(&response_id)
+            .bind(&task_id)
             .bind(&session_name)
             .bind(&principal)
             .bind(&input_json)
@@ -944,15 +945,15 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt response {} created for woken session {}",
-                response_id, session_name
+                "Prompt task {} created for woken session {}",
+                task_id, session_name
             );
         }
 
         // Insert a chat marker indicating the session has woken
-        let response_id = uuid::Uuid::new_v4().to_string();
+        let task_id = uuid::Uuid::new_v4().to_string();
         let now_text = chrono::Utc::now().to_rfc3339();
-        let reason = update
+        let reason = request
             .payload
             .get("reason")
             .and_then(|v| v.as_str())
@@ -968,41 +969,41 @@ impl SessionManager {
         });
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&effective_principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
-        .bind(&update.created_at)
-        .bind(&update.created_at)
+        .bind(&request.created_at)
+        .bind(&request.created_at)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    pub async fn handle_create_response(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = update.session_name.clone();
-        let principal = update.created_by.clone();
+    pub async fn handle_create_task(&self, request: SessionRequest) -> Result<()> {
+        let session_name = request.session_name.clone();
+        let principal = request.created_by.clone();
 
-        info!("Handling create_response for session {}", session_name);
+        info!("Handling create_task for session {}", session_name);
 
         // Parse payload
-        let response_id = update
+        let task_id = request
             .payload
-            .get("response_id")
+            .get("task_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("Missing response_id in payload"))?;
-        let input = update
+            .ok_or_else(|| anyhow::anyhow!("Missing task_id in payload"))?;
+        let input = request
             .payload
             .get("input")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({"text":""}));
-        let wake_if_slept = update
+        let wake_if_slept = request
             .payload
             .get("wake_if_slept")
             .and_then(|v| v.as_bool())
@@ -1019,7 +1020,7 @@ impl SessionManager {
         // Wake if needed
         if wake_if_slept && state == "slept" {
             info!(
-                "Session {} slept; waking prior to inserting response",
+                "Session {} slept; waking prior to inserting task entry",
                 session_name
             );
             let wake_token = self
@@ -1031,7 +1032,7 @@ impl SessionManager {
                     wake_token,
                     principal.clone(),
                     "User".to_string(),
-                    update.created_at,
+                    request.created_at,
                 )
                 .await?;
             sqlx::query(
@@ -1044,18 +1045,18 @@ impl SessionManager {
             // Insert a wake marker for implicit wake
             let marker_id = uuid::Uuid::new_v4().to_string();
             let now_text = chrono::Utc::now().to_rfc3339();
-            // Ensure the wake marker sorts before the newly created response row by using a slightly earlier timestamp
-            let marker_created_at = update
+            // Ensure the wake marker sorts before the newly created task row by using a slightly earlier timestamp
+            let marker_created_at = request
                 .created_at
                 .checked_sub_signed(chrono::Duration::milliseconds(1))
-                .unwrap_or(update.created_at);
+                .unwrap_or(request.created_at);
             let output_json = serde_json::json!({
                 "text": "",
                 "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
             });
             sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, ?, ?)
             "#,
         )
@@ -1070,54 +1071,51 @@ impl SessionManager {
         .await?;
         }
 
-        // If a response with this id already exists (e.g., pre-insert cancel), skip insertion
+        // If a task with this id already exists (e.g., pre-insert cancel), skip insertion
         if let Some((_existing_id, existing_status)) = sqlx::query_as::<_, (String, String)>(
-            r#"SELECT id, status FROM session_responses WHERE id = ?"#,
+            r#"SELECT id, status FROM session_tasks WHERE id = ?"#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .fetch_optional(&self.pool)
         .await?
         {
             info!(
-                "Response {} already exists with status {}, skipping insert",
-                response_id, existing_status
+                "Task {} already exists with status {}, skipping insert",
+                task_id, existing_status
             );
             return Ok(());
         }
 
-        // Insert response row
+        // Insert task row
         // To avoid identical timestamps with the implicit wake marker (second-level precision
-        // in MySQL DATETIME), create the response one second after the update's created_at.
+        // in MySQL DATETIME), create the task entry one second after the request's created_at.
         let output_json = serde_json::json!({ "text": "", "items": [] });
-        let resp_created_at = update
+        let task_created_at = request
             .created_at
             .checked_add_signed(chrono::Duration::seconds(1))
-            .unwrap_or(update.created_at);
+            .unwrap_or(request.created_at);
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
             "#,
         )
-        .bind(&response_id)
+        .bind(&task_id)
         .bind(&session_name)
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
-        .bind(&resp_created_at)
-        .bind(&resp_created_at)
+        .bind(&task_created_at)
+        .bind(&task_created_at)
         .execute(&self.pool)
         .await?;
-        info!(
-            "Inserted response {} for session {}",
-            response_id, session_name
-        );
+        info!("Inserted task {} for session {}", task_id, session_name);
 
         Ok(())
     }
 
-    async fn handle_publish_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = &update.session_name;
+    async fn handle_publish_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = &request.session_name;
         info!("Publishing content for session {}", session_name);
 
         // Check if docker command is available
@@ -1232,8 +1230,8 @@ impl SessionManager {
         Ok(())
     }
 
-    async fn handle_unpublish_session(&self, update: SessionUpdate) -> Result<()> {
-        let session_name = &update.session_name;
+    async fn handle_unpublish_session(&self, request: SessionRequest) -> Result<()> {
+        let session_name = &request.session_name;
         info!("Unpublishing content for session {}", session_name);
 
         // Remove content directory for this session from the content container
@@ -1367,9 +1365,9 @@ impl SessionManager {
         Ok(parts.join("/"))
     }
 
-    async fn complete_update_with_payload(
+    async fn complete_request_with_payload(
         &self,
-        update_id: &str,
+        request_id: &str,
         mut payload: serde_json::Value,
         result: serde_json::Value,
     ) -> Result<()> {
@@ -1377,28 +1375,28 @@ impl SessionManager {
             map.insert("result".into(), result);
         }
         sqlx::query(
-            r#"UPDATE session_updates SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
+            r#"UPDATE session_requests SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
         )
         .bind(&payload)
-        .bind(update_id)
+        .bind(request_id)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    async fn fail_update(&self, update_id: &str, msg: String) -> Result<()> {
+    async fn fail_request(&self, request_id: &str, msg: String) -> Result<()> {
         sqlx::query(
-            r#"UPDATE session_updates SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
+            r#"UPDATE session_requests SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
         )
         .bind(&msg)
-        .bind(update_id)
+        .bind(request_id)
         .execute(&self.pool)
         .await?;
         Ok(())
     }
 
-    pub async fn handle_file_read(&self, update: SessionUpdate) -> Result<()> {
-        let path = update
+    pub async fn handle_file_read(&self, request: SessionRequest) -> Result<()> {
+        let path = request
             .payload
             .get("path")
             .and_then(|v| v.as_str())
@@ -1409,13 +1407,13 @@ impl SessionManager {
         // Do not auto-wake for file APIs; require running container
         match self
             .docker_manager
-            .is_container_healthy(&update.session_name)
+            .is_container_healthy(&request.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_update(&update.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is sleeping".to_string())
                     .await;
             }
         }
@@ -1424,7 +1422,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1435,7 +1433,7 @@ impl SessionManager {
             .await?;
         if stat_code != 0 {
             return self
-                .fail_update(&update.id, "not found or invalid".to_string())
+                .fail_request(&request.id, "not found or invalid".to_string())
                 .await;
         }
         let size: u64 = String::from_utf8_lossy(&stat_out)
@@ -1446,8 +1444,8 @@ impl SessionManager {
         const MAX_BYTES: u64 = 25 * 1024 * 1024;
         if size > MAX_BYTES {
             return self
-                .fail_update(
-                    &update.id,
+                .fail_request(
+                    &request.id,
                     format!("file too large ({} bytes > 25MB)", size),
                 )
                 .await;
@@ -1455,13 +1453,13 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec!["/bin/cat".into(), full_path.clone()],
             )
             .await?;
         if code != 0 {
             return self
-                .fail_update(&update.id, String::from_utf8_lossy(&stderr).to_string())
+                .fail_request(&request.id, String::from_utf8_lossy(&stderr).to_string())
                 .await;
         }
         let ct = guess_content_type(&safe);
@@ -1471,12 +1469,12 @@ impl SessionManager {
             "content_type": ct,
             "size": size,
         });
-        self.complete_update_with_payload(&update.id, update.payload.clone(), result)
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }
 
-    pub async fn handle_file_metadata(&self, update: SessionUpdate) -> Result<()> {
-        let path = update
+    pub async fn handle_file_metadata(&self, request: SessionRequest) -> Result<()> {
+        let path = request
             .payload
             .get("path")
             .and_then(|v| v.as_str())
@@ -1486,13 +1484,13 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&update.session_name)
+            .is_container_healthy(&request.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_update(&update.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is sleeping".to_string())
                     .await;
             }
         }
@@ -1501,7 +1499,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1512,14 +1510,14 @@ impl SessionManager {
             .await?;
         if code != 0 {
             return self
-                .fail_update(&update.id, String::from_utf8_lossy(&stderr).to_string())
+                .fail_request(&request.id, String::from_utf8_lossy(&stderr).to_string())
                 .await;
         }
         let line = String::from_utf8_lossy(&stdout);
         let parts: Vec<&str> = line.trim().split('|').collect();
         if parts.len() < 4 {
             return self
-                .fail_update(&update.id, "unexpected stat output".into())
+                .fail_request(&request.id, "unexpected stat output".into())
                 .await;
         }
         let kind_raw = parts[0].to_ascii_lowercase();
@@ -1546,22 +1544,22 @@ impl SessionManager {
                 obj["link_target"] = serde_json::Value::String(target.to_string());
             }
         }
-        self.complete_update_with_payload(&update.id, update.payload.clone(), obj)
+        self.complete_request_with_payload(&request.id, request.payload.clone(), obj)
             .await
     }
 
-    pub async fn handle_file_list(&self, update: SessionUpdate) -> Result<()> {
-        let path = update
+    pub async fn handle_file_list(&self, request: SessionRequest) -> Result<()> {
+        let path = request
             .payload
             .get("path")
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let offset = update
+        let offset = request
             .payload
             .get("offset")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        let limit = update
+        let limit = request
             .payload
             .get("limit")
             .and_then(|v| v.as_u64())
@@ -1575,13 +1573,13 @@ impl SessionManager {
         };
         match self
             .docker_manager
-            .is_container_healthy(&update.session_name)
+            .is_container_healthy(&request.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_update(&update.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is sleeping".to_string())
                     .await;
             }
         }
@@ -1596,7 +1594,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec![
                     "/usr/bin/find".into(),
                     base.clone(),
@@ -1613,7 +1611,7 @@ impl SessionManager {
             .await?;
         if code != 0 {
             return self
-                .fail_update(&update.id, String::from_utf8_lossy(&stderr).to_string())
+                .fail_request(&request.id, String::from_utf8_lossy(&stderr).to_string())
                 .await;
         }
         let mut entries: Vec<(String, String, u64, String, i64)> = Vec::new();
@@ -1663,12 +1661,12 @@ impl SessionManager {
             None
         };
         let result = serde_json::json!({ "entries": list, "offset": offset, "limit": limit, "next_offset": next_offset, "total": total });
-        self.complete_update_with_payload(&update.id, update.payload.clone(), result)
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }
 
-    pub async fn handle_file_delete(&self, update: SessionUpdate) -> Result<()> {
-        let path = update
+    pub async fn handle_file_delete(&self, request: SessionRequest) -> Result<()> {
+        let path = request
             .payload
             .get("path")
             .and_then(|v| v.as_str())
@@ -1678,13 +1676,13 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&update.session_name)
+            .is_container_healthy(&request.session_name)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_update(&update.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is sleeping".to_string())
                     .await;
             }
         }
@@ -1693,7 +1691,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1703,28 +1701,30 @@ impl SessionManager {
             )
             .await?;
         if stat_code != 0 {
-            return self.fail_update(&update.id, "not found".to_string()).await;
+            return self
+                .fail_request(&request.id, "not found".to_string())
+                .await;
         }
         let kind = String::from_utf8_lossy(&stat_out).to_ascii_lowercase();
         if !kind.contains("regular file") {
             return self
-                .fail_update(&update.id, "Path is not a file".to_string())
+                .fail_request(&request.id, "Path is not a file".to_string())
                 .await;
         }
         let (rm_code, _out, err) = self
             .docker_manager
             .exec_collect(
-                &update.session_name,
+                &request.session_name,
                 vec!["/bin/rm".into(), "-f".into(), full_path.clone()],
             )
             .await?;
         if rm_code != 0 {
             return self
-                .fail_update(&update.id, String::from_utf8_lossy(&err).to_string())
+                .fail_request(&request.id, String::from_utf8_lossy(&err).to_string())
                 .await;
         }
         let result = serde_json::json!({ "deleted": true, "path": safe });
-        self.complete_update_with_payload(&update.id, update.payload.clone(), result)
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }
 }

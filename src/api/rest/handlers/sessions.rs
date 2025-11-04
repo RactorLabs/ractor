@@ -19,8 +19,8 @@ use crate::shared::models::{
     RestoreSessionRequest, Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
-// Use fully-qualified names for response records to avoid name conflict with local SessionResponse
-use crate::shared::models::response as resp_model;
+// Use fully-qualified names for task records to avoid name conflict with local SessionResponse
+use crate::shared::models::task as task_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
@@ -207,7 +207,7 @@ fn is_safe_relative_path(p: &str) -> bool {
     !p.split('/').any(|seg| seg == ".." || seg.is_empty())
 }
 
-fn map_file_update_error(err: &str) -> ApiError {
+fn map_file_request_error(err: &str) -> ApiError {
     let lower = err.to_ascii_lowercase();
     if lower.contains("too large") {
         ApiError::PayloadTooLarge(err.to_string())
@@ -254,8 +254,8 @@ pub async fn read_session_file(
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
 
-    // Create file_read update
-    let update_id = uuid::Uuid::new_v4().to_string();
+    // Create file_read request
+    let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": path,
     });
@@ -264,25 +264,26 @@ pub async fn read_session_file(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_read', ?, ?, 'pending')"#,
     )
-    .bind(&update_id)
+    .bind(&request_id)
     .bind(&name)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_read update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_read request: {}", e)))?;
 
     // Poll for completion up to 15s
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM session_updates WHERE id = ?"#)
-            .bind(&update_id)
-            .fetch_optional(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
@@ -319,7 +320,7 @@ pub async fn read_session_file(
                 let err: String = row
                     .try_get("error")
                     .unwrap_or_else(|_| "file read failed".to_string());
-                return Err(map_file_update_error(&err));
+                return Err(map_file_request_error(&err));
             }
         }
         if start.elapsed().as_secs() >= 15 {
@@ -352,17 +353,17 @@ pub async fn get_session_file_metadata(
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
-    let update_id = uuid::Uuid::new_v4().to_string();
+    let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({ "path": path });
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_metadata', ?, ?, 'pending')"#,
     )
-    .bind(&update_id)
+    .bind(&request_id)
     .bind(&name)
     .bind(username)
     .bind(&payload)
@@ -370,18 +371,19 @@ pub async fn get_session_file_metadata(
     .await
     .map_err(|e| {
         ApiError::Internal(anyhow::anyhow!(
-            "Failed to create file_metadata update: {}",
+            "Failed to create file_metadata request: {}",
             e
         ))
     })?;
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM session_updates WHERE id = ?"#)
-            .bind(&update_id)
-            .fetch_optional(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
@@ -396,7 +398,7 @@ pub async fn get_session_file_metadata(
                 let err: String = row
                     .try_get("error")
                     .unwrap_or_else(|_| "metadata failed".to_string());
-                return Err(map_file_update_error(&err));
+                return Err(map_file_request_error(&err));
             }
         }
         if start.elapsed().as_secs() >= 15 {
@@ -430,7 +432,7 @@ pub async fn list_session_files(
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
-    let update_id = uuid::Uuid::new_v4().to_string();
+    let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": path,
         "offset": paging.offset.unwrap_or(0),
@@ -441,24 +443,25 @@ pub async fn list_session_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
-    .bind(&update_id)
+    .bind(&request_id)
     .bind(&name)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e)))?;
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM session_updates WHERE id = ?"#)
-            .bind(&update_id)
-            .fetch_optional(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
@@ -473,7 +476,7 @@ pub async fn list_session_files(
                 let err: String = row
                     .try_get("error")
                     .unwrap_or_else(|_| "list failed".to_string());
-                return Err(map_file_update_error(&err));
+                return Err(map_file_request_error(&err));
             }
         }
         if start.elapsed().as_secs() >= 15 {
@@ -505,7 +508,7 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let _session = find_session_by_name(&state, &name, username, is_admin).await?;
-    let update_id = uuid::Uuid::new_v4().to_string();
+    let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
         "offset": paging.offset.unwrap_or(0),
@@ -516,24 +519,25 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
-    .bind(&update_id)
+    .bind(&request_id)
     .bind(&name)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e)))?;
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM session_updates WHERE id = ?"#)
-            .bind(&update_id)
-            .fetch_optional(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
@@ -581,13 +585,13 @@ pub async fn delete_session_file(
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
-    let update_id = uuid::Uuid::new_v4().to_string();
+    let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({ "path": path });
     sqlx::query(
-        r#"INSERT INTO session_updates (id, session_name, update_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_delete', ?, ?, 'pending')"#,
     )
-    .bind(&update_id)
+    .bind(&request_id)
     .bind(&name)
     .bind(username)
     .bind(&payload)
@@ -595,18 +599,19 @@ pub async fn delete_session_file(
     .await
     .map_err(|e| {
         ApiError::Internal(anyhow::anyhow!(
-            "Failed to create file_delete update: {}",
+            "Failed to create file_delete request: {}",
             e
         ))
     })?;
 
     let start = std::time::Instant::now();
     loop {
-        let row = sqlx::query(r#"SELECT status, payload, error FROM session_updates WHERE id = ?"#)
-            .bind(&update_id)
-            .fetch_optional(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         if let Some(row) = row {
             let status: String = row.try_get("status").unwrap_or_default();
             if status == "completed" {
@@ -621,7 +626,7 @@ pub async fn delete_session_file(
                 let err: String = row
                     .try_get("error")
                     .unwrap_or_else(|_| "delete failed".to_string());
-                return Err(map_file_update_error(&err));
+                return Err(map_file_request_error(&err));
             }
         }
         if start.elapsed().as_secs() >= 15 {
@@ -798,8 +803,8 @@ pub async fn get_session(
     ))
 }
 
-// Cancel the latest in-progress response for an session and set session to idle
-pub async fn cancel_active_response(
+// Cancel the latest in-progress task for an session and set session to idle
+pub async fn cancel_active_task(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -826,9 +831,9 @@ pub async fn cancel_active_response(
         ));
     }
 
-    // Find latest in-progress response (processing or pending)
+    // Find latest in-progress task (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM session_responses WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
     .bind(&session.name)
     .fetch_optional(&*state.db)
@@ -836,7 +841,7 @@ pub async fn cancel_active_response(
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
     let mut cancelled = false;
-    if let Some((resp_id, output)) = row {
+    if let Some((task_id, output)) = row {
         let mut new_output = output.clone();
         let mut items = new_output
             .get("items")
@@ -852,38 +857,38 @@ pub async fn cancel_active_response(
             new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
         }
         sqlx::query(
-            r#"UPDATE session_responses SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
+            r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
         )
         .bind(&new_output)
-        .bind(&resp_id)
+        .bind(&task_id)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
         cancelled = true;
     }
 
-    // If no response row, try to cancel a queued create_response update (pre-insert race)
+    // If no task row, try to cancel a queued create_task request (pre-insert race)
     if !cancelled {
-        if let Some((update_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM session_updates WHERE session_name = ? AND update_type = 'create_response' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+        if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+            r#"SELECT id, created_by, payload FROM session_requests WHERE session_name = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
         .bind(&session.name)
         .fetch_optional(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
-            let resp_id = payload.get("response_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if !resp_id.is_empty() {
+            let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if !task_id.is_empty() {
                 let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
                 let now = chrono::Utc::now();
                 let cancelled_item = serde_json::json!({"type":"cancelled","reason":"user_cancel","at": now.to_rfc3339()});
                 let output = serde_json::json!({"text":"","items":[cancelled_item]});
-                // Insert cancelled response row (idempotent behavior if it already exists)
+                // Insert cancelled task row (idempotent behavior if it already exists)
                 let _ = sqlx::query(
-                    r#"INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+                    r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
-                .bind(&resp_id)
+                .bind(&task_id)
                 .bind(&session.name)
                 .bind(&created_by)
                 .bind(&input)
@@ -891,8 +896,8 @@ pub async fn cancel_active_response(
                 .execute(&*state.db)
                 .await;
                 // Mark update completed to prevent later insertion
-                let _ = sqlx::query(r#"UPDATE session_updates SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
-                    .bind(&update_id)
+                let _ = sqlx::query(r#"UPDATE session_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                    .bind(&request_id)
                     .execute(&*state.db)
                     .await;
                 cancelled = true;
@@ -955,7 +960,7 @@ async fn estimate_history_tokens_since(
     // No ordering needed for estimation; avoid sort pressure
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ? AND created_at >= ?"#,
         )
             .bind(session_name)
             .bind(cut)
@@ -963,7 +968,7 @@ async fn estimate_history_tokens_since(
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ?"#,
         )
             .bind(session_name)
             .fetch_all(pool)
@@ -975,7 +980,7 @@ async fn estimate_history_tokens_since(
     let mut msg_count: u32 = 0;
     const TOOL_RESULT_PREVIEW_MAX: usize = 100;
 
-    // Determine the single latest 'processing' response by created_at
+    // Determine the single latest 'processing' task by created_at
     let mut latest_proc: Option<DateTime<Utc>> = None;
     for row in rows.iter() {
         let status: String = row
@@ -1019,7 +1024,7 @@ async fn estimate_history_tokens_since(
 
         let status_lc = status.to_lowercase();
         if status_lc == "processing" {
-            // Only include tools for the single most recent processing response
+            // Only include tools for the single most recent processing task
             let include_tools = latest_proc
                 .and_then(|lp| {
                     row.try_get::<DateTime<Utc>, _>("created_at")
@@ -1028,7 +1033,7 @@ async fn estimate_history_tokens_since(
                 })
                 .unwrap_or(false);
             if include_tools {
-                // For the response currently being worked on, include tool_call and tool_result outputs
+                // For the task currently being worked on, include tool_call and tool_result outputs
                 if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                     for it in items {
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
@@ -1091,7 +1096,7 @@ async fn estimate_history_tokens_since(
             }
         }
         if status_lc == "completed" {
-            // Completed responses: include only the synthesized assistant message built from output_content
+            // Completed tasks: include only the synthesized assistant message built from output_content
             const MAX_TOTAL: usize = 3000;
             const MAX_ITEM: usize = 1200;
             // Extract items from the last 'output' tool_result if present
@@ -1270,11 +1275,11 @@ pub async fn clear_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was cleared
-    if let Ok(created) = resp_model::SessionResponse::create(
+    if let Ok(created) = task_model::SessionTask::create(
         &state.db,
         &session.name,
         username,
-        resp_model::CreateResponseRequest {
+        task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
         },
@@ -1282,10 +1287,10 @@ pub async fn clear_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::SessionResponse::update_by_id(
+        let _ = task_model::SessionTask::update_by_id(
             &state.db,
             &created.id,
-            resp_model::UpdateResponseRequest {
+            task_model::UpdateTaskRequest {
                 status: Some("completed".to_string()),
                 input: None,
                 output: Some(serde_json::json!({
@@ -1342,7 +1347,7 @@ pub async fn compact_session_context(
     let cutoff = session.context_cutoff_at;
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT input, output FROM session_responses WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .bind(cut)
@@ -1351,7 +1356,7 @@ pub async fn compact_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     } else {
         sqlx::query(
-            r#"SELECT input, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .fetch_all(&*state.db)
@@ -1525,11 +1530,11 @@ pub async fn compact_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was compacted, include summary as a compact_summary item
-    if let Ok(created) = resp_model::SessionResponse::create(
+    if let Ok(created) = task_model::SessionTask::create(
         &state.db,
         &session.name,
         username,
-        resp_model::CreateResponseRequest {
+        task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
             background: None,
         },
@@ -1537,10 +1542,10 @@ pub async fn compact_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = resp_model::SessionResponse::update_by_id(
+        let _ = task_model::SessionTask::update_by_id(
             &state.db,
             &created.id,
-            resp_model::UpdateResponseRequest {
+            task_model::UpdateTaskRequest {
                 status: Some("completed".to_string()),
                 input: None,
                 output: Some(serde_json::json!({
@@ -1663,7 +1668,7 @@ pub async fn create_session(
             ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
         })?;
 
-    // Add update to queue for session manager to create container with session parameters
+    // Add request to queue for session manager to create container with session parameters
     let payload = serde_json::json!({
         "env": req.env,
         "instructions": req.instructions,
@@ -1679,7 +1684,7 @@ pub async fn create_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
         "#,
     )
@@ -1688,9 +1693,9 @@ pub async fn create_session(
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
 
-    tracing::info!("Created session update for session {}", session.name);
+    tracing::info!("Created session request for session {}", session.name);
 
     Ok(Json(
         SessionResponse::from_session(session, &state.db).await?,
@@ -1760,7 +1765,7 @@ pub async fn branch_session(
         // Content is always allowed - no permission check needed
     }
 
-    // Get the principal name for update creation (brancher becomes owner)
+    // Get the principal name for request creation (brancher becomes owner)
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -1796,8 +1801,8 @@ pub async fn branch_session(
             ApiError::Internal(anyhow::anyhow!("Failed to branch session: {}", e))
         })?;
 
-    // Add update to queue for session manager to create container with branch options
-    let update_payload = serde_json::json!({
+    // Add request to queue for session manager to create container with branch options
+    let request_payload = serde_json::json!({
         "branch": true,
         "parent_session_name": parent.name,
         "copy_code": copy_code,
@@ -1813,19 +1818,19 @@ pub async fn branch_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'create_session', ?, ?, 'pending')
         "#,
     )
     .bind(&session.name)
     .bind(created_by)
-    .bind(update_payload)
+    .bind(request_payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
 
     tracing::info!(
-        "Created session update for branched session {}",
+        "Created session request for branched session {}",
         session.name
     );
 
@@ -1900,7 +1905,7 @@ pub async fn sleep_session(
     if delay_seconds < 5 {
         delay_seconds = 5;
     }
-    // Add update to destroy the container but keep volume after delay
+    // Add request to destroy the container but keep volume after delay
     let note = maybe_req
         .as_ref()
         .and_then(|r| r.note.clone())
@@ -1919,7 +1924,7 @@ pub async fn sleep_session(
     };
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'sleep_session', ?, ?, 'pending')
         "#,
     )
@@ -1929,11 +1934,11 @@ pub async fn sleep_session(
     .execute(&*state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to create suspend update: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create suspend update: {}", e))
+        tracing::error!("Failed to create suspend request: {:?}", e);
+        ApiError::Internal(anyhow::anyhow!("Failed to create suspend request: {}", e))
     })?;
 
-    tracing::info!("Created suspend update for session {}", name);
+    tracing::info!("Created suspend request for session {}", name);
 
     // Do not insert a pre-sleep marker; the controller will add a single 'slept' marker when sleep completes
 
@@ -2008,7 +2013,7 @@ pub async fn wake_session(
         return Err(ApiError::NotFound("Session not found".to_string()));
     }
 
-    // Get the principal name for update creation
+    // Get the principal name for request creation
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -2026,7 +2031,7 @@ pub async fn wake_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'wake_session', ?, ?, 'pending')
         "#,
     )
@@ -2036,11 +2041,11 @@ pub async fn wake_session(
     .execute(&*state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to create resume update: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create resume update: {}", e))
+        tracing::error!("Failed to create resume request: {:?}", e);
+        ApiError::Internal(anyhow::anyhow!("Failed to create resume request: {}", e))
     })?;
 
-    tracing::info!("Created resume update for session {}", session.name);
+    tracing::info!("Created resume request for session {}", session.name);
 
     // Fetch updated session
     let updated_session = Session::find_by_name(&state.db, &session.name)
@@ -2173,7 +2178,7 @@ pub async fn delete_session(
     // Queue unpublish to remove any public content
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'unpublish_session', ?, '{}', 'pending')
         "#,
     )
@@ -2181,12 +2186,14 @@ pub async fn delete_session(
     .bind(username)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish update: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to create unpublish request: {}", e))
+    })?;
 
-    // Add update to queue for session manager to destroy container and cleanup volume
+    // Add request to queue for session manager to destroy container and cleanup volume
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'destroy_session', ?, '{}', 'pending')
         "#,
     )
@@ -2194,9 +2201,9 @@ pub async fn delete_session(
     .bind(username)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy request: {}", e)))?;
 
-    tracing::info!("Created destroy update for session {}", session.name);
+    tracing::info!("Created destroy request for session {}", session.name);
 
     let deleted = Session::delete(&state.db, &session.name)
         .await
@@ -2247,7 +2254,7 @@ pub async fn publish_session(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to publish session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Create update to copy content files to public directory
+    // Create request to copy content files to public directory
     let payload = serde_json::json!({
         "content": req.content, // Content is always included in v0.4.0
         "code": req.code,
@@ -2256,7 +2263,7 @@ pub async fn publish_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'publish_session', ?, ?, 'pending')
         "#,
     )
@@ -2265,9 +2272,9 @@ pub async fn publish_session(
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create publish update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create publish request: {}", e)))?;
 
-    tracing::info!("Created publish update for session {}", session.name);
+    tracing::info!("Created publish request for session {}", session.name);
 
     Ok(Json(
         SessionResponse::from_session(published_session, &state.db).await?,
@@ -2311,12 +2318,12 @@ pub async fn unpublish_session(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to unpublish session: {}", e)))?
         .ok_or(ApiError::NotFound("Session not found".to_string()))?;
 
-    // Create update to remove content files from public directory
+    // Create request to remove content files from public directory
     let payload = serde_json::json!({});
 
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
         VALUES (?, 'unpublish_session', ?, ?, 'pending')
         "#,
     )
@@ -2325,9 +2332,11 @@ pub async fn unpublish_session(
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create unpublish update: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to create unpublish request: {}", e))
+    })?;
 
-    tracing::info!("Created unpublish update for session {}", session.name);
+    tracing::info!("Created unpublish request for session {}", session.name);
 
     Ok(Json(
         SessionResponse::from_session(unpublished_session, &state.db).await?,
@@ -2399,14 +2408,14 @@ pub async fn get_session_runtime(
     // Find session (admin can access any session)
     let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Fetch all responses for this session (created_at + output JSON)
+    // Fetch all tasks for this session (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM session_responses WHERE session_name = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#
     )
     .bind(&session.name)
     .fetch_all(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
     // Sum runtime for completed sessions; track last wake for current session inclusion
     let mut total: i64 = 0;

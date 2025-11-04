@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::{debug, info};
 
-// (Removed legacy message types and constants import; API now uses Responses.)
+// (Removed legacy message types and constants import; API now uses Tasks.)
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Session {
@@ -49,10 +49,10 @@ impl TaskSandboxClient {
         &self.config.session_name
     }
 
-    /// Get a response by id for current session
-    pub async fn get_response_by_id(&self, id: &str) -> Result<ResponseView> {
+    /// Get a task by id for current session
+    pub async fn get_task_by_id(&self, id: &str) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/responses/{}",
+            "{}/api/v0/sessions/{}/tasks/{}",
             self.config.api_url, self.config.session_name, id
         );
         let response = self
@@ -62,18 +62,18 @@ impl TaskSandboxClient {
             .send()
             .await?;
         match response.status() {
-            StatusCode::OK => Ok(response.json::<ResponseView>().await?),
+            StatusCode::OK => Ok(response.json::<TaskView>().await?),
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Response not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Task not found".to_string())),
             status => {
                 let error_text = response
                     .text()
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to get response ({}): {}",
+                    "Failed to get task ({}): {}",
                     status, error_text
                 )))
             }
@@ -122,13 +122,13 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Create a new response (user input)
-    pub async fn create_response(&self, input_text: &str) -> Result<ResponseView> {
+    /// Create a new task (user input)
+    pub async fn create_task(&self, input_text: &str) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/responses",
+            "{}/api/v0/sessions/{}/tasks",
             self.config.api_url, self.config.session_name
         );
-        let req = CreateResponseRequest {
+        let req = CreateTaskRequest {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
             background: None,
         };
@@ -140,7 +140,7 @@ impl TaskSandboxClient {
             .send()
             .await?;
         match response.status() {
-            StatusCode::OK | StatusCode::CREATED => Ok(response.json::<ResponseView>().await?),
+            StatusCode::OK | StatusCode::CREATED => Ok(response.json::<TaskView>().await?),
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
@@ -151,23 +151,23 @@ impl TaskSandboxClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to create response ({}): {}",
+                    "Failed to create task ({}): {}",
                     status, error_text
                 )))
             }
         }
     }
 
-    /// Update an existing response with output/status
-    pub async fn update_response(
+    /// Update an existing task with output/status
+    pub async fn update_task(
         &self,
         id: &str,
         status: Option<String>,
         output_text: Option<String>,
         items: Option<Vec<serde_json::Value>>,
-    ) -> Result<ResponseView> {
+    ) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/responses/{}",
+            "{}/api/v0/sessions/{}/tasks/{}",
             self.config.api_url, self.config.session_name, id
         );
         let mut output = serde_json::Map::new();
@@ -177,7 +177,7 @@ impl TaskSandboxClient {
         if let Some(list) = items {
             output.insert("items".to_string(), serde_json::Value::Array(list));
         }
-        let req = UpdateResponseRequest {
+        let req = UpdateTaskRequest {
             status,
             input: None,
             output: Some(serde_json::Value::Object(output)),
@@ -190,32 +190,32 @@ impl TaskSandboxClient {
             .send()
             .await?;
         match response.status() {
-            StatusCode::OK => Ok(response.json::<ResponseView>().await?),
+            StatusCode::OK => Ok(response.json::<TaskView>().await?),
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Response not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Task not found".to_string())),
             status => {
                 let error_text = response
                     .text()
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to update response ({}): {}",
+                    "Failed to update task ({}): {}",
                     status, error_text
                 )))
             }
         }
     }
 
-    /// List responses for current session
-    pub async fn get_responses(
+    /// List tasks for current session
+    pub async fn get_tasks(
         &self,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> Result<Vec<ResponseView>> {
+    ) -> Result<Vec<TaskView>> {
         let mut url = format!(
-            "{}/api/v0/sessions/{}/responses",
+            "{}/api/v0/sessions/{}/tasks",
             self.config.api_url, self.config.session_name
         );
         let mut sep = '?';
@@ -234,7 +234,7 @@ impl TaskSandboxClient {
             .await?;
         match response.status() {
             StatusCode::OK => Ok(response
-                .json::<Vec<ResponseView>>()
+                .json::<Vec<TaskView>>()
                 .await
                 .map_err(|e| HostError::Api(e.to_string()))?),
             StatusCode::UNAUTHORIZED => {
@@ -247,17 +247,17 @@ impl TaskSandboxClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to fetch responses ({}): {}",
+                    "Failed to fetch tasks ({}): {}",
                     status, error_text
                 )))
             }
         }
     }
 
-    /// Get response count for current session
-    pub async fn get_response_count(&self) -> Result<u64> {
+    /// Get task count for current session
+    pub async fn get_task_count(&self) -> Result<u64> {
         let url = format!(
-            "{}/api/v0/sessions/{}/responses/count",
+            "{}/api/v0/sessions/{}/tasks/count",
             self.config.api_url, self.config.session_name
         );
         let response = self
@@ -285,7 +285,7 @@ impl TaskSandboxClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to get response count ({}): {}",
+                    "Failed to get task count ({}): {}",
                     status, error_text
                 )))
             }
@@ -504,7 +504,7 @@ impl TaskSandboxClient {
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseView {
+pub struct TaskView {
     pub id: String,
     pub session_name: String,
     pub status: String,
@@ -519,14 +519,14 @@ pub struct ResponseView {
 }
 
 #[derive(Debug, Serialize)]
-pub struct CreateResponseRequest {
+pub struct CreateTaskRequest {
     pub input: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
-pub struct UpdateResponseRequest {
+pub struct UpdateTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

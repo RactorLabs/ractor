@@ -3,16 +3,16 @@ use thiserror::Error;
 
 pub mod constants;
 pub mod session;
-// message module removed in favor of response
-pub mod response;
+// message module removed in favor of task records
 pub mod state_helpers;
+pub mod task;
 
 pub use session::{
     BranchSessionRequest, CreateSessionRequest, PublishSessionRequest, RestoreSessionRequest,
     Session, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 // legacy message exports removed
-pub use response::{CreateResponseRequest, ResponseView, SessionResponse, UpdateResponseRequest};
+pub use task::{CreateTaskRequest, SessionTask, TaskView, UpdateTaskRequest};
 
 // Database errors
 #[derive(Error, Debug)]

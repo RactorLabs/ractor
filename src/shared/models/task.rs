@@ -4,7 +4,7 @@ use serde_json::Value;
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SessionResponse {
+pub struct SessionTask {
     pub id: String,
     pub session_name: String,
     pub created_by: String,
@@ -16,14 +16,14 @@ pub struct SessionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateResponseRequest {
+pub struct CreateTaskRequest {
     pub input: serde_json::Value, // { content: [{ type: 'text', content: string }] }
     #[serde(default)]
     pub background: Option<bool>, // default true; when false, API blocks until terminal
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UpdateResponseRequest {
+pub struct UpdateTaskRequest {
     #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
@@ -33,7 +33,7 @@ pub struct UpdateResponseRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResponseView {
+pub struct TaskView {
     pub id: String,
     pub session_name: String,
     pub status: String,
@@ -47,13 +47,13 @@ pub struct ResponseView {
     pub updated_at: String,
 }
 
-impl SessionResponse {
+impl SessionTask {
     pub async fn create(
         pool: &sqlx::MySqlPool,
         session_name: &str,
         created_by: &str,
-        req: CreateResponseRequest,
-    ) -> Result<SessionResponse, sqlx::Error> {
+        req: CreateTaskRequest,
+    ) -> Result<SessionTask, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
@@ -67,7 +67,7 @@ impl SessionResponse {
 
         sqlx::query(
             r#"
-            INSERT INTO session_responses (id, session_name, created_by, status, input, output, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
@@ -82,7 +82,7 @@ impl SessionResponse {
         .execute(pool)
         .await?;
 
-        Ok(SessionResponse {
+        Ok(SessionTask {
             id,
             session_name: session_name.to_string(),
             created_by: created_by.to_string(),
@@ -99,13 +99,13 @@ impl SessionResponse {
         session_name: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<SessionResponse>, sqlx::Error> {
+    ) -> Result<Vec<SessionTask>, sqlx::Error> {
         let limit = limit.unwrap_or(100).min(1000);
         let offset = offset.unwrap_or(0);
-        sqlx::query_as::<_, SessionResponse>(
+        sqlx::query_as::<_, SessionTask>(
             r#"
             SELECT id, session_name, created_by, status, input, output, created_at, updated_at
-            FROM session_responses
+            FROM session_tasks
             WHERE session_name = ?
             ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
@@ -123,7 +123,7 @@ impl SessionResponse {
         session_name: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_responses WHERE session_name = ?",
+            "SELECT COUNT(*) FROM session_tasks WHERE session_name = ?",
         )
         .bind(session_name)
         .fetch_one(pool)
@@ -134,9 +134,9 @@ impl SessionResponse {
     pub async fn find_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
-    ) -> Result<Option<SessionResponse>, sqlx::Error> {
-        sqlx::query_as::<_, SessionResponse>(
-            r#"SELECT id, session_name, created_by, status, input, output, created_at, updated_at FROM session_responses WHERE id = ?"#
+    ) -> Result<Option<SessionTask>, sqlx::Error> {
+        sqlx::query_as::<_, SessionTask>(
+            r#"SELECT id, session_name, created_by, status, input, output, created_at, updated_at FROM session_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -146,23 +146,23 @@ impl SessionResponse {
     pub async fn update_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
-        req: UpdateResponseRequest,
-    ) -> Result<SessionResponse, sqlx::Error> {
+        req: UpdateTaskRequest,
+    ) -> Result<SessionTask, sqlx::Error> {
         // Load existing
-        let mut resp = Self::find_by_id(pool, id)
+        let mut task = Self::find_by_id(pool, id)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
         if let Some(s) = req.status {
-            resp.status = s;
+            task.status = s;
         }
         if let Some(i) = req.input {
-            resp.input = i;
+            task.input = i;
         }
         if let Some(o) = req.output {
             // Merge output with append semantics for items
             use serde_json::{Map, Value};
-            let mut merged = match resp.output {
+            let mut merged = match task.output {
                 Value::Object(map) => map,
                 _ => Map::new(),
             };
@@ -192,21 +192,21 @@ impl SessionResponse {
                 }
             }
 
-            resp.output = serde_json::Value::Object(merged);
+            task.output = serde_json::Value::Object(merged);
         }
 
         let now = Utc::now();
         sqlx::query(
-            r#"UPDATE session_responses SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE session_tasks SET status=?, input=?, output=?, updated_at=? WHERE id = ?"#,
         )
-        .bind(&resp.status)
-        .bind(&resp.input)
-        .bind(&resp.output)
+        .bind(&task.status)
+        .bind(&task.input)
+        .bind(&task.output)
         .bind(&now)
-        .bind(&resp.id)
+        .bind(&task.id)
         .execute(pool)
         .await?;
-        resp.updated_at = now;
-        Ok(resp)
+        task.updated_at = now;
+        Ok(task)
     }
 }

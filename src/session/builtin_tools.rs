@@ -524,7 +524,7 @@ impl Tool for FindFilecontentTool {
     }
 
     fn description(&self) -> &str {
-        "Returns file content matches for the provided regex at the given path. The response will cite the files and line numbers of the matches along with some surrounding content. Never use grep but use this command instead since it is optimized for your machine."
+        "Returns file content matches for the provided regex at the given path. The task output will cite the files and line numbers of the matches along with some surrounding content. Never use grep but use this command instead since it is optimized for your machine."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -839,7 +839,7 @@ impl Tool for OutputTool {
     }
 
     fn description(&self) -> &str {
-        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'markdown'|'json'|'url'|'text', content }. This concludes the current response."
+        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'markdown'|'json'|'url'|'text', content }. This concludes the current task run."
     }
 
     fn parameters(&self) -> serde_json::Value {

@@ -68,7 +68,7 @@
 
   let session = null;
   let stateStr = '';
-  // Chat rendering derived from Responses
+  // Chat rendering derived from Tasks
   let chat = [];
   // Toggle display of thinking (analysis/commentary) text; persisted via cookie
   let showThinking = false;
@@ -536,7 +536,7 @@
       error = null;
       contextFull = false;
       await fetchContextUsage();
-      await fetchResponses();
+      await fetchTasks();
       await tick();
       scrollToBottom();
     } catch (e) {
@@ -552,7 +552,7 @@
       error = null;
       contextFull = false;
       await fetchContextUsage();
-      await fetchResponses();
+      await fetchTasks();
       await tick();
       scrollToBottom();
     } catch (e) {
@@ -740,10 +740,10 @@
     } catch (_) {}
   }
 
-  async function fetchResponses() {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/responses?limit=200`);
+  async function fetchTasks() {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/tasks?limit=200`);
     if (res.ok) {
-      const list = Array.isArray(res.data) ? res.data : (res.data?.responses || []);
+      const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
       // Only auto-stick if near bottom before refresh
       let shouldStick = true;
       try {
@@ -753,7 +753,7 @@
           shouldStick = delta < 80;
         }
       } catch (_) {}
-      // Transform responses into synthetic chat bubbles to reuse rendering
+      // Transform tasks into synthetic chat bubbles to reuse rendering
       const transformed = [];
       for (const r of list) {
         const inputText = r?.input?.text || '';
@@ -793,7 +793,7 @@
   function startPolling() {
     stopPolling();
     pollHandle = setInterval(async () => {
-      await fetchResponses();
+      await fetchTasks();
       await fetchContextUsage();
       await fetchSession();
       await fetchRuntime();
@@ -1319,7 +1319,7 @@
     if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Session is busy'; } return; }
     sending = true;
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/responses`, {
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/tasks`, {
         method: 'POST',
         body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
       });
@@ -1335,11 +1335,11 @@
       // Reset textarea height back to default (2 rows) after clearing
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
-      // Wait until the server-side response row appears, then update UI
+      // Wait until the server-side task row appears, then update UI
       const rid = res?.data?.id;
       const deadline = Date.now() + 10000; // up to 10s
       while (Date.now() < deadline) {
-        await fetchResponses();
+        await fetchTasks();
         const expectIn = rid ? `${rid}:in` : null;
         if (!rid || (chat && chat.some(m => m.id === expectIn))) {
           break;
@@ -1429,7 +1429,7 @@
       const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/cancel`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
       await fetchSession();
-      await fetchResponses();
+      await fetchTasks();
     } catch (e) {
       error = e.message || String(e);
     }
@@ -1492,7 +1492,7 @@
     try {
       await fetchSession();
       await fetchRuntime(true);
-      await fetchResponses();
+      await fetchTasks();
       // Render the chat before attempting to scroll
       loading = false;
       await tick();
@@ -2058,9 +2058,9 @@
                   </details>
                 </div>
               {:else}
-                <!-- Tool response card or regular session message -->
+                <!-- Tool task card or regular session message -->
                 {#if isToolResult(m) && showTools}
-                  <!-- Compact single-line summary that toggles details for ALL tool responses -->
+                  <!-- Compact single-line summary that toggles details for ALL tool tasks -->
                   <div class="d-flex mb-2 justify-content-start">
                     <details class="mt-0" open={expandAll}>
                       <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
@@ -2374,7 +2374,7 @@
       align-items: center;
       justify-content: center;
     }
-    /* Remove any bottom gap inside the responses panel */
+    /* Remove any bottom gap inside the tasks panel */
     :global(#chat-body > *:last-child) { margin-bottom: 0 !important; }
     :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
     /* Minimal code preview for file contents: match HUD typography/hljs scale */

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::{
-    AppState, CreateResponseRequest, ResponseView, SessionResponse, UpdateResponseRequest,
+    AppState, CreateTaskRequest, SessionTask, TaskView, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
 
@@ -20,25 +20,24 @@ pub struct ListQuery {
     pub offset: Option<i64>,
 }
 
-pub async fn list_responses(
+pub async fn list_tasks(
     State(state): State<Arc<AppState>>,
     Path(session_name): Path<String>,
     Query(query): Query<ListQuery>,
     Extension(_auth): Extension<AuthContext>,
-) -> ApiResult<Json<Vec<ResponseView>>> {
+) -> ApiResult<Json<Vec<TaskView>>> {
     let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
-    let list =
-        SessionResponse::find_by_session(&state.db, &session_name, query.limit, query.offset)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch responses: {}", e)))?;
+    let list = SessionTask::find_by_session(&state.db, &session_name, query.limit, query.offset)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
     let result = list
         .into_iter()
-        .map(|r| ResponseView {
+        .map(|r| TaskView {
             id: r.id,
             session_name: r.session_name,
             status: r.status,
@@ -52,17 +51,17 @@ pub async fn list_responses(
     Ok(Json(result))
 }
 
-pub async fn get_response_global_by_id(
+pub async fn get_task_global_by_id(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     _auth: Extension<AuthContext>,
-) -> ApiResult<Json<ResponseView>> {
-    // Look up response directly by id (no session required)
-    if let Some(cur) = SessionResponse::find_by_id(&state.db, &id)
+) -> ApiResult<Json<TaskView>> {
+    // Look up task directly by id (no session required)
+    if let Some(cur) = SessionTask::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
-        let view = ResponseView {
+        let view = TaskView {
             id: cur.id,
             session_name: cur.session_name,
             status: cur.status,
@@ -74,7 +73,7 @@ pub async fn get_response_global_by_id(
         };
         return Ok(Json(view));
     }
-    Err(ApiError::NotFound("Response not found".to_string()))
+    Err(ApiError::NotFound("Task not found".to_string()))
 }
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
@@ -90,12 +89,12 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
     }
 }
 
-pub async fn create_response(
+pub async fn create_task(
     State(state): State<Arc<AppState>>,
     Path(session_name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<CreateResponseRequest>,
-) -> ApiResult<Json<ResponseView>> {
+    Json(req): Json<CreateTaskRequest>,
+) -> ApiResult<Json<TaskView>> {
     use tokio::time::{sleep, Duration, Instant};
 
     let session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
@@ -113,7 +112,7 @@ pub async fn create_response(
         )));
     }
 
-    // Block new responses when session is busy
+    // Block new tasks when session is busy
     if session.state == crate::shared::models::constants::SESSION_STATE_BUSY {
         return Err(ApiError::Conflict("Session is busy".to_string()));
     }
@@ -148,20 +147,20 @@ pub async fn create_response(
             .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
     }
 
-    // Generate response id that Controller will use when inserting the DB row
-    let response_id = uuid::Uuid::new_v4().to_string();
+    // Generate task id that Controller will use when inserting the DB row
+    let task_id = uuid::Uuid::new_v4().to_string();
 
-    // Enqueue Controller update to wake (if needed) and create the response row
+    // Enqueue Controller request to wake (if needed) and create the task row
     let payload = serde_json::json!({
-        "response_id": response_id,
+        "task_id": task_id,
         "input": req.input,
         "wake_if_slept": true,
         "background": req.background.unwrap_or(true)
     });
     sqlx::query(
         r#"
-        INSERT INTO session_updates (session_name, update_type, created_by, payload, status)
-        VALUES (?, 'create_response', ?, ?, 'pending')
+        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        VALUES (?, 'create_task', ?, ?, 'pending')
         "#,
     )
     .bind(&session_name)
@@ -169,7 +168,7 @@ pub async fn create_response(
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create response update: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create task request: {}", e)))?;
 
     // If background flag is false, block until terminal state or timeout
     let background = req.background.unwrap_or(true);
@@ -182,17 +181,17 @@ pub async fn create_response(
             // Check timeout first
             if start.elapsed() >= timeout {
                 return Err(ApiError::Timeout(
-                    "Timed out waiting for response to complete".to_string(),
+                    "Timed out waiting for task to complete".to_string(),
                 ));
             }
 
-            // Reload current response by the preassigned id
-            match SessionResponse::find_by_id(&state.db, &response_id).await {
+            // Reload current task by the preassigned id
+            match SessionTask::find_by_id(&state.db, &task_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
                     if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled"
                     {
-                        return Ok(Json(ResponseView {
+                        return Ok(Json(TaskView {
                             id: cur.id,
                             session_name: cur.session_name,
                             status: cur.status,
@@ -209,7 +208,7 @@ pub async fn create_response(
                 }
                 Err(e) => {
                     return Err(ApiError::Internal(anyhow::anyhow!(
-                        "Failed to fetch response: {}",
+                        "Failed to fetch task: {}",
                         e
                     )));
                 }
@@ -219,10 +218,10 @@ pub async fn create_response(
         }
     }
 
-    // Non-blocking request: return a stub ResponseView acknowledging enqueued work
+    // Non-blocking request: return a stub TaskView acknowledging enqueued work
     let now = chrono::Utc::now().to_rfc3339();
-    Ok(Json(ResponseView {
-        id: response_id,
+    Ok(Json(TaskView {
+        id: task_id,
         session_name: session_name,
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
@@ -259,7 +258,7 @@ async fn estimate_history_tokens_since(
     // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ? AND created_at >= ?"#,
         )
             .bind(session_name)
             .bind(cut)
@@ -267,7 +266,7 @@ async fn estimate_history_tokens_since(
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_responses WHERE session_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ?"#,
         )
             .bind(session_name)
             .fetch_all(pool)
@@ -278,7 +277,7 @@ async fn estimate_history_tokens_since(
     let mut total_chars: i64 = 0;
     const TOOL_RESULT_PREVIEW_MAX: usize = 100;
 
-    // Determine the single latest 'processing' response by created_at
+    // Determine the single latest 'processing' task by created_at
     let mut latest_proc: Option<DateTime<Utc>> = None;
     for row in rows.iter() {
         let status: String = row
@@ -320,7 +319,7 @@ async fn estimate_history_tokens_since(
 
         let status_lc = status.to_lowercase();
         if status_lc == "processing" {
-            // Only include tools for the single most recent processing response
+            // Only include tools for the single most recent processing task
             let include_tools = latest_proc
                 .and_then(|lp| {
                     row.try_get::<DateTime<Utc>, _>("created_at")
@@ -501,34 +500,34 @@ async fn estimate_history_tokens_since(
     Ok(est_tokens)
 }
 
-pub async fn update_response(
+pub async fn update_task(
     State(state): State<Arc<AppState>>,
-    Path((session_name, response_id)): Path<(String, String)>,
+    Path((session_name, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
-    Json(req): Json<UpdateResponseRequest>,
-) -> ApiResult<Json<ResponseView>> {
+    Json(req): Json<UpdateTaskRequest>,
+) -> ApiResult<Json<TaskView>> {
     let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
     // Check belongs
-    if let Some(existing) = SessionResponse::find_by_id(&state.db, &response_id)
+    if let Some(existing) = SessionTask::find_by_id(&state.db, &task_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
         if existing.session_name != session_name {
-            return Err(ApiError::NotFound("Response not found".to_string()));
+            return Err(ApiError::NotFound("Task not found".to_string()));
         }
     } else {
-        return Err(ApiError::NotFound("Response not found".to_string()));
+        return Err(ApiError::NotFound("Task not found".to_string()));
     }
 
-    let updated = SessionResponse::update_by_id(&state.db, &response_id, req)
+    let updated = SessionTask::update_by_id(&state.db, &task_id, req)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update response: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update task: {}", e)))?;
 
-    Ok(Json(ResponseView {
+    Ok(Json(TaskView {
         id: updated.id,
         session_name: updated.session_name,
         status: updated.status,
@@ -540,23 +539,23 @@ pub async fn update_response(
     }))
 }
 
-pub async fn get_response_by_id(
+pub async fn get_task_by_id(
     State(state): State<Arc<AppState>>,
-    Path((session_name, response_id)): Path<(String, String)>,
+    Path((session_name, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
-) -> ApiResult<Json<ResponseView>> {
+) -> ApiResult<Json<TaskView>> {
     // Ensure session exists
     let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
-    let cur = crate::shared::models::SessionResponse::find_by_id(&state.db, &response_id)
+    let cur = crate::shared::models::SessionTask::find_by_id(&state.db, &task_id)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch response: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Response not found".to_string()))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch task: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Task not found".to_string()))?;
 
-    Ok(Json(ResponseView {
+    Ok(Json(TaskView {
         id: cur.id,
         session_name: cur.session_name,
         status: cur.status,
@@ -568,7 +567,7 @@ pub async fn get_response_by_id(
     }))
 }
 
-pub async fn get_response_count(
+pub async fn get_task_count(
     State(state): State<Arc<AppState>>,
     Path(session_name): Path<String>,
     Extension(_auth): Extension<AuthContext>,
@@ -577,9 +576,9 @@ pub async fn get_response_count(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
-    let count = SessionResponse::count_by_session(&state.db, &session_name)
+    let count = SessionTask::count_by_session(&state.db, &session_name)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count responses: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count tasks: {}", e)))?;
     Ok(Json(
         serde_json::json!({ "count": count, "session_name": session_name }),
     ))

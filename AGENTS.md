@@ -73,16 +73,16 @@ Note on commit message formatting:
 
 ## Session Lifecycle & API
 
-- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session updates).
+- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session requests).
 - The session runtime, on boot, calls the API to report state:
   - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts idle timer).
   - `POST /api/v0/sessions/{name}/busy` when processing (sets `busy` and starts busy timer).
 - Sleep/Wake actions:
   - `POST /sessions/{name}/sleep` schedules container stop and sets state to `slept`.
   - `POST /sessions/{name}/wake` restarts container and transitions via `init`.
-- Responses: `GET/POST /sessions/{name}/responses` for user↔session exchanges, stored in `session_responses`.
+- Tasks: `GET/POST /sessions/{name}/tasks` for user↔session exchanges, stored in `session_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
-  - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the response reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
+- `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
 
 ## Operator UI
 

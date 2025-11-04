@@ -236,7 +236,7 @@
     <Card class="mb-3">
       <div class="card-header fw-bold">Response Object</div>
       <div class="card-body p-3 p-sm-4 small">
-        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/sessions/&#123;name&#125;/responses</span> endpoints.</div>
+        <div class="mb-2">Standard object returned by <span class="font-monospace">/api/v0/sessions/&#123;name&#125;/tasks</span> endpoints.</div>
         <div class="table-responsive">
           <table class="table table-sm table-bordered mb-2">
             <thead>
@@ -256,7 +256,7 @@
         </div>
         <ul class="mb-0">
           <li>GET list is ordered by <span class="font-monospace">created_at</span> ascending.</li>
-          <li>Update semantics (PUT <span class="font-monospace">/responses/&#123;id&#125;</span>): <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
+          <li>Update semantics (PUT <span class="font-monospace">/tasks/&#123;id&#125;</span>): <span class="font-monospace">output.text</span> replaces; <span class="font-monospace">output.items</span> appends; other <span class="font-monospace">output</span> keys overwrite.</li>
           <li>Preferred input uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">text</span> field is still accepted.</li>
         </ul>
       </div>
