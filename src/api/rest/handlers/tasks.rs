@@ -22,16 +22,16 @@ pub struct ListQuery {
 
 pub async fn list_tasks(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(id): Path<String>,
     Query(query): Query<ListQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<TaskView>>> {
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
 
-    let list = SessionTask::find_by_session(&state.db, &session_name, query.limit, query.offset)
+    let list = SessionTask::find_by_session(&state.db, &session.id, query.limit, query.offset)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
@@ -39,7 +39,7 @@ pub async fn list_tasks(
         .into_iter()
         .map(|r| TaskView {
             id: r.id,
-            session_name: r.session_name,
+            session_id: r.session_id,
             status: r.status,
             input_content: extract_input_content(&r.input),
             output_content: extract_output_content(&r.output),
@@ -65,7 +65,7 @@ pub async fn get_task_global_by_id(
     {
         let view = TaskView {
             id: cur.id,
-            session_name: cur.session_name,
+            session_id: cur.session_id,
             status: cur.status,
             input_content: extract_input_content(&cur.input),
             output_content: extract_output_content(&cur.output),
@@ -95,13 +95,13 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 
 pub async fn create_task(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CreateTaskRequest>,
 ) -> ApiResult<Json<TaskView>> {
     use tokio::time::{sleep, Duration, Instant};
 
-    let session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
@@ -112,7 +112,7 @@ pub async fn create_task(
     if used_tokens >= limit_tokens {
         return Err(ApiError::Conflict(format!(
             "Context is full ({} / {} tokens). Clear context via POST /api/v0/sessions/{}/context/clear and try again.",
-            used_tokens, limit_tokens, session_name
+            used_tokens, limit_tokens, session.id
         )));
     }
 
@@ -150,9 +150,9 @@ pub async fn create_task(
     if session.state == crate::shared::models::constants::SESSION_STATE_IDLE
         || session.state == crate::shared::models::constants::SESSION_STATE_INIT
     {
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND state = ?"#)
+        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#)
             .bind(crate::shared::models::constants::SESSION_STATE_BUSY)
-            .bind(&session_name)
+            .bind(&session.id)
             .bind(session.state)
             .execute(&*state.db)
             .await
@@ -175,11 +175,11 @@ pub async fn create_task(
     });
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'create_task', ?, ?, 'pending')
         "#,
     )
-    .bind(&session_name)
+    .bind(&session.id)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -209,7 +209,7 @@ pub async fn create_task(
                     {
                         return Ok(Json(TaskView {
                             id: cur.id,
-                            session_name: cur.session_name,
+                            session_id: cur.session_id,
                             status: cur.status,
                             input_content: extract_input_content(&cur.input),
                             output_content: extract_output_content(&cur.output),
@@ -246,7 +246,7 @@ pub async fn create_task(
     let created_at = now.to_rfc3339();
     Ok(Json(TaskView {
         id: task_id,
-        session_name,
+        session_id: session.id.clone(),
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
         output_content: vec![],
@@ -528,11 +528,11 @@ async fn estimate_history_tokens_since(
 
 pub async fn update_task(
     State(state): State<Arc<AppState>>,
-    Path((session_name, task_id)): Path<(String, String)>,
+    Path((session_id, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> ApiResult<Json<TaskView>> {
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    let _session = crate::shared::models::Session::find_by_id(&state.db, &session_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
@@ -542,7 +542,7 @@ pub async fn update_task(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
-        if existing.session_name != session_name {
+        if existing.session_id != session_id {
             return Err(ApiError::NotFound("Task not found".to_string()));
         }
     } else {
@@ -563,7 +563,7 @@ pub async fn update_task(
 
     Ok(Json(TaskView {
         id: updated.id,
-        session_name: updated.session_name,
+        session_id: updated.session_id,
         status: updated.status,
         input_content: extract_input_content(&updated.input),
         output_content: extract_output_content(&updated.output),
@@ -577,11 +577,11 @@ pub async fn update_task(
 
 pub async fn get_task_by_id(
     State(state): State<Arc<AppState>>,
-    Path((session_name, task_id)): Path<(String, String)>,
+    Path((session_id, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<TaskView>> {
     // Ensure session exists
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    let _session = crate::shared::models::Session::find_by_id(&state.db, &session_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
@@ -593,7 +593,7 @@ pub async fn get_task_by_id(
 
     Ok(Json(TaskView {
         id: cur.id,
-        session_name: cur.session_name,
+        session_id: cur.session_id,
         status: cur.status,
         input_content: extract_input_content(&cur.input),
         output_content: extract_output_content(&cur.output),
@@ -607,18 +607,18 @@ pub async fn get_task_by_id(
 
 pub async fn get_task_count(
     State(state): State<Arc<AppState>>,
-    Path(session_name): Path<String>,
+    Path(id): Path<String>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let _session = crate::shared::models::Session::find_by_name(&state.db, &session_name)
+    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
-    let count = SessionTask::count_by_session(&state.db, &session_name)
+    let count = SessionTask::count_by_session(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count tasks: {}", e)))?;
     Ok(Json(
-        serde_json::json!({ "count": count, "session_name": session_name }),
+        serde_json::json!({ "count": count, "session_id": session.id }),
     ))
 }
 

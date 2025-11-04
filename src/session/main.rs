@@ -14,6 +14,10 @@ struct Args {
     #[arg(long, env = "TSBX_API_URL")]
     api_url: String,
 
+    /// Session ID (UUID)
+    #[arg(long, env = "SESSION_ID")]
+    session_id: String,
+
     /// Session Name
     #[arg(long, env = "TSBX_SESSION_NAME")]
     session_name: String,
@@ -28,7 +32,7 @@ async fn main() -> Result<()> {
 
     // Run the Session (Computer Use Session) with comprehensive error handling
     loop {
-        match session::run(&args.api_url, &args.session_name).await {
+        match session::run(&args.api_url, &args.session_id, &args.session_name).await {
             Ok(()) => {
                 // Session run completed successfully (should not happen in normal operation)
                 tracing::warn!("Session run completed unexpectedly, restarting...");

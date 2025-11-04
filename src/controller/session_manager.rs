@@ -22,11 +22,18 @@ use rbac::{RbacClaims, SubjectType};
 
 use super::docker_manager::DockerManager;
 
+#[path = "../shared/models/session.rs"]
+pub mod session_model;
+use session_model::Session;
+
+#[path = "../shared/models/state_helpers.rs"]
+pub mod state_helpers;
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SessionRequest {
     id: String,
     request_type: String,
-    session_name: String,
+    session_id: String,
     created_by: String,
     payload: serde_json::Value,
     status: String,
@@ -242,7 +249,7 @@ impl SessionManager {
             // Create stop request for the session
             let request_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+                INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
                 VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
                 "#)
             .bind(&request_id)
@@ -501,7 +508,12 @@ impl SessionManager {
     }
 
     pub async fn handle_start_session(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name.clone();
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
 
         // Parse the payload to get session creation parameters
         let env = request
@@ -629,6 +641,7 @@ impl SessionManager {
 
             self.docker_manager
                 .create_container_with_full_copy_and_tokens(
+                    &session.id,
                     &session_name,
                     parent_session_name,
                     clone_token,
@@ -643,6 +656,7 @@ impl SessionManager {
             // For regular sessions, create container with session parameters and generated tokens
             self.docker_manager
                 .create_container_with_params_and_tokens(
+                    &session.id,
                     &session_name,
                     env,
                     instructions,
@@ -698,7 +712,12 @@ impl SessionManager {
     }
 
     pub async fn handle_delete_session(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name;
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
 
         info!("Deleting container and volume for session {}", session_name);
         self.docker_manager.delete_container(&session_name).await?;
@@ -709,7 +728,13 @@ impl SessionManager {
     }
 
     pub async fn handle_execute_command(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name;
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let command = request.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
@@ -773,7 +798,13 @@ impl SessionManager {
     }
 
     pub async fn handle_stop_session(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name;
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         // Optional delay before closing (in seconds), minimum 5 seconds
         let delay_secs = request
             .payload
@@ -996,7 +1027,13 @@ impl SessionManager {
     }
 
     pub async fn handle_restart_session(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name;
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         // Prefer explicitly provided principal/principal_type from payload (owner),
         // fall back to request.created_by as a regular subject.
         let effective_principal = request
@@ -1037,6 +1074,7 @@ impl SessionManager {
         );
         self.docker_manager
             .restart_container_with_tokens(
+                &session.id,
                 &session_name,
                 restart_token,
                 effective_principal.clone(),
@@ -1125,7 +1163,13 @@ impl SessionManager {
     }
 
     pub async fn handle_create_task(&self, request: SessionRequest) -> Result<()> {
-        let session_name = request.session_name.clone();
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let principal = request.created_by.clone();
 
         info!("Handling create_task for session {}", session_name);
@@ -1173,6 +1217,7 @@ impl SessionManager {
                 .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
             self.docker_manager
                 .restart_container_with_tokens(
+                    &session.id,
                     &session_name,
                     restart_token,
                     principal.clone(),
@@ -1395,6 +1440,13 @@ impl SessionManager {
     }
 
     pub async fn handle_file_read(&self, request: SessionRequest) -> Result<()> {
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let path = request
             .payload
             .get("path")
@@ -1406,7 +1458,7 @@ impl SessionManager {
         // Do not auto-open for file APIs; require running container
         match self
             .docker_manager
-            .is_container_healthy(&request.session_name)
+            .is_container_healthy(&session_name)
             .await
         {
             Ok(true) => {}
@@ -1421,7 +1473,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1452,7 +1504,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec!["/bin/cat".into(), full_path.clone()],
             )
             .await?;
@@ -1473,6 +1525,13 @@ impl SessionManager {
     }
 
     pub async fn handle_file_metadata(&self, request: SessionRequest) -> Result<()> {
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let path = request
             .payload
             .get("path")
@@ -1483,7 +1542,7 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&request.session_name)
+            .is_container_healthy(&session_name)
             .await
         {
             Ok(true) => {}
@@ -1498,7 +1557,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1548,6 +1607,13 @@ impl SessionManager {
     }
 
     pub async fn handle_file_list(&self, request: SessionRequest) -> Result<()> {
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let path = request
             .payload
             .get("path")
@@ -1572,7 +1638,7 @@ impl SessionManager {
         };
         match self
             .docker_manager
-            .is_container_healthy(&request.session_name)
+            .is_container_healthy(&session_name)
             .await
         {
             Ok(true) => {}
@@ -1593,7 +1659,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec![
                     "/usr/bin/find".into(),
                     base.clone(),
@@ -1665,6 +1731,13 @@ impl SessionManager {
     }
 
     pub async fn handle_file_delete(&self, request: SessionRequest) -> Result<()> {
+        // Look up the session from the database using session_id
+        let session = sqlx::query_as::<_, Session>("SELECT * FROM sessions WHERE id = ?")
+            .bind(&request.session_id)
+            .fetch_one(&self.pool)
+            .await?;
+        let session_name = session.name.clone();
+
         let path = request
             .payload
             .get("path")
@@ -1675,7 +1748,7 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&request.session_name)
+            .is_container_healthy(&session_name)
             .await
         {
             Ok(true) => {}
@@ -1690,7 +1763,7 @@ impl SessionManager {
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1713,7 +1786,7 @@ impl SessionManager {
         let (rm_code, _out, err) = self
             .docker_manager
             .exec_collect(
-                &request.session_name,
+                &session_name,
                 vec!["/bin/rm".into(), "-f".into(), full_path.clone()],
             )
             .await?;

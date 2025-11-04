@@ -1,15 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-// Removed uuid::Uuid - no longer using UUIDs in v0.4.0
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Session {
-    pub name: String, // Primary key - no more UUID id
+    pub id: String, // Primary key - UUID
+    pub name: String, // Unique field, used for Docker operations
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_session_name: Option<String>, // Changed from parent_session_id
+    pub parent_session_id: Option<String>, // Changed from parent_session_name
     pub created_at: DateTime<Utc>,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
@@ -20,7 +20,6 @@ pub struct Session {
     pub busy_from: Option<DateTime<Utc>>,
     pub context_cutoff_at: Option<DateTime<Utc>>,
     pub last_context_length: i64,
-    // Removed: id, container_id, persistent_volume_id (derived from name)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +30,8 @@ pub struct StartSessionRequest {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub parent_session_id: Option<String>,
     #[serde(default, deserialize_with = "deserialize_tags_vec")]
     pub tags: Vec<String>,
     #[serde(default)]
@@ -525,7 +526,7 @@ impl Session {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT name, created_by, state, description, parent_session_name,
+            SELECT id, name, created_by, state, description, parent_session_id,
                    created_at, last_activity_at, metadata, tags,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
@@ -543,7 +544,7 @@ impl Session {
     ) -> Result<Option<Session>, sqlx::Error> {
         sqlx::query_as::<_, Session>(
             r#"
-            SELECT name, created_by, state, description, parent_session_name,
+            SELECT id, name, created_by, state, description, parent_session_id,
                    created_at, last_activity_at, metadata, tags,
                    stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                    last_context_length
@@ -552,6 +553,25 @@ impl Session {
             "#,
         )
         .bind(name)
+        .fetch_optional(pool)
+        .await
+    }
+
+    pub async fn find_by_id(
+        pool: &sqlx::MySqlPool,
+        id: &str,
+    ) -> Result<Option<Session>, sqlx::Error> {
+        sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, name, created_by, state, description, parent_session_id,
+                   created_at, last_activity_at, metadata, tags,
+                   stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+                   last_context_length
+            FROM sessions
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
         .fetch_optional(pool)
         .await
     }
@@ -570,16 +590,17 @@ impl Session {
         let idle_from: Option<DateTime<Utc>> = None; // Will be set when session becomes idle
         let busy_from: Option<DateTime<Utc>> = None; // Will be set when session becomes busy
 
-        // Insert the session using name as primary key
+        // Insert the session - MySQL will auto-generate UUID for id
         sqlx::query(
             r#"
-            INSERT INTO sessions (name, created_by, description, metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sessions (name, created_by, description, parent_session_id, metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&session_name)
         .bind(created_by)
         .bind(&req.description)
+        .bind(&req.parent_session_id)
         .bind(&req.metadata)
         .bind(serde_json::json!(req.tags.into_iter().map(|t| t.to_lowercase()).collect::<Vec<_>>()))
         .bind(stop_timeout)
@@ -597,12 +618,12 @@ impl Session {
 
     pub async fn clone_from(
         pool: &sqlx::MySqlPool,
-        parent_name: &str,
+        parent_id: &str,
         req: CloneSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Get parent session
-        let parent = Self::find_by_name(pool, parent_name)
+        let parent = Self::find_by_id(pool, parent_id)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
@@ -613,7 +634,7 @@ impl Session {
         sqlx::query(
             r#"
             INSERT INTO sessions (
-                name, created_by, description, parent_session_name,
+                name, created_by, description, parent_session_id,
                 metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -622,7 +643,7 @@ impl Session {
         .bind(&req.name)
         .bind(created_by) // Use actual cloner as owner
         .bind(&parent.description)
-        .bind(parent_name)
+        .bind(parent_id)
         .bind(req.metadata.as_ref().unwrap_or(&parent.metadata))
         .bind(&match &parent.tags {
             serde_json::Value::Array(arr) => serde_json::Value::Array(
@@ -652,11 +673,11 @@ impl Session {
     #[allow(dead_code)]
     pub async fn update_state(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
         req: UpdateSessionStateRequest,
     ) -> Result<Option<Session>, sqlx::Error> {
         // Check current state and validate transition
-        let current = Self::find_by_name(pool, name).await?;
+        let current = Self::find_by_id(pool, id).await?;
         if let Some(session) = current {
             if !super::state_helpers::can_transition_to(&session.state, &req.state) {
                 return Err(sqlx::Error::Protocol(format!(
@@ -671,29 +692,25 @@ impl Session {
         let now = Utc::now();
         let mut query_builder = String::from("UPDATE sessions SET state = ?, last_activity_at = ?");
 
-        // Removed container_id and persistent_volume_id - derived from name in v0.4.0
-
-        query_builder.push_str(" WHERE name = ?");
+        query_builder.push_str(" WHERE id = ?");
 
         // Build and execute query
         let mut query = sqlx::query(&query_builder)
             .bind(req.state.clone())
             .bind(now);
 
-        // Removed container_id and persistent_volume_id bindings
-
-        query = query.bind(name);
+        query = query.bind(id);
 
         let _result = query.execute(pool).await?;
 
         // Always fetch and return the current record. rows_affected() can be 0 when
         // updating with the same values; treat that as a successful no-op update.
-        Self::find_by_name(pool, name).await
+        Self::find_by_id(pool, id).await
     }
 
     pub async fn update(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
         req: UpdateSessionRequest,
     ) -> Result<Option<Session>, sqlx::Error> {
         let mut query_builder = String::from("UPDATE sessions SET");
@@ -721,7 +738,7 @@ impl Session {
         }
 
         query_builder.push_str(&updates.join(","));
-        query_builder.push_str(" WHERE name = ?");
+        query_builder.push_str(" WHERE id = ?");
 
         let mut query = sqlx::query(&query_builder);
 
@@ -743,21 +760,21 @@ impl Session {
             query = query.bind(archive_timeout_seconds);
         }
 
-        query = query.bind(name);
+        query = query.bind(id);
 
         let result = query.execute(pool).await?;
 
         if result.rows_affected() > 0 {
-            Self::find_by_name(pool, name).await
+            Self::find_by_id(pool, id).await
         } else {
             Ok(None)
         }
     }
 
-    pub async fn delete(pool: &sqlx::MySqlPool, name: &str) -> Result<bool, sqlx::Error> {
+    pub async fn delete(pool: &sqlx::MySqlPool, id: &str) -> Result<bool, sqlx::Error> {
         // Hard delete session row; cascades will remove tasks; requests may persist per FK changes
-        let result = sqlx::query(r#"DELETE FROM sessions WHERE name = ?"#)
-            .bind(name)
+        let result = sqlx::query(r#"DELETE FROM sessions WHERE id = ?"#)
+            .bind(id)
             .execute(pool)
             .await?;
         Ok(result.rows_affected() > 0)
@@ -765,17 +782,17 @@ impl Session {
 
     pub async fn clear_context_cutoff(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE sessions
             SET context_cutoff_at = NOW(),
                 last_context_length = 0
-            WHERE name = ?
+            WHERE id = ?
             "#,
         )
-        .bind(name)
+        .bind(id)
         .execute(pool)
         .await?;
 
@@ -784,7 +801,7 @@ impl Session {
 
     pub async fn update_last_context_length(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
         tokens: i64,
     ) -> Result<(), sqlx::Error> {
         let clamped = if tokens < 0 { 0 } else { tokens };
@@ -792,11 +809,11 @@ impl Session {
             r#"
             UPDATE sessions
             SET last_context_length = ?
-            WHERE name = ?
+            WHERE id = ?
             "#,
         )
         .bind(clamped)
-        .bind(name)
+        .bind(id)
         .execute(pool)
         .await?;
 
@@ -809,20 +826,20 @@ impl Session {
 
     pub async fn update_session_to_idle(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
     ) -> Result<(), sqlx::Error> {
         // Set session to idle and record idle_from; clear busy_from
         sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE sessions
             SET state = 'idle',
                 last_activity_at = NOW(),
                 idle_from = NOW(),
                 busy_from = NULL
-            WHERE name = ?
+            WHERE id = ?
             "#,
         )
-        .bind(name)
+        .bind(id)
         .execute(pool)
         .await?;
 
@@ -831,20 +848,20 @@ impl Session {
 
     pub async fn update_session_to_busy(
         pool: &sqlx::MySqlPool,
-        name: &str,
+        id: &str,
     ) -> Result<(), sqlx::Error> {
         // Set session to busy: clear idle_from, set busy_from
         sqlx::query(
             r#"
-            UPDATE sessions 
+            UPDATE sessions
             SET state = 'busy',
                 last_activity_at = NOW(),
                 idle_from = NULL,
                 busy_from = NOW()
-            WHERE name = ?
+            WHERE id = ?
             "#,
         )
-        .bind(name)
+        .bind(id)
         .execute(pool)
         .await?;
 

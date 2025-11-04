@@ -9,10 +9,11 @@ use tracing::{debug, info};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Session {
-    pub name: String, // Primary key in v0.4.0
+    pub id: String, // UUID primary key
+    pub name: String, // Unique name
     pub created_by: String,
     pub state: String,
-    pub parent_session_name: Option<String>, // Changed from parent_session_id
+    pub parent_session_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -22,12 +23,12 @@ pub struct Session {
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
     pub last_context_length: i64,
-    // Removed: id, container_id, persistent_volume_id (derived from name in v0.4.0)
 }
 
 pub struct TaskSandboxClient {
     client: Client,
     config: Arc<Config>,
+    session_id: String,
 }
 
 impl TaskSandboxClient {
@@ -37,7 +38,9 @@ impl TaskSandboxClient {
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, config }
+        let session_id = config.session_id.clone();
+
+        Self { client, config, session_id }
     }
 
     // Expose session name for prompts/logging
@@ -49,7 +52,7 @@ impl TaskSandboxClient {
     pub async fn get_task_by_id(&self, id: &str) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sessions/{}/tasks/{}",
-            self.config.api_url, self.config.session_name, id
+            self.config.api_url, self.session_id, id
         );
         let response = self
             .client
@@ -80,7 +83,7 @@ impl TaskSandboxClient {
     pub async fn get_session(&self) -> Result<Session> {
         let url = format!(
             "{}/api/v0/sessions/{}",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
 
         debug!("Fetching session info from: {}", url);
@@ -122,7 +125,7 @@ impl TaskSandboxClient {
     pub async fn create_task(&self, input_text: &str) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sessions/{}/tasks",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
         let req = CreateTaskRequest {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
@@ -165,7 +168,7 @@ impl TaskSandboxClient {
     ) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sessions/{}/tasks/{}",
-            self.config.api_url, self.config.session_name, id
+            self.config.api_url, self.session_id, id
         );
         let mut output = serde_json::Map::new();
         if let Some(t) = output_text {
@@ -214,7 +217,7 @@ impl TaskSandboxClient {
     ) -> Result<Vec<TaskView>> {
         let mut url = format!(
             "{}/api/v0/sessions/{}/tasks",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
         let mut sep = '?';
         if let Some(l) = limit {
@@ -256,7 +259,7 @@ impl TaskSandboxClient {
     pub async fn get_task_count(&self) -> Result<u64> {
         let url = format!(
             "{}/api/v0/sessions/{}/tasks/count",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
         let response = self
             .client
@@ -294,7 +297,7 @@ impl TaskSandboxClient {
     pub async fn update_session_to_busy(&self) -> Result<()> {
         let url = format!(
             "{}/api/v0/sessions/{}/busy",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
 
         let response = self
@@ -333,7 +336,7 @@ impl TaskSandboxClient {
     pub async fn update_session_to_idle(&self) -> Result<()> {
         let url = format!(
             "{}/api/v0/sessions/{}/idle",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
 
         let response = self
@@ -376,7 +379,7 @@ impl TaskSandboxClient {
 
         let url = format!(
             "{}/api/v0/sessions/{}/context/usage",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
 
         let body = ContextUsageReq {
@@ -411,7 +414,7 @@ impl TaskSandboxClient {
     }
 
 
-    /// Stop the current session by name after an optional delay (seconds, min 5) with optional note
+    /// Stop the current session by ID after an optional delay (seconds, min 5) with optional note
     pub async fn stop_session(
         &self,
         delay_seconds: Option<u64>,
@@ -419,7 +422,7 @@ impl TaskSandboxClient {
     ) -> Result<()> {
         let url = format!(
             "{}/api/v0/sessions/{}/stop",
-            self.config.api_url, self.config.session_name
+            self.config.api_url, self.session_id
         );
 
         let response = self

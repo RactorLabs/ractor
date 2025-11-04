@@ -6,7 +6,7 @@ use sqlx::FromRow;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct SessionTask {
     pub id: String,
-    pub session_name: String,
+    pub session_id: String,
     pub created_by: String,
     pub status: String, // pending | processing | completed | failed | cancelled
     pub input: serde_json::Value,
@@ -41,7 +41,7 @@ pub struct UpdateTaskRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {
     pub id: String,
-    pub session_name: String,
+    pub session_id: String,
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<Value>,
@@ -58,7 +58,7 @@ pub struct TaskView {
 impl SessionTask {
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        session_id: &str,
         created_by: &str,
         req: CreateTaskRequest,
     ) -> Result<SessionTask, sqlx::Error> {
@@ -77,12 +77,12 @@ impl SessionTask {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
-        .bind(session_name)
+        .bind(session_id)
         .bind(created_by)
         .bind(&status)
         .bind(&req.input)
@@ -96,7 +96,7 @@ impl SessionTask {
 
         Ok(SessionTask {
             id,
-            session_name: session_name.to_string(),
+            session_id: session_id.to_string(),
             created_by: created_by.to_string(),
             status,
             input: req.input,
@@ -110,7 +110,7 @@ impl SessionTask {
 
     pub async fn find_by_session(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        session_id: &str,
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> Result<Vec<SessionTask>, sqlx::Error> {
@@ -118,14 +118,14 @@ impl SessionTask {
         let offset = offset.unwrap_or(0);
         sqlx::query_as::<_, SessionTask>(
             r#"
-            SELECT id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
+            SELECT id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
             FROM session_tasks
-            WHERE session_name = ?
+            WHERE session_id = ?
             ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
             "#,
         )
-        .bind(session_name)
+        .bind(session_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
@@ -134,12 +134,12 @@ impl SessionTask {
 
     pub async fn count_by_session(
         pool: &sqlx::MySqlPool,
-        session_name: &str,
+        session_id: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_tasks WHERE session_name = ?",
+            "SELECT COUNT(*) FROM session_tasks WHERE session_id = ?",
         )
-        .bind(session_name)
+        .bind(session_id)
         .fetch_one(pool)
         .await?;
         Ok(result)
@@ -150,7 +150,7 @@ impl SessionTask {
         id: &str,
     ) -> Result<Option<SessionTask>, sqlx::Error> {
         sqlx::query_as::<_, SessionTask>(
-            r#"SELECT id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM session_tasks WHERE id = ?"#
+            r#"SELECT id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM session_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)

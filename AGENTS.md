@@ -65,8 +65,10 @@ Note on commit message formatting:
 
 ## Data Model Highlights (Sessions)
 
-- Name-based primary key: sessions are addressed by `name` (no numeric ID).
+- UUID-based primary key: sessions are addressed by `id` (CHAR(36) UUID).
+- Each session has a unique `name` field (VARCHAR(64)) used for Docker container/volume naming and display.
 - Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
+- Parent sessions: `parent_session_id` (CHAR(36)) references parent session's UUID.
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
 
@@ -74,14 +76,15 @@ Note on commit message formatting:
 
 - Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session requests).
 - The session runtime, on boot, calls the API to report state:
-  - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts stop timeout).
-  - `POST /api/v0/sessions/{name}/busy` when processing (sets state to `busy` and pauses stop timeout).
+  - `POST /api/v0/sessions/{id}/idle` when ready (sets state to `idle` and starts idle timer).
+  - `POST /api/v0/sessions/{id}/busy` when processing (sets state to `busy` and starts busy timer).
 - Stop/Restart actions:
-  - `POST /sessions/{name}/stop` schedules container stop and sets state to `stopped`.
-  - `POST /sessions/{name}/restart` restarts container and transitions via `init`.
-- Tasks: `GET/POST /sessions/{name}/tasks` for user↔session exchanges, stored in `session_tasks`.
+  - `POST /sessions/{id}/stop` schedules container stop and sets state to `stopped`.
+  - `POST /sessions/{id}/restart` restarts container and transitions via `init`.
+- Tasks: `GET/POST /sessions/{id}/tasks` for user↔session exchanges, stored in `session_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
 - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
+- All API routes use session UUID `id` for addressing, but Docker operations use the session `name`.
 
 ## Operator UI
 

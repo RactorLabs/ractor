@@ -50,92 +50,92 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Session endpoints
         .route("/sessions", get(handlers::sessions::list_sessions))
         .route("/sessions", post(handlers::sessions::start_session))
-        .route("/sessions/{name}", get(handlers::sessions::get_session))
-        .route("/sessions/{name}", put(handlers::sessions::update_session))
+        .route("/sessions/{id}", get(handlers::sessions::get_session))
+        .route("/sessions/{id}", put(handlers::sessions::update_session))
         .route(
-            "/sessions/{name}/state",
+            "/sessions/{id}/state",
             put(handlers::sessions::update_session_state),
         )
         .route(
-            "/sessions/{name}/busy",
+            "/sessions/{id}/busy",
             post(handlers::sessions::update_session_to_busy),
         )
         .route(
-            "/sessions/{name}/idle",
+            "/sessions/{id}/idle",
             post(handlers::sessions::update_session_to_idle),
         )
         .route(
-            "/sessions/{name}/stop",
+            "/sessions/{id}/stop",
             post(handlers::sessions::stop_session),
         )
         .route(
-            "/sessions/{name}/cancel",
+            "/sessions/{id}/cancel",
             post(handlers::sessions::cancel_active_task),
         )
         .route(
-            "/sessions/{name}/restart",
+            "/sessions/{id}/restart",
             post(handlers::sessions::restart_session),
         )
         .route(
-            "/sessions/{name}/runtime",
+            "/sessions/{id}/runtime",
             get(handlers::sessions::get_session_runtime),
         )
         .route(
-            "/sessions/{name}/clone",
+            "/sessions/{id}/clone",
             post(handlers::sessions::clone_session),
         )
         .route(
-            "/sessions/{name}/context",
+            "/sessions/{id}/context",
             get(handlers::sessions::get_session_context),
         )
         .route(
-            "/sessions/{name}/context/clear",
+            "/sessions/{id}/context/clear",
             post(handlers::sessions::clear_session_context),
         )
         .route(
-            "/sessions/{name}/context/compact",
+            "/sessions/{id}/context/compact",
             post(handlers::sessions::compact_session_context),
         )
         .route(
-            "/sessions/{name}/context/usage",
+            "/sessions/{id}/context/usage",
             post(handlers::sessions::update_session_context_usage),
         )
         .route(
-            "/sessions/{name}",
+            "/sessions/{id}",
             delete(handlers::sessions::delete_session),
         )
         // Task endpoints (composite model)
-        .route("/sessions/{name}/tasks", get(handlers::tasks::list_tasks))
-        .route("/sessions/{name}/tasks", post(handlers::tasks::create_task))
+        .route("/sessions/{id}/tasks", get(handlers::tasks::list_tasks))
+        .route("/sessions/{id}/tasks", post(handlers::tasks::create_task))
         .route(
-            "/sessions/{name}/tasks/{id}",
+            "/sessions/{id}/tasks/{task_id}",
             get(handlers::tasks::get_task_by_id).put(handlers::tasks::update_task),
         )
         .route(
-            "/sessions/{name}/tasks/count",
+            "/sessions/{id}/tasks/count",
             get(handlers::tasks::get_task_count),
         )
         // Global task lookup by id
         .route("/tasks/{id}", get(handlers::tasks::get_task_global_by_id))
         // Session files (read-only)
         .route(
-            "/sessions/{name}/files/read/{*path}",
+            "/sessions/{id}/files/read/{*path}",
             get(handlers::sessions::read_session_file),
         )
         .route(
-            "/sessions/{name}/files/metadata/{*path}",
+            "/sessions/{id}/files/metadata/{*path}",
             get(handlers::sessions::get_session_file_metadata),
         )
         .route(
-            "/sessions/{name}/files/list/{*path}",
+            "/sessions/{id}/files/list/{*path}",
             get(handlers::sessions::list_session_files),
         )
         .route(
-            "/sessions/{name}/files/list",
+            "/sessions/{id}/files/list",
             get(handlers::sessions::list_session_files_root),
         )
         .route(
-            "/sessions/{name}/files/delete/{*path}",
+            "/sessions/{id}/files/delete/{*path}",
             delete(handlers::sessions::delete_session_file),
         )
         .layer(middleware::from_fn_with_state(

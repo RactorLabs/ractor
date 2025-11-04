@@ -33,13 +33,14 @@ CREATE TABLE IF NOT EXISTS role_bindings (
     INDEX idx_role_bindings_role_name (role_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Sessions - Name-based architecture with timeout functionality
+-- Sessions - UUID-based architecture with timeout functionality
 CREATE TABLE IF NOT EXISTS sessions (
-    name VARCHAR(64) PRIMARY KEY,
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    name VARCHAR(64) NOT NULL UNIQUE,
     created_by VARCHAR(255) NOT NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
     description TEXT NULL,
-    parent_session_name VARCHAR(64) NULL,
+    parent_session_id CHAR(36) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,
     metadata JSON DEFAULT ('{}'),
@@ -50,11 +51,11 @@ CREATE TABLE IF NOT EXISTS sessions (
     archive_timeout_seconds INT NOT NULL DEFAULT 86400,
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
-    
+
     -- Context cutoff marker for conversation trimming
     context_cutoff_at TIMESTAMP NULL,
     last_context_length BIGINT NOT NULL DEFAULT 0,
-    
+
     -- Constraints
     CONSTRAINT sessions_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
     CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'stopped')),
@@ -63,12 +64,13 @@ CREATE TABLE IF NOT EXISTS sessions (
         stop_timeout_seconds > 0 AND stop_timeout_seconds <= 604800 AND
         archive_timeout_seconds > 0 AND archive_timeout_seconds <= 31536000
     ),
-    CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_name) REFERENCES sessions(name) ON DELETE SET NULL,
+    CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
 
     -- Indexes
+    INDEX idx_sessions_name (name),
     INDEX idx_sessions_created_by (created_by),
     INDEX idx_sessions_state (state),
-    INDEX idx_sessions_parent_session_name (parent_session_name),
+    INDEX idx_sessions_parent_session_id (parent_session_id),
     INDEX idx_sessions_idle_from (idle_from, state),
     INDEX idx_sessions_busy_from (busy_from, state),
     INDEX idx_sessions_context_cutoff (context_cutoff_at)
@@ -77,7 +79,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- Session Tasks (user conversations)
 CREATE TABLE IF NOT EXISTS session_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    session_name VARCHAR(64) NOT NULL,
+    session_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
     input JSON NOT NULL,
@@ -86,19 +88,19 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     timeout_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_tasks_session FOREIGN KEY (session_name) REFERENCES sessions(name) ON DELETE CASCADE,
-    INDEX idx_session_tasks_session_name (session_name),
+    CONSTRAINT fk_tasks_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    INDEX idx_session_tasks_session_id (session_id),
     INDEX idx_session_tasks_created_by (created_by),
     INDEX idx_session_tasks_created_at (created_at),
     INDEX idx_session_tasks_timeout_at (timeout_at),
-    INDEX idx_session_tasks_session_created_at_id (session_name, created_at, id)
+    INDEX idx_session_tasks_session_created_at_id (session_id, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Session Requests
 CREATE TABLE IF NOT EXISTS session_requests (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     request_type VARCHAR(50) NOT NULL,
-    session_name VARCHAR(64) NOT NULL,
+    session_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     payload JSON NOT NULL DEFAULT ('{}'),
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -109,13 +111,13 @@ CREATE TABLE IF NOT EXISTS session_requests (
     error TEXT,
     -- Note: no FK to sessions; requests may reference sessions scheduled for deletion
     INDEX idx_session_requests_status (status),
-    INDEX idx_session_requests_session_name (session_name),
+    INDEX idx_session_requests_session_id (session_id),
     INDEX idx_session_requests_created_by (created_by),
     INDEX idx_session_requests_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default admin operator
-INSERT IGNORE INTO operators (name, password_hash, description, active) 
+INSERT IGNORE INTO operators (name, password_hash, description, active)
 VALUES (
     'admin',
     '$2b$12$xJxdkbovt0jOPDz54RrAeufRUuWRCEJRhClksgUmN9uKKUbG.I8Ly',
@@ -140,8 +142,8 @@ INSERT IGNORE INTO roles (name, description, rules) VALUES
 
 
 -- Role bindings
-INSERT IGNORE INTO role_bindings (principal, principal_type, role_name) 
-VALUES 
+INSERT IGNORE INTO role_bindings (principal, principal_type, role_name)
+VALUES
     ('admin', 'Admin', 'admin');
 
 

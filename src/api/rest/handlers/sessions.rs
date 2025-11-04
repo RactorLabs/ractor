@@ -37,11 +37,12 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 
 #[derive(Debug, Serialize)]
 pub struct SessionResponse {
-    pub name: String, // Primary key - no more id field
+    pub id: String, // Primary key - UUID
+    pub name: String, // Unique field, used for Docker operations
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_session_name: Option<String>, // Changed from parent_session_id
+    pub parent_session_id: Option<String>, // Changed from parent_session_name
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
@@ -52,7 +53,6 @@ pub struct SessionResponse {
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
     pub last_context_length: i64,
-    // Removed: id, container_id, persistent_volume_id
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -137,11 +137,12 @@ impl SessionResponse {
             _ => Vec::new(),
         };
         Ok(Self {
+            id: session.id,
             name: session.name,
             created_by: session.created_by,
             state: session.state,
             description: session.description,
-            parent_session_name: session.parent_session_name,
+            parent_session_id: session.parent_session_id,
             created_at: session.created_at.to_rfc3339(),
             last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
             metadata: session.metadata,
@@ -156,7 +157,32 @@ impl SessionResponse {
     }
 }
 
-// Helper function to find session by name
+// Helper function to find session by ID
+async fn find_session_by_id(
+    state: &AppState,
+    id: &str,
+    created_by: &str,
+    is_admin: bool,
+) -> Result<Session, ApiError> {
+    // Try to find by id
+    if let Some(session) = Session::find_by_id(&state.db, id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
+    {
+        // Admins can access any session, regular users only their own
+        if is_admin || session.created_by == created_by {
+            return Ok(session);
+        } else {
+            return Err(ApiError::Forbidden(
+                "Access denied to this session".to_string(),
+            ));
+        }
+    }
+
+    Err(ApiError::NotFound("Session not found".to_string()))
+}
+
+// Helper function to find session by name (for backwards compatibility and specific use cases)
 async fn find_session_by_name(
     state: &AppState,
     name: &str,
@@ -224,7 +250,7 @@ fn map_file_request_error(err: &str) -> ApiError {
 
 pub async fn read_session_file(
     State(state): State<Arc<AppState>>,
-    Path((name, path)): Path<(String, String)>,
+    Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Response, ApiError> {
     // Admins require explicit permission; owners can access their own sessions
@@ -241,7 +267,7 @@ pub async fn read_session_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
@@ -257,11 +283,11 @@ pub async fn read_session_file(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_read', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&name)
+    .bind(&session.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -327,7 +353,7 @@ pub async fn read_session_file(
 
 pub async fn get_session_file_metadata(
     State(state): State<Arc<AppState>>,
-    Path((name, path)): Path<(String, String)>,
+    Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
@@ -342,7 +368,7 @@ pub async fn get_session_file_metadata(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -353,11 +379,11 @@ pub async fn get_session_file_metadata(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_metadata', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&name)
+    .bind(&session.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -405,7 +431,7 @@ pub async fn get_session_file_metadata(
 
 pub async fn list_session_files(
     State(state): State<Arc<AppState>>,
-    Path((name, path)): Path<(String, String)>,
+    Path((id, path)): Path<(String, String)>,
     Query(paging): Query<ListFilesQuery>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -421,7 +447,7 @@ pub async fn list_session_files(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -436,11 +462,11 @@ pub async fn list_session_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&name)
+    .bind(&session.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -484,7 +510,7 @@ pub async fn list_session_files(
 // List at root when no path segment provided
 pub async fn list_session_files_root(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Query(paging): Query<ListFilesQuery>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -500,7 +526,7 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
@@ -512,11 +538,11 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&name)
+    .bind(&session.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -559,7 +585,7 @@ pub async fn list_session_files_root(
 
 pub async fn delete_session_file(
     State(state): State<Arc<AppState>>,
-    Path((name, path)): Path<(String, String)>,
+    Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
@@ -574,18 +600,18 @@ pub async fn delete_session_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let _session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({ "path": path });
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
+        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_delete', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&name)
+    .bind(&session.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -721,9 +747,8 @@ pub async fn list_sessions(
     // Fetch page
     let select_sql = format!(
         r#"
-        SELECT name, created_by, state, description, parent_session_name,
+        SELECT id, name, created_by, state, description, parent_session_id,
                created_at, last_activity_at, metadata, tags,
-               is_published, published_at, published_by, publish_permissions,
                stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
         FROM sessions
@@ -769,7 +794,7 @@ pub async fn list_sessions(
 
 pub async fn get_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionResponse>> {
     // Admins require explicit permission; non-admins can access only their own session
@@ -788,8 +813,8 @@ pub async fn get_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by name (admin can access any session)
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    // Find session by id (admin can access any session)
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     Ok(Json(
         SessionResponse::from_session(session, &state.db).await?,
@@ -799,7 +824,7 @@ pub async fn get_session(
 // Cancel the latest in-progress task for an session and set session to idle
 pub async fn cancel_active_task(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Admins must have SESSION_UPDATE; owners can cancel their own without RBAC grant
@@ -817,7 +842,7 @@ pub async fn cancel_active_task(
     };
 
     // Confirm access to the session; enforce ownership for non-admins
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
             "You can only cancel your own sessions".to_string(),
@@ -826,7 +851,7 @@ pub async fn cancel_active_task(
 
     // Find latest in-progress task (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM session_tasks WHERE session_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
     .bind(&session.name)
     .fetch_optional(&*state.db)
@@ -863,7 +888,7 @@ pub async fn cancel_active_task(
     // If no task row, try to cancel a queued create_task request (pre-insert race)
     if !cancelled {
         if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM session_requests WHERE session_name = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            r#"SELECT id, created_by, payload FROM session_requests WHERE session_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
         .bind(&session.name)
         .fetch_optional(&*state.db)
@@ -877,7 +902,7 @@ pub async fn cancel_active_task(
                 let output = serde_json::json!({"text":"","items":[cancelled_item]});
                 // Insert cancelled task row (idempotent behavior if it already exists)
                 let _ = sqlx::query(
-                    r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, created_at, updated_at)
+                    r#"INSERT INTO session_tasks (id, session_id, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
@@ -899,7 +924,7 @@ pub async fn cancel_active_task(
     }
 
     // Set session to idle
-    sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE name = ?"#)
+    sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE id = ?"#)
         .bind(&session.name)
         .execute(&*state.db)
         .await
@@ -947,23 +972,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    session_name: &str,
+    session_id: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<(i64, u32), ApiError> {
     // No ordering needed for estimation; avoid sort pressure
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ? AND created_at >= ?"#,
         )
-            .bind(session_name)
+            .bind(session_id)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ?"#,
         )
-            .bind(session_name)
+            .bind(session_id)
             .fetch_all(pool)
             .await
     }
@@ -1196,7 +1221,7 @@ async fn estimate_history_tokens_since(
 
 pub async fn get_session_context(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Reuse GET permission
@@ -1215,7 +1240,7 @@ pub async fn get_session_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     let used = session.last_context_length;
     let limit = soft_limit_tokens();
     let used_percent = if limit > 0 {
@@ -1240,7 +1265,7 @@ pub async fn get_session_context(
 
 pub async fn clear_session_context(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Require update permission
@@ -1260,10 +1285,10 @@ pub async fn clear_session_context(
     };
 
     // Confirm access to the session
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Set the cutoff now
-    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.name)
+    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
@@ -1316,7 +1341,7 @@ pub async fn clear_session_context(
 // Compact context: summarize recent conversation and set a new cutoff.
 pub async fn compact_session_context(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<SessionContextUsageResponse>> {
     // Require update permission
@@ -1336,13 +1361,13 @@ pub async fn compact_session_context(
     };
 
     // Confirm access to the session
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Load conversation history since the current cutoff (if any)
     let cutoff = session.context_cutoff_at;
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT input, output FROM session_tasks WHERE session_name = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_id = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .bind(cut)
@@ -1351,7 +1376,7 @@ pub async fn compact_session_context(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     } else {
         sqlx::query(
-            r#"SELECT input, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM session_tasks WHERE session_id = ? ORDER BY created_at ASC"#,
         )
         .bind(&session.name)
         .fetch_all(&*state.db)
@@ -1520,7 +1545,7 @@ pub async fn compact_session_context(
     };
 
     // Set the cutoff now
-    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.name)
+    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
@@ -1575,7 +1600,7 @@ pub async fn compact_session_context(
 
 pub async fn update_session_context_usage(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateContextUsageRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -1585,10 +1610,10 @@ pub async fn update_session_context_usage(
     };
 
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     let tokens = req.tokens.max(0);
-    Session::update_last_context_length(&state.db, &session.name, tokens)
+    Session::update_last_context_length(&state.db, &session.id, tokens)
         .await
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Failed to update context length: {}", e))
@@ -1681,7 +1706,7 @@ pub async fn start_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
@@ -1701,7 +1726,7 @@ pub async fn start_session(
 
 pub async fn clone_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<CloneSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -1722,7 +1747,7 @@ pub async fn clone_session(
 
     // Find parent session by ID or name (admin can clone any session, users only their own)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let parent = find_session_by_name(&state, &name, username, is_admin).await?;
+    let parent = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Check clone permissions: only owner or admin can clone
     if parent.created_by != *username && !is_admin {
@@ -1740,7 +1765,7 @@ pub async fn clone_session(
     // Store the initial prompt before moving req into Session::clone_from
     let initial_prompt = req.prompt.clone();
 
-    let session = Session::clone_from(&state.db, &parent.name, req.clone(), created_by)
+    let session = Session::clone_from(&state.db, &parent.id, req.clone(), created_by)
         .await
         .map_err(|e| {
             // Provide a clearer error on duplicate name conflicts
@@ -1777,7 +1802,7 @@ pub async fn clone_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
@@ -1808,19 +1833,19 @@ pub struct StopSessionRequest {
 
 pub async fn stop_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     maybe_req: Option<Json<StopSessionRequest>>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Stop request received for session: {}", name);
+    tracing::info!("Stop request received for session: {}", id);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by ID or name (admin can stop any session)
+    // Find session by ID (admin can stop any session)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, created_by, is_admin).await?;
+    let session = find_session_by_id(&state, &id, created_by, is_admin).await?;
 
     tracing::info!("Found session in state: {}", session.state);
 
@@ -1883,7 +1908,7 @@ pub async fn stop_session(
     };
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'stop_session', ?, ?, 'pending')
         "#,
     )
@@ -1897,12 +1922,12 @@ pub async fn stop_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create stop request: {}", e))
     })?;
 
-    tracing::info!("Created stop request for session {}", name);
+    tracing::info!("Created stop request for session {}", session.name);
 
     // Do not insert a pre-stop marker; the controller will add a single 'stopped' marker when shutdown completes
 
     // Fetch session (state remains as-is until controller executes stop)
-    let updated_session = Session::find_by_name(&state.db, &name)
+    let updated_session = Session::find_by_id(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
@@ -1914,7 +1939,7 @@ pub async fn stop_session(
 
 pub async fn restart_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<RestartSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -1935,7 +1960,7 @@ pub async fn restart_session(
 
     // Find session by ID or name (admin can find any session, but restore has ownership restrictions)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Ownership: owners can restart their own sessions; admins (with SESSION_UPDATE) may restart any session
     if session.created_by != *username && !is_admin {
@@ -1958,7 +1983,7 @@ pub async fn restart_session(
         r#"
         UPDATE sessions 
         SET state = ?, last_activity_at = CURRENT_TIMESTAMP
-        WHERE name = ? AND state = ?
+        WHERE id = ? AND state = ?
         "#,
     )
     .bind(crate::shared::models::constants::SESSION_STATE_INIT)
@@ -1990,7 +2015,7 @@ pub async fn restart_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'restart_session', ?, ?, 'pending')
         "#,
     )
@@ -2019,7 +2044,7 @@ pub async fn restart_session(
 
 pub async fn update_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
@@ -2040,7 +2065,7 @@ pub async fn update_session(
 
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
     // Enforce ownership: only admin or owner may update
     if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
@@ -2048,7 +2073,7 @@ pub async fn update_session(
         ));
     }
 
-    let updated_session = Session::update(&state.db, &session.name, req)
+    let updated_session = Session::update(&state.db, &session.id, req)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
@@ -2071,7 +2096,7 @@ pub async fn update_session(
 
 pub async fn update_session_state(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateSessionStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
@@ -2084,11 +2109,11 @@ pub async fn update_session_state(
 
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Update the state with ownership verification
     let result = sqlx::query(
-        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE name = ? AND created_by = ?"
+        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
     .bind(&session.name)
@@ -2111,7 +2136,7 @@ pub async fn update_session_state(
 
 pub async fn delete_session(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
     // Check permission for deleting sessions (admin only). Owners can delete without RBAC grant
@@ -2131,13 +2156,13 @@ pub async fn delete_session(
 
     // Find session by ID or name (admin can access any session for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Hard delete: schedule container+volume removal, then remove DB row
     // Add request to queue for session manager to delete container and cleanup volume
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
+        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
         VALUES (?, 'delete_session', ?, '{}', 'pending')
         "#,
     )
@@ -2149,7 +2174,7 @@ pub async fn delete_session(
 
     tracing::info!("Created delete request for session {}", session.name);
 
-    let deleted = Session::delete(&state.db, &session.name)
+    let deleted = Session::delete(&state.db, &session.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete session: {}", e)))?;
 
@@ -2163,7 +2188,7 @@ pub async fn delete_session(
 // GET /sessions/{name}/runtime — total runtime across sessions
 pub async fn get_session_runtime(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Permission: owner or admin
@@ -2183,13 +2208,13 @@ pub async fn get_session_runtime(
     };
 
     // Find session (admin can access any session)
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Fetch all tasks for this session (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, output FROM session_tasks WHERE session_id = ? ORDER BY created_at ASC"#
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .fetch_all(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
@@ -2254,7 +2279,7 @@ pub async fn get_session_runtime(
 
 pub async fn update_session_to_busy(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Only the session container should be able to call this
@@ -2265,10 +2290,10 @@ pub async fn update_session_to_busy(
 
     // Find session (session token should match session ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Update session to busy: clear idle_from and set busy_from (pauses stop timeout)
-    Session::update_session_to_busy(&state.db, &session.name)
+    Session::update_session_to_busy(&state.db, &session.id)
         .await
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Failed to update session to busy: {}", e))
@@ -2283,7 +2308,7 @@ pub async fn update_session_to_busy(
 
 pub async fn update_session_to_idle(
     State(state): State<Arc<AppState>>,
-    Path(name): Path<String>,
+    Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     // Only the session container should be able to call this
@@ -2294,10 +2319,10 @@ pub async fn update_session_to_idle(
 
     // Find session (session token should match session ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_name(&state, &name, username, is_admin).await?;
+    let session = find_session_by_id(&state, &id, username, is_admin).await?;
 
     // Update session to idle: set idle_from and clear busy_from (idle timeout active)
-    Session::update_session_to_idle(&state.db, &session.name)
+    Session::update_session_to_idle(&state.db, &session.id)
         .await
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Failed to update session to idle: {}", e))

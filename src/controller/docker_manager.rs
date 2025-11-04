@@ -485,6 +485,7 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_full_copy_and_tokens(
         &self,
+        session_id: &str,
         session_name: &str,
         parent_session_name: &str,
         tsbx_token: String,
@@ -647,6 +648,7 @@ echo 'Session directories created (.env, logs)'
         // Now create and start the container with user env + generated system tokens
         let container_name = self
             .create_container_internal_with_tokens(
+                session_id,
                 session_name,
                 Some(env),
                 instructions,
@@ -779,6 +781,7 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_params_and_tokens(
         &self,
+        session_id: &str,
         session_name: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
@@ -790,6 +793,7 @@ echo 'Session directories created (.env, logs)'
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
+                session_id,
                 session_name,
                 Some(env),
                 instructions,
@@ -857,6 +861,7 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn restart_container_with_tokens(
         &self,
+        session_id: &str,
         session_name: &str,
         tsbx_token: String,
         principal: String,
@@ -900,6 +905,7 @@ echo 'Session directories created (.env, logs)'
 
         let container_name = self
             .create_container_internal_with_tokens(
+                session_id,
                 session_name,
                 env,
                 instructions,
@@ -1110,6 +1116,7 @@ echo 'Session directories created (.env, logs)'
 
     async fn create_container_internal_with_tokens(
         &self,
+        session_id: &str,
         session_name: &str,
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
@@ -1161,6 +1168,7 @@ echo 'Session directories created (.env, logs)'
         // Set environment variables for the session structure
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
+            format!("SESSION_ID={}", session_id),
             format!("TSBX_SESSION_NAME={}", session_name),
             format!("TSBX_SESSION_DIR=/session"),
             // Set the generated system tokens directly as environment variables
