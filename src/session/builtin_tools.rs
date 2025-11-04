@@ -721,34 +721,34 @@ impl Tool for PublishTool {
     }
 }
 
-/// Sleep tool (explicit user confirmation required)
-pub struct SleepTool {
+/// Stop tool (explicit user confirmation required)
+pub struct StopSessionTool {
     api: Arc<TaskSandboxClient>,
 }
 
-impl SleepTool {
+impl StopSessionTool {
     pub fn new(api: Arc<TaskSandboxClient>) -> Self {
         Self { api }
     }
 }
 
 #[async_trait]
-impl Tool for SleepTool {
+impl Tool for StopSessionTool {
     fn name(&self) -> &str {
-        "sleep_session"
+        "stop_session"
     }
 
     fn description(&self) -> &str {
-        "Schedule the session to sleep (stop runtime but preserve data) after a short delay. Optionally include a note (shown in chat)."
+        "Schedule the session to stop (halt runtime but preserve data) after a short delay. Optionally include a note (shown in chat)."
     }
 
     fn parameters(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
             "properties": {
-                "commentary": { "type": "string", "description": "Plain-text explanation of why you are sleeping the session" },
+                "commentary": { "type": "string", "description": "Plain-text explanation of why you are stopping the session" },
                 "note": { "type": "string", "description": "Optional reason or note (shown in chat)" },
-                "delay_seconds": { "type": "integer", "description": "Delay in seconds before sleeping (min/default 5)" }
+                "delay_seconds": { "type": "integer", "description": "Delay in seconds before stopping (min/default 5)" }
             },
             "required":["commentary"]
         })
@@ -763,7 +763,7 @@ impl Tool for SleepTool {
             .is_none()
         {
             return Ok(
-                json!({"status":"error","tool":"sleep_session","error":"commentary is required"}),
+                json!({"status":"error","tool":"stop_session","error":"commentary is required"}),
             );
         }
         let mut delay = args
@@ -777,11 +777,11 @@ impl Tool for SleepTool {
             .get("note")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        match self.api.sleep_session(Some(delay), note.clone()).await {
+        match self.api.stop_session(Some(delay), note.clone()).await {
             Ok(_) => Ok(
-                json!({"status":"ok","tool":"sleep_session","message":"Sleep request submitted","delay_seconds": delay, "note": note}),
+                json!({"status":"ok","tool":"stop_session","message":"Stop request submitted","delay_seconds": delay, "note": note}),
             ),
-            Err(e) => Ok(json!({"status":"error","tool":"sleep_session","error":e.to_string()})),
+            Err(e) => Ok(json!({"status":"error","tool":"stop_session","error":e.to_string()})),
         }
     }
 }

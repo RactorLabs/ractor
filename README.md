@@ -18,9 +18,9 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 
 ## Why TaskSandbox
 
-- Session isolation & persistence — Each session runs inside a managed Docker container with a dedicated `/session` volume and private `.env`, created by the controller and reused across sleep/wake cycles.
-- Built-in agent tooling — The session runtime ships a tool registry (bash execution, file editing, plan management, publish/sleep helpers, etc.) so agents can automate real workflows safely.
-- Observability & lifecycle control — Controller and session services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (sleep, wake, remix, publish) for operators.
+- Session isolation & persistence — Each session runs inside a managed Docker container with a dedicated `/session` volume and private `.env`, created by the controller and reused across stop/restart cycles.
+- Built-in agent tooling — The session runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
+- Observability & lifecycle control — Controller and session services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (stop, restart, remix, publish) for operators.
 - API coverage — The Rust API service exposes REST endpoints for sessions, tasks, operators, files, and auth, enabling external orchestration or integration.
 - LLM integration — Sessions talk to Ollama via `OLLAMA_HOST` and the configurable `TSBX_DEFAULT_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
 - Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, Ollama, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.

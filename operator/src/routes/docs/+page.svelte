@@ -334,7 +334,7 @@
               <tbody>
                 <tr><td class="font-monospace">name</td><td>string</td><td>Session name (primary key)</td></tr>
                 <tr><td class="font-monospace">created_by</td><td>string</td><td>Owner username</td></tr>
-                <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|slept</span></td></tr>
+                <tr><td class="font-monospace">state</td><td>string</td><td><span class="font-monospace">init|idle|busy|stopped</span></td></tr>
                 <tr><td class="font-monospace">description</td><td>string|null</td><td>Optional description</td></tr>
                 <tr><td class="font-monospace">parent_session_name</td><td>string|null</td><td>Parent session name if branched</td></tr>
                 <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp</td></tr>

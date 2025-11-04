@@ -338,7 +338,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateSessionRequest' }
+            schema: { $ref: '#/components/schemas/StartSessionRequest' }
       responses:
         '200':
           description: Created session
@@ -464,10 +464,10 @@ paths:
                   success: { type: boolean }
                   state: { type: string }
 
-  /sessions/{name}/sleep:
+/sessions/{name}/stop:
     post:
       tags: [Sessions]
-      summary: Sleep session (destroy container; keep volume)
+      summary: Stop session (destroy container; keep volume)
       parameters:
         - in: path
           name: name
@@ -477,7 +477,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/SleepSessionRequest' }
+            schema: { $ref: '#/components/schemas/StopSessionRequest' }
       responses:
         '200':
           description: Updated session
@@ -510,10 +510,10 @@ paths:
                   cancelled: { type: boolean }
         # 404 is reserved for missing session; handler returns 200 with cancelled=false otherwise
 
-  /sessions/{name}/wake:
+/sessions/{name}/restart:
     post:
       tags: [Sessions]
-      summary: Wake session (recreate container)
+      summary: Restart session (recreate container)
       parameters:
         - in: path
           name: name
@@ -523,7 +523,7 @@ paths:
         required: false
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/RestoreSessionRequest' }
+            schema: { $ref: '#/components/schemas/RestartSessionRequest' }
       responses:
         '200':
           description: Updated session
@@ -848,7 +848,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: Session is sleeping }
+        '409': { description: Session is stopped }
         '413': { description: File too large }
 
   /sessions/{name}/files/metadata/{path}:
@@ -1027,7 +1027,7 @@ components:
         created_by: { type: string }
         state:
           type: string
-          enum: [init, idle, busy, slept]
+          enum: [init, idle, busy, stopped]
           description: Session lifecycle state
         description: { type: string, nullable: true }
         parent_session_name: { type: string, nullable: true }
@@ -1060,7 +1060,7 @@ components:
         page: { type: integer }
         pages: { type: integer }
 
-    CreateSessionRequest:
+    StartSessionRequest:
       type: object
       required: [name]
       properties:
@@ -1097,7 +1097,7 @@ components:
         state:
           type: string
           description: New session state
-          enum: [init, idle, busy, slept]
+          enum: [init, idle, busy, stopped]
 
     BranchSessionRequest:
       type: object
@@ -1117,12 +1117,12 @@ components:
         env: { type: boolean, default: true }
         content: { type: boolean, default: true }
 
-    RestoreSessionRequest:
+    RestartSessionRequest:
       type: object
       properties:
         prompt: { type: string, nullable: true }
 
-    SleepSessionRequest:
+    StopSessionRequest:
       type: object
       properties:
         delay_seconds: { type: integer, minimum: 5, default: 5 }

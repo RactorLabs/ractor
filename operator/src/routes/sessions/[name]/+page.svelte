@@ -585,7 +585,7 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'slept') return 'bi bi-moon';
+    if (s === 'stopped') return 'bi bi-stop-circle';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -596,8 +596,8 @@
   $: stateStr = normState(session?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
-  function isSlept() { return stateStr === 'slept'; }
-  function isAwake() { return stateStr === 'idle' || stateStr === 'busy'; }
+  function isStopped() { return stateStr === 'stopped'; }
+  function isActive() { return stateStr === 'idle' || stateStr === 'busy'; }
   function isInitOrDeleted() { return stateStr === 'init'; }
 
   // Do not auto-refresh files on state changes; user triggers Refresh manually
@@ -702,20 +702,20 @@
   function closeDeleteModal() { showDeleteModal = false; }
   $: canConfirmDelete = String(deleteConfirm || '').trim() === String(name || '').trim();
 
-  // Sleep modal state and actions
-  let showSleepModal = false;
-  let sleepDelayInput = 5;
-  let sleepNoteInput = '';
-  function openSleepModal() {
-    sleepDelayInput = 5;
-    sleepNoteInput = '';
-    showSleepModal = true;
+  // Stop modal state and actions
+  let showStopModal = false;
+  let stopDelayInput = 5;
+  let stopNoteInput = '';
+  function openStopModal() {
+    stopDelayInput = 5;
+    stopNoteInput = '';
+    showStopModal = true;
   }
-  function closeSleepModal() { showSleepModal = false; }
-  async function confirmSleep() {
-    const d = Math.max(5, Math.floor(Number(sleepDelayInput || 5)));
-    showSleepModal = false;
-    await sleepSession(d, sleepNoteInput);
+  function closeStopModal() { showStopModal = false; }
+  async function confirmStop() {
+    const d = Math.max(5, Math.floor(Number(stopDelayInput || 5)));
+    showStopModal = false;
+    await stopSession(d, stopNoteInput);
   }
 
   async function fetchSession() {
@@ -912,28 +912,28 @@
   function segNote(s) {
     try { return String(s?.note || '').trim(); } catch (_) { return ''; }
   }
-  function hasSleptSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'slept'); } catch(_) { return false; }
+  function hasStoppedSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'stopped'); } catch(_) { return false; }
   }
-  function sleptNoteFrom(m) {
+  function stoppedNoteFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'slept');
+      const s = segmentsOf(m).find((x) => segType(x) === 'stopped');
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
-  function sleptRuntimeFrom(m) {
+  function stoppedRuntimeFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'slept');
+      const s = segmentsOf(m).find((x) => segType(x) === 'stopped');
       const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
       return Number.isFinite(v) && v >= 0 ? v : 0;
     } catch(_) { return 0; }
   }
-  function hasWokeSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'woke'); } catch(_) { return false; }
+  function hasRestartedSeg(m) {
+    try { return segmentsOf(m).some((x) => segType(x) === 'restarted'); } catch(_) { return false; }
   }
-  function wokeNoteFrom(m) {
+  function restartedNoteFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'woke');
+      const s = segmentsOf(m).find((x) => segType(x) === 'restarted');
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
@@ -1093,12 +1093,12 @@
       else addTextPart('publish');
       return { parts, text: parts.map((p) => p.text).join(' > ') || 'publish' };
     }
-    if (t === 'sleep_session') {
+    if (t === 'stop_session') {
       const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
       const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
-      const label = [`sleep${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
-      addTextPart(label || 'sleep');
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'sleep' };
+      const label = [`close${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
+      addTextPart(label || 'close');
+      return { parts, text: parts.map((p) => p.text).join(' > ') || 'close' };
     }
     if (t === 'create_plan') {
       const title = typeof a.title === 'string' ? a.title : '';
@@ -1191,26 +1191,26 @@
 
   // Track which tool-result segments are expanded (full output) and which <details> are open
   let expandedSegments = new Set();
-  let openedSegments = new Set();
+  let restartedSegments = new Set();
   let expandAll = false; // when true, force-open all <details> blocks and full segment views
   function segKey(m, j) { try { return `${m?.id || ''}:${j}`; } catch (_) { return `${j}`; } }
   function expandSeg(key) {
     try {
       const s = new Set(expandedSegments); s.add(key); expandedSegments = s;
-      if (!expandAll) { const o = new Set(openedSegments); o.add(key); openedSegments = o; }
+      if (!expandAll) { const o = new Set(restartedSegments); o.add(key); restartedSegments = o; }
     } catch (_) {}
   }
   function collapseSeg(key) {
     try {
       const s = new Set(expandedSegments); s.delete(key); expandedSegments = s;
-      if (!expandAll) { const o = new Set(openedSegments); o.delete(key); openedSegments = o; }
+      if (!expandAll) { const o = new Set(restartedSegments); o.delete(key); restartedSegments = o; }
     } catch (_) {}
   }
   function onToggleDetails(key, isOpen) {
     try {
-      const o = new Set(openedSegments);
+      const o = new Set(restartedSegments);
       if (isOpen) { o.add(key); } else { o.delete(key); }
-      openedSegments = o;
+      restartedSegments = o;
     } catch (_) {}
   }
   // In-progress preview and label removed; always render full details in the feed.
@@ -1271,7 +1271,7 @@
   function collapseAllDetails() {
     try {
       expandedSegments = new Set();
-      openedSegments = new Set();
+      restartedSegments = new Set();
       expandAll = false;
     } catch (_) {}
   }
@@ -1356,24 +1356,24 @@
     sending = false;
   }
 
-  async function sleepSession(delaySeconds = 5, note = '') {
+  async function stopSession(delaySeconds = 5, note = '') {
     try {
       const body = { delay_seconds: delaySeconds };
       const t = String(note || '').trim();
       if (t) body['note'] = t;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Sleep failed (HTTP ${res.status})`);
-      // Do not optimistically flip state; let polling update when controller sleeps it
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST', body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Stop failed (HTTP ${res.status})`);
+      // Do not optimistically flip state; let polling update when controller stops it
       error = null;
     } catch (e) {
       error = e.message || String(e);
     }
   }
 
-  async function wakeSession() {
+  async function restartSession() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Wake failed (HTTP ${res.status})`);
+      const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/restart`, { method: 'POST', body: JSON.stringify({}) });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Restart failed (HTTP ${res.status})`);
       // Optimistically set to init; controller will flip to idle/busy
       if (session) session = { ...(session || {}), state: 'init' };
       const deadline = Date.now() + 120000; // wait up to 2 minutes
@@ -1546,7 +1546,7 @@
             <div class="col-12 col-md-6">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
-              <div class="form-text">Time of inactivity before auto-sleep. 0 disables idle timeout.</div>
+              <div class="form-text">Time of inactivity before auto-stop. 0 disables idle timeout.</div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
@@ -1564,28 +1564,28 @@
   </div>
 {/if}
 
-<!-- Sleep Modal -->
-{#if showSleepModal}
+<!-- Stop Modal -->
+{#if showStopModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Sleep Session</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeSleepModal}></button>
+          <h5 class="modal-title">Stop Session</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeStopModal}></button>
         </div>
         <div class="modal-body">
-          <label class="form-label" for="sleep-delay">Sleep in (seconds)</label>
-          <input id="sleep-delay" type="number" min="5" step="1" class="form-control" bind:value={sleepDelayInput} />
-          <div class="form-text">Minimum 5 seconds. The session will go to sleep after this delay.</div>
+          <label class="form-label" for="stop-delay">Stop in (seconds)</label>
+          <input id="stop-delay" type="number" min="5" step="1" class="form-control" bind:value={stopDelayInput} />
+          <div class="form-text">Minimum 5 seconds. The session will stop after this delay.</div>
           <div class="mt-3">
-            <label class="form-label" for="sleep-note">Note (optional)</label>
-            <input id="sleep-note" type="text" class="form-control" bind:value={sleepNoteInput} placeholder="e.g., Taking a break" />
-            <div class="form-text">Shown alongside the sleep marker in chat.</div>
+            <label class="form-label" for="stop-note">Note (optional)</label>
+            <input id="stop-note" type="text" class="form-control" bind:value={stopNoteInput} placeholder="e.g., Taking a break" />
+            <div class="form-text">Shown alongside the stop marker in chat.</div>
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeSleepModal}>Cancel</button>
-          <button class="btn btn-primary" on:click={confirmSleep}><i class="bi bi-moon me-1"></i>Sleep</button>
+          <button class="btn btn-outline-secondary" on:click={closeStopModal}>Cancel</button>
+          <button class="btn btn-primary" on:click={confirmStop}><i class="bi bi-stop-circle me-1"></i>Stop</button>
         </div>
       </div>
     </div>
@@ -1680,7 +1680,7 @@
             <!-- Public URL in main card -->
             
             <!-- Tags removed from detail page -->
-            <!-- In-card actions (publish, branch, sleep/wake, kebab) -->
+            <!-- In-card actions (publish, branch, close/open, kebab) -->
             <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
@@ -1692,8 +1692,8 @@
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-primary btn-sm" on:click={openSleepModal} aria-label="Put session to sleep">
-                    <i class="fa fa-moon me-1"></i><span>Sleep</span>
+                  <button class="btn btn-outline-primary btn-sm" on:click={openStopModal} aria-label="Stop session">
+                    <i class="fa fa-stop-circle me-1"></i><span>Stop</span>
                   </button>
                 {/if}
                 {#if session}
@@ -1904,7 +1904,7 @@
                         <!-- Combine tool call + immediate tool result if next segment matches -->
                         {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
                           <div class="d-flex mb-3 justify-content-start">
-                            <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
+                            <details class="mt-0" open={expandAll || restartedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">
@@ -1987,7 +1987,7 @@
                         <!-- Orphan tool result (no preceding call) -->
                         {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
                           <div class="d-flex mb-3 justify-content-start">
-                            <details class="mt-0" open={expandAll || openedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
+                            <details class="mt-0" open={expandAll || restartedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
                               <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
                                 <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
                                 <span class="text-body-secondary">Result</span>
@@ -2010,9 +2010,9 @@
                     {/each}
                     </div>
                   </div>
-                  {#if hasSleptSeg(m)}
+                  {#if hasStoppedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Slept{#if sleptNoteFrom(m)}&nbsp;({sleptNoteFrom(m)}){/if}{#if sleptRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(sleptRuntimeFrom(m))}{/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Stopped{#if stoppedNoteFrom(m)}&nbsp;({stoppedNoteFrom(m)}){/if}{#if stoppedRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(stoppedRuntimeFrom(m))}{/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
@@ -2022,9 +2022,9 @@
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
-                  {#if hasWokeSeg(m)}
+                  {#if hasRestartedSeg(m)}
                   <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Woke up{#if wokeNoteFrom(m)}&nbsp;({wokeNoteFrom(m)}){/if}</span>
+                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Restarted{#if restartedNoteFrom(m)}&nbsp;({restartedNoteFrom(m)}){/if}</span>
                     <hr class="flex-grow-1 my-0 chat-marker-hr" />
                   </div>
                   {/if}
@@ -2214,18 +2214,18 @@
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
           <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-            {#if stateStr === 'slept'}
+            {#if stateStr === 'stopped'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><i class="bi bi-moon me-2"></i>Session is sleeping</div>
-                  <p class="small mb-3 text-body-secondary">Wake the session to browse its workspace files.</p>
-                  <button class="btn btn-outline-success btn-sm" on:click={wakeSession}><i class="bi bi-sun me-1"></i>Wake</button>
+                  <div class="fs-5 mb-2"><i class="bi bi-stop-circle me-2"></i>Session is stopped</div>
+                  <p class="small mb-3 text-body-secondary">Restart the session to browse its workspace files.</p>
+                  <button class="btn btn-outline-success btn-sm" on:click={restartSession}><i class="bi bi-arrow-repeat me-1"></i>Restart</button>
                 </div>
               </div>
             {:else if stateStr === 'init'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to wake up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to open up</div>
                 </div>
               </div>
             {:else}

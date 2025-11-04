@@ -28,7 +28,7 @@ pub struct Session {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CreateSessionRequest {
+pub struct StartSessionRequest {
     #[serde(default = "default_metadata")]
     pub metadata: serde_json::Value,
     #[serde(deserialize_with = "deserialize_required_name")] // Required for now
@@ -125,7 +125,7 @@ pub struct UpdateSessionRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RestoreSessionRequest {
+pub struct RestartSessionRequest {
     #[serde(default)]
     pub prompt: Option<String>,
 }
@@ -600,7 +600,7 @@ impl Session {
 
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        req: CreateSessionRequest,
+        req: StartSessionRequest,
         created_by: &str,
     ) -> Result<Session, sqlx::Error> {
         // Use the provided name (random generation to be implemented later)

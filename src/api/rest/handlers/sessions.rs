@@ -15,8 +15,8 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, BranchSessionRequest, CreateSessionRequest, PublishSessionRequest,
-    RestoreSessionRequest, Session, UpdateSessionRequest, UpdateSessionStateRequest,
+    AppState, BranchSessionRequest, PublishSessionRequest, RestartSessionRequest, Session,
+    StartSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
 // Use fully-qualified names for task records to avoid name conflict with local SessionResponse
@@ -217,11 +217,12 @@ fn map_file_request_error(err: &str) -> ApiError {
         ApiError::BadRequest("Path is a directory".to_string())
     } else if lower.contains("invalid path") {
         ApiError::BadRequest("Invalid path".to_string())
-    } else if lower.contains("sleep")
+    } else if lower.contains("stopped")
+        || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Session is sleeping".to_string())
+        ApiError::Conflict("Session is stopped".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -1603,10 +1604,10 @@ pub async fn update_session_context_usage(
     })))
 }
 
-pub async fn create_session(
+pub async fn start_session(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<CreateSessionRequest>,
+    Json(req): Json<StartSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
     tracing::info!(
         "Creating session with env: {} keys, instructions: {}, setup: {}, prompt: {}",
@@ -1685,7 +1686,7 @@ pub async fn create_session(
     sqlx::query(
         r#"
         INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
-        VALUES (?, 'create_session', ?, ?, 'pending')
+        VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
     .bind(&session.name)
@@ -1819,7 +1820,7 @@ pub async fn branch_session(
     sqlx::query(
         r#"
         INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
-        VALUES (?, 'create_session', ?, ?, 'pending')
+        VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
     .bind(&session.name)
@@ -1840,41 +1841,41 @@ pub async fn branch_session(
 }
 
 #[derive(Debug, Deserialize)]
-pub struct SleepSessionRequest {
+pub struct StopSessionRequest {
     #[serde(default)]
     pub delay_seconds: Option<u64>,
     #[serde(default)]
     pub note: Option<String>,
 }
 
-pub async fn sleep_session(
+pub async fn stop_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    maybe_req: Option<Json<SleepSessionRequest>>,
+    maybe_req: Option<Json<StopSessionRequest>>,
 ) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Sleep request received for session: {}", name);
+    tracing::info!("Stop request received for session: {}", name);
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by ID or name (admin can sleep any session)
+    // Find session by ID or name (admin can stop any session)
     let is_admin = is_admin_principal(&auth, &state).await;
     let session = find_session_by_name(&state, &name, created_by, is_admin).await?;
 
     tracing::info!("Found session in state: {}", session.state);
 
-    // Check permission for updating sessions (admin only). Owners can sleep without RBAC grant
+    // Check permission for updating sessions (admin only). Owners can stop without RBAC grant
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to sleep session".to_string())
+                ApiError::Forbidden("Insufficient permissions to stop session".to_string())
             })?;
     }
 
-    // Allow sleeping own sessions or admin can sleep any session
+    // Allow stopping own sessions or admin can stop any session
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
@@ -1883,16 +1884,16 @@ pub async fn sleep_session(
     let is_admin = is_admin_principal(&auth, &state).await;
     if !is_admin && session.created_by != *username {
         return Err(ApiError::Forbidden(
-            "Can only sleep your own sessions".to_string(),
+            "Can only stop your own sessions".to_string(),
         ));
     }
     tracing::info!("Permission check passed");
 
-    // Check current state - cannot sleep if already sleeping
+    // Check current state - cannot stop if already stopped
 
-    if session.state == crate::shared::models::constants::SESSION_STATE_SLEPT {
+    if session.state == crate::shared::models::constants::SESSION_STATE_STOPPED {
         return Err(ApiError::BadRequest(
-            "Session is already sleeping".to_string(),
+            "Session is already stopped".to_string(),
         ));
     }
 
@@ -1925,7 +1926,7 @@ pub async fn sleep_session(
     sqlx::query(
         r#"
         INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
-        VALUES (?, 'sleep_session', ?, ?, 'pending')
+        VALUES (?, 'stop_session', ?, ?, 'pending')
         "#,
     )
     .bind(&session.name)
@@ -1934,15 +1935,15 @@ pub async fn sleep_session(
     .execute(&*state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to create suspend request: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create suspend request: {}", e))
+        tracing::error!("Failed to create stop request: {:?}", e);
+        ApiError::Internal(anyhow::anyhow!("Failed to create stop request: {}", e))
     })?;
 
-    tracing::info!("Created suspend request for session {}", name);
+    tracing::info!("Created stop request for session {}", name);
 
-    // Do not insert a pre-sleep marker; the controller will add a single 'slept' marker when sleep completes
+    // Do not insert a pre-stop marker; the controller will add a single 'stopped' marker when shutdown completes
 
-    // Fetch session (state remains as-is until controller executes sleep)
+    // Fetch session (state remains as-is until controller executes stop)
     let updated_session = Session::find_by_name(&state.db, &name)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
@@ -1953,18 +1954,18 @@ pub async fn sleep_session(
     ))
 }
 
-pub async fn wake_session(
+pub async fn restart_session(
     State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RestoreSessionRequest>,
+    Json(req): Json<RestartSessionRequest>,
 ) -> ApiResult<Json<SessionResponse>> {
-    // Check permission for updating sessions (admin only). Owners can wake without RBAC grant
+    // Check permission for updating sessions (admin only). Owners can restart without RBAC grant
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to wake session".to_string())
+                ApiError::Forbidden("Insufficient permissions to restart session".to_string())
             })?;
     }
 
@@ -1978,17 +1979,17 @@ pub async fn wake_session(
     let is_admin = is_admin_principal(&auth, &state).await;
     let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Ownership: owners can wake their own sessions; admins (with SESSION_UPDATE) may wake any session
+    // Ownership: owners can restart their own sessions; admins (with SESSION_UPDATE) may restart any session
     if session.created_by != *username && !is_admin {
         return Err(ApiError::Forbidden(
-            "You can only wake your own sessions.".to_string(),
+            "You can only restart your own sessions.".to_string(),
         ));
     }
 
-    // Check current state - can only wake if sleeping
-    if session.state != crate::shared::models::constants::SESSION_STATE_SLEPT {
+    // Check current state - can only restart if stopped
+    if session.state != crate::shared::models::constants::SESSION_STATE_STOPPED {
         return Err(ApiError::BadRequest(format!(
-            "Cannot wake session in {} state - only sleeping sessions can be woken",
+            "Cannot restart session in {} state - only stopped sessions can be restarted",
             session.state
         )));
     }
@@ -2004,10 +2005,10 @@ pub async fn wake_session(
     )
     .bind(crate::shared::models::constants::SESSION_STATE_INIT)
     .bind(&session.name)
-    .bind(crate::shared::models::constants::SESSION_STATE_SLEPT)
+    .bind(crate::shared::models::constants::SESSION_STATE_STOPPED)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to wake session: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restart session: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("Session not found".to_string()));
@@ -2021,10 +2022,10 @@ pub async fn wake_session(
 
     // Add update to restart the container with optional prompt
     // Include the session owner as principal for token generation so the
-    // container can authenticate to the API even when an admin triggers wake.
-    let restore_payload = serde_json::json!({
+    // container can authenticate to the API even when an admin triggers restart.
+    let restart_payload = serde_json::json!({
         "prompt": req.prompt,
-        "reason": "user_wake",
+        "reason": "user_restart",
         "principal": session.created_by,
         "principal_type": "User"
     });
@@ -2032,20 +2033,20 @@ pub async fn wake_session(
     sqlx::query(
         r#"
         INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
-        VALUES (?, 'wake_session', ?, ?, 'pending')
+        VALUES (?, 'restart_session', ?, ?, 'pending')
         "#,
     )
     .bind(&session.name)
     .bind(username)
-    .bind(&restore_payload)
+    .bind(&restart_payload)
     .execute(&*state.db)
     .await
     .map_err(|e| {
-        tracing::error!("Failed to create resume request: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create resume request: {}", e))
+        tracing::error!("Failed to create restart request: {:?}", e);
+        ApiError::Internal(anyhow::anyhow!("Failed to create restart request: {}", e))
     })?;
 
-    tracing::info!("Created resume request for session {}", session.name);
+    tracing::info!("Created restart request for session {}", session.name);
 
     // Fetch updated session
     let updated_session = Session::find_by_name(&state.db, &session.name)
@@ -2417,23 +2418,23 @@ pub async fn get_session_runtime(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
-    // Sum runtime for completed sessions; track last wake for current session inclusion
+    // Sum runtime for completed sessions; track last restart marker for current session inclusion
     let mut total: i64 = 0;
-    let mut last_woke: Option<DateTime<Utc>> = None;
+    let mut last_restarted: Option<DateTime<Utc>> = None;
     let mut current_session: i64 = 0;
     for (row_created_at, output) in rows.into_iter() {
         if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
             for it in items {
                 let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if t == "woke" {
+                if t == "restarted" {
                     let at = it
                         .get("at")
                         .and_then(|v| v.as_str())
                         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or(row_created_at);
-                    last_woke = Some(at);
-                } else if t == "slept" {
+                    last_restarted = Some(at);
+                } else if t == "stopped" {
                     // Prefer embedded runtime_seconds, else compute delta
                     if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
                         if rs > 0 {
@@ -2446,7 +2447,7 @@ pub async fn get_session_runtime(
                             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                             .map(|dt| dt.with_timezone(&Utc))
                             .unwrap_or(row_created_at);
-                        let start_at = last_woke.unwrap_or(session.created_at);
+                        let start_at = last_restarted.unwrap_or(session.created_at);
                         let delta = (end_at - start_at).num_seconds();
                         if delta > 0 {
                             total += delta;
@@ -2457,9 +2458,9 @@ pub async fn get_session_runtime(
         }
     }
 
-    // Include current session up to now when session is not sleeping
-    if session.state.to_lowercase() != crate::shared::models::constants::SESSION_STATE_SLEPT {
-        let start_at = last_woke.unwrap_or(session.created_at);
+    // Include current session up to now when session is not stopped
+    if session.state.to_lowercase() != crate::shared::models::constants::SESSION_STATE_STOPPED {
+        let start_at = last_restarted.unwrap_or(session.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
         if delta > 0 {

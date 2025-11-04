@@ -912,11 +912,11 @@ echo 'Session directories created (code, .env, logs, content, template)'
         Ok(container_name)
     }
 
-    pub async fn wake_container(&self, session_name: &str) -> Result<String> {
+    pub async fn restart_container(&self, session_name: &str) -> Result<String> {
         // Read existing env from the volume
         let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
         info!(
-            "Waking container for session {} - reading env from volume {}",
+            "Restarting container for session {} - reading env from volume {}",
             session_name, volume_name
         );
 
@@ -957,7 +957,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         Ok(container_name)
     }
 
-    pub async fn wake_container_with_tokens(
+    pub async fn restart_container_with_tokens(
         &self,
         session_name: &str,
         tsbx_token: String,
@@ -968,7 +968,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         // Read existing user env from the volume (but generate fresh system tokens)
         let volume_name = format!("tsbx_session_data_{}", session_name.to_ascii_lowercase());
         info!(
-            "Waking container for session {} with fresh tokens",
+            "Restarting container for session {} with fresh tokens",
             session_name
         );
 
@@ -1390,11 +1390,11 @@ echo 'Session directories created (code, .env, logs, content, template)'
         Ok(container.id)
     }
 
-    // Sleep container but retain persistent volume (for session pause/sleep)
-    pub async fn sleep_container(&self, session_name: &str) -> Result<()> {
+    // Stop container but retain persistent volume (for session pause/stop)
+    pub async fn stop_container(&self, session_name: &str) -> Result<()> {
         let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());
 
-        info!("Sleeping container {}", container_name);
+        info!("Stopping container {}", container_name);
 
         let options = RemoveContainerOptions {
             force: true,
@@ -1408,7 +1408,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         {
             Ok(_) => {
                 info!(
-                    "Container {} slept, persistent volume retained",
+                    "Container {} stopped, persistent volume retained",
                     container_name
                 );
                 Ok(())
@@ -1421,8 +1421,8 @@ echo 'Session directories created (code, .env, logs, content, template)'
                     );
                     Ok(())
                 } else {
-                    error!("Failed to sleep container {}: {}", container_name, e);
-                    Err(anyhow::anyhow!("Failed to sleep container: {}", e))
+                    error!("Failed to stop container {}: {}", container_name, e);
+                    Err(anyhow::anyhow!("Failed to stop container: {}", e))
                 }
             }
         }
@@ -1478,7 +1478,7 @@ echo 'Session directories created (code, .env, logs, content, template)'
         }
     }
 
-    // Removed legacy destroy_container (deprecated). Use close_container or delete_container.
+    // Removed legacy destroy_container (deprecated). Use stop_container or delete_container.
 
     pub async fn execute_command(&self, session_name: &str, command: &str) -> Result<String> {
         let container_name = format!("tsbx_session_{}", session_name.to_ascii_lowercase());

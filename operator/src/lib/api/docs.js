@@ -31,7 +31,7 @@ export function getCommonSchemas() {
     Session: [
       { name: 'name', type: 'string', desc: 'Session name (primary key)' },
       { name: 'created_by', type: 'string', desc: 'Owner username' },
-      { name: 'state', type: 'string', desc: 'init|idle|busy|slept' },
+      { name: 'state', type: 'string', desc: 'init|idle|busy|stopped' },
       { name: 'description', type: 'string|null', desc: 'Optional description' },
       { name: 'parent_session_name', type: 'string|null', desc: 'Parent session name if branched' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
@@ -78,7 +78,7 @@ export function getCommonSchemas() {
     RuntimeTotal: [
       { name: 'session_name', type: 'string', desc: 'Session name' },
       { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sessions (seconds)' },
-      { name: 'current_session_seconds', type: 'int', desc: 'Current session runtime (seconds), 0 if sleeping' },
+      { name: 'current_session_seconds', type: 'int', desc: 'Current session runtime (seconds), 0 if stopped' },
     ],
     BusyIdleAck: [
       { name: 'success', type: 'boolean', desc: 'true on success' },
@@ -403,7 +403,7 @@ export function getApiDocs(base) {
       { method: 'GET', path: '/api/v0/sessions', auth: 'bearer', desc: 'List/search sessions with pagination.', params: [
         { in: 'query', name: 'q', type: 'string', required: false, desc: 'Search substring over name and description (case-insensitive)' },
         { in: 'query', name: 'tags', type: 'string (comma-separated)', required: false, desc: 'Filter by tags (INTERSECTION/AND). Provide multiple tags as a comma-separated list (e.g., tags=prod,team). Tags are matched case-insensitively and stored lowercase.' },
-        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|slept' },
+        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|stopped' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
@@ -433,7 +433,7 @@ export function getApiDocs(base) {
       ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle","description":"Updated","parent_session_name":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"idle_timeout_seconds":300,"busy_timeout_seconds":3600,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
       { method: 'PUT', path: '/api/v0/sessions/{name}/state', auth: 'bearer', desc: 'Update session state (generic).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|slept)' }
+        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|stopped)' }
       ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<name>/state -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"state":"idle"}'`, resp: { schema: 'StateAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle"}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/busy', auth: 'bearer', desc: 'Set session busy.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
@@ -441,19 +441,19 @@ export function getApiDocs(base) {
       { method: 'POST', path: '/api/v0/sessions/{name}/idle', auth: 'bearer', desc: 'Set session idle.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/idle -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle","timeout_status":"active"}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/sleep', auth: 'bearer', desc: 'Schedule session to sleep after an optional delay (min/default 5s).', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/stop', auth: 'bearer', desc: 'Schedule session to stop after an optional delay (min/default 5s).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before sleeping (min/default 5 seconds)' },
-        { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when sleep occurs' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/sleep -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested sleep"}'\n\n# The session will sleep after the delay. State may not change immediately in the response.`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle",...}` }] },
+        { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before stopping (min/default 5 seconds)' },
+        { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when stop occurs' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/stop -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested stop"}'\n\n# The session will stop after the delay. State may not change immediately in the response.`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"idle",...}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing task (or queued update) and set session to idle.', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/cancel -H "Authorization: Bearer <token>"`, resp: { schema: 'CancelAck' }, responses: [{ status: 200, body: `{"status":"ok","session":"demo","cancelled":true}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{name}/wake', auth: 'bearer', desc: 'Wake session (optionally send a prompt).', params: [
+      { method: 'POST', path: '/api/v0/sessions/{name}/restart', auth: 'bearer', desc: 'Restart session (optionally send a prompt).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
-        { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on wake' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/wake -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init",...}` }] },
-      { method: 'GET', path: '/api/v0/sessions/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last wake or creation).', params: [
+        { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on restart' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<name>/restart -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"name":"demo","created_by":"admin","state":"init",...}` }] },
+      { method: 'GET', path: '/api/v0/sessions/{name}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last restart or creation).', params: [
         { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' }
       ], example: `curl -s ${BASE}/api/v0/sessions/<name>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"session_name":"demo","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
       { method: 'POST', path: '/api/v0/sessions/{name}/branch', auth: 'bearer', desc: 'Branch session (create a new session from parent).', params: [
@@ -557,7 +557,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/sessions/{name}/files/metadata/{path...}',
         auth: 'bearer',
-        desc: 'Get metadata for a file or directory. For symlinks, includes link_target. Returns 409 if the session is sleeping; 400 for invalid paths; 404 if not found.',
+        desc: 'Get metadata for a file or directory. For symlinks, includes link_target. Returns 409 if the session is stopped; 400 for invalid paths; 404 if not found.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
@@ -572,7 +572,7 @@ export function getApiDocs(base) {
         method: 'GET',
         path: '/api/v0/sessions/{name}/files/read/{path...}',
         auth: 'bearer',
-        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-TaskSandbox-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if session is sleeping; 404 if not found; 400 for invalid paths.',
+        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-TaskSandbox-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if session is stopped; 404 if not found; 400 for invalid paths.',
         params: [
           { in: 'path', name: 'name', type: 'string', required: true, desc: 'Session name' },
           { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }

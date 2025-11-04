@@ -64,11 +64,11 @@ impl SessionManager {
 
     pub async fn run(&self) -> Result<()> {
         info!(
-            "Session Manager started, polling for requests, auto-sleep monitoring, and health checks..."
+            "Session Manager started, polling for requests, auto-stop monitoring, and health checks..."
         );
 
         // Run frequent request polling; run heavier maintenance on a slower cadence
-        let mut last_auto_sleep = Instant::now() - Duration::from_secs(60);
+        let mut last_auto_stop = Instant::now() - Duration::from_secs(60);
         let mut last_health = Instant::now() - Duration::from_secs(60);
         loop {
             // Process pending requests (fast path)
@@ -80,17 +80,17 @@ impl SessionManager {
                 }
             };
 
-            // Process auto-sleep every 10s
-            let mut sessions_slept = 0;
-            if last_auto_sleep.elapsed() >= Duration::from_secs(10) {
-                sessions_slept = match self.process_auto_sleep().await {
-                    Ok(slept) => slept,
+            // Process auto-stop every 10s
+            let mut sessions_stopped = 0;
+            if last_auto_stop.elapsed() >= Duration::from_secs(10) {
+                sessions_stopped = match self.process_auto_stop().await {
+                    Ok(count) => count,
                     Err(e) => {
-                        error!("Error processing auto-sleep: {}", e);
+                        error!("Error processing auto-stop: {}", e);
                         0
                     }
                 };
-                last_auto_sleep = Instant::now();
+                last_auto_stop = Instant::now();
             }
 
             // Check health every 10s
@@ -107,13 +107,13 @@ impl SessionManager {
             }
 
             // If no work was done, short sleep before next poll (improves responsiveness)
-            if requests_processed == 0 && sessions_slept == 0 && sessions_recovered == 0 {
+            if requests_processed == 0 && sessions_stopped == 0 && sessions_recovered == 0 {
                 sleep(Duration::from_millis(250)).await;
             }
         }
     }
 
-    /// Ensure the session container is running and healthy; wake if needed and wait up to timeout_secs
+    /// Ensure the session container is running and healthy; restart if needed and wait up to timeout_secs
     pub async fn ensure_session_running(
         &self,
         session_name: &str,
@@ -128,16 +128,16 @@ impl SessionManager {
             }
         }
 
-        // If DB says slept or container absent, wake
+        // If DB says stopped or container absent, restart
         if let Some((state,)) =
             sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sessions WHERE name = ?"#)
                 .bind(session_name)
                 .fetch_optional(&self.pool)
                 .await?
         {
-            if state.to_lowercase() == "slept" {
-                tracing::info!("Session {} is slept; waking container", session_name);
-                let _ = self.docker_manager.wake_container(session_name).await?;
+            if state.to_lowercase() == "stopped" {
+                tracing::info!("Session {} is stopped; restarting container", session_name);
+                let _ = self.docker_manager.restart_container(session_name).await?;
             }
         } else {
             // No row; nothing we can do
@@ -175,8 +175,8 @@ impl SessionManager {
 
     // No external API key required for local Ollama
 
-    /// Process sessions that need auto-closing due to timeout
-    async fn process_auto_sleep(&self) -> Result<usize> {
+    /// Process sessions that need auto-stopping due to timeout
+    async fn process_auto_stop(&self) -> Result<usize> {
         // Ensure all idle sessions have idle_from set
         let _ = sqlx::query(
             r#"
@@ -199,8 +199,8 @@ impl SessionManager {
         .execute(&self.pool)
         .await;
 
-        // Find sessions that need auto-sleep due to idle timeout
-        let sessions_to_close: Vec<(String,)> = sqlx::query_as(
+        // Find sessions that need auto-stop due to idle or busy timeout
+        let sessions_to_stop: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT name
             FROM sessions
@@ -215,37 +215,37 @@ impl SessionManager {
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-sleep: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-stop: {}", e))?;
 
-        let mut slept_count = 0;
+        let mut stopped_count = 0;
 
-        for (session_name,) in sessions_to_close {
-            info!("Auto-sleeping session {} due to timeout", session_name);
+        for (session_name,) in sessions_to_stop {
+            info!("Auto-stopping session {} due to timeout", session_name);
 
-            // Create sleep request for the session
+            // Create stop request for the session
             let request_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
                 INSERT INTO session_requests (id, session_name, request_type, created_by, payload, status)
-                VALUES (?, ?, 'sleep_session', 'system', '{"reason": "auto_sleep_timeout"}', 'pending')
+                VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
                 "#)
             .bind(&request_id)
             .bind(&session_name)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-sleep request for session {}: {}", session_name, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session {}: {}", session_name, e))?;
 
             info!(
-                "Created auto-sleep request {} for session {}",
+                "Created auto-stop request {} for session {}",
                 request_id, session_name
             );
-            slept_count += 1;
+            stopped_count += 1;
         }
 
-        if slept_count > 0 {
-            info!("Scheduled {} sessions for auto-sleep", slept_count);
+        if stopped_count > 0 {
+            info!("Scheduled {} sessions for auto-stop", stopped_count);
         }
 
-        Ok(slept_count)
+        Ok(stopped_count)
     }
 
     /// Generate a session-specific TSBX token for the given principal
@@ -343,11 +343,11 @@ impl SessionManager {
         );
 
         let result = match request.request_type.as_str() {
-            "create_session" => self.handle_create_session(request.clone()).await,
+            "start_session" => self.handle_start_session(request.clone()).await,
             "destroy_session" => self.handle_destroy_session(request.clone()).await,
             "execute_command" => self.handle_execute_command(request.clone()).await,
-            "sleep_session" => self.handle_sleep_session(request.clone()).await,
-            "wake_session" => self.handle_wake_session(request.clone()).await,
+            "stop_session" => self.handle_stop_session(request.clone()).await,
+            "restart_session" => self.handle_restart_session(request.clone()).await,
             "publish_session" => self.handle_publish_session(request.clone()).await,
             "unpublish_session" => self.handle_unpublish_session(request.clone()).await,
             "create_task" => self.handle_create_task(request.clone()).await,
@@ -376,7 +376,7 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_create_session(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_start_session(&self, request: SessionRequest) -> Result<()> {
         let session_name = request.session_name.clone();
 
         // Parse the payload to get session creation parameters
@@ -671,9 +671,9 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_sleep_session(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_stop_session(&self, request: SessionRequest) -> Result<()> {
         let session_name = request.session_name;
-        // Optional delay before sleeping (in seconds), minimum 5 seconds
+        // Optional delay before closing (in seconds), minimum 5 seconds
         let delay_secs = request
             .payload
             .get("delay_seconds")
@@ -682,7 +682,7 @@ impl SessionManager {
             .unwrap_or(5);
         if delay_secs > 0 {
             info!(
-                "Delaying sleep for session {} by {} seconds",
+                "Delaying close for session {} by {} seconds",
                 session_name, delay_secs
             );
             sleep(Duration::from_secs(delay_secs)).await;
@@ -697,25 +697,25 @@ impl SessionManager {
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
 
-        info!("Sleeping container for session {}", session_name);
+        info!("Closing container for session {}", session_name);
 
-        // Sleep the Docker container but keep the persistent volume
-        self.docker_manager.sleep_container(&session_name).await?;
+        // Close the Docker container but keep the persistent volume
+        self.docker_manager.stop_container(&session_name).await?;
 
-        // Update session state to slept
-        sqlx::query(r#"UPDATE sessions SET state = 'slept' WHERE name = ?"#)
+        // Update session state to stopped
+        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
             .bind(&session_name)
             .execute(&self.pool)
             .await?;
 
-        info!("Session {} state updated to slept", session_name);
-        // Create a chat marker task to indicate the session has slept
+        info!("Session {} state updated to stopped", session_name);
+        // Create a chat marker task to indicate the session has stopped
         let task_id = uuid::Uuid::new_v4().to_string();
         let created_by = request.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
         // Determine note: auto timeout vs user-triggered
         let auto =
-            request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_sleep_timeout");
+            request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_stop_timeout");
         let reason = if auto {
             if prior_state.to_lowercase() == "busy" {
                 "busy_timeout"
@@ -736,10 +736,10 @@ impl SessionManager {
                 .payload
                 .get("note")
                 .and_then(|v| v.as_str())
-                .unwrap_or("User requested sleep")
+                .unwrap_or("User requested close")
         };
 
-        // Mark the latest in-progress task as cancelled (processing or pending) (applies to any sleep reason)
+        // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)
         if let Some((task_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
             r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
@@ -806,7 +806,7 @@ impl SessionManager {
                 }
             }
         }
-        // Determine runtime: time from last wake marker (or session.created_at if none)
+        // Determine runtime: time from last open marker (or session.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
             r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
         )
@@ -819,7 +819,7 @@ impl SessionManager {
             if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                 let mut found = false;
                 for it in items {
-                    if it.get("type").and_then(|v| v.as_str()) == Some("woke") {
+                    if it.get("type").and_then(|v| v.as_str()) == Some("restarted") {
                         start_ts = row_created_at;
                         found = true;
                         break;
@@ -839,7 +839,7 @@ impl SessionManager {
         let output_json = serde_json::json!({
             "text": "",
             "items": [
-                { "type": "slept", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text, "runtime_seconds": runtime_seconds }
+                { "type": "stopped", "note": note, "reason": reason, "by": created_by, "delay_seconds": delay_secs, "at": now_text, "runtime_seconds": runtime_seconds }
             ]
         });
 
@@ -860,7 +860,7 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_wake_session(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_restart_session(&self, request: SessionRequest) -> Result<()> {
         let session_name = request.session_name;
         // Prefer explicitly provided principal/principal_type from payload (owner),
         // fall back to request.created_by as a regular subject.
@@ -877,11 +877,14 @@ impl SessionManager {
             .unwrap_or("User")
             .to_string();
 
-        info!("Waking container for session {}", session_name);
+        info!("Restarting container for session {}", session_name);
 
-        // Generate fresh tokens for woken session
-        info!("Generating fresh tokens for woken session {}", session_name);
-        let wake_token = self
+        // Generate fresh tokens for restarted session
+        info!(
+            "Generating fresh tokens for restarted session {}",
+            session_name
+        );
+        let restart_token = self
             .generate_session_token(
                 &effective_principal,
                 match effective_principal_type.as_str() {
@@ -890,24 +893,24 @@ impl SessionManager {
                 },
                 &session_name,
             )
-            .map_err(|e| anyhow::anyhow!("Failed to generate wake session token: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
 
-        // All woken sessions were slept (container destroyed), so recreate container
+        // All restarted sessions were stopped (container destroyed), so recreate container
         info!(
-            "Session {} was slept, waking container with persistent volume and fresh tokens",
+            "Session {} was stopped, restarting container with persistent volume and fresh tokens",
             session_name
         );
         self.docker_manager
-            .wake_container_with_tokens(
+            .restart_container_with_tokens(
                 &session_name,
-                wake_token,
+                restart_token,
                 effective_principal.clone(),
                 effective_principal_type.clone(),
                 request.created_at,
             )
             .await?;
 
-        // Update last_activity_at and clear idle_from/busy_from since session is being woken (will set to idle later)
+        // Update last_activity_at and clear idle_from/busy_from since session is being restarted (will set to idle later)
         sqlx::query(
             r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE name = ?"#,
         )
@@ -915,19 +918,19 @@ impl SessionManager {
         .execute(&self.pool)
         .await?;
 
-        info!("Container woken for session {}", session_name);
+        info!("Container restarted for session {}", session_name);
 
         // Send prompt if provided
         if let Some(prompt) = request.payload.get("prompt").and_then(|v| v.as_str()) {
             info!(
-                "Sending prompt to woken session {}: {}",
+                "Sending prompt to restarted session {}: {}",
                 session_name, prompt
             );
 
             // Get the principal name from the request
             let principal = effective_principal.clone();
 
-            // Create task record in database for woken session
+            // Create task record in database for restarted session
             let task_id = uuid::Uuid::new_v4().to_string();
             let input_json = serde_json::json!({ "text": prompt });
             let output_json = serde_json::json!({ "text": "", "items": [] });
@@ -945,27 +948,27 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt task {} created for woken session {}",
+                "Prompt task {} created for rerestarted session {}",
                 task_id, session_name
             );
         }
 
-        // Insert a chat marker indicating the session has woken
+        // Insert a chat marker indicating the session has restarted
         let task_id = uuid::Uuid::new_v4().to_string();
         let now_text = chrono::Utc::now().to_rfc3339();
         let reason = request
             .payload
             .get("reason")
             .and_then(|v| v.as_str())
-            .unwrap_or("user_wake");
-        let note = if reason == "user_wake" {
-            "User wake"
+            .unwrap_or("user_restart");
+        let note = if reason == "user_restart" {
+            "User open"
         } else {
-            "Wake"
+            "Open"
         };
         let output_json = serde_json::json!({
             "text": "",
-            "items": [ { "type": "woke", "note": note, "reason": reason, "by": effective_principal, "at": now_text } ]
+            "items": [ { "type": "restarted", "note": note, "reason": reason, "by": effective_principal, "at": now_text } ]
         });
         sqlx::query(
             r#"
@@ -1003,9 +1006,9 @@ impl SessionManager {
             .get("input")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({"text":""}));
-        let wake_if_slept = request
+        let restart_if_stopped = request
             .payload
-            .get("wake_if_slept")
+            .get("restart_if_stopped")
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
@@ -1017,19 +1020,19 @@ impl SessionManager {
                 .await?;
         let state = state_opt.map(|t| t.0).unwrap_or_default();
 
-        // Wake if needed
-        if wake_if_slept && state == "slept" {
+        // Restart if needed
+        if restart_if_stopped && state == "stopped" {
             info!(
-                "Session {} slept; waking prior to inserting task entry",
+                "Session {} stopped; restarting prior to inserting task entry",
                 session_name
             );
-            let wake_token = self
+            let restart_token = self
                 .generate_session_token(&principal, SubjectType::Subject, &session_name)
-                .map_err(|e| anyhow::anyhow!("Failed to generate wake session token: {}", e))?;
+                .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
             self.docker_manager
-                .wake_container_with_tokens(
+                .restart_container_with_tokens(
                     &session_name,
-                    wake_token,
+                    restart_token,
                     principal.clone(),
                     "User".to_string(),
                     request.created_at,
@@ -1042,17 +1045,17 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
 
-            // Insert a wake marker for implicit wake
+            // Insert a restart marker for implicit restarts
             let marker_id = uuid::Uuid::new_v4().to_string();
             let now_text = chrono::Utc::now().to_rfc3339();
-            // Ensure the wake marker sorts before the newly created task row by using a slightly earlier timestamp
+            // Ensure the restart marker sorts before the newly created task row by using a slightly earlier timestamp
             let marker_created_at = request
                 .created_at
                 .checked_sub_signed(chrono::Duration::milliseconds(1))
                 .unwrap_or(request.created_at);
             let output_json = serde_json::json!({
                 "text": "",
-                "items": [ { "type": "woke", "note": "Incoming request", "reason": "implicit_wake", "by": principal, "at": now_text } ]
+                "items": [ { "type": "restarted", "note": "Incoming request", "reason": "implicit_restart", "by": principal, "at": now_text } ]
             });
             sqlx::query(
             r#"
@@ -1087,7 +1090,7 @@ impl SessionManager {
         }
 
         // Insert task row
-        // To avoid identical timestamps with the implicit wake marker (second-level precision
+        // To avoid identical timestamps with the implicit open marker (second-level precision
         // in MySQL DATETIME), create the task entry one second after the request's created_at.
         let output_json = serde_json::json!({ "text": "", "items": [] });
         let task_created_at = request
@@ -1266,14 +1269,14 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Check health of all non-sleeping sessions and mark failed containers as slept
+    /// Check health of all non-stopped sessions and mark failed containers as stopped
     async fn check_session_health(&self) -> Result<usize> {
-        // Find all sessions that are not sleeping (active sessions)
+        // Find all sessions that are not stopped (active sessions)
         let active_sessions: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT name, state
             FROM sessions
-            WHERE state != 'slept'
+            WHERE state != 'stopped'
             ORDER BY name
             "#,
         )
@@ -1304,24 +1307,24 @@ impl SessionManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Session {} container is unhealthy or missing, marking as slept for recovery",
+                        "Session {} container is unhealthy or missing, marking as stopped for recovery",
                         session_name
                     );
 
-                    // Mark session as slept so it can be woken up later
+                    // Mark session as stopped so it can be restarted later
                     if let Err(e) =
-                        sqlx::query(r#"UPDATE sessions SET state = 'slept' WHERE name = ?"#)
+                        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE name = ?"#)
                             .bind(&session_name)
                             .execute(&self.pool)
                             .await
                     {
                         error!(
-                            "Failed to mark unhealthy session {} as slept: {}",
+                            "Failed to mark unhealthy session {} as stopped: {}",
                             session_name, e
                         );
                     } else {
                         info!(
-                            "Session {} marked as slept due to container failure (was: {})",
+                            "Session {} marked as stopped due to container failure (was: {})",
                             session_name, current_state
                         );
                         recovered_count += 1;
@@ -1339,7 +1342,7 @@ impl SessionManager {
 
         if recovered_count > 0 {
             info!(
-                "Marked {} sessions as slept due to container failures",
+                "Marked {} sessions as stopped due to container failures",
                 recovered_count
             );
         }
@@ -1404,7 +1407,7 @@ impl SessionManager {
         let safe = self
             .sanitize_relative_path(path)
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        // Do not auto-wake for file APIs; require running container
+        // Do not auto-open for file APIs; require running container
         match self
             .docker_manager
             .is_container_healthy(&request.session_name)
@@ -1413,7 +1416,7 @@ impl SessionManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is stopped".to_string())
                     .await;
             }
         }
@@ -1490,7 +1493,7 @@ impl SessionManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is stopped".to_string())
                     .await;
             }
         }
@@ -1579,7 +1582,7 @@ impl SessionManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is stopped".to_string())
                     .await;
             }
         }
@@ -1682,7 +1685,7 @@ impl SessionManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is sleeping".to_string())
+                    .fail_request(&request.id, "session is stopped".to_string())
                     .await;
             }
         }

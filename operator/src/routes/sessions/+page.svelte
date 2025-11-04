@@ -40,7 +40,7 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'slept') return 'bi bi-moon';
+    if (s === 'stopped') return 'bi bi-stop-circle';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -79,24 +79,24 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function sleepSession(name) {
+  async function stopSession(name) {
     let delaySeconds = 5;
     try {
-      const input = prompt('Sleep in how many seconds? (min 5)', '5');
+      const input = prompt('Stop in how many seconds? (min 5)', '5');
       if (input !== null) {
         const n = Math.floor(Number(input));
         if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
       }
     } catch (_) {}
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/sleep`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
-    if (!res.ok) { error = res?.data?.message || 'Sleep failed'; return; }
-    // Give the controller time to perform delayed sleep before refreshing
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
+    if (!res.ok) { error = res?.data?.message || 'Stop failed'; return; }
+    // Give the controller time to perform delayed stop before refreshing
     await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
     await refresh();
   }
-  async function wakeSession(name) {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/wake`, { method: 'POST', body: JSON.stringify({}) });
-    if (!res.ok) { error = res?.data?.message || 'Wake failed'; return; }
+  async function restartSession(name) {
+    const res = await apiFetch(`/sessions/${encodeURIComponent(name)}/restart`, { method: 'POST', body: JSON.stringify({}) });
+    if (!res.ok) { error = res?.data?.message || 'Restart failed'; return; }
     await refresh();
   }
   async function publishSession(name) {
@@ -213,7 +213,7 @@ import { getHostUrl } from '$lib/branding.js';
             <option value="init">init</option>
             <option value="idle">idle</option>
             <option value="busy">busy</option>
-            <option value="slept">slept</option>
+            <option value="stopped">stopped</option>
           </select>
         </div>
       </div>
@@ -287,8 +287,13 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => sleepSession(a.name)} aria-label="Put session to sleep">
-                            <i class="bi bi-moon me-1"></i><span>Sleep</span>
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSession(a.name)} aria-label="Stop session">
+                            <i class="bi bi-stop-circle me-1"></i><span>Stop</span>
+                          </button>
+                        {/if}
+                        {#if String(a.state||'').toLowerCase() === 'stopped'}
+                          <button class="btn btn-outline-success btn-sm" on:click={() => restartSession(a.name)} aria-label="Restart session">
+                            <i class="bi bi-arrow-repeat me-1"></i><span>Restart</span>
                           </button>
                         {/if}
                         {#if a.is_published}

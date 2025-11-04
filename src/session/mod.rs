@@ -195,8 +195,8 @@ pub async fn run(api_url: &str, session_name: &str) -> Result<()> {
             let state = session_info.state.to_lowercase();
             if state == "busy" {
                 info!("Skipping initial idle update because session is marked busy");
-            } else if state == "slept" {
-                info!("Skipping initial idle update because session is slept");
+            } else if state == "stopped" {
+                info!("Skipping initial idle update because session is stopped");
             } else {
                 info!("Setting session to idle to start timeout...");
                 if let Err(e) = api_client.update_session_to_idle().await {

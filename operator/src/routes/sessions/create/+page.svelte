@@ -198,12 +198,12 @@
             <div class="col-12 col-md-3">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
-              <div class="form-text">Sleep after idle (default 300).</div>
+              <div class="form-text">Stop after idle (default 300).</div>
             </div>
             <div class="col-12 col-md-3">
               <label class="form-label" for="busy-timeout">Busy Timeout (seconds)</label>
               <input id="busy-timeout" type="number" min="1" class="form-control" bind:value={busyTimeoutSeconds} />
-              <div class="form-text">Sleep after busy too long (default 3600).</div>
+              <div class="form-text">Stop after busy too long (default 3600).</div>
             </div>
 
             <div class="col-12">
