@@ -698,7 +698,7 @@
   let deleteConfirm = '';
   function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
   function closeDeleteModal() { showDeleteModal = false; }
-  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.id || name || '').trim();
+  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.id || sessionId || '').trim();
 
   // Stop modal state and actions
   let showStopModal = false;
@@ -1579,14 +1579,14 @@
           <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold font-monospace">{session?.id || name}</span> to confirm permanent deletion.</p>
-          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={session?.id || name} />
+          <p class="mb-2">Type <span class="fw-bold font-monospace">{session?.id || sessionId}</span> to confirm permanent deletion.</p>
+          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={session?.id || sessionId} />
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
           <button class="btn btn-danger" disabled={!canConfirmDelete} on:click={async () => {
             try {
-              const cur = String(name || '').trim();
+              const cur = String(sessionId || '').trim();
               const res = await apiFetch(`/sessions/${encodeURIComponent(cur)}`, { method: 'DELETE' });
               if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
               showDeleteModal = false;
