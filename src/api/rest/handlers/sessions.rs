@@ -853,7 +853,7 @@ pub async fn cancel_active_task(
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
         r#"SELECT id, output FROM session_tasks WHERE session_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .fetch_optional(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -890,7 +890,7 @@ pub async fn cancel_active_task(
         if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
             r#"SELECT id, created_by, payload FROM session_requests WHERE session_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
-        .bind(&session.name)
+        .bind(&session.id)
         .fetch_optional(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
@@ -907,7 +907,7 @@ pub async fn cancel_active_task(
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
                 .bind(&task_id)
-                .bind(&session.name)
+                .bind(&session.id)
                 .bind(&created_by)
                 .bind(&input)
                 .bind(&output)
@@ -925,7 +925,7 @@ pub async fn cancel_active_task(
 
     // Set session to idle
     sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE id = ?"#)
-        .bind(&session.name)
+        .bind(&session.id)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e)))?;
@@ -1806,7 +1806,7 @@ pub async fn clone_session(
         VALUES (?, 'start_session', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(created_by)
     .bind(request_payload)
     .execute(&*state.db)
@@ -2116,7 +2116,7 @@ pub async fn update_session_state(
         "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
-    .bind(&session.name)
+    .bind(&session.id)
     .bind(username)
     .execute(&*state.db)
     .await

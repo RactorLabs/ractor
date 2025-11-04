@@ -246,23 +246,35 @@ impl SessionManager {
         for (session_name,) in sessions_to_stop {
             info!("Auto-stopping session {} due to timeout", session_name);
 
-            // Create stop request for the session
-            let request_id = uuid::Uuid::new_v4().to_string();
-            sqlx::query(r#"
-                INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
-                VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
-                "#)
-            .bind(&request_id)
+            // Look up session to get its UUID
+            let session_id_opt: Option<(String,)> = sqlx::query_as(
+                "SELECT id FROM sessions WHERE name = ?"
+            )
             .bind(&session_name)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session {}: {}", session_name, e))?;
+            .fetch_optional(&self.pool)
+            .await?;
 
-            info!(
-                "Created auto-stop request {} for session {}",
-                request_id, session_name
-            );
-            stopped_count += 1;
+            if let Some((session_id,)) = session_id_opt {
+                // Create stop request for the session
+                let request_id = uuid::Uuid::new_v4().to_string();
+                sqlx::query(r#"
+                    INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+                    VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
+                    "#)
+                .bind(&request_id)
+                .bind(&session_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session {}: {}", session_name, e))?;
+
+                info!(
+                    "Created auto-stop request {} for session {}",
+                    request_id, session_name
+                );
+                stopped_count += 1;
+            } else {
+                warn!("Session {} not found in database during auto-stop", session_name);
+            }
         }
 
         if stopped_count > 0 {
@@ -276,7 +288,7 @@ impl SessionManager {
         let timed_out: Vec<(String, String, serde_json::Value, chrono::DateTime<Utc>)> =
             sqlx::query_as(
                 r#"
-                SELECT id, session_name, output, created_at
+                SELECT id, session_id, output, created_at
                 FROM session_tasks
                 WHERE timeout_at IS NOT NULL
                   AND timeout_at <= NOW()
@@ -293,7 +305,22 @@ impl SessionManager {
         }
 
         let mut cancelled = 0usize;
-        for (task_id, session_name, output_json, created_at) in timed_out {
+        for (task_id, session_id, output_json, created_at) in timed_out {
+            // Look up session name from session_id for logging and state update
+            let session_name_opt: Option<(String,)> = sqlx::query_as(
+                "SELECT name FROM sessions WHERE id = ?"
+            )
+            .bind(&session_id)
+            .fetch_optional(&self.pool)
+            .await?;
+
+            let session_name = match session_name_opt {
+                Some((name,)) => name,
+                None => {
+                    warn!("Session with id {} not found during task timeout processing", session_id);
+                    continue;
+                }
+            };
             let now = chrono::Utc::now();
             let now_text = now.to_rfc3339();
             let runtime_seconds = (now - created_at).num_seconds();
@@ -681,12 +708,12 @@ impl SessionManager {
             let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&task_id)
-            .bind(&session_name)
+            .bind(&session.id)
             .bind(&principal)
             .bind(&input_json)
             .bind(&output_json)
@@ -889,9 +916,9 @@ impl SessionManager {
 
         // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)
         if let Some((task_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM session_tasks WHERE session_name = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+            r#"SELECT id, output FROM session_tasks WHERE session_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
-        .bind(&session_name)
+        .bind(&session.id)
         .fetch_optional(&self.pool)
         .await
         .unwrap_or(None)
@@ -924,9 +951,9 @@ impl SessionManager {
         } else {
             // If no task row exists yet (pre-insert race), try to find the latest create_task request and insert a cancelled task
             if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM session_requests WHERE session_name = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+                r#"SELECT id, created_by, payload FROM session_requests WHERE session_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
             )
-            .bind(&session_name)
+            .bind(&session.id)
             .fetch_optional(&self.pool)
             .await
             .unwrap_or(None)
@@ -936,12 +963,12 @@ impl SessionManager {
                     let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
                     let output = serde_json::json!({"text":"","items":[cancelled_item]});
                     let _ = sqlx::query(
-                        r#"INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                        r#"INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                             VALUES (?, ?, ?, 'cancelled', ?, ?, NULL, NULL, NOW(), NOW())
                             ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), timeout_seconds=VALUES(timeout_seconds), timeout_at=VALUES(timeout_at), updated_at=NOW()"#
                     )
                     .bind(task_id)
-                    .bind(&session_name)
+                    .bind(&session.id)
                     .bind(&created_by)
                     .bind(&input)
                     .bind(&output)
@@ -956,9 +983,9 @@ impl SessionManager {
         }
         // Determine runtime: time from last open marker (or session.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-            r#"SELECT created_at, output FROM session_tasks WHERE session_name = ? ORDER BY created_at DESC LIMIT 50"#
+            r#"SELECT created_at, output FROM session_tasks WHERE session_id = ? ORDER BY created_at DESC LIMIT 50"#
         )
-        .bind(&session_name)
+        .bind(&session.id)
         .fetch_all(&self.pool)
         .await
         .unwrap_or_default();
@@ -1011,12 +1038,12 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, NOW(), NOW())
             "#,
         )
         .bind(&task_id)
-        .bind(&session_name)
+        .bind(&session.id)
         .bind(&created_by)
         .bind(&serde_json::json!({"text": ""}))
         .bind(&output_json)
@@ -1109,12 +1136,12 @@ impl SessionManager {
             let output_json = serde_json::json!({ "text": "", "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, NULL, NULL, NOW(), NOW())
                 "#,
             )
             .bind(&task_id)
-            .bind(&session_name)
+            .bind(&session.id)
             .bind(&principal)
             .bind(&input_json)
             .bind(&output_json)
@@ -1145,12 +1172,12 @@ impl SessionManager {
         });
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, ?, ?)
             "#,
         )
         .bind(&task_id)
-        .bind(&session_name)
+        .bind(&session.id)
         .bind(&effective_principal)
         .bind(&serde_json::json!({"text":""}))
         .bind(&output_json)
@@ -1246,12 +1273,12 @@ impl SessionManager {
             });
             sqlx::query(
                 r#"
-                INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                 VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, ?, ?)
                 "#,
             )
             .bind(&marker_id)
-            .bind(&session_name)
+            .bind(&session.id)
             .bind(&principal)
             .bind(&serde_json::json!({"text":""}))
             .bind(&output_json)
@@ -1290,12 +1317,12 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_name, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task_id)
-        .bind(&session_name)
+        .bind(&session.id)
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)

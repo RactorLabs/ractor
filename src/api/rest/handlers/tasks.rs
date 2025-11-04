@@ -278,23 +278,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    session_name: &str,
+    session_id: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<i64, ApiError> {
     // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ? AND created_at >= ?"#,
         )
-            .bind(session_name)
+            .bind(session_id)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_name = ?"#,
+            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ?"#,
         )
-            .bind(session_name)
+            .bind(session_id)
             .fetch_all(pool)
             .await
     }
