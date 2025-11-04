@@ -453,14 +453,14 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Sleep the current session by name after an optional delay (seconds, min 5) with optional note
-    pub async fn sleep_session(
+    /// Stop the current session by name after an optional delay (seconds, min 5) with optional note
+    pub async fn stop_session(
         &self,
         delay_seconds: Option<u64>,
         note: Option<String>,
     ) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/sleep",
+            "{}/api/v0/sessions/{}/stop",
             self.config.api_url, self.config.session_name
         );
 
@@ -496,7 +496,7 @@ impl TaskSandboxClient {
                     .await
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
-                    "Failed to sleep session ({}): {}",
+                    "Failed to stop session ({}): {}",
                     status, error_text
                 )))
             }

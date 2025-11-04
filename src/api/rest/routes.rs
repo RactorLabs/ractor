@@ -58,7 +58,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         // Session endpoints
         .route("/sessions", get(handlers::sessions::list_sessions))
-        .route("/sessions", post(handlers::sessions::create_session))
+        .route("/sessions", post(handlers::sessions::start_session))
         .route("/sessions/{name}", get(handlers::sessions::get_session))
         .route("/sessions/{name}", put(handlers::sessions::update_session))
         .route(
@@ -74,16 +74,16 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::sessions::update_session_to_idle),
         )
         .route(
-            "/sessions/{name}/sleep",
-            post(handlers::sessions::sleep_session),
+            "/sessions/{name}/stop",
+            post(handlers::sessions::stop_session),
         )
         .route(
             "/sessions/{name}/cancel",
             post(handlers::sessions::cancel_active_task),
         )
         .route(
-            "/sessions/{name}/wake",
-            post(handlers::sessions::wake_session),
+            "/sessions/{name}/restart",
+            post(handlers::sessions::restart_session),
         )
         .route(
             "/sessions/{name}/runtime",

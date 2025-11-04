@@ -66,7 +66,7 @@ Note on commit message formatting:
 ## Data Model Highlights (Sessions)
 
 - Name-based primary key: sessions are addressed by `name` (no numeric ID).
-- Core fields: `state` (`init|idle|busy|slept`), `created_by`, timestamps, `metadata` (JSON).
+- Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
 - Publishing fields: `is_published`, `published_at`, `published_by`, `publish_permissions` (JSON flags for `code`,`env`,`content`).
 - Timeouts: `idle_timeout_seconds`, `busy_timeout_seconds` with tracking via `idle_from` and `busy_from`.
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
@@ -77,9 +77,9 @@ Note on commit message formatting:
 - The session runtime, on boot, calls the API to report state:
   - `POST /api/v0/sessions/{name}/idle` when ready (sets state to `idle` and starts idle timer).
   - `POST /api/v0/sessions/{name}/busy` when processing (sets `busy` and starts busy timer).
-- Sleep/Wake actions:
-  - `POST /sessions/{name}/sleep` schedules container stop and sets state to `slept`.
-  - `POST /sessions/{name}/wake` restarts container and transitions via `init`.
+- Stop/Restart actions:
+  - `POST /sessions/{name}/stop` schedules container stop and sets state to `stopped`.
+  - `POST /sessions/{name}/restart` restarts container and transitions via `init`.
 - Tasks: `GET/POST /sessions/{name}/tasks` for user↔session exchanges, stored in `session_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
 - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
@@ -87,7 +87,7 @@ Note on commit message formatting:
 ## Operator UI
 
 - Primary routes live under `/sessions` (list, create, details/chat). Legacy `/app/*` routes have been removed.
-- Session pages show tags and support “Remix”, “Edit Tags”, “Delete” via modals. Sleep/Wake buttons appear only when actionable.
+- Session pages show tags and support “Remix”, “Edit Tags”, “Delete” via modals. Stop/Restart buttons appear only when actionable.
 - Published content is served by the `tsbx-content` service under `/content/{session}` and proxied publicly via the Gateway at port 80.
 
 ## Session-Specific Instructions

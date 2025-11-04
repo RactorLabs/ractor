@@ -103,11 +103,11 @@ impl TaskHandler {
                     let publish_tool = Box::new(super::builtin_tools::PublishTool::new(
                         api_client_clone.clone(),
                     ));
-                    let sleep_tool = Box::new(super::builtin_tools::SleepTool::new(
+                    let stop_tool = Box::new(super::builtin_tools::StopSessionTool::new(
                         api_client_clone.clone(),
                     ));
                     registry.register_tool(publish_tool).await;
-                    registry.register_tool(sleep_tool).await;
+                    registry.register_tool(stop_tool).await;
                     // Unified Output tool + validation tool
                     registry
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
@@ -329,7 +329,7 @@ impl TaskHandler {
                     let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
                     if !tool_known {
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_session', 'sleep_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_session', 'stop_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                             tool_name
                         );
                         Self::push_system_note(&mut conversation, dev_note);
@@ -428,13 +428,13 @@ impl TaskHandler {
                         )
                         .await;
                     _items_sent += 1;
-                    // Special case: after successful sleep, proactively inform the user and finalize
-                    if tool_name == "sleep_session" {
+                    // Special case: after successful stop, proactively inform the user and finalize
+                    if tool_name == "stop_session" {
                         let delay = output_value_preview
                             .get("delay_seconds")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(5);
-                        let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
+                        let msg = format!("Okay — I will stop the session in {} seconds.", delay);
                         let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
                         let _ = self
                             .api_client
@@ -550,7 +550,7 @@ impl TaskHandler {
                     .is_some();
                 if !tool_known {
                     let dev_note = format!(
-                        "Developer note: Unknown tool '{}' (salvaged from content). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_session', 'sleep_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
+                        "Developer note: Unknown tool '{}' (salvaged from content). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_session', 'stop_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                         tool_name
                     );
                     Self::push_system_note(&mut conversation, dev_note);
@@ -724,12 +724,12 @@ impl TaskHandler {
                             .await;
                         return Ok(());
                     }
-                    if tool_name == "sleep_session" {
+                    if tool_name == "stop_session" {
                         let delay = output_value_preview
                             .get("delay_seconds")
                             .and_then(|v| v.as_u64())
                             .unwrap_or(5);
-                        let msg = format!("Okay — I will go to sleep in {} seconds.", delay);
+                        let msg = format!("Okay — I will stop the session in {} seconds.", delay);
                         let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
                         let _ = self
                             .api_client
@@ -1321,13 +1321,13 @@ Note: All file and directory paths must be absolute paths under `/session`. Path
   - commentary (required): Plain-text explanation of why you are publishing.
   - note: Optional reason or note.
 
-### Tool: sleep_session
+### Tool: stop_session
 
-- Schedule the session to sleep (stop runtime but preserve data) after a short delay.
+- Schedule the session to stop (halt runtime but preserve data) after a short delay.
 - Parameters:
-  - commentary (required): Why you are sleeping the session.
+  - commentary (required): Why you are stopping the session.
   - note: Optional reason.
-  - delay_seconds: Delay before sleeping (min/default 5).
+  - delay_seconds: Delay before stopping (min/default 5).
 
 ### Tool Result Schema
 

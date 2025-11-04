@@ -123,14 +123,14 @@ pub async fn create_task(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // If session is sleeping, only owner or admin can implicitly wake via this path
+    // If session is stopped, only owner or admin can implicitly restart via this path
     let is_admin = is_admin_principal(&auth, &state).await;
-    if session.state == crate::shared::models::constants::SESSION_STATE_SLEPT
+    if session.state == crate::shared::models::constants::SESSION_STATE_STOPPED
         && !is_admin
         && session.created_by != *created_by
     {
         return Err(ApiError::Forbidden(
-            "You can only wake your own sessions.".to_string(),
+            "You can only restart your own sessions.".to_string(),
         ));
     }
 
@@ -150,11 +150,11 @@ pub async fn create_task(
     // Generate task id that Controller will use when inserting the DB row
     let task_id = uuid::Uuid::new_v4().to_string();
 
-    // Enqueue Controller request to wake (if needed) and create the task row
+    // Enqueue Controller request to restart (if needed) and create the task row
     let payload = serde_json::json!({
         "task_id": task_id,
         "input": req.input,
-        "wake_if_slept": true,
+        "restart_if_stopped": true,
         "background": req.background.unwrap_or(true)
     });
     sqlx::query(

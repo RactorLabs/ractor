@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     
     -- Constraints
     CONSTRAINT sessions_name_check CHECK (name REGEXP '^[A-Za-z][A-Za-z0-9-]{0,61}[A-Za-z0-9]$'),
-    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'slept')),
+    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'stopped')),
     CONSTRAINT sessions_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT sessions_publish_check CHECK (
         (is_published = false AND published_at IS NULL AND published_by IS NULL) OR
