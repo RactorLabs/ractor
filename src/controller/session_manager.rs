@@ -470,7 +470,7 @@ impl SessionManager {
 
         let result = match request.request_type.as_str() {
             "start_session" => self.handle_start_session(request.clone()).await,
-            "destroy_session" => self.handle_destroy_session(request.clone()).await,
+            "delete_session" => self.handle_delete_session(request.clone()).await,
             "execute_command" => self.handle_execute_command(request.clone()).await,
             "stop_session" => self.handle_stop_session(request.clone()).await,
             "restart_session" => self.handle_restart_session(request.clone()).await,
@@ -718,7 +718,7 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_destroy_session(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_delete_session(&self, request: SessionRequest) -> Result<()> {
         let session_name = request.session_name;
 
         info!("Deleting container and volume for session {}", session_name);

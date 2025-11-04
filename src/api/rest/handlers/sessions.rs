@@ -2195,20 +2195,20 @@ pub async fn delete_session(
         ApiError::Internal(anyhow::anyhow!("Failed to create unpublish request: {}", e))
     })?;
 
-    // Add request to queue for session manager to destroy container and cleanup volume
+    // Add request to queue for session manager to delete container and cleanup volume
     sqlx::query(
         r#"
         INSERT INTO session_requests (session_name, request_type, created_by, payload, status)
-        VALUES (?, 'destroy_session', ?, '{}', 'pending')
+        VALUES (?, 'delete_session', ?, '{}', 'pending')
         "#,
     )
     .bind(&session.name)
     .bind(username)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create destroy request: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create delete request: {}", e)))?;
 
-    tracing::info!("Created destroy request for session {}", session.name);
+    tracing::info!("Created delete request for session {}", session.name);
 
     let deleted = Session::delete(&state.db, &session.name)
         .await
@@ -2495,7 +2495,7 @@ pub async fn update_session_to_busy(
     let is_admin = is_admin_principal(&auth, &state).await;
     let session = find_session_by_name(&state, &name, username, is_admin).await?;
 
-    // Update session to busy: clear idle_from and set busy_from (strict busy timeout)
+    // Update session to busy: clear idle_from and set busy_from (pauses stop timeout)
     Session::update_session_to_busy(&state.db, &session.name)
         .await
         .map_err(|e| {

@@ -1153,7 +1153,8 @@ components:
         timeout_seconds:
           type: integer
           nullable: true
-          description: Optional per-task timeout in seconds (>0 enables auto-cancel)
+          default: 3600
+          description: Per-task timeout in seconds (defaults to 3600/1 hour; set to 0 to disable auto-cancel)
 
     UpdateTaskRequest:
       type: object
