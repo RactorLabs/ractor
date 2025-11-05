@@ -245,7 +245,7 @@ import { getHostUrl } from '$lib/branding.js';
         {:else}
           <div class="row g-3">
             {#each sessions as a}
-              <div class="col-12 col-sm-6 col-lg-4">
+              <div class="col-12 col-md-6">
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
