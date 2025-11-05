@@ -14,12 +14,12 @@ module.exports = (program) => {
   program
     .command('rebuild')
     .description('[development only] Rebuild TaskSandbox components via ./scripts/rebuild.sh')
-    .argument('[args...]', 'Components: api, controller, session, operator, content, gateway. Flags are passed through.')
-    .addHelpText('after', '\nAllowed components: api, controller, session, operator, content, gateway\n' +
+    .argument('[args...]', 'Components: api, controller, sandbox, operator, content, gateway. Flags are passed through.')
+    .addHelpText('after', '\nAllowed components: api, controller, sandbox, operator, content, gateway\n' +
       '\nExamples:\n' +
       '  $ tsbx rebuild                    # rebuild all components (script default)\n' +
       '  $ tsbx rebuild controller         # rebuild controller\n' +
-      '  $ tsbx rebuild api session          # rebuild multiple components')
+      '  $ tsbx rebuild api sandbox        # rebuild multiple components')
     .action(async (args = []) => {
       try {
         const scriptPath = path.join(process.cwd(), 'scripts', 'rebuild.sh');
@@ -28,10 +28,10 @@ module.exports = (program) => {
           process.exit(1);
         }
         // Validate non-flag args are TaskSandbox components
-        const allowed = new Set(['api','controller','session','operator','content','gateway']);
+        const allowed = new Set(['api','controller','sandbox','operator','content','gateway']);
         const invalid = (args || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {
-          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, session, operator, content, gateway`);
+          console.error(`[ERROR] Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, sandbox, operator, content, gateway`);
           process.exit(1);
         }
         await runScript(scriptPath, args);

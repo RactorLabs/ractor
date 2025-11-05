@@ -38,7 +38,7 @@ impl Guardrails {
 
     /// Check if the input is asking for system prompt or internal information
     pub fn check_system_prompt_exposure(&self, _content: &str) -> Result<()> {
-        // System prompt exposure checks disabled for more open session behavior
+        // System prompt exposure checks disabled for more open sandbox behavior
         Ok(())
     }
 
@@ -79,7 +79,7 @@ impl Guardrails {
 
     /// Check if output contains critical system information that should be filtered
     pub fn check_system_info_leakage(&self, _content: &str) -> Result<()> {
-        // System info leakage checks disabled for more open session behavior
+        // System info leakage checks disabled for more open sandbox behavior
         Ok(())
     }
 

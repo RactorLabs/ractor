@@ -6,8 +6,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::info;
 
-const SESSION_ROOT: &str = "/session";
-pub const PLAN_PATH: &str = "/session/plan.md";
+const SESSION_ROOT: &str = "/sandbox";
+pub const PLAN_PATH: &str = "/sandbox/plan.md";
 const MAX_OUTPUT_BYTES: usize = 8_000; // cap tool outputs (characters)
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,7 +42,7 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
             Component::Normal(seg) => full.push(seg),
             Component::CurDir => {}
             Component::ParentDir => {
-                // prevent escaping the session root
+                // prevent escaping the sandbox root
                 if !full.starts_with(SESSION_ROOT) {
                     anyhow::bail!("Invalid path traversal");
                 }
@@ -55,7 +55,7 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
     // Ensure still within root
     let canon_parent = Path::new(SESSION_ROOT);
     if !full.starts_with(canon_parent) {
-        anyhow::bail!("Path escapes session root");
+        anyhow::bail!("Path escapes sandbox root");
     }
     Ok(full)
 }
@@ -63,7 +63,7 @@ fn normalize_path(p: &str) -> Result<PathBuf> {
 fn ensure_not_plan(full: &Path) -> Result<()> {
     if full == Path::new(PLAN_PATH) {
         return Err(anyhow!(
-            "direct access to /session/plan.md is blocked; use the update_plan tool instead"
+            "direct access to /sandbox/plan.md is blocked; use the update_plan tool instead"
         ));
     }
     Ok(())
@@ -81,7 +81,7 @@ pub async fn run_bash(cmd: &str) -> Result<String> {
     let start_time = std::time::SystemTime::now();
     info!(tool = "bash", %cmd, "tool start");
     let wrapped_cmd = format!(
-        "export PATH=\"/session/bin:$PATH\"; if [ -f /session/.env ]; then set -a; . /session/.env; set +a; fi; {}",
+        "export PATH=\"/sandbox/bin:$PATH\"; if [ -f /sandbox/.env ]; then set -a; . /sandbox/.env; set +a; fi; {}",
         cmd
     );
     let out = Command::new("bash")

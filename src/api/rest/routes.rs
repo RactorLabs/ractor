@@ -47,96 +47,99 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/operators/{name}/password",
             put(handlers::operators::update_operator_password),
         )
-        // Session endpoints
-        .route("/sessions", get(handlers::sessions::list_sessions))
-        .route("/sessions", post(handlers::sessions::start_session))
-        .route("/sessions/{id}", get(handlers::sessions::get_session))
-        .route("/sessions/{id}", put(handlers::sessions::update_session))
+        // Sandbox endpoints
+        .route("/sandboxes", get(handlers::sandboxes::list_sandboxes))
+        .route("/sandboxes", post(handlers::sandboxes::create_sandbox))
+        .route("/sandboxes/{id}", get(handlers::sandboxes::get_sandbox))
+        .route("/sandboxes/{id}", put(handlers::sandboxes::update_sandbox))
         .route(
-            "/sessions/{id}/state",
-            put(handlers::sessions::update_session_state),
+            "/sandboxes/{id}/state",
+            put(handlers::sandboxes::update_sandbox_state),
         )
         .route(
-            "/sessions/{id}/busy",
-            post(handlers::sessions::update_session_to_busy),
+            "/sandboxes/{id}/busy",
+            post(handlers::sandboxes::update_sandbox_to_busy),
         )
         .route(
-            "/sessions/{id}/idle",
-            post(handlers::sessions::update_session_to_idle),
+            "/sandboxes/{id}/idle",
+            post(handlers::sandboxes::update_sandbox_to_idle),
         )
         .route(
-            "/sessions/{id}/stop",
-            post(handlers::sessions::stop_session),
+            "/sandboxes/{id}/cancel",
+            post(handlers::sandboxes::cancel_active_task),
         )
         .route(
-            "/sessions/{id}/cancel",
-            post(handlers::sessions::cancel_active_task),
+            "/sandboxes/{id}/runtime",
+            get(handlers::sandboxes::get_sandbox_runtime),
         )
         .route(
-            "/sessions/{id}/restart",
-            post(handlers::sessions::restart_session),
+            "/sandboxes/{id}/context",
+            get(handlers::sandboxes::get_sandbox_context),
         )
         .route(
-            "/sessions/{id}/runtime",
-            get(handlers::sessions::get_session_runtime),
+            "/sandboxes/{id}/context/clear",
+            post(handlers::sandboxes::clear_sandbox_context),
         )
         .route(
-            "/sessions/{id}/clone",
-            post(handlers::sessions::clone_session),
+            "/sandboxes/{id}/context/compact",
+            post(handlers::sandboxes::compact_sandbox_context),
         )
         .route(
-            "/sessions/{id}/context",
-            get(handlers::sessions::get_session_context),
+            "/sandboxes/{id}/context/usage",
+            post(handlers::sandboxes::update_sandbox_context_usage),
         )
         .route(
-            "/sessions/{id}/context/clear",
-            post(handlers::sessions::clear_session_context),
+            "/sandboxes/{id}",
+            delete(handlers::sandboxes::delete_sandbox),
+        )
+        // Snapshot endpoints
+        .route("/snapshots", get(handlers::snapshots::list_snapshots))
+        .route("/snapshots/{id}", get(handlers::snapshots::get_snapshot))
+        .route(
+            "/snapshots/{id}",
+            delete(handlers::snapshots::delete_snapshot),
         )
         .route(
-            "/sessions/{id}/context/compact",
-            post(handlers::sessions::compact_session_context),
+            "/sandboxes/{id}/snapshots",
+            get(handlers::snapshots::list_sandbox_snapshots),
         )
         .route(
-            "/sessions/{id}/context/usage",
-            post(handlers::sessions::update_session_context_usage),
-        )
-        .route(
-            "/sessions/{id}",
-            delete(handlers::sessions::delete_session),
+            "/sandboxes/{id}/snapshots",
+            post(handlers::snapshots::create_snapshot),
         )
         // Task endpoints (composite model)
-        .route("/sessions/{id}/tasks", get(handlers::tasks::list_tasks))
-        .route("/sessions/{id}/tasks", post(handlers::tasks::create_task))
+        .route("/sandboxes/{id}/tasks", get(handlers::tasks::list_tasks))
+        .route("/sandboxes/{id}/tasks", post(handlers::tasks::create_task))
         .route(
-            "/sessions/{id}/tasks/{task_id}",
+            "/sandboxes/{id}/tasks/{task_id}",
             get(handlers::tasks::get_task_by_id).put(handlers::tasks::update_task),
         )
         .route(
-            "/sessions/{id}/tasks/count",
+            "/sandboxes/{id}/tasks/count",
             get(handlers::tasks::get_task_count),
         )
         // Global task lookup by id
         .route("/tasks/{id}", get(handlers::tasks::get_task_global_by_id))
-        // Session files (read-only)
+        // Sandbox files (read-only)
         .route(
-            "/sessions/{id}/files/read/{*path}",
-            get(handlers::sessions::read_session_file),
+            "/sandboxes/{id}/files/read/{*path}",
+            get(handlers::sandboxes::read_sandbox_file),
         )
         .route(
-            "/sessions/{id}/files/metadata/{*path}",
-            get(handlers::sessions::get_session_file_metadata),
+            "/sandboxes/{id}/files/metadata/{*path}",
+            get(handlers::sandboxes::get_sandbox_file_metadata),
         )
         .route(
-            "/sessions/{id}/files/list/{*path}",
-            get(handlers::sessions::list_session_files),
+            "/sandboxes/{id}/files/list/{*path}",
+            get(handlers::sandboxes::list_sandbox_files),
         )
         .route(
-            "/sessions/{id}/files/list",
-            get(handlers::sessions::list_session_files_root),
+            "/sandboxes/{id}/files/list",
+            get(handlers::sandboxes::list_sandbox_files_root),
         )
         .route(
-            "/sessions/{id}/files/delete/{*path}",
-            delete(handlers::sessions::delete_session_file),
+            "/sandboxes/{id}/files/delete/{*path}",
+            delete(handlers::sandboxes::delete_sandbox_file),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

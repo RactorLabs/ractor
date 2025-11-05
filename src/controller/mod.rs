@@ -1,7 +1,7 @@
 pub mod docker_manager;
-mod session_manager;
+mod sandbox_manager;
 
-pub use session_manager::SessionManager;
+pub use sandbox_manager::SandboxManager;
 
 use anyhow::Result;
 
@@ -15,10 +15,10 @@ pub async fn run() -> Result<()> {
         std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
     tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
 
-    // Initialize session manager and run
-    let session_manager = SessionManager::new(&database_url).await?;
-    if let Err(e) = session_manager.run().await {
-        tracing::error!("Session manager error: {}", e);
+    // Initialize sandbox manager and run
+    let sandbox_manager = SandboxManager::new(&database_url).await?;
+    if let Err(e) = sandbox_manager.run().await {
+        tracing::error!("Sandbox manager error: {}", e);
     }
     Ok(())
 }

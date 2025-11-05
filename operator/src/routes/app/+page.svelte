@@ -12,7 +12,7 @@
     <Card>
       <div class="card-body">
         <div class="fs-20px fw-bold mb-1">Welcome</div>
-  <div class="text-body text-opacity-75">Hello, {name}. Use the navigation to manage sessions and view tasks. Interactive pages require your active session.</div>
+  <div class="text-body text-opacity-75">Hello, {name}. Use the navigation to manage sandboxes and view tasks. Interactive pages require your active auth token.</div>
       </div>
     </Card>
   </div>

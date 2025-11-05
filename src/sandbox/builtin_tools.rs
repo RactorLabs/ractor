@@ -12,7 +12,7 @@ use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 
-const SESSION_ROOT: &str = "/session";
+const SESSION_ROOT: &str = "/sandbox";
 
 fn is_plan_path(path: &Path) -> bool {
     path == Path::new(PLAN_PATH)
@@ -30,7 +30,7 @@ fn plan_access_denied(tool: &str) -> serde_json::Value {
     })
 }
 
-fn ensure_under_session(path: &str) -> anyhow::Result<&Path> {
+fn ensure_under_sandbox(path: &str) -> anyhow::Result<&Path> {
     let p = Path::new(path);
     if !p.starts_with(SESSION_ROOT) {
         return Err(anyhow!(format!("path must be under {}", SESSION_ROOT)));
@@ -38,8 +38,8 @@ fn ensure_under_session(path: &str) -> anyhow::Result<&Path> {
     Ok(p)
 }
 
-fn to_rel_under_session(path: &str) -> anyhow::Result<String> {
-    let p = ensure_under_session(path)?;
+fn to_rel_under_sandbox(path: &str) -> anyhow::Result<String> {
+    let p = ensure_under_sandbox(path)?;
     let rel = p.strip_prefix(SESSION_ROOT).unwrap_or(p);
     let s = rel.to_string_lossy();
     let s = s.strip_prefix('/').unwrap_or(&s).to_string();
@@ -93,12 +93,12 @@ impl Tool for ShellTool {
         let exec_dir = args
             .get("exec_dir")
             .and_then(|v| v.as_str())
-            .unwrap_or("/session");
+            .unwrap_or("/sandbox");
         let commands = args.get("commands").and_then(|v| v.as_str()).unwrap_or("");
-        // safety: restrict to /session
-        if !exec_dir.starts_with("/session") {
+        // safety: restrict to /sandbox
+        if !exec_dir.starts_with("/sandbox") {
             return Ok(
-                json!({"status":"error","tool":"run_bash","error":"exec_dir must be under /session","exec_dir":exec_dir}),
+                json!({"status":"error","tool":"run_bash","error":"exec_dir must be under /sandbox","exec_dir":exec_dir}),
             );
         }
         // emulate working dir via cd then run
@@ -173,7 +173,7 @@ impl Tool for OpenFileTool {
             .get("end_line")
             .and_then(|v| v.as_u64())
             .map(|n| n as usize);
-        let rel = to_rel_under_session(path).map_err(|e| anyhow::anyhow!(e))?;
+        let rel = to_rel_under_sandbox(path).map_err(|e| anyhow::anyhow!(e))?;
         let action = TextEditAction::View {
             path: rel,
             start_line,
@@ -233,7 +233,7 @@ impl Tool for CreateFileTool {
         if is_plan_path_str(path) {
             return Ok(plan_access_denied("create_file"));
         }
-        let p = ensure_under_session(path)?;
+        let p = ensure_under_sandbox(path)?;
         if p.exists() {
             return Ok(
                 json!({"status":"error","tool":"create_file","error":"file already exists"}),
@@ -296,7 +296,7 @@ impl Tool for StrReplaceTool {
         if is_plan_path_str(path) {
             return Ok(plan_access_denied("str_replace"));
         }
-        let p = ensure_under_session(path)?;
+        let p = ensure_under_sandbox(path)?;
         let content = fs::read_to_string(p).await?;
         let count = content.matches(old_str).count();
         if count == 0 {
@@ -364,7 +364,7 @@ impl Tool for InsertTool {
             .and_then(|v| v.as_u64())
             .unwrap_or(1) as usize;
         let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        let rel = to_rel_under_session(path).map_err(|e| anyhow::anyhow!(e))?;
+        let rel = to_rel_under_sandbox(path).map_err(|e| anyhow::anyhow!(e))?;
         let action = TextEditAction::Insert {
             path: rel,
             line,
@@ -422,7 +422,7 @@ impl Tool for RemoveStrTool {
         }
         let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
-        let p = ensure_under_session(path)?;
+        let p = ensure_under_sandbox(path)?;
         let content = fs::read_to_string(p).await?;
         let count = content.matches(remove).count();
         if count == 0 {
@@ -460,7 +460,7 @@ impl Tool for UpdatePlanTool {
     }
 
     fn description(&self) -> &str {
-        "Replace the entire contents of /session/plan.md with the provided text. Use this after every step to keep the plan current, and call it with an empty checklist once all work is complete."
+        "Replace the entire contents of /sandbox/plan.md with the provided text. Use this after every step to keep the plan current, and call it with an empty checklist once all work is complete."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -468,7 +468,7 @@ impl Tool for UpdatePlanTool {
             "type":"object",
             "properties":{
                 "commentary": {"type":"string","description":"Plain-text explanation of why you are updating the plan"},
-                "content": {"type":"string","description":"Complete markdown checklist to write to /session/plan.md"}
+                "content": {"type":"string","description":"Complete markdown checklist to write to /sandbox/plan.md"}
             },
             "required":["commentary","content"]
         })
@@ -556,7 +556,7 @@ impl Tool for FindFilecontentTool {
         }
         let re = Regex::new(pattern).map_err(|e| anyhow::anyhow!(e))?;
         let mut hits = Vec::new();
-        let _ = ensure_under_session(root)?;
+        let _ = ensure_under_sandbox(root)?;
         let meta = std::fs::metadata(root);
         if meta.as_ref().map(|m| m.is_file()).unwrap_or(false) {
             scan_file(Path::new(root), &re, &mut hits).await?;
@@ -636,7 +636,7 @@ impl Tool for FindFilenameTool {
         }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let glob_str = args.get("glob").and_then(|v| v.as_str()).unwrap_or("");
-        let _ = ensure_under_session(root)?;
+        let _ = ensure_under_sandbox(root)?;
         let mut builder = GlobSetBuilder::new();
         for pat in glob_str
             .split(';')
@@ -845,7 +845,7 @@ impl Tool for OutputTool {
 // (PlannerAddTaskTool removed)
 
 // (PlannerReadPlanTool removed)
-// Purged legacy planner tools (complete_task, clear_plan). Planning is now managed via /session/plan.md.
+// Purged legacy planner tools (complete_task, clear_plan). Planning is now managed via /sandbox/plan.md.
 
 fn matches_default_ignored_dir(name: &str) -> bool {
     matches!(

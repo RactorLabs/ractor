@@ -602,7 +602,7 @@ pub async fn init_database(
                     // Check if tables exist anyway
                     let table_check = sqlx::query_scalar::<_, i64>(
                         "SELECT COUNT(*) FROM information_schema.tables 
-                         WHERE table_schema = DATABASE() AND table_name = 'sessions'",
+                         WHERE table_schema = DATABASE() AND table_name = 'sandboxes'",
                     )
                     .fetch_one(&*db)
                     .await

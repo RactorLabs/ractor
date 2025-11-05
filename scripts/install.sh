@@ -207,7 +207,7 @@ print_status "  1. Link CLI for development:    ./scripts/link.sh"
 print_status "  2. Build services:              ./scripts/build.sh"
 print_status "  3. Start services:              tsbx start"
 print_status "  4. Test authentication:         tsbx auth login --user admin --pass admin"
-print_status "  5. Start session:                 tsbx session create"
+print_status "  5. Start sandbox:               tsbx sandbox create"
 
 echo ""
 print_status "💡 Development workflow:"

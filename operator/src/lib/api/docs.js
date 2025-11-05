@@ -28,12 +28,12 @@ export function getCommonSchemas() {
       { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
       { name: 'last_login_at', type: 'string|null (RFC3339)', desc: 'Last login timestamp' },
     ],
-    Session: [
-      { name: 'id', type: 'string', desc: 'Session ID (UUID primary key)' },
+    Sandbox: [
+      { name: 'id', type: 'string', desc: 'Sandbox ID (UUID primary key)' },
       { name: 'created_by', type: 'string', desc: 'Owner username' },
-      { name: 'state', type: 'string', desc: 'init|idle|busy|stopped' },
+      { name: 'state', type: 'string', desc: 'init|idle|busy|deleted' },
       { name: 'description', type: 'string|null', desc: 'Optional description' },
-      { name: 'parent_session_id', type: 'string|null', desc: 'Parent session ID if cloned' },
+      { name: 'parent_sandbox_id', type: 'string|null', desc: 'Parent sandbox ID if cloned' },
       { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
       { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Last activity timestamp' },
       { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata' },
@@ -44,9 +44,9 @@ export function getCommonSchemas() {
       { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When busy started' },
       { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff timestamp if set' },
     ],
-    ListSessionsResult: [
-      { name: 'items', type: 'Session[]', desc: 'Array of sessions for current page' },
-      { name: 'total', type: 'int', desc: 'Total sessions matching filters' },
+    ListSandboxesResult: [
+      { name: 'items', type: 'Sandbox[]', desc: 'Array of sandboxes for current page' },
+      { name: 'total', type: 'int', desc: 'Total sandboxes matching filters' },
       { name: 'limit', type: 'int', desc: 'Page size' },
       { name: 'offset', type: 'int', desc: 'Row offset (0-based)' },
       { name: 'page', type: 'int', desc: 'Current page number (1-based)' },
@@ -54,7 +54,7 @@ export function getCommonSchemas() {
     ],
     TaskObject: [
       { name: 'id', type: 'string', desc: 'Task ID (UUID)' },
-      { name: 'session_id', type: 'string', desc: 'Session ID (UUID)' },
+      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
       { name: 'status', type: 'string', desc: "'pending'|'processing'|'completed'|'failed'|'cancelled'" },
       { name: 'input_content', type: 'array', desc: "User input content items (e.g., [{ type: 'text', content: 'hello' }]). Preferred input shape uses 'content' array; legacy { text: string } is accepted but not echoed in input_content." },
       { name: 'output_content', type: 'array', desc: "Final content items extracted from segments (typically the 'output' tool_result payload)" },
@@ -71,12 +71,12 @@ export function getCommonSchemas() {
     ],
     Count: [
       { name: 'count', type: 'int', desc: 'Count value' },
-      { name: 'session_id', type: 'string', desc: 'Session ID (UUID)' },
+      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
     ],
     RuntimeTotal: [
-      { name: 'session_id', type: 'string', desc: 'Session ID (UUID)' },
-      { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sessions (seconds)' },
-      { name: 'current_session_seconds', type: 'int', desc: 'Current session runtime (seconds), 0 if stopped' },
+      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
+      { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sandboxes (seconds)' },
+      { name: 'current_sandbox_seconds', type: 'int', desc: 'Current sandbox runtime (seconds), 0 if deleted' },
     ],
     BusyIdleAck: [
       { name: 'success', type: 'boolean', desc: 'true on success' },
@@ -87,8 +87,8 @@ export function getCommonSchemas() {
       { name: 'success', type: 'boolean', desc: 'true on success' },
       { name: 'state', type: 'string', desc: 'New state value' },
     ],
-    SessionContextUsage: [
-      { name: 'session_id', type: 'string', desc: 'Session ID (UUID)' },
+    SandboxContextUsage: [
+      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
       { name: 'soft_limit_tokens', type: 'int', desc: 'Soft limit (tokens)' },
       { name: 'used_tokens_estimated', type: 'int', desc: 'Estimated tokens since cutoff' },
       { name: 'used_percent', type: 'float', desc: 'Usage percent of soft limit' },
@@ -120,7 +120,7 @@ export function getCommonSchemas() {
     ],
     CancelAck: [
       { name: 'status', type: 'string', desc: "Always 'ok' on success" },
-      { name: 'session_id', type: 'string', desc: 'Session ID (UUID)' },
+      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
       { name: 'cancelled', type: 'boolean', desc: 'true if a pending/processing task or queued update was cancelled' },
     ],
     Empty: [],
@@ -317,19 +317,19 @@ export function getApiDocs(base) {
     ]
   },
   {
-    id: 'sessions',
-    title: 'Sessions',
-    description: 'Session lifecycle and management endpoints (protected).',
+    id: 'sandboxes',
+    title: 'Sandboxes',
+    description: 'Sandbox lifecycle and management endpoints (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/sessions', auth: 'bearer', desc: 'List/search sessions with pagination.', params: [
+      { method: 'GET', path: '/api/v0/sandboxes', auth: 'bearer', desc: 'List/search sandboxes with pagination.', params: [
         { in: 'query', name: 'q', type: 'string', required: false, desc: 'Search substring over name and description (case-insensitive)' },
         { in: 'query', name: 'tags', type: 'string (comma-separated)', required: false, desc: 'Filter by tags (INTERSECTION/AND). Provide multiple tags as a comma-separated list (e.g., tags=prod,team). Tags are matched case-insensitively and stored lowercase.' },
-        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|stopped' },
+        { in: 'query', name: 'state', type: 'string', required: false, desc: 'Filter by state: init|idle|busy|deleted' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100)' },
         { in: 'query', name: 'page', type: 'int', required: false, desc: 'Page number (1-based). Ignored when offset is set.' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (0-based). Takes precedence over page.' }
-      ], example: `curl -s ${BASE}/api/v0/sessions?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSessionsResult' }, responses: [{ status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo session","parent_session_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
-      { method: 'POST', path: '/api/v0/sessions', auth: 'bearer', desc: 'Start a new session. A UUID will be automatically generated as the session ID.', params: [
+      ], example: `curl -s ${BASE}/api/v0/sandboxes?q=demo&tags=prod,team/core&state=idle&limit=30&page=1 -H "Authorization: Bearer <token>"`, resp: { schema: 'ListSandboxesResult' }, responses: [{ status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","parent_sandbox_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":30,"offset":0,"page":1,"pages":1}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes', auth: 'bearer', desc: 'Start a new sandbox. A UUID will be automatically generated as the sandbox ID.', params: [
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional human-readable description' },
         { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary JSON metadata (default: {})' },
         { in: 'body', name: 'tags', type: 'string[]', required: false, desc: "Array of tags; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces (default: [])" },
@@ -339,110 +339,110 @@ export function getApiDocs(base) {
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' },
         { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Stop timeout seconds (default 300)' },
         { in: 'body', name: 'archive_timeout_seconds', type: 'int|null', required: false, desc: 'Archive timeout seconds (default 86400)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo session"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"init","description":"Demo session","parent_session_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":null,"busy_from":null}` }] },
-      { method: 'GET', path: '/api/v0/sessions/{id}', auth: 'bearer', desc: 'Get session by ID.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo session","parent_session_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
-      { method: 'PUT', path: '/api/v0/sessions/{id}', auth: 'bearer', desc: 'Update session by ID.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo sandbox"}'`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"init","description":"Demo sandbox","parent_sandbox_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":null,"busy_from":null}` }] },
+      { method: 'GET', path: '/api/v0/sandboxes/{id}', auth: 'bearer', desc: 'Get sandbox by ID.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","parent_sandbox_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }] },
+      { method: 'PUT', path: '/api/v0/sandboxes/{id}', auth: 'bearer', desc: 'Update sandbox by ID.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Replace metadata (omit to keep)' },
         { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Update description' },
         { in: 'body', name: 'tags', type: 'string[]|null', required: false, desc: "Replace tags array; allowed characters are letters, digits, '/', '-', '_', '.'; no spaces" },
         { in: 'body', name: 'stop_timeout_seconds', type: 'int|null', required: false, desc: 'Update stop timeout seconds' },
         { in: 'body', name: 'archive_timeout_seconds', type: 'int|null', required: false, desc: 'Update archive timeout seconds' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Updated","parent_session_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
-      { method: 'PUT', path: '/api/v0/sessions/{id}/state', auth: 'bearer', desc: 'Update session state (generic).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
-        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|stopped)' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<id>/state -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"state":"idle"}'`, resp: { schema: 'StateAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle"}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/busy', auth: 'bearer', desc: 'Set session busy.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/busy -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"busy","timeout_status":"paused"}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/idle', auth: 'bearer', desc: 'Set session idle.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/idle -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle","timeout_status":"active"}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/stop', auth: 'bearer', desc: 'Schedule session to stop after an optional delay (min/default 5s).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated"}'`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Updated","parent_sandbox_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":[],"is_published":false,"published_at":null,"published_by":null,"publish_permissions":{"code":true,"env":true,"content":true},"stop_timeout_seconds":300,"archive_timeout_seconds":86400,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }] },
+      { method: 'PUT', path: '/api/v0/sandboxes/{id}/state', auth: 'bearer', desc: 'Update sandbox state (generic).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+        { in: 'body', name: 'state', type: 'string', required: true, desc: 'New state (e.g., init|idle|busy|deleted)' }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/state -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"state":"idle"}'`, resp: { schema: 'StateAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle"}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/busy', auth: 'bearer', desc: 'Set sandbox busy.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/busy -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"busy","timeout_status":"paused"}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/idle', auth: 'bearer', desc: 'Set sandbox idle.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/idle -H "Authorization: Bearer <token>"`, resp: { schema: 'BusyIdleAck' }, responses: [{ status: 200, body: `{"success":true,"state":"idle","timeout_status":"active"}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/stop', auth: 'bearer', desc: 'Schedule sandbox to stop after an optional delay (min/default 5s).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'body', name: 'delay_seconds', type: 'int|null', required: false, desc: 'Delay before stopping (min/default 5 seconds)' },
         { in: 'body', name: 'note', type: 'string|null', required: false, desc: 'Optional note to display in chat when stop occurs' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/stop -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested stop"}'\n\n# The session will stop after the delay. State may not change immediately in the response.`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle",...}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing task (or queued update) and set session to idle.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/cancel -H "Authorization: Bearer <token>"`, resp: { schema: 'CancelAck' }, responses: [{ status: 200, body: `{"status":"ok","session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","cancelled":true}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/restart', auth: 'bearer', desc: 'Restart session (optionally send a prompt).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/stop -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"delay_seconds":10,"note":"User requested stop"}'\n\n# The sandbox will stop after the delay. State may not change immediately in the response.`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle",...}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/cancel', auth: 'bearer', desc: 'Cancel the most recent pending/processing task (or queued update) and set sandbox to idle.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/cancel -H "Authorization: Bearer <token>"`, resp: { schema: 'CancelAck' }, responses: [{ status: 200, body: `{"status":"ok","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","cancelled":true}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/restart', auth: 'bearer', desc: 'Restart sandbox (optionally send a prompt).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional prompt to send on restart' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/restart -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"init",...}` }] },
-      { method: 'GET', path: '/api/v0/sessions/{id}/runtime', auth: 'bearer', desc: 'Get total runtime across sessions (seconds). Includes current session (since last restart or creation).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","total_runtime_seconds":1234,"current_session_seconds":321}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/clone', auth: 'bearer', desc: 'Clone session (start a new session from parent).', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Parent session ID (UUID)' },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/restart -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt":"get ready"}'`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"init",...}` }] },
+      { method: 'GET', path: '/api/v0/sandboxes/{id}/runtime', auth: 'bearer', desc: 'Get total runtime across sandboxes (seconds). Includes current sandbox (since last restart or creation).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id>/runtime -H "Authorization: Bearer <token>"`, resp: { schema: 'RuntimeTotal' }, responses: [{ status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","total_runtime_seconds":1234,"current_sandbox_seconds":321}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/clone', auth: 'bearer', desc: 'Clone sandbox (start a new sandbox from parent).', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Parent sandbox ID (UUID)' },
         { in: 'body', name: 'metadata', type: 'object|null', required: false, desc: 'Optional metadata override' },
         { in: 'body', name: 'code', type: 'boolean', required: false, desc: 'Copy code (default true)' },
         { in: 'body', name: 'env', type: 'boolean', required: false, desc: 'Copy env (default true)' },
         { in: 'body', name: 'content', type: 'boolean', required: false, desc: 'Copy content (always true in v0.4.0+)' },
         { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/clone -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Session' }, responses: [{ status: 200, body: `{"id":"b7d4f3e8-c1a2-11f0-aadd-064ac08387fc","created_by":"admin","state":"init",...}` }] },
-      { method: 'DELETE', path: '/api/v0/sessions/{id}', auth: 'bearer', desc: 'Delete session.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X DELETE ${BASE}/api/v0/sessions/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'Empty' }, responses: [{ status: 200 }] }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/clone -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"code":true,"env":false,"prompt":"clone and adjust"}'`, resp: { schema: 'Sandbox' }, responses: [{ status: 200, body: `{"id":"b7d4f3e8-c1a2-11f0-aadd-064ac08387fc","created_by":"admin","state":"init",...}` }] },
+      { method: 'DELETE', path: '/api/v0/sandboxes/{id}', auth: 'bearer', desc: 'Delete sandbox.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X DELETE ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`, resp: { schema: 'Empty' }, responses: [{ status: 200 }] }
     ]
   },
   {
     id: 'responses',
-    title: 'Session Tasks',
+    title: 'Sandbox Tasks',
     description: 'Composite input→output exchanges with live items (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/sessions/{id}/tasks', auth: 'bearer', desc: 'List tasks for session.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      { method: 'GET', path: '/api/v0/sandboxes/{id}/tasks', auth: 'bearer', desc: 'List tasks for sandbox.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max responses (0..1000, default 100)' },
         { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset for pagination (default 0)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject', array: true }, responses: [{ status: 200, body: `[{"id":"d8e9f0a1-c2b3-11f0-aadd-064ac08387fc","session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/tasks', auth: 'bearer', desc: 'Create a task (user input). Supports blocking when background=false.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject', array: true }, responses: [{ status: 200, body: `[{"id":"d8e9f0a1-c2b3-11f0-aadd-064ac08387fc","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/tasks', auth: 'bearer', desc: 'Create a task (user input). Supports blocking when background=false.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'body', name: 'input', type: 'object', required: true, desc: "User input; preferred shape: { content: [{ type: 'text', content: string }] }. Legacy: { text: string } also accepted." },
         { in: 'body', name: 'background', type: 'boolean', required: false, desc: "Default true. If false, request blocks up to 15 minutes until the response reaches a terminal status (completed|failed|cancelled). Returns 504 on timeout. If true or omitted, returns immediately (typically status=pending)." },
         { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout in seconds (defaults to 3600/1 hour; set to 0 to disable auto-cancel).' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false,"timeout_seconds":600}'`, resp: { schema: 'TaskObject' }, responses: [
-        { status: 200, body: `{"id":"e9f0a1b2-c3d4-11f0-aadd-064ac08387fc","session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` },
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false,"timeout_seconds":600}'`, resp: { schema: 'TaskObject' }, responses: [
+        { status: 200, body: `{"id":"e9f0a1b2-c3d4-11f0-aadd-064ac08387fc","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"..."}],"segments":[{"type":"final","channel":"final","text":"..."}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` },
         { status: 504, body: `{"message":"Timed out waiting for response to complete"}` }
       ] },
-      { method: 'GET', path: '/api/v0/sessions/{id}/tasks/{task_id}', auth: 'bearer', desc: 'Get a single task by id.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      { method: 'GET', path: '/api/v0/sandboxes/{id}/tasks/{task_id}', auth: 'bearer', desc: 'Get a single task by id.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject' }, responses: [
-        { status: 200, body: `{"id":"f0a1b2c3-d4e5-11f0-aadd-064ac08387fc","session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[{"type":"tool_call","tool":"search","args":{}}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` }
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`, resp: { schema: 'TaskObject' }, responses: [
+        { status: 200, body: `{"id":"f0a1b2c3-d4e5-11f0-aadd-064ac08387fc","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[{"type":"tool_call","tool":"search","args":{}}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"...","updated_at":"..."}` }
       ] },
-      { method: 'PUT', path: '/api/v0/sessions/{id}/tasks/{task_id}', auth: 'bearer', desc: 'Update a task record. Used to append output.items and mark status.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+      { method: 'PUT', path: '/api/v0/sandboxes/{id}/tasks/{task_id}', auth: 'bearer', desc: 'Update a task record. Used to append output.items and mark status.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
         { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' },
         { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'", required: false, desc: 'Status update' },
         { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update; replaces existing input JSON' },
         { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; shape: { text?: string, items?: [] }' },
         { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears)' }
-      ], example: `curl -s -X PUT ${BASE}/api/v0/sessions/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","channel":"final","text":"done"}]}}'`, resp: { schema: 'TaskObject' }, responses: [{ status: 200, body: `{"id":"a1b2c3d4-e5f6-11f0-aadd-064ac08387fc","session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"...","updated_at":"..."}` }] },
-      { method: 'GET', path: '/api/v0/sessions/{id}/tasks/count', auth: 'bearer', desc: 'Get task count for session.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id>/tasks/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc"}` }] }
+      ], example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done","items":[{"type":"final","channel":"final","text":"done"}]}}'`, resp: { schema: 'TaskObject' }, responses: [{ status: 200, body: `{"id":"a1b2c3d4-e5f6-11f0-aadd-064ac08387fc","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","status":"completed","input_content":[],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"...","updated_at":"..."}` }] },
+      { method: 'GET', path: '/api/v0/sandboxes/{id}/tasks/count', auth: 'bearer', desc: 'Get task count for sandbox.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/count -H "Authorization: Bearer <token>"`, resp: { schema: 'Count' }, responses: [{ status: 200, body: `{"count":123,"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc"}` }] }
     ]
   },
   {
     id: 'files',
-    title: 'Session Files',
-    description: 'Read-only browsing of an session\'s /session workspace (protected). Paths are relative to /session.',
+    title: 'Sandbox Files',
+    description: 'Read-only browsing of a sandbox\'s /sandbox workspace (protected). Paths are relative to /sandbox.',
     endpoints: [
       {
         method: 'GET',
-        path: '/api/v0/sessions/{id}/files/list',
+        path: '/api/v0/sandboxes/{id}/files/list',
         auth: 'bearer',
-        desc: 'List immediate children at /session (root). Sorted by name (case-insensitive). Supports pagination with offset+limit and returns total and next_offset.',
+        desc: 'List immediate children at /sandbox (root). Sorted by name (case-insensitive). Supports pagination with offset+limit and returns total and next_offset.',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
           { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0)' },
           { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500)' },
         ],
-        example: `curl -s ${BASE}/api/v0/sessions/<id>/files/list -H "Authorization: Bearer <token>"`,
+        example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/list -H "Authorization: Bearer <token>"`,
         resp: { schema: 'FileListResult' },
         responses: [
           { status: 200, body: `{"entries":[{"name":"code","kind":"dir","size":0,"mode":"0755","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":100,"next_offset":null,"total":1}` }
@@ -450,16 +450,16 @@ export function getApiDocs(base) {
       },
       {
         method: 'GET',
-        path: '/api/v0/sessions/{id}/files/list/{path...}',
+        path: '/api/v0/sandboxes/{id}/files/list/{path...}',
         auth: 'bearer',
         desc: 'List immediate children under a relative path (e.g., code/src). Sorted by name (case-insensitive). Supports pagination with offset+limit and returns total and next_offset. Path must be safe (no leading \'/\', no ..).',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
-          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' },
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash)' },
           { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0)' },
           { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500)' },
         ],
-        example: `curl -s ${BASE}/api/v0/sessions/<id>/files/list/code -H "Authorization: Bearer <token>"`,
+        example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/list/code -H "Authorization: Bearer <token>"`,
         resp: { schema: 'FileListResult' },
         responses: [
           { status: 200, body: `{"entries":[{"name":"main.rs","kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":100,"next_offset":null,"total":1}` }
@@ -467,14 +467,14 @@ export function getApiDocs(base) {
       },
       {
         method: 'GET',
-        path: '/api/v0/sessions/{id}/files/metadata/{path...}',
+        path: '/api/v0/sandboxes/{id}/files/metadata/{path...}',
         auth: 'bearer',
-        desc: 'Get metadata for a file or directory. For symlinks, includes link_target. Returns 409 if the session is stopped; 400 for invalid paths; 404 if not found.',
+        desc: 'Get metadata for a file or directory. For symlinks, includes link_target. Returns 409 if the sandbox is deleted; 400 for invalid paths; 404 if not found.',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
-          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash)' }
         ],
-        example: `curl -s ${BASE}/api/v0/sessions/<id>/files/metadata/code/src/main.rs -H "Authorization: Bearer <token>"`,
+        example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/metadata/code/src/main.rs -H "Authorization: Bearer <token>"`,
         resp: { schema: 'FileMetadata' },
         responses: [
           { status: 200, body: `{"kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}` }
@@ -482,14 +482,14 @@ export function getApiDocs(base) {
       },
       {
         method: 'GET',
-        path: '/api/v0/sessions/{id}/files/read/{path...}',
+        path: '/api/v0/sandboxes/{id}/files/read/{path...}',
         auth: 'bearer',
-        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-TaskSandbox-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if session is stopped; 404 if not found; 400 for invalid paths.',
+        desc: 'Read a file and return its raw bytes. Sets Content-Type (guessed by filename) and X-TaskSandbox-File-Size headers. Max size 25MB; larger files return 413. Returns 409 if sandbox is deleted; 404 if not found; 400 for invalid paths.',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
-          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash)' }
         ],
-        example: `curl -s -OJ ${BASE}/api/v0/sessions/<id>/files/read/code/report.html -H "Authorization: Bearer <token>" -D -`,
+        example: `curl -s -OJ ${BASE}/api/v0/sandboxes/<id>/files/read/code/report.html -H "Authorization: Bearer <token>" -D -`,
         resp: { schema: 'Empty' },
         responses: [
           { status: 200 }
@@ -497,14 +497,14 @@ export function getApiDocs(base) {
       },
       {
         method: 'DELETE',
-        path: '/api/v0/sessions/{id}/files/delete/{path...}',
+        path: '/api/v0/sandboxes/{id}/files/delete/{path...}',
         auth: 'bearer',
         desc: 'Delete a file or empty directory. Returns { deleted: true } on success. May be disabled in some environments.',
         params: [
-          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' },
-          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /session (no leading slash)' }
+          { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+          { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash)' }
         ],
-        example: `curl -s -X DELETE ${BASE}/api/v0/sessions/<id>/files/delete/code/tmp.txt -H "Authorization: Bearer <token>"`,
+        example: `curl -s -X DELETE ${BASE}/api/v0/sandboxes/<id>/files/delete/code/tmp.txt -H "Authorization: Bearer <token>"`,
         resp: { schema: 'Empty' },
         responses: [
           { status: 200, body: `{"deleted":true}` }
@@ -514,21 +514,21 @@ export function getApiDocs(base) {
   },
   {
     id: 'context',
-    title: 'Session Context',
+    title: 'Sandbox Context',
     description: 'Context usage and management (protected).',
     endpoints: [
-      { method: 'GET', path: '/api/v0/sessions/{id}/context', auth: 'bearer', desc: 'Get the latest reported context usage from the session.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s ${BASE}/api/v0/sessions/<id>/context -H "Authorization: Bearer <token>"`, resp: { schema: 'SessionContextUsage' }, responses: [{ status: 200, body: `{"session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":12345,"used_percent":9.6,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/context/clear', auth: 'bearer', desc: 'Clear context by setting a new cutoff at now. Adds a "Context Cleared" marker response.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/context/clear -H "Authorization: Bearer <token>"`, resp: { schema: 'SessionContextUsage' }, responses: [{ status: 200, body: `{"session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/context/compact', auth: 'bearer', desc: 'Compact context by summarizing recent conversation via LLM and setting a new cutoff. Adds a "Context Compacted" marker response with the summary in output.text.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'SessionContextUsage' }, responses: [{ status: 200, body: `{"session_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] },
-      { method: 'POST', path: '/api/v0/sessions/{id}/context/usage', auth: 'bearer', desc: 'Report the latest context length (tokens) after an LLM call.', params: [
-        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Session ID (UUID)' }
-      ], example: `curl -s -X POST ${BASE}/api/v0/sessions/<id>/context/usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"tokens": 4096}'`, resp: { schema: 'Empty' }, responses: [{ status: 200, body: `{"success":true,"last_context_length":4096}` }] }
+      { method: 'GET', path: '/api/v0/sandboxes/{id}/context', auth: 'bearer', desc: 'Get the latest reported context usage from the sandbox.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s ${BASE}/api/v0/sandboxes/<id>/context -H "Authorization: Bearer <token>"`, resp: { schema: 'SandboxContextUsage' }, responses: [{ status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":12345,"used_percent":9.6,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/context/clear', auth: 'bearer', desc: 'Clear context by setting a new cutoff at now. Adds a "Context Cleared" marker response.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/clear -H "Authorization: Bearer <token>"`, resp: { schema: 'SandboxContextUsage' }, responses: [{ status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/context/compact', auth: 'bearer', desc: 'Compact context by summarizing recent conversation via LLM and setting a new cutoff. Adds a "Context Compacted" marker response with the summary in output.text.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/compact -H "Authorization: Bearer <token>"`, resp: { schema: 'SandboxContextUsage' }, responses: [{ status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0.0,"basis":"ollama_last_context_length","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }] },
+      { method: 'POST', path: '/api/v0/sandboxes/{id}/context/usage', auth: 'bearer', desc: 'Report the latest context length (tokens) after an LLM call.', params: [
+        { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+      ], example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"tokens": 4096}'`, resp: { schema: 'Empty' }, responses: [{ status: 200, body: `{"success":true,"last_context_length":4096}` }] }
     ]
   }
   ];

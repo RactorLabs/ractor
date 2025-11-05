@@ -1,4 +1,4 @@
-// Session (Computer Use Session) modules
+// Sandbox (Computer Use Sandbox) modules
 mod api;
 mod builtin_tools;
 mod config;
@@ -13,12 +13,12 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
-    tracing::info!("Starting TaskSandbox Session...");
+pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
+    tracing::info!("Starting TaskSandbox Sandbox...");
     tracing::info!("Connecting to API: {}", api_url);
-    tracing::info!("Session ID: {}", session_id);
+    tracing::info!("Sandbox ID: {}", sandbox_id);
 
-    // Log which principal this Session is running as
+    // Log which principal this Sandbox is running as
     if let Ok(principal) = std::env::var("TSBX_PRINCIPAL") {
         let principal_type =
             std::env::var("TSBX_PRINCIPAL_TYPE").unwrap_or_else(|_| "Unknown".to_string());
@@ -52,7 +52,7 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
 
     // Initialize configuration
     let config = Arc::new(config::Config {
-        session_id: session_id.to_string(),
+        sandbox_id: sandbox_id.to_string(),
         api_url: api_url.to_string(),
         api_token,
         polling_interval: std::time::Duration::from_secs(2),
@@ -74,21 +74,21 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
-    // Initialize session directories
-    let session_dirs = [
-        "/session",
-        "/session/logs",
+    // Initialize sandbox directories
+    let sandbox_dirs = [
+        "/sandbox",
+        "/sandbox/logs",
     ];
 
-    for dir in session_dirs.iter() {
+    for dir in sandbox_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {
             warn!("Failed to create directory {}: {}", dir, e);
         }
     }
 
-    // Ensure /session/bin exists and install command wrappers
-    if let Err(e) = std::fs::create_dir_all("/session/bin") {
-        warn!("Failed to create /session/bin: {}", e);
+    // Ensure /sandbox/bin exists and install command wrappers
+    if let Err(e) = std::fs::create_dir_all("/sandbox/bin") {
+        warn!("Failed to create /sandbox/bin: {}", e);
     } else {
         if let Err(e) = install_wrappers() {
             warn!("Failed to install wrappers: {}", e);
@@ -96,7 +96,7 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     }
 
     // Wait for and execute setup script if it becomes available
-    let setup_script = std::path::Path::new("/session/setup.sh");
+    let setup_script = std::path::Path::new("/sandbox/setup.sh");
 
     // Check if a setup script is expected based on environment variable
     let has_setup_script = std::env::var("TSBX_HAS_SETUP").is_ok();
@@ -117,10 +117,10 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     }
 
     if setup_script.exists() {
-        info!("Executing setup script: /session/setup.sh");
+        info!("Executing setup script: /sandbox/setup.sh");
         match std::process::Command::new("bash")
-            .arg("/session/setup.sh")
-            .current_dir("/session")
+            .arg("/sandbox/setup.sh")
+            .current_dir("/sandbox")
             .output()
         {
             Ok(output) => {
@@ -144,14 +144,14 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
             }
         }
     } else {
-        info!("No setup script found at /session/setup.sh");
+        info!("No setup script found at /sandbox/setup.sh");
     }
 
-    // Set working directory to session directory
-    if let Err(e) = std::env::set_current_dir("/session") {
-        warn!("Failed to set working directory to /session: {}", e);
+    // Set working directory to sandbox directory
+    if let Err(e) = std::env::set_current_dir("/sandbox") {
+        warn!("Failed to set working directory to /sandbox: {}", e);
     } else {
-        info!("Set working directory to /session");
+        info!("Set working directory to /sandbox");
     }
 
     // Initialize task handler
@@ -182,25 +182,25 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
     info!("API: {}", api_url);
 
     // Set initial state thoughtfully: don't clobber a pre-set busy state
-    match api_client.get_session().await {
-        Ok(session_info) => {
-            let state = session_info.state.to_lowercase();
+    match api_client.get_sandbox().await {
+        Ok(sandbox_info) => {
+            let state = sandbox_info.state.to_lowercase();
             if state == "busy" {
-                info!("Skipping initial idle update because session is marked busy");
-            } else if state == "stopped" {
-                info!("Skipping initial idle update because session is stopped");
+                info!("Skipping initial idle update because sandbox is marked busy");
+            } else if state == "deleted" {
+                info!("Skipping initial idle update because sandbox is deleted");
             } else {
-                info!("Setting session to idle to start timeout...");
-                if let Err(e) = api_client.update_session_to_idle().await {
-                    warn!("Failed to set session to idle after initialization: {}", e);
+                info!("Setting sandbox to idle to start timeout...");
+                if let Err(e) = api_client.update_sandbox_to_idle().await {
+                    warn!("Failed to set sandbox to idle after initialization: {}", e);
                 } else {
-                    info!("Session set to idle - timeout started");
+                    info!("Sandbox set to idle - timeout started");
                 }
             }
         }
         Err(e) => {
             warn!(
-                "Could not fetch session state on startup (will proceed): {}",
+                "Could not fetch sandbox state on startup (will proceed): {}",
                 e
             );
         }
@@ -218,7 +218,7 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
             }
             Err(e) => {
                 error!("Error processing tasks: {}", e);
-                // Continue polling - session should never die silently
+                // Continue polling - sandbox should never die silently
             }
         }
 
@@ -230,9 +230,9 @@ pub async fn run(api_url: &str, session_id: &str) -> Result<()> {
 // Content preview server removed.
 
 fn install_wrappers() -> anyhow::Result<()> {
-    write_exec("/session/bin/ls", LS_WRAPPER)?;
-    write_exec("/session/bin/rg", RG_WRAPPER)?;
-    write_exec("/session/bin/fd", FD_WRAPPER)?;
+    write_exec("/sandbox/bin/ls", LS_WRAPPER)?;
+    write_exec("/sandbox/bin/rg", RG_WRAPPER)?;
+    write_exec("/sandbox/bin/fd", FD_WRAPPER)?;
     Ok(())
 }
 

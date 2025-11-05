@@ -14,18 +14,18 @@
 
 ## What is TaskSandbox
 
-TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agent sessions. It provisions Docker-isolated workspaces with persistent storage, wires them to Ollama-powered tooling, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
+TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agent sandboxes. It provisions Docker-isolated workspaces with persistent storage, wires them to Ollama-powered tooling, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
 
 ## Why TaskSandbox
 
-- Session isolation & persistence — Each session runs inside a managed Docker container with a dedicated `/session` volume and private `.env`, created by the controller and reused across stop/restart cycles.
-- Built-in agent tooling — The session runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
-- Observability & lifecycle control — Controller and session services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (stop, restart, remix, publish) for operators.
-- API coverage — The Rust API service exposes REST endpoints for sessions, tasks, operators, files, and auth, enabling external orchestration or integration.
+- Sandbox isolation & persistence — Each sandbox runs inside a managed Docker container with a dedicated `/sandbox` volume and private `.env`, created by the controller and reused across stop/restart cycles.
+- Built-in agent tooling — The sandbox runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
+- Observability & lifecycle control — Controller and sandbox services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (stop, restart, remix, publish) for operators.
+- API coverage — The Rust API service exposes REST endpoints for sandboxes, tasks, operators, files, and auth, enabling external orchestration or integration.
 - LLM integration — Sessions talk to Ollama via `OLLAMA_HOST` and the configurable `TSBX_DEFAULT_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
 - Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, Ollama, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
 - Portable dev→prod — Docker images built via `./scripts/build.sh` are the same ones the CLI pulls or runs in CI/CD, keeping local and production stacks aligned.
-- Rust-first core — API, controller, session, and content services are Rust 2021 binaries with structured logging and consistent error handling.
+- Rust-first core — API, controller, sandbox, and content services are Rust 2021 binaries with structured logging and consistent error handling.
 
 ## Requirements
 

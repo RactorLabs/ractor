@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `session/` (runtime), `shared/` (common code). Binaries: `tsbx-api`, `tsbx-controller`, `tsbx-session`.
+- `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `sandbox/` (runtime), `shared/` (common code). Binaries: `tsbx-api`, `tsbx-controller`, `tsbx-sandbox`.
 - `cli/`: Node.js CLI (`tsbx`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`, `install.sh`, `rebuild.sh`, `release.sh`, `bump.sh`, `push.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
@@ -15,7 +15,7 @@
 - Start services (Docker via CLI): `tsbx start [components...]`
   - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Controller, Gateway (`80`).
   - In dev, use `./scripts/build.sh` to build images when needed.
-- Stop: `tsbx stop [components...]` (supports `sessions` to stop all session containers).
+- Stop: `tsbx stop [components...]` (supports `sandboxes` to stop all sandbox containers).
 - Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.
 
 ## Contributor Workflow Rules
@@ -46,7 +46,7 @@
 - PRs must include: summary, test plan, breaking changes (if any), and linked issues.
 - Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `tsbx start api`.
 - Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
-- Branch naming: `type/short-description` (e.g., `feat/session-timeout`).
+- Branch naming: `type/short-description` (e.g., `feat/sandbox-timeout`).
 
 Note on commit message formatting:
 
@@ -61,37 +61,37 @@ Note on commit message formatting:
 - Example local DB: `mysql://tsbx:tsbx@localhost:3307/tsbx`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
-- The CLI injects `TSBX_HOST_NAME`/`TSBX_HOST_URL` into Operator, Controller and sessions for consistent links/branding.
+- The CLI injects `TSBX_HOST_NAME`/`TSBX_HOST_URL` into Operator, Controller and sandboxes for consistent links/branding.
 
 ## Data Model Highlights (Sessions)
 
-- UUID-based primary key: sessions are identified exclusively by `id` (CHAR(36) UUID).
-- Core fields: `state` (`init|idle|busy|stopped`), `created_by`, timestamps, `metadata` (JSON).
-- Parent sessions: `parent_session_id` (CHAR(36)) references parent session's UUID.
+- UUID-based primary key: sandboxes are identified exclusively by `id` (CHAR(36) UUID).
+- Core fields: `state` (`init|idle|busy|deleted`), `created_by`, timestamps, `metadata` (JSON).
+- Parent sandboxes: `parent_sandbox_id` (CHAR(36)) references parent sandbox's UUID.
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
-- Docker resources: Container names are `tsbx_session_{id}`, volume names are `tsbx_session_data_{id}`.
+- Docker resources: Container names are `tsbx_sandbox_{id}`, volume names are `tsbx_sandbox_data_{id}`.
 
-## Session Lifecycle & API
+## Sandbox Lifecycle & API
 
-- Controller creates the session container and sets initial DB state to `init` (only if still `init`, to avoid racing session requests).
-- The session runtime, on boot, calls the API to report state:
-  - `POST /api/v0/sessions/{id}/idle` when ready (sets state to `idle` and starts idle timer).
-  - `POST /api/v0/sessions/{id}/busy` when processing (sets state to `busy` and starts busy timer).
+- Controller creates the sandbox container and sets initial DB state to `init` (only if still `init`, to avoid racing sandbox requests).
+- The sandbox runtime, on boot, calls the API to report state:
+  - `POST /api/v0/sandboxes/{id}/idle` when ready (sets state to `idle` and starts idle timer).
+  - `POST /api/v0/sandboxes/{id}/busy` when processing (sets state to `busy` and starts busy timer).
 - Stop/Restart actions:
-  - `POST /sessions/{id}/stop` schedules container stop and sets state to `stopped`.
-  - `POST /sessions/{id}/restart` restarts container and transitions via `init`.
-- Tasks: `GET/POST /sessions/{id}/tasks` for user↔session exchanges, stored in `session_tasks`.
+  - `POST /sandboxes/{id}/stop` schedules container stop and sets state to `deleted`.
+  - `POST /sandboxes/{id}/restart` restarts container and transitions via `init`.
+- Tasks: `GET/POST /sandboxes/{id}/tasks` for user↔sandbox exchanges, stored in `sandbox_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
 - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
-- All API routes and Docker operations use session UUID `id` exclusively.
+- All API routes and Docker operations use sandbox UUID `id` exclusively.
 
 ## Operator UI
 
-- Primary routes live under `/sessions` (list, create, details/chat). Legacy `/app/*` routes have been removed.
+- Primary routes live under `/sandboxes` (list, create, details/chat). Legacy `/app/*` routes have been removed.
 - Sessions are displayed by their ID (shortened to first 8 characters, with full ID on hover).
-- Session pages show tags and support "Remix", "Edit Tags", "Delete" via modals. Stop/Restart buttons appear only when actionable.
-- No name input required when creating or cloning sessions - IDs are auto-generated.
+- Sandbox pages show tags and support "Remix", "Edit Tags", "Delete" via modals. Stop/Restart buttons appear only when actionable.
+- No name input required when creating or cloning sandboxes - IDs are auto-generated.
 
 ## Session-Specific Instructions
 

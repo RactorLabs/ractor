@@ -26,17 +26,17 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove TaskSandbox component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sessions (all session containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sandboxes (all sandbox containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only TaskSandbox component containers.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
-      '  • Use component "sessions" to stop/remove all session containers.\n' +
+      '  • Use component "sandboxes" to stop/remove all sandbox containers.\n' +
       '\nExamples:\n' +
       '  $ tsbx stop                     # stop all TaskSandbox components\n' +
       '  $ tsbx stop api controller      # stop specific components\n' +
       '  $ tsbx stop operator            # stop UI component\n' +
-      '  $ tsbx stop sessions              # stop all session containers\n')
+      '  $ tsbx stop sandboxes           # stop all sandbox containers\n')
     .action(async (components, _opts, cmd) => {
       try {
         // Default to stopping all TaskSandbox components when none specified
@@ -44,10 +44,10 @@ module.exports = (program) => {
           components = ['gateway','controller','operator','api'];
         }
         // Validate component names (only TaskSandbox components)
-        const allowed = new Set(['api','controller','operator','gateway','sessions']);
+        const allowed = new Set(['api','controller','operator','gateway','sandboxes']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
-          console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, gateway, sessions`);
+          console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, gateway, sandboxes`);
           cmd.help({ error: true });
         }
 
@@ -57,9 +57,9 @@ module.exports = (program) => {
         console.log();
 
         const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', gateway: 'tsbx_gateway' };
-        const includeSessions = components.includes('sessions');
+        const includeSandboxes = components.includes('sandboxes');
         const order = ['gateway','controller','operator','api'];
-        const toStop = components.filter(c => c !== 'sessions');
+        const toStop = components.filter(c => c !== 'sandboxes');
         const ordered = order.filter((c) => toStop.includes(c));
 
         // Helper to list all containers matching a base name, including suffixed variants
@@ -103,20 +103,20 @@ module.exports = (program) => {
           console.log();
         }
 
-        if (includeSessions) {
-          console.log(chalk.blue('[INFO] ') + 'Stopping session containers...');
+        if (includeSandboxes) {
+          console.log(chalk.blue('[INFO] ') + 'Stopping sandbox containers...');
           try {
-            const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=tsbx_session_'], { silent: true });
+            const res = await docker(['ps','-a','--format','{{.Names}}','--filter','name=tsbx_sandbox_'], { silent: true });
             const names = res.stdout.trim().split('\n').filter(Boolean);
             if (names.length) {
               try { await docker(['stop', ...names]); } catch (_) {}
               await docker(['rm','-f', ...names]);
-              console.log(chalk.green('[SUCCESS] ') + `Stopped and removed ${names.length} session containers`);
+              console.log(chalk.green('[SUCCESS] ') + `Stopped and removed ${names.length} sandbox containers`);
             } else {
-              console.log(chalk.green('[SUCCESS] ') + 'No session containers found');
+              console.log(chalk.green('[SUCCESS] ') + 'No sandbox containers found');
             }
           } catch (e) {
-            console.log(chalk.yellow('[WARNING] ') + 'Some session containers could not be removed');
+            console.log(chalk.yellow('[WARNING] ') + 'Some sandbox containers could not be removed');
           }
           console.log();
         }

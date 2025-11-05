@@ -18,7 +18,7 @@
     setPageTitle('Change Password');
     if (!isAuthenticated()) { goto('/login'); return; }
     const t = (getPrincipalType() || '').toLowerCase();
-    if (t !== 'admin') { goto('/sessions'); return; }
+    if (t !== 'admin') { goto('/sandboxes'); return; }
     operatorName = getOperatorName() || '';
   });
 
@@ -83,7 +83,7 @@
                   Update Password
                 {/if}
               </button>
-              <a href="/sessions" class="btn btn-outline-secondary">Cancel</a>
+              <a href="/sandboxes" class="btn btn-outline-secondary">Cancel</a>
             </div>
           </form>
         </div>

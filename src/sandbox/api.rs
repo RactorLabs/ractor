@@ -8,16 +8,15 @@ use tracing::{debug, info};
 // (Removed legacy message types and constants import; API now uses Tasks.)
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct Session {
+pub struct Sandbox {
     pub id: String, // UUID primary key
     pub created_by: String,
     pub state: String,
-    pub parent_session_id: Option<String>,
+    pub snapshot_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
-    pub stop_timeout_seconds: i32,
-    pub archive_timeout_seconds: i32,
+    pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
@@ -27,7 +26,7 @@ pub struct Session {
 pub struct TaskSandboxClient {
     client: Client,
     config: Arc<Config>,
-    session_id: String,
+    sandbox_id: String,
 }
 
 impl TaskSandboxClient {
@@ -37,17 +36,17 @@ impl TaskSandboxClient {
             .build()
             .expect("Failed to create HTTP client");
 
-        let session_id = config.session_id.clone();
+        let sandbox_id = config.sandbox_id.clone();
 
-        Self { client, config, session_id }
+        Self { client, config, sandbox_id }
     }
 
 
-    /// Get a task by id for current session
+    /// Get a task by id for current sandbox
     pub async fn get_task_by_id(&self, id: &str) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/tasks/{}",
-            self.config.api_url, self.session_id, id
+            "{}/api/v0/sandboxes/{}/tasks/{}",
+            self.config.api_url, self.sandbox_id, id
         );
         let response = self
             .client
@@ -74,14 +73,14 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Get session information
-    pub async fn get_session(&self) -> Result<Session> {
+    /// Get sandbox information
+    pub async fn get_sandbox(&self) -> Result<Sandbox> {
         let url = format!(
-            "{}/api/v0/sessions/{}",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}",
+            self.config.api_url, self.sandbox_id
         );
 
-        debug!("Fetching session info from: {}", url);
+        debug!("Fetching sandbox info from: {}", url);
 
         let response = self
             .client
@@ -92,16 +91,16 @@ impl TaskSandboxClient {
 
         match response.status() {
             StatusCode::OK => {
-                let session = response.json::<Session>().await?;
-                debug!("Fetched session info for: {}", session.id);
-                Ok(session)
+                let sandbox = response.json::<Sandbox>().await?;
+                debug!("Fetched sandbox info for: {}", sandbox.id);
+                Ok(sandbox)
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.session_id
+                "Sandbox {} not found",
+                self.sandbox_id
             ))),
             status => {
                 let error_text = response
@@ -119,8 +118,8 @@ impl TaskSandboxClient {
     /// Create a new task (user input)
     pub async fn create_task(&self, input_text: &str) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/tasks",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/tasks",
+            self.config.api_url, self.sandbox_id
         );
         let req = CreateTaskRequest {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
@@ -139,7 +138,7 @@ impl TaskSandboxClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -162,8 +161,8 @@ impl TaskSandboxClient {
         items: Option<Vec<serde_json::Value>>,
     ) -> Result<TaskView> {
         let url = format!(
-            "{}/api/v0/sessions/{}/tasks/{}",
-            self.config.api_url, self.session_id, id
+            "{}/api/v0/sandboxes/{}/tasks/{}",
+            self.config.api_url, self.sandbox_id, id
         );
         let mut output = serde_json::Map::new();
         if let Some(t) = output_text {
@@ -204,15 +203,15 @@ impl TaskSandboxClient {
         }
     }
 
-    /// List tasks for current session
+    /// List tasks for current sandbox
     pub async fn get_tasks(
         &self,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<TaskView>> {
         let mut url = format!(
-            "{}/api/v0/sessions/{}/tasks",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/tasks",
+            self.config.api_url, self.sandbox_id
         );
         let mut sep = '?';
         if let Some(l) = limit {
@@ -236,7 +235,7 @@ impl TaskSandboxClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -250,11 +249,11 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Get task count for current session
+    /// Get task count for current sandbox
     pub async fn get_task_count(&self) -> Result<u64> {
         let url = format!(
-            "{}/api/v0/sessions/{}/tasks/count",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/tasks/count",
+            self.config.api_url, self.sandbox_id
         );
         let response = self
             .client
@@ -274,7 +273,7 @@ impl TaskSandboxClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -288,11 +287,11 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Update session to busy (clears idle_from)
-    pub async fn update_session_to_busy(&self) -> Result<()> {
+    /// Update sandbox to busy (clears idle_from)
+    pub async fn update_sandbox_to_busy(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/busy",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/busy",
+            self.config.api_url, self.sandbox_id
         );
 
         let response = self
@@ -304,15 +303,15 @@ impl TaskSandboxClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Session state updated to: busy (timeout paused)");
+                info!("Sandbox state updated to: busy (timeout paused)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.session_id
+                "Sandbox {} not found",
+                self.sandbox_id
             ))),
             status => {
                 let error_text = response
@@ -327,11 +326,11 @@ impl TaskSandboxClient {
         }
     }
 
-    /// Update session to idle (sets idle_from)
-    pub async fn update_session_to_idle(&self) -> Result<()> {
+    /// Update sandbox to idle (sets idle_from)
+    pub async fn update_sandbox_to_idle(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sessions/{}/idle",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/idle",
+            self.config.api_url, self.sandbox_id
         );
 
         let response = self
@@ -343,15 +342,15 @@ impl TaskSandboxClient {
 
         match response.status() {
             StatusCode::OK | StatusCode::NO_CONTENT => {
-                info!("Session state updated to: idle (timeout started)");
+                info!("Sandbox state updated to: idle (timeout started)");
                 Ok(())
             }
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
             StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.session_id
+                "Sandbox {} not found",
+                self.sandbox_id
             ))),
             status => {
                 let error_text = response
@@ -366,15 +365,15 @@ impl TaskSandboxClient {
         }
     }
 
-    pub async fn update_session_context_length(&self, tokens: i64) -> Result<()> {
+    pub async fn update_sandbox_context_length(&self, tokens: i64) -> Result<()> {
         #[derive(Serialize)]
         struct ContextUsageReq {
             tokens: i64,
         }
 
         let url = format!(
-            "{}/api/v0/sessions/{}/context/usage",
-            self.config.api_url, self.session_id
+            "{}/api/v0/sandboxes/{}/context/usage",
+            self.config.api_url, self.sandbox_id
         );
 
         let body = ContextUsageReq {
@@ -394,7 +393,7 @@ impl TaskSandboxClient {
             StatusCode::UNAUTHORIZED => {
                 Err(HostError::Api("Unauthorized - check API token".to_string()))
             }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Session not found".to_string())),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
             status => {
                 let error_text = response
                     .text()
@@ -409,60 +408,11 @@ impl TaskSandboxClient {
     }
 
 
-    /// Stop the current session by ID after an optional delay (seconds, min 5) with optional note
-    pub async fn stop_session(
-        &self,
-        delay_seconds: Option<u64>,
-        note: Option<String>,
-    ) -> Result<()> {
-        let url = format!(
-            "{}/api/v0/sessions/{}/stop",
-            self.config.api_url, self.session_id
-        );
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&{
-                let mut body = serde_json::json!({ "delay_seconds": delay_seconds.unwrap_or(5) });
-                if let Some(n) = note {
-                    let t = n.trim().to_string();
-                    if !t.is_empty() {
-                        body["note"] = serde_json::json!(t);
-                    }
-                }
-                body
-            })
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT | StatusCode::CREATED => Ok(()),
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api(format!(
-                "Session {} not found",
-                self.session_id
-            ))),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to stop session ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {
     pub id: String,
-    pub session_id: String,
+    pub sandbox_id: String,
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<serde_json::Value>,

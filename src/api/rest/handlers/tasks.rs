@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::shared::models::{
-    AppState, CreateTaskRequest, SessionTask, TaskView, UpdateTaskRequest,
+    AppState, CreateTaskRequest, SandboxTask, TaskView, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
 
@@ -26,12 +26,12 @@ pub async fn list_tasks(
     Query(query): Query<ListQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<Vec<TaskView>>> {
-    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
-    let list = SessionTask::find_by_session(&state.db, &session.id, query.limit, query.offset)
+    let list = SandboxTask::find_by_sandbox(&state.db, &sandbox.id, query.limit, query.offset)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
@@ -39,7 +39,7 @@ pub async fn list_tasks(
         .into_iter()
         .map(|r| TaskView {
             id: r.id,
-            session_id: r.session_id,
+            sandbox_id: r.sandbox_id,
             status: r.status,
             input_content: extract_input_content(&r.input),
             output_content: extract_output_content(&r.output),
@@ -58,14 +58,14 @@ pub async fn get_task_global_by_id(
     Path(id): Path<String>,
     _auth: Extension<AuthContext>,
 ) -> ApiResult<Json<TaskView>> {
-    // Look up task directly by id (no session required)
-    if let Some(cur) = SessionTask::find_by_id(&state.db, &id)
+    // Look up task directly by id (no sandbox required)
+    if let Some(cur) = SandboxTask::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
         let view = TaskView {
             id: cur.id,
-            session_id: cur.session_id,
+            sandbox_id: cur.sandbox_id,
             status: cur.status,
             input_content: extract_input_content(&cur.input),
             output_content: extract_output_content(&cur.output),
@@ -101,24 +101,31 @@ pub async fn create_task(
 ) -> ApiResult<Json<TaskView>> {
     use tokio::time::{sleep, Duration, Instant};
 
-    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    // Check if sandbox is deleted
+    if sandbox.state == "deleted" {
+        return Err(ApiError::BadRequest(
+            "Sandbox is deleted. Please create a new one.".to_string(),
+        ));
+    }
 
     // Soft limit guard: block when history usage since cutoff meets/exceeds limit
     let limit_tokens = soft_limit_tokens();
-    let used_tokens = session.last_context_length;
+    let used_tokens = sandbox.last_context_length;
     if used_tokens >= limit_tokens {
         return Err(ApiError::Conflict(format!(
-            "Context is full ({} / {} tokens). Clear context via POST /api/v0/sessions/{}/context/clear and try again.",
-            used_tokens, limit_tokens, session.id
+            "Context is full ({} / {} tokens). Clear context via POST /api/v0/sandboxes/{}/context/clear and try again.",
+            used_tokens, limit_tokens, sandbox.id
         )));
     }
 
-    // Block new tasks when session is busy
-    if session.state == crate::shared::models::constants::SESSION_STATE_BUSY {
-        return Err(ApiError::Conflict("Session is busy".to_string()));
+    // Block new tasks when sandbox is busy
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_BUSY {
+        return Err(ApiError::Conflict("Sandbox is busy".to_string()));
     }
 
     if let Some(timeout) = req.timeout_seconds {
@@ -135,28 +142,17 @@ pub async fn create_task(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // If session is stopped, only owner or admin can implicitly restart via this path
-    let is_admin = is_admin_principal(&auth, &state).await;
-    if session.state == crate::shared::models::constants::SESSION_STATE_STOPPED
-        && !is_admin
-        && session.created_by != *created_by
+    // If sandbox is idle (or still init), mark busy to signal work enqueued
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_IDLE
+        || sandbox.state == crate::shared::models::constants::SANDBOX_STATE_INIT
     {
-        return Err(ApiError::Forbidden(
-            "You can only restart your own sessions.".to_string(),
-        ));
-    }
-
-    // If session is idle (or still init), mark busy to signal work enqueued
-    if session.state == crate::shared::models::constants::SESSION_STATE_IDLE
-        || session.state == crate::shared::models::constants::SESSION_STATE_INIT
-    {
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#)
-            .bind(crate::shared::models::constants::SESSION_STATE_BUSY)
-            .bind(&session.id)
-            .bind(session.state)
+        sqlx::query(r#"UPDATE sandboxes SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#)
+            .bind(crate::shared::models::constants::SANDBOX_STATE_BUSY)
+            .bind(&sandbox.id)
+            .bind(sandbox.state)
             .execute(&*state.db)
             .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox state: {}", e)))?;
     }
 
     // Generate task id that Controller will use when inserting the DB row
@@ -165,21 +161,20 @@ pub async fn create_task(
     // Default task timeout to 1 hour (3600 seconds) if not specified
     let timeout_seconds = req.timeout_seconds.or(Some(3600));
 
-    // Enqueue Controller request to restart (if needed) and create the task row
+    // Enqueue Controller request to create the task row
     let payload = serde_json::json!({
         "task_id": task_id,
         "input": req.input,
-        "restart_if_stopped": true,
         "background": req.background.unwrap_or(true),
         "timeout_seconds": timeout_seconds
     });
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
+        INSERT INTO sandbox_requests (sandbox_id, request_type, created_by, payload, status)
         VALUES (?, 'create_task', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
@@ -202,14 +197,14 @@ pub async fn create_task(
             }
 
             // Reload current task by the preassigned id
-            match SessionTask::find_by_id(&state.db, &task_id).await {
+            match SandboxTask::find_by_id(&state.db, &task_id).await {
                 Ok(Some(cur)) => {
                     let status_lc = cur.status.to_lowercase();
                     if status_lc == "completed" || status_lc == "failed" || status_lc == "cancelled"
                     {
                         return Ok(Json(TaskView {
                             id: cur.id,
-                            session_id: cur.session_id,
+                            sandbox_id: cur.sandbox_id,
                             status: cur.status,
                             input_content: extract_input_content(&cur.input),
                             output_content: extract_output_content(&cur.output),
@@ -246,7 +241,7 @@ pub async fn create_task(
     let created_at = now.to_rfc3339();
     Ok(Json(TaskView {
         id: task_id,
-        session_id: session.id.clone(),
+        sandbox_id: sandbox.id.clone(),
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
         output_content: vec![],
@@ -278,23 +273,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    session_id: &str,
+    sandbox_id: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<i64, ApiError> {
     // Mirror conversation building: count user inputs, tool calls/results for in-progress, and compact assistant text for completed.
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM sandbox_tasks WHERE sandbox_id = ? AND created_at >= ?"#,
         )
-            .bind(session_id)
+            .bind(sandbox_id)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ?"#,
+            r#"SELECT status, input, output, created_at FROM sandbox_tasks WHERE sandbox_id = ?"#,
         )
-            .bind(session_id)
+            .bind(sandbox_id)
             .fetch_all(pool)
             .await
     }
@@ -528,21 +523,28 @@ async fn estimate_history_tokens_since(
 
 pub async fn update_task(
     State(state): State<Arc<AppState>>,
-    Path((session_id, task_id)): Path<(String, String)>,
+    Path((sandbox_id, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> ApiResult<Json<TaskView>> {
-    let _session = crate::shared::models::Session::find_by_id(&state.db, &session_id)
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    // Check if sandbox is deleted
+    if sandbox.state == "deleted" {
+        return Err(ApiError::BadRequest(
+            "Sandbox is deleted. Please create a new one.".to_string(),
+        ));
+    }
 
     // Check belongs
-    if let Some(existing) = SessionTask::find_by_id(&state.db, &task_id)
+    if let Some(existing) = SandboxTask::find_by_id(&state.db, &task_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
-        if existing.session_id != session_id {
+        if existing.sandbox_id != sandbox_id {
             return Err(ApiError::NotFound("Task not found".to_string()));
         }
     } else {
@@ -557,13 +559,13 @@ pub async fn update_task(
         }
     }
 
-    let updated = SessionTask::update_by_id(&state.db, &task_id, req)
+    let updated = SandboxTask::update_by_id(&state.db, &task_id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update task: {}", e)))?;
 
     Ok(Json(TaskView {
         id: updated.id,
-        session_id: updated.session_id,
+        sandbox_id: updated.sandbox_id,
         status: updated.status,
         input_content: extract_input_content(&updated.input),
         output_content: extract_output_content(&updated.output),
@@ -577,23 +579,23 @@ pub async fn update_task(
 
 pub async fn get_task_by_id(
     State(state): State<Arc<AppState>>,
-    Path((session_id, task_id)): Path<(String, String)>,
+    Path((sandbox_id, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<TaskView>> {
-    // Ensure session exists
-    let _session = crate::shared::models::Session::find_by_id(&state.db, &session_id)
+    // Ensure sandbox exists
+    let _sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
-    let cur = crate::shared::models::SessionTask::find_by_id(&state.db, &task_id)
+    let cur = crate::shared::models::SandboxTask::find_by_id(&state.db, &task_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch task: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Task not found".to_string()))?;
 
     Ok(Json(TaskView {
         id: cur.id,
-        session_id: cur.session_id,
+        sandbox_id: cur.sandbox_id,
         status: cur.status,
         input_content: extract_input_content(&cur.input),
         output_content: extract_output_content(&cur.output),
@@ -610,15 +612,15 @@ pub async fn get_task_count(
     Path(id): Path<String>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let session = crate::shared::models::Session::find_by_id(&state.db, &id)
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
-    let count = SessionTask::count_by_session(&state.db, &session.id)
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+    let count = SandboxTask::count_by_sandbox(&state.db, &sandbox.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count tasks: {}", e)))?;
     Ok(Json(
-        serde_json::json!({ "count": count, "session_id": session.id }),
+        serde_json::json!({ "count": count, "sandbox_id": sandbox.id }),
     ))
 }
 

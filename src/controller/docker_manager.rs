@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 pub struct DockerManager {
     docker: Docker,
-    session_image: String,
+    sandbox_image: String,
     cpu_limit: f64,
     memory_limit: i64,
     db_pool: MySqlPool,
@@ -21,7 +21,7 @@ pub struct DockerManager {
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
     let mut lines = String::from(
-        "# TaskSandbox session environment\n# Managed by TaskSandbox controller; do not modify without explicit approval.\n",
+        "# TaskSandbox sandbox environment\n# Managed by TaskSandbox controller; do not modify without explicit approval.\n",
     );
     let mut entries: Vec<_> = env.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -50,26 +50,26 @@ impl DockerManager {
         Self {
             docker,
             db_pool,
-            session_image: std::env::var("SESSION_IMAGE")
-                .unwrap_or_else(|_| "tsbx_session:latest".to_string()),
-            cpu_limit: std::env::var("SESSION_CPU_LIMIT")
+            sandbox_image: std::env::var("SANDBOX_IMAGE")
+                .unwrap_or_else(|_| "tsbx_sandbox:latest".to_string()),
+            cpu_limit: std::env::var("SANDBOX_CPU_LIMIT")
                 .unwrap_or_else(|_| "0.5".to_string())
                 .parse()
                 .unwrap_or(0.5),
-            memory_limit: std::env::var("SESSION_MEMORY_LIMIT")
+            memory_limit: std::env::var("SANDBOX_MEMORY_LIMIT")
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),
         }
     }
 
-    // NEW: Create session volume with explicit naming
-    async fn create_session_volume(&self, session_id: &str) -> Result<String> {
-        let volume_name = format!("tsbx_session_data_{}", session_id);
+    // NEW: Create sandbox volume with explicit naming
+    async fn create_sandbox_volume(&self, sandbox_id: &str) -> Result<String> {
+        let volume_name = format!("tsbx_sandbox_data_{}", sandbox_id);
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
-        labels.insert("tsbx.type".to_string(), "session_volume".to_string());
+        labels.insert("tsbx.sandbox_id".to_string(), sandbox_id.to_string());
+        labels.insert("tsbx.type".to_string(), "sandbox_volume".to_string());
         labels.insert(
             "tsbx.created_at".to_string(),
             chrono::Utc::now().to_rfc3339(),
@@ -83,73 +83,73 @@ impl DockerManager {
         };
 
         self.docker.create_volume(volume_config).await?;
-        info!("Created session volume: {}", volume_name);
+        info!("Created sandbox volume: {}", volume_name);
 
         Ok(volume_name)
     }
 
-    // Get session volume name (derived from session ID)
-    fn get_session_volume_name(&self, session_id: &str) -> String {
-        format!("tsbx_session_data_{}", session_id)
+    // Get sandbox volume name (derived from sandbox ID)
+    fn get_sandbox_volume_name(&self, sandbox_id: &str) -> String {
+        format!("tsbx_sandbox_data_{}", sandbox_id)
     }
 
-    // Get session container name (derived from session ID)
-    fn get_session_container_name(&self, session_id: &str) -> String {
-        format!("tsbx_session_{}", session_id)
+    // Get sandbox container name (derived from sandbox ID)
+    fn get_sandbox_container_name(&self, sandbox_id: &str) -> String {
+        format!("tsbx_sandbox_{}", sandbox_id)
     }
 
-    // Check if session volume exists
-    async fn session_volume_exists(&self, session_id: &str) -> Result<bool> {
-        let volume_name = self.get_session_volume_name(session_id);
+    // Check if sandbox volume exists
+    async fn sandbox_volume_exists(&self, sandbox_id: &str) -> Result<bool> {
+        let volume_name = self.get_sandbox_volume_name(sandbox_id);
         match self.docker.inspect_volume(&volume_name).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }
 
-    // Initialize session directory structure with env, instructions, and setup
-    async fn initialize_session_structure(
+    // Initialize sandbox directory structure with env, instructions, and setup
+    async fn initialize_sandbox_structure(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         env: &HashMap<String, String>,
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
         info!(
-            "Initializing session structure for session {}",
-            session_id
+            "Initializing sandbox structure for sandbox {}",
+            sandbox_id
         );
 
         // Create base directories with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
-        let init_script = "sudo mkdir -p /session/logs
-sudo touch /session/.env
-sudo chown session:session /session/.env
-sudo chmod 600 /session/.env
-sudo chown -R session:session /session
-sudo chmod -R 755 /session
+        let init_script = "sudo mkdir -p /sandbox/logs
+sudo touch /sandbox/.env
+sudo chown sandbox:sandbox /sandbox/.env
+sudo chmod 600 /sandbox/.env
+sudo chown -R sandbox:sandbox /sandbox
+sudo chmod -R 755 /sandbox
 echo 'Session directories created (.env, logs)'
 ";
 
-        self.execute_command(session_id, init_script).await?;
+        self.execute_command(sandbox_id, init_script).await?;
 
-        // Write env values to /session/.env
+        // Write env values to /sandbox/.env
         let env_content = render_env_file(env);
         let write_env_script = format!(
-            "cat <<'EOF_ENV' | sudo tee /session/.env >/dev/null\n{}EOF_ENV\nsudo chown session:session /session/.env\nsudo chmod 600 /session/.env\n",
+            "cat <<'EOF_ENV' | sudo tee /sandbox/.env >/dev/null\n{}EOF_ENV\nsudo chown sandbox:sandbox /sandbox/.env\nsudo chmod 600 /sandbox/.env\n",
             env_content
         );
-        self.execute_command(session_id, &write_env_script)
+        self.execute_command(sandbox_id, &write_env_script)
             .await?;
 
         // Write instructions if provided
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
             let write_instructions_command = format!(
-                "echo '{}' > /session/instructions.md",
+                "echo '{}' > /sandbox/instructions.md",
                 escaped_instructions
             );
-            self.execute_command(session_id, &write_instructions_command)
+            self.execute_command(sandbox_id, &write_instructions_command)
                 .await?;
         }
 
@@ -157,10 +157,10 @@ echo 'Session directories created (.env, logs)'
         if let Some(setup_content) = setup {
             let escaped_setup = setup_content.replace("'", "'\"'\"'");
             let write_setup_command = format!(
-                "echo '{}' > /session/setup.sh && chmod +x /session/setup.sh",
+                "echo '{}' > /sandbox/setup.sh && chmod +x /sandbox/setup.sh",
                 escaped_setup
             );
-            self.execute_command(session_id, &write_setup_command)
+            self.execute_command(sandbox_id, &write_setup_command)
                 .await?;
         }
 
@@ -172,22 +172,22 @@ echo 'Session directories created (.env, logs)'
         Ok(())
     }
 
-    // NEW: Check if session is initialized
-    async fn session_initialized(&self, _volume_name: &str) -> Result<bool> {
+    // NEW: Check if sandbox is initialized
+    async fn sandbox_initialized(&self, _volume_name: &str) -> Result<bool> {
         // Skip initialization check for now - always initialize
         Ok(false)
     }
 
-    // NEW: Cleanup session volume
-    pub async fn cleanup_session_volume(&self, session_id: &str) -> Result<()> {
-        let expected_volume_name = format!("tsbx_session_data_{}", session_id);
+    // NEW: Cleanup sandbox volume
+    pub async fn cleanup_sandbox_volume(&self, sandbox_id: &str) -> Result<()> {
+        let expected_volume_name = format!("tsbx_sandbox_data_{}", sandbox_id);
 
         match self.docker.remove_volume(&expected_volume_name, None).await {
             Ok(_) => {
-                info!("Removed session volume: {}", expected_volume_name);
+                info!("Removed sandbox volume: {}", expected_volume_name);
             }
             Err(e) => warn!(
-                "Failed to remove session volume {}: {}",
+                "Failed to remove sandbox volume {}: {}",
                 expected_volume_name, e
             ),
         }
@@ -197,20 +197,20 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_volume_copy(
         &self,
-        session_id: &str,
-        parent_session_id: &str,
+        sandbox_id: &str,
+        parent_sandbox_id: &str,
     ) -> Result<String> {
         info!(
-            "Creating cloned session {} with volume copy from {}",
-            session_id, parent_session_id
+            "Creating cloned sandbox {} with volume copy from {}",
+            sandbox_id, parent_sandbox_id
         );
 
         // First create the container normally (this creates the empty target volume)
-        let container_name = self.create_container(session_id).await?;
+        let container_name = self.create_container(sandbox_id).await?;
 
         // Then copy data from parent volume to new volume using Docker command
-        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
-        let new_volume = format!("tsbx_session_data_{}", session_id);
+        let parent_volume = format!("tsbx_sandbox_data_{}", parent_sandbox_id);
+        let new_volume = format!("tsbx_sandbox_data_{}", sandbox_id);
 
         info!(
             "Copying volume data from {} to {}",
@@ -218,10 +218,10 @@ echo 'Session directories created (.env, logs)'
         );
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
+        let copy_container_name = format!("tsbx_volume_copy_{}", sandbox_id);
 
         let config = Config {
-            image: Some(self.session_image.clone()),
+            image: Some(self.sandbox_image.clone()),
             cmd: Some(vec![
                 "bash".to_string(),
                 "-c".to_string(),
@@ -321,32 +321,32 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_full_copy(
         &self,
-        session_id: &str,
-        parent_session_id: &str,
+        sandbox_id: &str,
+        parent_sandbox_id: &str,
     ) -> Result<String> {
-        info!("Creating cloned session {} with full copy from {}",
-              session_id, parent_session_id);
+        info!("Creating cloned sandbox {} with full copy from {}",
+              sandbox_id, parent_sandbox_id);
 
-        // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_id).await?;
+        // First create the sandbox volume (without starting container)
+        let sandbox_volume = self.create_sandbox_volume(sandbox_id).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
-        let new_volume = format!("tsbx_session_data_{}", session_id);
+        let parent_volume = format!("tsbx_sandbox_data_{}", parent_sandbox_id);
+        let new_volume = format!("tsbx_sandbox_data_{}", sandbox_id);
 
         info!(
             "Copying full volume data from {} to {}",
             parent_volume, new_volume
         );
 
-        // Copy entire /session directory from parent
+        // Copy entire /sandbox directory from parent
         let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
+        let copy_container_name = format!("tsbx_volume_copy_{}", sandbox_id);
 
         let config = Config {
-            image: Some(self.session_image.clone()),
+            image: Some(self.sandbox_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
@@ -438,7 +438,7 @@ echo 'Session directories created (.env, logs)'
             }
         };
 
-        info!("Environment entries in cloned session: {}", env.len());
+        info!("Environment entries in cloned sandbox: {}", env.len());
 
         // Clean up copy container
         let _ = self
@@ -470,7 +470,7 @@ echo 'Session directories created (.env, logs)'
 
         // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(session_id, Some(env), instructions, setup)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -478,38 +478,38 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_full_copy_and_tokens(
         &self,
-        session_id: &str,
-        parent_session_id: &str,
+        sandbox_id: &str,
+        parent_sandbox_id: &str,
         tsbx_token: String,
         principal: String,
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
     ) -> Result<String> {
         info!(
-            "Creating cloned session {} with full copy from {} and fresh tokens",
-            session_id, parent_session_id
+            "Creating cloned sandbox {} with full copy from {} and fresh tokens",
+            sandbox_id, parent_sandbox_id
         );
 
-        // First create the session volume (without starting container)
-        let session_volume = self.create_session_volume(session_id).await?;
+        // First create the sandbox volume (without starting container)
+        let sandbox_volume = self.create_sandbox_volume(sandbox_id).await?;
 
         // Then copy specific directories from parent volume to new volume
-        let parent_volume = format!("tsbx_session_data_{}", parent_session_id);
-        let new_volume = format!("tsbx_session_data_{}", session_id);
+        let parent_volume = format!("tsbx_sandbox_data_{}", parent_sandbox_id);
+        let new_volume = format!("tsbx_sandbox_data_{}", sandbox_id);
 
         info!(
             "Copying full volume data from {} to {}",
             parent_volume, new_volume
         );
 
-        // Copy entire /session directory from parent
+        // Copy entire /sandbox directory from parent
         let copy_command = "cp -a /source/. /dest/ 2>/dev/null || echo 'No source data'; echo 'Full volume copy completed'".to_string();
 
         // Use bollard Docker API to create copy container
-        let copy_container_name = format!("tsbx_volume_copy_{}", session_id);
+        let copy_container_name = format!("tsbx_volume_copy_{}", sandbox_id);
 
         let config = Config {
-            image: Some(self.session_image.clone()),
+            image: Some(self.sandbox_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec!["bash".to_string(), "-c".to_string(), copy_command]),
             host_config: Some(HostConfig {
@@ -637,7 +637,7 @@ echo 'Session directories created (.env, logs)'
         // Now create and start the container with user env + generated system tokens
         let container_name = self
             .create_container_internal_with_tokens(
-                session_id,
+                sandbox_id,
                 Some(env),
                 instructions,
                 setup,
@@ -668,7 +668,7 @@ echo 'Session directories created (.env, logs)'
         );
 
         let config = Config {
-            image: Some(self.session_image.clone()),
+            image: Some(self.sandbox_image.clone()),
             user: Some("root".to_string()),
             cmd: Some(vec![
                 "bash".to_string(),
@@ -756,20 +756,20 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container_with_params(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_id, Some(env), instructions, setup)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup)
             .await?;
         Ok(container_name)
     }
 
     pub async fn create_container_with_params_and_tokens(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         env: std::collections::HashMap<String, String>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -780,7 +780,7 @@ echo 'Session directories created (.env, logs)'
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
-                session_id,
+                sandbox_id,
                 Some(env),
                 instructions,
                 setup,
@@ -793,149 +793,40 @@ echo 'Session directories created (.env, logs)'
         Ok(container_name)
     }
 
-    pub async fn create_container(&self, session_id: &str) -> Result<String> {
+    pub async fn create_container(&self, sandbox_id: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(session_id, None, None, None)
-            .await?;
-        Ok(container_name)
-    }
-
-    pub async fn restart_container(&self, session_id: &str) -> Result<String> {
-        // Read existing env from the volume
-        let volume_name = format!("tsbx_session_data_{}", session_id);
-        info!(
-            "Restarting container for session {} - reading env from volume {}",
-            session_id, volume_name
-        );
-
-        let env = match self.read_env_from_volume(&volume_name).await {
-            Ok(s) => {
-                info!(
-                    "Found {} env in volume for session {}",
-                    s.len(),
-                    session_id
-                );
-                for key in s.keys() {
-                    info!("  - Env key: {}", key);
-                }
-                Some(s)
-            }
-            Err(e) => {
-                warn!(
-                    "Could not read env from volume for session {}: {}",
-                    session_id, e
-                );
-                None
-            }
-        };
-
-        // Read existing instructions and setup from volume
-        let instructions = self
-            .read_file_from_volume(&volume_name, "instructions.md")
-            .await
-            .ok();
-        let setup = self
-            .read_file_from_volume(&volume_name, "setup.sh")
-            .await
-            .ok();
-
-        let container_name = self
-            .create_container_internal(session_id, env, instructions, setup)
-            .await?;
-        Ok(container_name)
-    }
-
-    pub async fn restart_container_with_tokens(
-        &self,
-        session_id: &str,
-        tsbx_token: String,
-        principal: String,
-        principal_type: String,
-        request_created_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<String> {
-        // Read existing user env from the volume (but generate fresh system tokens)
-        let volume_name = format!("tsbx_session_data_{}", session_id);
-        info!(
-            "Restarting container for session {} with fresh tokens",
-            session_id
-        );
-
-        let env = match self.read_env_from_volume(&volume_name).await {
-            Ok(s) => {
-                info!(
-                    "Found {} user env in volume for session {}",
-                    s.len(),
-                    session_id
-                );
-                Some(s)
-            }
-            Err(e) => {
-                warn!(
-                    "Could not read env from volume for session {}: {}",
-                    session_id, e
-                );
-                None
-            }
-        };
-
-        // Read existing instructions and setup from volume
-        let instructions = self
-            .read_file_from_volume(&volume_name, "instructions.md")
-            .await
-            .ok();
-        let setup = self
-            .read_file_from_volume(&volume_name, "setup.sh")
-            .await
-            .ok();
-
-        let container_name = self
-            .create_container_internal_with_tokens(
-                session_id,
-                env,
-                instructions,
-                setup,
-                tsbx_token,
-                principal,
-                principal_type,
-                Some(request_created_at),
-            )
+            .create_container_internal(sandbox_id, None, None, None)
             .await?;
         Ok(container_name)
     }
 
     async fn create_container_internal(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
     ) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_id);
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         // No content port mapping; preview server is removed.
 
-        // Use session image directly for all sessions
-        let container_image = self.session_image.clone();
+        // Use sandbox image directly for all sandboxes
+        let container_image = self.sandbox_image.clone();
         info!(
-            "Creating container {} with session image {},",
+            "Creating container {} with sandbox image {},",
             container_name, container_image
         );
 
-        info!("Creating container for session {}", session_id);
+        info!("Creating container for sandbox {}", sandbox_id);
 
-        // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_id).await? {
-            self.get_session_volume_name(session_id)
-        } else {
-            self.create_session_volume(session_id).await?
-        };
+        // Sandboxes use their own container filesystem (no external volumes)
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
+        labels.insert("tsbx.sandbox_id".to_string(), sandbox_id.to_string());
         labels.insert("tsbx.managed".to_string(), "true".to_string());
-        labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
-        // Get user token from env (added automatically by session manager)
+        // Get user token from env (added automatically by sandbox manager)
         let user_token = env_map
             .as_ref()
             .and_then(|s| s.get("TSBX_TOKEN"))
@@ -945,25 +836,19 @@ echo 'Session directories created (.env, logs)'
                 "missing-token".to_string()
             });
 
-        // Configure volume mounts
-        let mounts = vec![bollard::models::Mount {
-            typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(session_volume.clone()),
-            target: Some("/session".to_string()),
-            read_only: Some(false),
-            ..Default::default()
-        }];
+        // No external volume mounts - sandbox uses its own container filesystem
+        let mounts: Vec<bollard::models::Mount> = vec![];
 
         // No port bindings or exposed ports needed.
 
-        // Set environment variables for the session structure
+        // Set environment variables for the sandbox structure
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
-            format!("SESSION_ID={}", session_id),
-            format!("TSBX_SESSION_DIR=/session"),
+            format!("SANDBOX_ID={}", sandbox_id),
+            format!("TSBX_SANDBOX_DIR=/sandbox"),
         ];
 
-        // Propagate host branding and URL to sessions (provided by start script)
+        // Propagate host branding and URL to sandboxes (provided by start script)
         let host_name =
             std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
         let host_url =
@@ -1018,16 +903,16 @@ echo 'Session directories created (.env, logs)'
             for (key, value) in env_map {
                 if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
                     info!(
-                        "Skipping user-provided {} - using system-managed value instead for session {}",
-                        key, session_id
+                        "Skipping user-provided {} - using system-managed value instead for sandbox {}",
+                        key, sandbox_id
                     );
                     continue;
                 }
                 env_vars.push(format!("{}={}", key, value));
                 if key != "TSBX_PRINCIPAL" && key != "TSBX_PRINCIPAL_TYPE" {
                     info!(
-                        "Adding env entry {} as environment variable for session {}",
-                        key, session_id
+                        "Adding env entry {} as environment variable for sandbox {}",
+                        key, sandbox_id
                     );
                 }
             }
@@ -1035,23 +920,23 @@ echo 'Session directories created (.env, logs)'
 
         // Set the command with required arguments
         let cmd = vec![
-            "tsbx-session".to_string(),
+            "tsbx-sandbox".to_string(),
             "--api-url".to_string(),
             "http://tsbx_api:9000".to_string(),
-            "--session-id".to_string(),
-            session_id.to_string(),
+            "--sandbox-id".to_string(),
+            sandbox_id.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
-                "session-{}",
-                &session_id[..session_id.len().min(8)]
+                "sandbox-{}",
+                &sandbox_id[..sandbox_id.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env_vars),
             cmd: Some(cmd),
-            working_dir: Some("/session".to_string()), // User starts in their session
+            working_dir: Some("/sandbox".to_string()), // User starts in their sandbox
             exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1078,29 +963,27 @@ echo 'Session directories created (.env, logs)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize session structure after starting container so host can execute setup script
-        if !self.session_initialized(&session_volume).await? {
-            let empty_env: HashMap<String, String> = HashMap::new();
-            let env_ref = env_map.as_ref().unwrap_or(&empty_env);
-            self.initialize_session_structure(
-                session_id,
-                env_ref,
-                instructions.as_deref(),
-                setup.as_deref(),
-            )
-            .await?;
-        }
+        // Initialize sandbox structure after starting container so host can execute setup script
+        let empty_env: HashMap<String, String> = HashMap::new();
+        let env_ref = env_map.as_ref().unwrap_or(&empty_env);
+        self.initialize_sandbox_structure(
+            sandbox_id,
+            env_ref,
+            instructions.as_deref(),
+            setup.as_deref(),
+        )
+        .await?;
 
         info!(
-            "Container {} created with session volume {}",
-            container_name, session_volume
+            "Container {} created (using container filesystem)",
+            container_name
         );
         Ok(container.id)
     }
 
     async fn create_container_internal_with_tokens(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         env_map_opt: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
@@ -1109,57 +992,45 @@ echo 'Session directories created (.env, logs)'
         principal_type: String,
         request_created_at: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_id);
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         // No content port mapping; preview server is removed.
 
-        // Use session image directly for all sessions
-        let container_image = self.session_image.clone();
+        // Use sandbox image directly for all sandboxes
+        let container_image = self.sandbox_image.clone();
         info!(
-            "Creating container {} with session image and generated tokens",
+            "Creating container {} with sandbox image and generated tokens",
             container_name
         );
 
         info!(
-            "Creating container for session {} with fresh tokens",
-            session_id
+            "Creating container for sandbox {} with fresh tokens",
+            sandbox_id
         );
 
-        // Create or get existing session volume
-        let session_volume = if self.session_volume_exists(session_id).await? {
-            self.get_session_volume_name(session_id)
-        } else {
-            self.create_session_volume(session_id).await?
-        };
+        // Sandboxes use their own container filesystem (no external volumes)
 
         let mut labels = HashMap::new();
-        labels.insert("tsbx.session_id".to_string(), session_id.to_string());
+        labels.insert("tsbx.sandbox_id".to_string(), sandbox_id.to_string());
         labels.insert("tsbx.managed".to_string(), "true".to_string());
-        labels.insert("tsbx.volume".to_string(), session_volume.clone());
 
-        // Configure volume mounts
-        let mounts = vec![bollard::models::Mount {
-            typ: Some(bollard::models::MountTypeEnum::VOLUME),
-            source: Some(session_volume.clone()),
-            target: Some("/session".to_string()),
-            read_only: Some(false),
-            ..Default::default()
-        }];
+        // No external volume mounts - sandbox uses its own container filesystem
+        let mounts: Vec<bollard::models::Mount> = vec![];
 
         // No port bindings or exposed ports needed.
 
-        // Set environment variables for the session structure
+        // Set environment variables for the sandbox structure
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
-            format!("SESSION_ID={}", session_id),
-            format!("TSBX_SESSION_DIR=/session"),
+            format!("SANDBOX_ID={}", sandbox_id),
+            format!("TSBX_SANDBOX_DIR=/sandbox"),
             // Set the generated system tokens directly as environment variables
             format!("TSBX_TOKEN={}", tsbx_token),
             format!("TSBX_PRINCIPAL={}", principal),
             format!("TSBX_PRINCIPAL_TYPE={}", principal_type),
         ];
 
-        // Propagate host branding and URL to sessions (provided by start script)
+        // Propagate host branding and URL to sandboxes (provided by start script)
         let host_name =
             std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
         let host_url =
@@ -1206,31 +1077,31 @@ echo 'Session directories created (.env, logs)'
                 }
                 env_vars.push(format!("{}={}", key, value));
                 info!(
-                    "Adding user env entry {} as environment variable for session {}",
-                    key, session_id
+                    "Adding user env entry {} as environment variable for sandbox {}",
+                    key, sandbox_id
                 );
             }
         }
 
         // Set the command with required arguments
         let cmd = vec![
-            "tsbx-session".to_string(),
+            "tsbx-sandbox".to_string(),
             "--api-url".to_string(),
             "http://tsbx_api:9000".to_string(),
-            "--session-id".to_string(),
-            session_id.to_string(),
+            "--sandbox-id".to_string(),
+            sandbox_id.to_string(),
         ];
 
         let config = Config {
             image: Some(container_image),
             hostname: Some(format!(
-                "session-{}",
-                &session_id[..session_id.len().min(8)]
+                "sandbox-{}",
+                &sandbox_id[..sandbox_id.len().min(8)]
             )),
             labels: Some(labels),
             env: Some(env_vars),
             cmd: Some(cmd),
-            working_dir: Some("/session".to_string()), // User starts in their session
+            working_dir: Some("/sandbox".to_string()), // User starts in their sandbox
             exposed_ports: None,
             host_config: Some(bollard::models::HostConfig {
                 cpu_quota: Some((self.cpu_limit * 100000.0) as i64),
@@ -1257,30 +1128,28 @@ echo 'Session directories created (.env, logs)'
             .start_container::<String>(&container.id, None)
             .await?;
 
-        // Initialize session structure after starting container so host can execute setup script
+        // Initialize sandbox structure after starting container so host can execute setup script
         // Only initialize with user env (system tokens are already in environment)
-        if !self.session_initialized(&session_volume).await? {
-            let empty_env: HashMap<String, String> = HashMap::new();
-            let env_ref = env_map_opt.as_ref().unwrap_or(&empty_env);
-            self.initialize_session_structure(
-                session_id,
-                env_ref,
-                instructions.as_deref(),
-                setup.as_deref(),
-            )
-            .await?;
-        }
+        let empty_env: HashMap<String, String> = HashMap::new();
+        let env_ref = env_map_opt.as_ref().unwrap_or(&empty_env);
+        self.initialize_sandbox_structure(
+            sandbox_id,
+            env_ref,
+            instructions.as_deref(),
+            setup.as_deref(),
+        )
+        .await?;
 
         info!(
-            "Container {} created with session volume {} and fresh system tokens",
-            container_name, session_volume
+            "Container {} created with fresh system tokens (using container filesystem)",
+            container_name
         );
         Ok(container.id)
     }
 
-    // Stop container but retain persistent volume (for session pause/stop)
-    pub async fn stop_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("tsbx_session_{}", session_id);
+    // Stop and remove container (sandbox data is lost)
+    pub async fn stop_container(&self, sandbox_id: &str) -> Result<()> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         info!("Stopping container {}", container_name);
 
@@ -1296,7 +1165,7 @@ echo 'Session directories created (.env, logs)'
         {
             Ok(_) => {
                 info!(
-                    "Container {} stopped, persistent volume retained",
+                    "Container {} deleted, persistent volume retained",
                     container_name
                 );
                 Ok(())
@@ -1316,9 +1185,9 @@ echo 'Session directories created (.env, logs)'
         }
     }
 
-    // Delete container and remove persistent volume (for session deletion)
-    pub async fn delete_container(&self, session_id: &str) -> Result<()> {
-        let container_name = format!("tsbx_session_{}", session_id);
+    // Delete container and remove persistent volume (for sandbox deletion)
+    pub async fn delete_container(&self, sandbox_id: &str) -> Result<()> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         info!("Deleting container {}", container_name);
 
@@ -1335,11 +1204,11 @@ echo 'Session directories created (.env, logs)'
             Ok(_) => {
                 info!("Container {} deleted", container_name);
 
-                // Cleanup the session volume
-                if let Err(e) = self.cleanup_session_volume(session_id).await {
+                // Cleanup the sandbox volume
+                if let Err(e) = self.cleanup_sandbox_volume(sandbox_id).await {
                     warn!(
-                        "Failed to cleanup session volume for {}: {}",
-                        session_id, e
+                        "Failed to cleanup sandbox volume for {}: {}",
+                        sandbox_id, e
                     );
                 }
 
@@ -1349,11 +1218,11 @@ echo 'Session directories created (.env, logs)'
                 if e.to_string().contains("404") || e.to_string().contains("No such container") {
                     warn!("Container {} already removed or doesn't exist, proceeding with volume cleanup", container_name);
 
-                    // Still try to cleanup the session volume
-                    if let Err(e) = self.cleanup_session_volume(session_id).await {
+                    // Still try to cleanup the sandbox volume
+                    if let Err(e) = self.cleanup_sandbox_volume(sandbox_id).await {
                         warn!(
-                            "Failed to cleanup session volume for {}: {}",
-                            session_id, e
+                            "Failed to cleanup sandbox volume for {}: {}",
+                            sandbox_id, e
                         );
                     }
 
@@ -1368,8 +1237,270 @@ echo 'Session directories created (.env, logs)'
 
     // Removed legacy destroy_container (deprecated). Use stop_container or delete_container.
 
-    pub async fn execute_command(&self, session_id: &str, command: &str) -> Result<String> {
-        let container_name = format!("tsbx_session_{}", session_id);
+    // Create a snapshot of a sandbox by copying its /sandbox/ directory to the snapshots volume
+    pub async fn create_snapshot(
+        &self,
+        sandbox_id: &str,
+        snapshot_id: &str,
+    ) -> Result<()> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
+
+        info!("Creating snapshot {} for sandbox {}", snapshot_id, sandbox_id);
+
+        // Check if container exists
+        match self.docker.inspect_container(&container_name, None).await {
+            Ok(_) => {
+                // Container exists, copy data from it
+                info!("Copying data from running container {} to snapshot {}", container_name, snapshot_id);
+
+                // Use docker cp to copy /sandbox/ from container to /data/snapshots/{snapshot_id}/
+                // We'll use a temporary container to perform the copy since we're in controller
+                let copy_container_name = format!("tsbx_snapshot_copy_{}", snapshot_id);
+
+                let config = Config {
+                    image: Some(self.sandbox_image.clone()),
+                    user: Some("root".to_string()),
+                    cmd: Some(vec![
+                        "bash".to_string(),
+                        "-c".to_string(),
+                        format!(
+                            "mkdir -p /snapshots/{} && docker cp {}:/sandbox/. /snapshots/{}/",
+                            snapshot_id, container_name, snapshot_id
+                        ),
+                    ]),
+                    host_config: Some(HostConfig {
+                        mounts: Some(vec![
+                            Mount {
+                                typ: Some(MountTypeEnum::VOLUME),
+                                source: Some("tsbx_snapshots_data".to_string()),
+                                target: Some("/snapshots".to_string()),
+                                read_only: Some(false),
+                                ..Default::default()
+                            },
+                            Mount {
+                                typ: Some(MountTypeEnum::BIND),
+                                source: Some("/var/run/docker.sock".to_string()),
+                                target: Some("/var/run/docker.sock".to_string()),
+                                read_only: Some(false),
+                                ..Default::default()
+                            },
+                        ]),
+                        network_mode: Some("tsbx_network".to_string()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+
+                // Create and start the copy container
+                self.docker
+                    .create_container(
+                        Some(CreateContainerOptions {
+                            name: copy_container_name.clone(),
+                            ..Default::default()
+                        }),
+                        config,
+                    )
+                    .await?;
+
+                self.docker
+                    .start_container::<String>(&copy_container_name, None)
+                    .await?;
+
+                // Wait for completion
+                let mut wait_stream = self
+                    .docker
+                    .wait_container::<String>(&copy_container_name, None);
+                while let Some(wait_result) = wait_stream.next().await {
+                    let exit_result = wait_result?;
+                    if exit_result.status_code == 0 {
+                        info!("Snapshot {} created successfully", snapshot_id);
+                    } else {
+                        warn!(
+                            "Snapshot copy container exited with code {}",
+                            exit_result.status_code
+                        );
+                    }
+                    break;
+                }
+
+                // Get logs for debugging
+                let logs = self.docker.logs::<String>(
+                    &copy_container_name,
+                    Some(LogsOptions {
+                        stdout: true,
+                        stderr: true,
+                        ..Default::default()
+                    }),
+                );
+
+                let log_output = logs
+                    .map(|log| match log {
+                        Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                        Err(_) => String::new(),
+                    })
+                    .collect::<Vec<_>>()
+                    .await
+                    .join("");
+
+                if !log_output.is_empty() {
+                    info!("Snapshot copy logs: {}", log_output.trim());
+                }
+
+                // Clean up copy container
+                let _ = self
+                    .docker
+                    .remove_container(
+                        &copy_container_name,
+                        Some(RemoveContainerOptions {
+                            force: true,
+                            ..Default::default()
+                        }),
+                    )
+                    .await;
+
+                Ok(())
+            }
+            Err(_) => {
+                // Container doesn't exist, can't create snapshot
+                warn!("Container {} not found, cannot create snapshot", container_name);
+                Err(anyhow::anyhow!(
+                    "Cannot create snapshot: container {} not found",
+                    container_name
+                ))
+            }
+        }
+    }
+
+    // Restore a snapshot to a sandbox by copying from /data/snapshots/{snapshot_id}/ to container's /sandbox/
+    pub async fn restore_snapshot(
+        &self,
+        sandbox_id: &str,
+        snapshot_id: &str,
+    ) -> Result<()> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
+
+        info!("Restoring snapshot {} to sandbox {}", snapshot_id, sandbox_id);
+
+        // Use docker exec to copy data into the running container
+        // We need to use a temporary container since docker cp can't copy from volume to container directly
+        let restore_container_name = format!("tsbx_snapshot_restore_{}", sandbox_id);
+
+        let config = Config {
+            image: Some(self.sandbox_image.clone()),
+            user: Some("root".to_string()),
+            cmd: Some(vec![
+                "bash".to_string(),
+                "-c".to_string(),
+                format!(
+                    "if [ -d /snapshots/{} ]; then docker cp /snapshots/{}/. {}:/sandbox/; echo 'Snapshot restored'; else echo 'Snapshot not found'; exit 1; fi",
+                    snapshot_id, snapshot_id, container_name
+                ),
+            ]),
+            host_config: Some(HostConfig {
+                mounts: Some(vec![
+                    Mount {
+                        typ: Some(MountTypeEnum::VOLUME),
+                        source: Some("tsbx_snapshots_data".to_string()),
+                        target: Some("/snapshots".to_string()),
+                        read_only: Some(true),
+                        ..Default::default()
+                    },
+                    Mount {
+                        typ: Some(MountTypeEnum::BIND),
+                        source: Some("/var/run/docker.sock".to_string()),
+                        target: Some("/var/run/docker.sock".to_string()),
+                        read_only: Some(false),
+                        ..Default::default()
+                    },
+                ]),
+                network_mode: Some("tsbx_network".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        // Create and start the restore container
+        self.docker
+            .create_container(
+                Some(CreateContainerOptions {
+                    name: restore_container_name.clone(),
+                    ..Default::default()
+                }),
+                config,
+            )
+            .await?;
+
+        self.docker
+            .start_container::<String>(&restore_container_name, None)
+            .await?;
+
+        // Wait for completion
+        let mut wait_stream = self
+            .docker
+            .wait_container::<String>(&restore_container_name, None);
+        let mut exit_code = 0;
+        while let Some(wait_result) = wait_stream.next().await {
+            let exit_result = wait_result?;
+            exit_code = exit_result.status_code;
+            if exit_code == 0 {
+                info!("Snapshot {} restored successfully to sandbox {}", snapshot_id, sandbox_id);
+            } else {
+                warn!(
+                    "Snapshot restore container exited with code {}",
+                    exit_code
+                );
+            }
+            break;
+        }
+
+        // Get logs for debugging
+        let logs = self.docker.logs::<String>(
+            &restore_container_name,
+            Some(LogsOptions {
+                stdout: true,
+                stderr: true,
+                ..Default::default()
+            }),
+        );
+
+        let log_output = logs
+            .map(|log| match log {
+                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
+                Err(_) => String::new(),
+            })
+            .collect::<Vec<_>>()
+            .await
+            .join("");
+
+        if !log_output.is_empty() {
+            info!("Snapshot restore logs: {}", log_output.trim());
+        }
+
+        // Clean up restore container
+        let _ = self
+            .docker
+            .remove_container(
+                &restore_container_name,
+                Some(RemoveContainerOptions {
+                    force: true,
+                    ..Default::default()
+                }),
+            )
+            .await;
+
+        if exit_code != 0 {
+            return Err(anyhow::anyhow!(
+                "Failed to restore snapshot {}: exit code {}",
+                snapshot_id,
+                exit_code
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn execute_command(&self, sandbox_id: &str, command: &str) -> Result<String> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         info!(
             "Executing command in container {}: {}",
@@ -1404,10 +1535,10 @@ echo 'Session directories created (.env, logs)'
     // Execute a command and collect stdout/stderr bytes with exit code
     pub async fn exec_collect(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        let container_name = format!("tsbx_session_{}", session_id);
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
         let exec_config = CreateExecOptions {
             cmd: Some(cmd),
             attach_stdout: Some(true),
@@ -1444,9 +1575,9 @@ echo 'Session directories created (.env, logs)'
         Ok((code, out_buf, err_buf))
     }
 
-    /// Check if a session container exists and is running healthily
-    pub async fn is_container_healthy(&self, session_id: &str) -> Result<bool> {
-        let container_name = format!("tsbx_session_{}", session_id);
+    /// Check if a sandbox container exists and is running healthily
+    pub async fn is_container_healthy(&self, sandbox_id: &str) -> Result<bool> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
         // First check if container exists
         match self.docker.inspect_container(&container_name, None).await {
@@ -1461,32 +1592,32 @@ echo 'Session directories created (.env, logs)'
                             // Container exists but is not running
                             info!(
                                 "Session {} container exists but is not running",
-                                session_id
+                                sandbox_id
                             );
                             return Ok(false);
                         }
                     }
                 }
                 // Container state is unclear, assume unhealthy
-                warn!("Session {} container state is unclear", session_id);
+                warn!("Session {} container state is unclear", sandbox_id);
                 Ok(false)
             }
             Err(bollard::errors::Error::DockerResponseServerError {
                 status_code: 404, ..
             }) => {
                 // Container doesn't exist
-                info!("Session {} container does not exist", session_id);
+                info!("Sandbox {} container does not exist", sandbox_id);
                 Ok(false)
             }
             Err(e) => {
                 // Other Docker API error
                 error!(
-                    "Failed to inspect session {} container: {}",
-                    session_id, e
+                    "Failed to inspect sandbox {} container: {}",
+                    sandbox_id, e
                 );
                 Err(anyhow::anyhow!(
-                    "Docker API error for session {}: {}",
-                    session_id,
+                    "Docker API error for sandbox {}: {}",
+                    sandbox_id,
                     e
                 ))
             }

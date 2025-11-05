@@ -13,13 +13,13 @@ RUN apt-get update && \
 # Create Python symlink
 RUN ln -sf /usr/bin/python3 /usr/local/bin/python
 
-# Create session user
-RUN useradd -m -s /bin/bash session && \
-    echo 'session ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Create sandbox user
+RUN useradd -m -s /bin/bash sandbox && \
+    echo 'sandbox ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-USER session
-WORKDIR /home/session
-ENV HOME=/home/session
+USER sandbox
+WORKDIR /home/sandbox
+ENV HOME=/home/sandbox
 
 # Install Node.js via NVM
 RUN curl -o- https://raw.githubusercontent.com/creationix/nvm/master/install.sh | bash && \
@@ -34,15 +34,15 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 # Create global symlinks as root
 USER root
-RUN export NVM_DIR="/home/session/.nvm" && \
+RUN export NVM_DIR="/home/sandbox/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
     NODE_VERSION=$(nvm version default) && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/node /usr/local/bin/node && \
     ln -sf $NVM_DIR/versions/node/$NODE_VERSION/bin/npm /usr/local/bin/npm && \
-    ln -sf /home/session/.cargo/bin/cargo /usr/local/bin/cargo && \
-    ln -sf /home/session/.cargo/bin/rustc /usr/local/bin/rustc
+    ln -sf /home/sandbox/.cargo/bin/cargo /usr/local/bin/cargo && \
+    ln -sf /home/sandbox/.cargo/bin/rustc /usr/local/bin/rustc
 
-USER session
+USER sandbox
 
 # Setup environment for interactive and non-interactive shells
 RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
@@ -53,25 +53,25 @@ RUN echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.bashrc && \
     echo '. "$HOME/.cargo/env"' >> ~/.profile
 
 # Set environment variables for runtime
-ENV NVM_DIR=/home/session/.nvm
+ENV NVM_DIR=/home/sandbox/.nvm
 
 # Copy pre-built binary from local build
 USER root
-COPY target/release/tsbx-session /usr/local/bin/tsbx-session
+COPY target/release/tsbx-sandbox /usr/local/bin/tsbx-sandbox
 
-# Create session directory structure with proper permissions
+# Create sandbox directory structure with proper permissions
 # This provides a fallback structure and ensures correct permissions
-RUN mkdir -p /session/logs && \
-    touch /session/.env && \
-    chown -R session:session /session && \
-    chmod -R 755 /session && \
-    chmod 600 /session/.env
+RUN mkdir -p /sandbox/logs && \
+    touch /sandbox/.env && \
+    chown -R sandbox:sandbox /sandbox && \
+    chmod -R 755 /sandbox && \
+    chmod 600 /sandbox/.env
 
-# Switch back to session user and set working directory to /session
-USER session
-WORKDIR /session
+# Switch back to sandbox user and set working directory to /sandbox
+USER sandbox
+WORKDIR /sandbox
 
-# Configure environment variables for session structure
-ENV TSBX_SESSION_DIR=/session
+# Configure environment variables for sandbox structure
+ENV TSBX_SANDBOX_DIR=/sandbox
 
-CMD ["tsbx-session", "--api-url", "http://tsbx_api:9000", "--session-id", "unknown", "--api-key", "unknown"]
+CMD ["tsbx-sandbox", "--api-url", "http://tsbx_api:9000", "--sandbox-id", "unknown", "--api-key", "unknown"]

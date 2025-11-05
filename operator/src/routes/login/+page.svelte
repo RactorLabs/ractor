@@ -24,7 +24,7 @@
       setToken(token);
       if (data?.type) setPrincipalType(data.type);
       if (data?.user) setOperatorName(data.user);
-      goto('/sessions');
+      goto('/sandboxes');
     } catch (e) {
       error = e.message;
     } finally {

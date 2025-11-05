@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
+  for (const v of ['mysql_data', 'ollama_data', 'tsbx_snapshots_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -126,10 +126,10 @@ module.exports = (program) => {
       '  $ tsbx start                                # Start full stack\n' +
       '  $ tsbx start api controller                 # Start API + controller\n' +
       '  $ tsbx start mysql                          # Ensure MySQL is up\n')
-    .option('--controller-session-image <image>', 'Controller SESSION_IMAGE')
-    .option('--controller-session-cpu-limit <n>', 'Controller SESSION_CPU_LIMIT', '0.5')
-    .option('--controller-session-memory-limit <bytes>', 'Controller SESSION_MEMORY_LIMIT', '536870912')
-    .option('--controller-session-disk-limit <bytes>', 'Controller SESSION_DISK_LIMIT', '1073741824')
+    .option('--controller-sandbox-image <image>', 'Controller SANDBOX_IMAGE')
+    .option('--controller-sandbox-cpu-limit <n>', 'Controller SANDBOX_CPU_LIMIT', '0.5')
+    .option('--controller-sandbox-memory-limit <bytes>', 'Controller SANDBOX_MEMORY_LIMIT', '536870912')
+    .option('--controller-sandbox-disk-limit <bytes>', 'Controller SANDBOX_DISK_LIMIT', '1073741824')
     .action(async (components, options) => {
       try {
         const detached = options.foreground ? false : (options.detached !== false);
@@ -501,7 +501,6 @@ module.exports = (program) => {
               const args = ['run','-d',
                 '--name','tsbx_api',
                 '--network','tsbx_network',
-                '-v', 'tsbx_api_data:/app/logs',
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
@@ -553,7 +552,7 @@ module.exports = (program) => {
               // Default OLLAMA_HOST to internal service always
               const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
-              const sessionImage = options.controllerSessionImage || await resolveTaskSandboxImage('session','tsbx_session','registry.digitalocean.com/tsbx/tsbx_session', tag);
+              const sandboxImage = options.controllerSandboxImage || await resolveTaskSandboxImage('sandbox','tsbx_sandbox','registry.digitalocean.com/tsbx/tsbx_sandbox', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
@@ -568,21 +567,21 @@ module.exports = (program) => {
                 '--name','tsbx_controller',
                 '--network','tsbx_network',
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
-                '-v','tsbx_controller_data:/app/logs',
+                '-v','tsbx_snapshots_data:/data/snapshots',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
                 '-e',`TSBX_DEFAULT_MODEL=${model}`,
-                // Model/runtime defaults for session calls
+                // Model/runtime defaults for sandbox calls
                 '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
                 '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
                 '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
-                '-e',`SESSION_IMAGE=${sessionImage}`,
-                '-e',`SESSION_CPU_LIMIT=${options.controllerSessionCpuLimit || '0.5'}`,
-                '-e',`SESSION_MEMORY_LIMIT=${(getOptionSource('controllerSessionMemoryLimit')==='cli' ? options.controllerSessionMemoryLimit : (process.env.SESSION_MEMORY_LIMIT || options.controllerSessionMemoryLimit || '536870912'))}`,
-                '-e',`SESSION_DISK_LIMIT=${options.controllerSessionDiskLimit || '1073741824'}`,
+                '-e',`SANDBOX_IMAGE=${sandboxImage}`,
+                '-e',`SANDBOX_CPU_LIMIT=${options.controllerSandboxCpuLimit || '0.5'}`,
+                '-e',`SANDBOX_MEMORY_LIMIT=${(getOptionSource('controllerSandboxMemoryLimit')==='cli' ? options.controllerSandboxMemoryLimit : (process.env.SANDBOX_MEMORY_LIMIT || options.controllerSandboxMemoryLimit || '536870912'))}`,
+                '-e',`SANDBOX_DISK_LIMIT=${options.controllerSandboxDiskLimit || '1073741824'}`,
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
@@ -627,7 +626,6 @@ module.exports = (program) => {
               args.push(
                 '--name','tsbx_operator',
                 '--network','tsbx_network',
-                '-v','tsbx_operator_data:/app/logs',
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
               );
@@ -735,7 +733,7 @@ module.exports = (program) => {
           console.log('  • Check logs: docker logs tsbx_api -f');
           console.log('  • Authenticate: tsbx login -u admin -p admin');
           console.log('  • Check version: tsbx api version');
-          console.log('  • Start session: tsbx session create');
+          console.log('  • Start sandbox: tsbx sandbox create');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Container management:');
           console.log("  • Stop services: tsbx stop");

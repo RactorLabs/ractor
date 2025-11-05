@@ -1,7 +1,7 @@
 {
   "name": "@tsbx/cli",
   "version": "0.11.0",
-  "description": "TaskSandbox CLI - Computer use sessions",
+  "description": "TaskSandbox CLI - Computer use sandboxes",
   "main": "index.js",
   "bin": {
     "tsbx": "./index.js"
@@ -12,7 +12,7 @@
   "keywords": [
     "computer-use",
     "automation",
-    "sessions",
+    "sandboxes",
     "remote-work",
     "manual-work"
   ],

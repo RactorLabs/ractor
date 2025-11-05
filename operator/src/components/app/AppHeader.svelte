@@ -65,15 +65,15 @@
             <!-- Top row -->
             <div class="row row-grid gx-0">
               <div class="col-4">
-                <a href="/sessions/start" aria-label="Start Session" class="dropdown-item text-decoration-none p-3 bg-none">
+                <a href="/sandboxes/start" aria-label="Start Sandbox" class="dropdown-item text-decoration-none p-3 bg-none">
                   <div><i class="bi bi-plus-circle h2 opacity-5 d-block my-1"></i></div>
                   <div class="fw-500 fs-10px text-inverse">START</div>
                 </a>
               </div>
               <div class="col-4">
-                <a href="/sessions" aria-label="Sessions" class="dropdown-item text-decoration-none p-3 bg-none">
+                <a href="/sandboxes" aria-label="Sandboxes" class="dropdown-item text-decoration-none p-3 bg-none">
                   <div><i class="bi bi-robot h2 opacity-5 d-block my-1"></i></div>
-                  <div class="fw-500 fs-10px text-inverse">SESSIONS</div>
+                  <div class="fw-500 fs-10px text-inverse">SANDBOXES</div>
                 </a>
               </div>
               <div class="col-4">

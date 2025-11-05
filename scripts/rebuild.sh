@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BUILDABLE_SET=(api session controller operator gateway)
-DEFAULT_SET=(api session controller operator gateway)
+BUILDABLE_SET=(api sandbox controller operator gateway)
+DEFAULT_SET=(api sandbox controller operator gateway)
 
 process_args() {
   local input=("$@")
@@ -16,17 +16,17 @@ process_args() {
     done
     [[ $exists -eq 0 ]] && unique+=("$c")
   done
-  # ensure 'session' precedes 'controller' when both present
-  local i_session=-1 i_controller=-1
+  # ensure 'sandbox' precedes 'controller' when both present
+  local i_sandbox=-1 i_controller=-1
   for i in "${!unique[@]}"; do
-    [[ "${unique[$i]}" == "session" ]] && i_session=$i
+    [[ "${unique[$i]}" == "sandbox" ]] && i_sandbox=$i
     [[ "${unique[$i]}" == "controller" ]] && i_controller=$i
   done
-  if [[ $i_session -ge 0 && $i_controller -ge 0 && $i_session -gt $i_controller ]]; then
+  if [[ $i_sandbox -ge 0 && $i_controller -ge 0 && $i_sandbox -gt $i_controller ]]; then
     local tmp=( )
     for i in "${!unique[@]}"; do
-      if [[ $i -eq $i_session ]]; then continue; fi
-      if [[ $i -eq $i_controller ]]; then tmp+=("session"); fi
+      if [[ $i -eq $i_sandbox ]]; then continue; fi
+      if [[ $i -eq $i_controller ]]; then tmp+=("sandbox"); fi
       tmp+=("${unique[$i]}")
     done
     unique=("${tmp[@]}")
@@ -60,7 +60,7 @@ for COMPONENT in "${ORDERED[@]}"; do
   bash "$(dirname "$0")/build.sh" "$COMPONENT"
 
   # 2) Stop the running container (when applicable)
-  if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
+  if [[ "$COMPONENT" != "sandbox" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Stopping $COMPONENT..."
     if command -v tsbx >/dev/null 2>&1; then
       tsbx stop "$COMPONENT" || true
@@ -68,15 +68,15 @@ for COMPONENT in "${ORDERED[@]}"; do
       echo "[WARNING] tsbx CLI not found; skipping stop for $COMPONENT" >&2
     fi
   else
-    if [[ "$COMPONENT" == "session" ]]; then
-      echo "[INFO] Skipping stop for session (no standalone session container)"
+    if [[ "$COMPONENT" == "sandbox" ]]; then
+      echo "[INFO] Skipping stop for sandbox (no standalone sandbox container)"
     else
       echo "[INFO] Skipping stop for app component ($COMPONENT is not auto-managed)"
     fi
   fi
 
   # 3) Start the container so it picks up the freshly built image
-  if [[ "$COMPONENT" != "session" && "$COMPONENT" != app_* ]]; then
+  if [[ "$COMPONENT" != "sandbox" && "$COMPONENT" != app_* ]]; then
     echo "[INFO] Starting $COMPONENT..."
     if command -v tsbx >/dev/null 2>&1; then
       tsbx start "$COMPONENT" || true
@@ -84,8 +84,8 @@ for COMPONENT in "${ORDERED[@]}"; do
       echo "[WARNING] tsbx CLI not found; skipping start for $COMPONENT" >&2
     fi
   else
-    if [[ "$COMPONENT" == "session" ]]; then
-      echo "[INFO] Skipping start for session (controller uses session image)"
+    if [[ "$COMPONENT" == "sandbox" ]]; then
+      echo "[INFO] Skipping start for sandbox (controller uses sandbox image)"
     else
       echo "[INFO] Skipping start for app component ($COMPONENT is never auto-started)"
     fi

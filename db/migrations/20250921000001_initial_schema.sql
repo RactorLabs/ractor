@@ -33,21 +33,20 @@ CREATE TABLE IF NOT EXISTS role_bindings (
     INDEX idx_role_bindings_role_name (role_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Sessions - UUID-based architecture with timeout functionality
-CREATE TABLE IF NOT EXISTS sessions (
+-- Sandboxes - UUID-based architecture with timeout functionality
+CREATE TABLE IF NOT EXISTS sandboxes (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     created_by VARCHAR(255) NOT NULL,
     state VARCHAR(50) NOT NULL DEFAULT 'init',
     description TEXT NULL,
-    parent_session_id CHAR(36) NULL,
+    snapshot_id CHAR(36) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_activity_at TIMESTAMP NULL,
     metadata JSON DEFAULT ('{}'),
     tags JSON NOT NULL DEFAULT ('[]'),
 
     -- Timeout functionality (idle/busy)
-    stop_timeout_seconds INT NOT NULL DEFAULT 300,
-    archive_timeout_seconds INT NOT NULL DEFAULT 86400,
+    idle_timeout_seconds INT NOT NULL DEFAULT 900,
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
 
@@ -56,27 +55,24 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_context_length BIGINT NOT NULL DEFAULT 0,
 
     -- Constraints
-    CONSTRAINT sessions_state_check CHECK (state IN ('init', 'idle', 'busy', 'stopped')),
-    CONSTRAINT sessions_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
-    CONSTRAINT sessions_timeout_check CHECK (
-        stop_timeout_seconds > 0 AND stop_timeout_seconds <= 604800 AND
-        archive_timeout_seconds > 0 AND archive_timeout_seconds <= 31536000
+    CONSTRAINT sandboxes_state_check CHECK (state IN ('init', 'idle', 'busy', 'deleted')),
+    CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
+    CONSTRAINT sandboxes_timeout_check CHECK (
+        idle_timeout_seconds > 0 AND idle_timeout_seconds <= 604800
     ),
-    CONSTRAINT fk_sessions_parent FOREIGN KEY (parent_session_id) REFERENCES sessions(id) ON DELETE SET NULL,
 
     -- Indexes
-    INDEX idx_sessions_created_by (created_by),
-    INDEX idx_sessions_state (state),
-    INDEX idx_sessions_parent_session_id (parent_session_id),
-    INDEX idx_sessions_idle_from (idle_from, state),
-    INDEX idx_sessions_busy_from (busy_from, state),
-    INDEX idx_sessions_context_cutoff (context_cutoff_at)
+    INDEX idx_sandboxes_created_by (created_by),
+    INDEX idx_sandboxes_state (state),
+    INDEX idx_sandboxes_idle_from (idle_from, state),
+    INDEX idx_sandboxes_busy_from (busy_from, state),
+    INDEX idx_sandboxes_context_cutoff (context_cutoff_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Tasks (user conversations)
-CREATE TABLE IF NOT EXISTS session_tasks (
+-- Sandbox Tasks (user conversations)
+CREATE TABLE IF NOT EXISTS sandbox_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
-    session_id CHAR(36) NOT NULL,
+    sandbox_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
     input JSON NOT NULL,
@@ -85,19 +81,19 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     timeout_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT fk_tasks_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
-    INDEX idx_session_tasks_session_id (session_id),
-    INDEX idx_session_tasks_created_by (created_by),
-    INDEX idx_session_tasks_created_at (created_at),
-    INDEX idx_session_tasks_timeout_at (timeout_at),
-    INDEX idx_session_tasks_session_created_at_id (session_id, created_at, id)
+    CONSTRAINT fk_tasks_sandbox FOREIGN KEY (sandbox_id) REFERENCES sandboxes(id) ON DELETE CASCADE,
+    INDEX idx_sandbox_tasks_sandbox_id (sandbox_id),
+    INDEX idx_sandbox_tasks_created_by (created_by),
+    INDEX idx_sandbox_tasks_created_at (created_at),
+    INDEX idx_sandbox_tasks_timeout_at (timeout_at),
+    INDEX idx_sandbox_tasks_sandbox_created_at_id (sandbox_id, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Session Requests
-CREATE TABLE IF NOT EXISTS session_requests (
+-- Sandbox Requests
+CREATE TABLE IF NOT EXISTS sandbox_requests (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     request_type VARCHAR(50) NOT NULL,
-    session_id CHAR(36) NOT NULL,
+    sandbox_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     payload JSON NOT NULL DEFAULT ('{}'),
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
@@ -106,11 +102,23 @@ CREATE TABLE IF NOT EXISTS session_requests (
     started_at TIMESTAMP NULL,
     completed_at TIMESTAMP NULL,
     error TEXT,
-    -- Note: no FK to sessions; requests may reference sessions scheduled for deletion
-    INDEX idx_session_requests_status (status),
-    INDEX idx_session_requests_session_id (session_id),
-    INDEX idx_session_requests_created_by (created_by),
-    INDEX idx_session_requests_created_at (created_at)
+    INDEX idx_sandbox_requests_status (status),
+    INDEX idx_sandbox_requests_sandbox_id (sandbox_id),
+    INDEX idx_sandbox_requests_created_by (created_by),
+    INDEX idx_sandbox_requests_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Snapshots
+CREATE TABLE IF NOT EXISTS snapshots (
+    id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
+    sandbox_id CHAR(36) NOT NULL,
+    trigger_type ENUM('sandbox_close', 'user') NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    metadata JSON DEFAULT ('{}'),
+    CONSTRAINT fk_snapshots_sandbox FOREIGN KEY (sandbox_id) REFERENCES sandboxes(id) ON DELETE CASCADE,
+    INDEX idx_snapshots_sandbox_id (sandbox_id),
+    INDEX idx_snapshots_trigger_type (trigger_type),
+    INDEX idx_snapshots_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Default admin operator
@@ -144,7 +152,7 @@ VALUES
     ('admin', 'Admin', 'admin');
 
 
--- Blocked Principals (merged from 20250924000002)
+-- Blocked Principals
 CREATE TABLE IF NOT EXISTS blocked_principals (
     principal VARCHAR(255) NOT NULL,
     principal_type VARCHAR(50) NOT NULL CHECK (principal_type IN ('Admin', 'User')),

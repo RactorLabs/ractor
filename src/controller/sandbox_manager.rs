@@ -12,7 +12,7 @@ use tracing::{error, info, warn};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::SESSION_STATE_INIT;
+pub use constants::SANDBOX_STATE_INIT;
 
 // Using local Ollama via OLLAMA_HOST
 
@@ -22,18 +22,22 @@ use rbac::{RbacClaims, SubjectType};
 
 use super::docker_manager::DockerManager;
 
-#[path = "../shared/models/session.rs"]
-pub mod session_model;
-use session_model::Session;
+#[path = "../shared/models/sandbox.rs"]
+pub mod sandbox_model;
+use sandbox_model::Sandbox;
+
+#[path = "../shared/models/snapshot.rs"]
+pub mod snapshot_model;
+use snapshot_model::{CreateSnapshotRequest, Snapshot};
 
 #[path = "../shared/models/state_helpers.rs"]
 pub mod state_helpers;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
-pub struct SessionRequest {
+pub struct SandboxRequest {
     id: String,
     request_type: String,
-    session_id: String,
+    sandbox_id: String,
     created_by: String,
     payload: serde_json::Value,
     status: String,
@@ -44,13 +48,13 @@ pub struct SessionRequest {
     error: Option<String>,
 }
 
-pub struct SessionManager {
+pub struct SandboxManager {
     pool: Pool<MySql>,
     docker_manager: DockerManager,
     jwt_secret: String,
 }
 
-impl SessionManager {
+impl SandboxManager {
     pub async fn new(database_url: &str) -> Result<Self> {
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
@@ -90,9 +94,9 @@ impl SessionManager {
             };
 
             // Process auto-stop every 10s
-            let mut sessions_stopped = 0;
+            let mut sandboxes_stopped = 0;
             if last_auto_stop.elapsed() >= Duration::from_secs(10) {
-                sessions_stopped = match self.process_auto_stop().await {
+                sandboxes_stopped = match self.process_auto_stop().await {
                     Ok(count) => count,
                     Err(e) => {
                         error!("Error processing auto-stop: {}", e);
@@ -103,12 +107,12 @@ impl SessionManager {
             }
 
             // Check health every 10s
-            let mut sessions_recovered = 0;
+            let mut sandboxes_recovered = 0;
             if last_health.elapsed() >= Duration::from_secs(10) {
-                sessions_recovered = match self.check_session_health().await {
+                sandboxes_recovered = match self.check_sandbox_health().await {
                     Ok(recovered) => recovered,
                     Err(e) => {
-                        error!("Error checking session health: {}", e);
+                        error!("Error checking sandbox health: {}", e);
                         0
                     }
                 };
@@ -130,8 +134,8 @@ impl SessionManager {
 
             // If no work was done, short sleep before next poll (improves responsiveness)
             if requests_processed == 0
-                && sessions_stopped == 0
-                && sessions_recovered == 0
+                && sandboxes_stopped == 0
+                && sandboxes_recovered == 0
                 && tasks_cancelled == 0
             {
                 sleep(Duration::from_millis(250)).await;
@@ -139,53 +143,55 @@ impl SessionManager {
         }
     }
 
-    /// Ensure the session container is running and healthy; restart if needed and wait up to timeout_secs
-    pub async fn ensure_session_running(
+    /// Ensure the sandbox container is running and healthy; wait up to timeout_secs
+    pub async fn ensure_sandbox_running(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         timeout_secs: u64,
     ) -> Result<()> {
         // Quick healthy check
-        match self.docker_manager.is_container_healthy(session_id).await {
+        match self.docker_manager.is_container_healthy(sandbox_id).await {
             Ok(true) => return Ok(()),
             Ok(false) => {}
             Err(e) => {
-                tracing::warn!("health check error for {}: {}", session_id, e);
+                tracing::warn!("health check error for {}: {}", sandbox_id, e);
             }
         }
 
-        // If DB says stopped or container absent, restart
+        // Check if sandbox exists in DB
         if let Some((state,)) =
-            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sessions WHERE id = ?"#)
-                .bind(session_id)
+            sqlx::query_as::<_, (String,)>(r#"SELECT state FROM sandboxes WHERE id = ?"#)
+                .bind(sandbox_id)
                 .fetch_optional(&self.pool)
                 .await?
         {
-            if state.to_lowercase() == "stopped" {
-                tracing::info!("Session ID {} is stopped; restarting container", session_id);
-                let _ = self.docker_manager.restart_container(session_id).await?;
+            if state.to_lowercase() == "deleted" {
+                return Err(anyhow::anyhow!(
+                    "Sandbox {} is deleted and cannot be used",
+                    sandbox_id
+                ));
             }
         } else {
             // No row; nothing we can do
-            tracing::warn!(
-                "Session ID {} not found in DB during ensure_session_running",
-                session_id
-            );
+            return Err(anyhow::anyhow!(
+                "Sandbox {} not found in DB",
+                sandbox_id
+            ));
         }
 
         // Wait for healthy
         let mut waited = 0u64;
         let step = 500u64; // ms
         while waited / 1000 < timeout_secs {
-            if let Ok(true) = self.docker_manager.is_container_healthy(session_id).await {
+            if let Ok(true) = self.docker_manager.is_container_healthy(sandbox_id).await {
                 return Ok(());
             }
             tokio::time::sleep(std::time::Duration::from_millis(step)).await;
             waited += step;
         }
         Err(anyhow::anyhow!(
-            "session {} not ready in {}s",
-            session_id,
+            "sandbox {} not ready in {}s",
+            sandbox_id,
             timeout_secs
         ))
     }
@@ -193,20 +199,20 @@ impl SessionManager {
     /// Proxy exec with stdout/stderr collection
     pub async fn exec_collect(
         &self,
-        session_id: &str,
+        sandbox_id: &str,
         cmd: Vec<String>,
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
-        self.docker_manager.exec_collect(session_id, cmd).await
+        self.docker_manager.exec_collect(sandbox_id, cmd).await
     }
 
     // No external API key required for local Ollama
 
-    /// Process sessions that need auto-stopping due to timeout
+    /// Process sandboxes that need auto-stopping due to timeout
     async fn process_auto_stop(&self) -> Result<usize> {
-        // Ensure all idle sessions have idle_from set
+        // Ensure all idle sandboxes have idle_from set
         let _ = sqlx::query(
             r#"
-            UPDATE sessions
+            UPDATE sandboxes
             SET idle_from = NOW()
             WHERE state = 'idle' AND idle_from IS NULL
             "#,
@@ -214,10 +220,10 @@ impl SessionManager {
         .execute(&self.pool)
         .await;
 
-        // Ensure all busy sessions have busy_from set
+        // Ensure all busy sandboxes have busy_from set
         let _ = sqlx::query(
             r#"
-            UPDATE sessions
+            UPDATE sandboxes
             SET busy_from = NOW()
             WHERE state = 'busy' AND busy_from IS NULL
             "#,
@@ -225,48 +231,48 @@ impl SessionManager {
         .execute(&self.pool)
         .await;
 
-        // Find sessions that need auto-stop due to idle timeout
-        let sessions_to_stop: Vec<(String,)> = sqlx::query_as(
+        // Find sandboxes that need auto-stop due to idle timeout
+        let sandboxes_to_stop: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT id
-            FROM sessions
+            FROM sandboxes
             WHERE state = 'idle'
               AND idle_from IS NOT NULL
-              AND TIMESTAMPADD(SECOND, stop_timeout_seconds, idle_from) <= NOW()
-            ORDER BY TIMESTAMPADD(SECOND, stop_timeout_seconds, idle_from) ASC
+              AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW()
+            ORDER BY TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) ASC
             LIMIT 50
             "#,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to find sessions to auto-stop: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to find sandboxes to auto-stop: {}", e))?;
 
         let mut stopped_count = 0;
 
-        for (session_id,) in sessions_to_stop {
-            info!("Auto-stopping session ID {} due to timeout", session_id);
+        for (sandbox_id,) in sandboxes_to_stop {
+            info!("Auto-stopping sandbox {} due to timeout", sandbox_id);
 
-            // Create stop request for the session
+            // Create stop request for the sandbox
             let request_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
-                INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
-                VALUES (?, ?, 'stop_session', 'system', '{"reason": "auto_stop_timeout"}', 'pending')
+                INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+                VALUES (?, ?, 'delete_sandbox', 'system', '{"reason": "idle_timeout"}', 'pending')
                 "#)
             .bind(&request_id)
-            .bind(&session_id)
+            .bind(&sandbox_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for session ID {}: {}", session_id, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to create auto-stop request for sandbox {}: {}", sandbox_id, e))?;
 
             info!(
-                "Created auto-stop request {} for session ID {}",
-                request_id, session_id
+                "Created auto-stop request {} for sandbox {}",
+                request_id, sandbox_id
             );
             stopped_count += 1;
         }
 
         if stopped_count > 0 {
-            info!("Scheduled {} sessions for auto-stop", stopped_count);
+            info!("Scheduled {} sandboxes for auto-stop", stopped_count);
         }
 
         Ok(stopped_count)
@@ -276,8 +282,8 @@ impl SessionManager {
         let timed_out: Vec<(String, String, serde_json::Value, chrono::DateTime<Utc>)> =
             sqlx::query_as(
                 r#"
-                SELECT id, session_id, output, created_at
-                FROM session_tasks
+                SELECT id, sandbox_id, output, created_at
+                FROM sandbox_tasks
                 WHERE timeout_at IS NOT NULL
                   AND timeout_at <= NOW()
                   AND status IN ('pending', 'processing')
@@ -293,7 +299,7 @@ impl SessionManager {
         }
 
         let mut cancelled = 0usize;
-        for (task_id, session_id, output_json, created_at) in timed_out {
+        for (task_id, sandbox_id, output_json, created_at) in timed_out {
             let now = chrono::Utc::now();
             let now_text = now.to_rfc3339();
             let runtime_seconds = (now - created_at).num_seconds();
@@ -338,7 +344,7 @@ impl SessionManager {
 
             let update = sqlx::query(
                 r#"
-                UPDATE session_tasks
+                UPDATE sandbox_tasks
                 SET status = 'cancelled',
                     output = ?,
                     timeout_seconds = NULL,
@@ -360,7 +366,7 @@ impl SessionManager {
 
             sqlx::query(
                 r#"
-                UPDATE sessions
+                UPDATE sandboxes
                 SET state = 'idle',
                     busy_from = NULL,
                     idle_from = NOW(),
@@ -368,25 +374,25 @@ impl SessionManager {
                 WHERE id = ? AND state = 'busy'
                 "#,
             )
-            .bind(&session_id)
+            .bind(&sandbox_id)
             .execute(&self.pool)
             .await?;
 
             info!(
-                "Cancelled task {} for session ID {} due to per-task timeout",
-                task_id, session_id
+                "Cancelled task {} for sandbox {} due to per-task timeout",
+                task_id, sandbox_id
             );
         }
 
         Ok(cancelled)
     }
 
-    /// Generate a session-specific TSBX token for the given principal
-    fn generate_session_token(
+    /// Generate a sandbox-specific TSBX token for the given principal
+    fn generate_sandbox_token(
         &self,
         principal: &str,
         principal_type: SubjectType,
-        session_id: &str,
+        sandbox_id: &str,
     ) -> Result<String> {
         let exp = chrono::Utc::now() + chrono::Duration::hours(24);
         let claims = RbacClaims {
@@ -394,7 +400,7 @@ impl SessionManager {
             sub_type: principal_type,
             exp: exp.timestamp() as usize,
             iat: chrono::Utc::now().timestamp() as usize,
-            iss: "tsbx-session-manager".to_string(),
+            iss: "tsbx-sandbox-manager".to_string(),
         };
 
         let token = encode(
@@ -402,11 +408,11 @@ impl SessionManager {
             &claims,
             &EncodingKey::from_secret(self.jwt_secret.as_ref()),
         )
-        .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to generate sandbox token: {}", e))?;
 
         info!(
-            "Generated session token for principal: {} (session ID: {})",
-            principal, session_id
+            "Generated sandbox token for principal: {} (sandbox ID: {})",
+            principal, sandbox_id
         );
         Ok(token)
     }
@@ -425,13 +431,13 @@ impl SessionManager {
         Ok(processed)
     }
 
-    async fn fetch_pending_requests(&self) -> Result<Vec<SessionRequest>> {
+    async fn fetch_pending_requests(&self) -> Result<Vec<SandboxRequest>> {
         // MySQL doesn't support RETURNING, so we need to do this in two steps
         // First, get and lock the pending requests
         let request_ids: Vec<(String,)> = sqlx::query_as(
             r#"
             SELECT id
-            FROM session_requests
+            FROM sandbox_requests
             WHERE status = 'pending'
             ORDER BY created_at
             LIMIT 5
@@ -449,7 +455,7 @@ impl SessionManager {
         let ids: Vec<String> = request_ids.into_iter().map(|(id,)| id).collect();
         let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
         let query_str = format!(
-            "UPDATE session_requests SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
+            "UPDATE sandbox_requests SET status = 'processing', started_at = NOW(), updated_at = NOW() WHERE id IN ({placeholders})"
         );
 
         let mut query = sqlx::query(&query_str);
@@ -459,8 +465,8 @@ impl SessionManager {
         query.execute(&self.pool).await?;
 
         // Fetch the now-processing requests
-        let query_str = format!("SELECT * FROM session_requests WHERE id IN ({placeholders})");
-        let mut query = sqlx::query_as::<_, SessionRequest>(&query_str);
+        let query_str = format!("SELECT * FROM sandbox_requests WHERE id IN ({placeholders})");
+        let mut query = sqlx::query_as::<_, SandboxRequest>(&query_str);
         for id in &ids {
             query = query.bind(id);
         }
@@ -469,18 +475,16 @@ impl SessionManager {
         Ok(requests)
     }
 
-    async fn process_request(&self, request: SessionRequest) -> Result<()> {
+    async fn process_request(&self, request: SandboxRequest) -> Result<()> {
         info!(
             "Processing request {} of type {}",
             request.id, request.request_type
         );
 
         let result = match request.request_type.as_str() {
-            "start_session" => self.handle_start_session(request.clone()).await,
-            "delete_session" => self.handle_delete_session(request.clone()).await,
+            "create_sandbox" => self.handle_start_sandbox(request.clone()).await,
+            "delete_sandbox" => self.handle_delete_sandbox_request(request.clone()).await,
             "execute_command" => self.handle_execute_command(request.clone()).await,
-            "stop_session" => self.handle_stop_session(request.clone()).await,
-            "restart_session" => self.handle_restart_session(request.clone()).await,
             "create_task" => self.handle_create_task(request.clone()).await,
             "file_read" => self.handle_file_read(request.clone()).await,
             "file_metadata" => self.handle_file_metadata(request.clone()).await,
@@ -507,18 +511,18 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_start_session(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>(
-            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
-             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+    pub async fn handle_start_sandbox(&self, request: SandboxRequest) -> Result<()> {
+        // Look up the sandbox from the database using sandbox_id
+        let sandbox = sqlx::query_as::<_, Sandbox>(
+            "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
         )
-            .bind(&request.session_id)
+            .bind(&request.sandbox_id)
             .fetch_one(&self.pool)
             .await?;
 
-        // Parse the payload to get session creation parameters
+        // Parse the payload to get sandbox creation parameters
         let env = request
             .payload
             .get("env")
@@ -567,113 +571,57 @@ impl SessionManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic token for this session (for TaskSandbox auth)
-        info!("Generating dynamic token for session ID {}", &session.id);
-        let session_token = self
-            .generate_session_token(principal, principal_type, &session.id)
-            .map_err(|e| anyhow::anyhow!("Failed to generate session token: {}", e))?;
+        // Generate dynamic token for this sandbox (for TaskSandbox auth)
+        info!("Generating dynamic token for sandbox ID {}", &sandbox.id);
+        let sandbox_token = self
+            .generate_sandbox_token(principal, principal_type, &sandbox.id)
+            .map_err(|e| anyhow::anyhow!("Failed to generate sandbox token: {}", e))?;
 
         info!(
-            "Generated dynamic tokens for session ID {} (principal: {})",
-            &session.id, principal
+            "Generated dynamic tokens for sandbox ID {} (principal: {})",
+            &sandbox.id, principal
         );
 
-        info!("Creating session ID {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}",
-              &session.id, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating sandbox ID {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}",
+              &sandbox.id, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
 
-        // Check if this is a cloned session from request payload
-        let is_clone = request
-            .payload
-            .get("clone")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        info!("Creating new sandbox {}", &sandbox.id);
 
-        // For cloned sessions, extract prompt from request payload
-        let clone_prompt = if is_clone {
-            request
-                .payload
-                .get("prompt")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-        } else {
-            None
-        };
+        // Create container with sandbox parameters and generated tokens
+        self.docker_manager
+            .create_container_with_params_and_tokens(
+                &sandbox.id,
+                env,
+                instructions,
+                setup,
+                sandbox_token,
+                principal.to_string(),
+                principal_type_str.to_string(),
+                request.created_at,
+            )
+            .await?;
 
-        if is_clone {
-            let parent_session_id = request
-                .payload
-                .get("parent_session_id")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| anyhow::anyhow!("Missing parent_session_id for clone"))?;
+        // Check if we need to restore from a snapshot
+        if let Some(snapshot_id) = request.payload.get("snapshot_id").and_then(|v| v.as_str()) {
+            info!("Restoring snapshot {} to sandbox {}", snapshot_id, &sandbox.id);
 
-            // For cloned sessions, get principal info from clone request payload
-            let clone_principal = request
-                .payload
-                .get("principal")
-                .and_then(|v| v.as_str())
-                .unwrap_or(principal);
-            let clone_principal_type_str = request
-                .payload
-                .get("principal_type")
-                .and_then(|v| v.as_str())
-                .unwrap_or(principal_type_str);
+            // Wait a moment for container to be fully ready
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-            info!(
-                "DEBUG: Clone request payload principal: {:?}, principal_type: {:?}",
-                request.payload.get("principal"),
-                request.payload.get("principal_type")
-            );
-            info!(
-                "DEBUG: Using clone_principal: {}, clone_principal_type_str: {}",
-                clone_principal, clone_principal_type_str
-            );
-            let clone_principal_type = match clone_principal_type_str {
-                "Admin" => SubjectType::Admin,
-                "User" => SubjectType::Subject,
-                _ => SubjectType::Subject,
-            };
-
-            info!("Creating cloned session ID {} from parent ID {} for principal {} ({})",
-                  &session.id, parent_session_id, clone_principal, clone_principal_type_str);
-
-            // For cloned sessions, create container with full volume copy from parent
-            // Generate fresh token for cloned session
-            let clone_token = self
-                .generate_session_token(clone_principal, clone_principal_type, &session.id)
-                .map_err(|e| anyhow::anyhow!("Failed to generate cloned session token: {}", e))?;
-
-            self.docker_manager
-                .create_container_with_full_copy_and_tokens(
-                    &session.id,
-                    parent_session_id,
-                    clone_token,
-                    clone_principal.to_string(),
-                    clone_principal_type_str.to_string(),
-                    request.created_at,
-                )
-                .await?;
-        } else {
-            info!("Creating new session ID {}", &session.id);
-
-            // For regular sessions, create container with session parameters and generated tokens
-            self.docker_manager
-                .create_container_with_params_and_tokens(
-                    &session.id,
-                    env,
-                    instructions,
-                    setup,
-                    session_token,
-                    principal.to_string(),
-                    principal_type_str.to_string(),
-                    request.created_at,
-                )
-                .await?;
+            match self.docker_manager.restore_snapshot(&sandbox.id, snapshot_id).await {
+                Ok(_) => {
+                    info!("Snapshot {} successfully restored to sandbox {}", snapshot_id, &sandbox.id);
+                }
+                Err(e) => {
+                    warn!("Failed to restore snapshot {} to sandbox {}: {}", snapshot_id, &sandbox.id, e);
+                    // Don't fail the entire creation - continue without the snapshot
+                }
+            }
         }
 
         // Send prompt if provided (BEFORE setting state to IDLE)
-        let prompt_to_send = prompt.or(clone_prompt);
-        if let Some(prompt) = prompt_to_send {
-            info!("Sending prompt to session ID {}: {}", &session.id, prompt);
+        if let Some(prompt) = prompt {
+            info!("Sending prompt to sandbox ID {}: {}", &sandbox.id, prompt);
 
             // Create task record in database (pending)
             let task_id = uuid::Uuid::new_v4().to_string();
@@ -682,12 +630,12 @@ impl SessionManager {
             let output_json = serde_json::json!({ "items": [] });
             sqlx::query(
                 r#"
-                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                 VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&task_id)
-            .bind(&session.id)
+            .bind(&sandbox.id)
             .bind(&principal)
             .bind(&input_json)
             .bind(&output_json)
@@ -696,51 +644,42 @@ impl SessionManager {
             .execute(&self.pool)
             .await?;
             info!(
-                "Prompt task {} created for session ID {}",
-                task_id, &session.id
+                "Prompt task {} created for sandbox ID {}",
+                task_id, &sandbox.id
             );
         }
 
-        // Set session state to INIT after container creation only if it hasn't changed yet.
-        // This avoids overwriting an session that already set itself to IDLE.
-        sqlx::query(r#"UPDATE sessions SET state = ?, last_activity_at = NOW() WHERE id = ? AND state = 'init'"#)
-            .bind(SESSION_STATE_INIT)
-            .bind(&session.id)
+        // Set sandbox state to INIT after container creation only if it hasn't changed yet.
+        // This avoids overwriting a sandbox that already set itself to IDLE.
+        sqlx::query(r#"UPDATE sandboxes SET state = ?, last_activity_at = NOW() WHERE id = ? AND state = 'init'"#)
+            .bind(SANDBOX_STATE_INIT)
+            .bind(&sandbox.id)
             .execute(&self.pool)
             .await?;
 
         Ok(())
     }
 
-    pub async fn handle_delete_session(&self, request: SessionRequest) -> Result<()> {
-        info!("Deleting container and volume for session ID {}", &request.session_id);
-        self.docker_manager.delete_container(&request.session_id).await?;
-
-        // No need to update session state - DELETE endpoint performs hard delete of session row
-
-        Ok(())
-    }
-
-    pub async fn handle_execute_command(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_execute_command(&self, request: SandboxRequest) -> Result<()> {
         let command = request.payload["command"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
-        info!("Executing command in session ID {}: {}", &request.session_id, command);
+        info!("Executing command in sandbox ID {}: {}", &request.sandbox_id, command);
         let _output = self
             .docker_manager
-            .execute_command(&request.session_id, command)
+            .execute_command(&request.sandbox_id, command)
             .await?;
 
         // Note: command_results table does not exist in schema
         // If command result tracking is needed, add migration to create:
         // CREATE TABLE command_results (
         //   id CHAR(36) PRIMARY KEY,
-        //   session_id CHAR(36) NOT NULL,
+        //   sandbox_id CHAR(36) NOT NULL,
         //   command TEXT NOT NULL,
         //   output TEXT,
         //   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        //   CONSTRAINT fk_command_results_session FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+        //   CONSTRAINT fk_command_results_sandbox FOREIGN KEY (sandbox_id) REFERENCES sandboxes(id) ON DELETE CASCADE
         // )
 
         Ok(())
@@ -749,7 +688,7 @@ impl SessionManager {
     async fn mark_request_completed(&self, request_id: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_requests
+            UPDATE sandbox_requests
             SET status = 'completed',
                 completed_at = NOW(),
                 updated_at = NOW()
@@ -766,7 +705,7 @@ impl SessionManager {
     async fn mark_request_failed(&self, request_id: &str, error: &str) -> Result<()> {
         sqlx::query(
             r#"
-            UPDATE session_requests
+            UPDATE sandbox_requests
             SET status = 'failed',
                 error = ?,
                 completed_at = NOW(),
@@ -782,14 +721,14 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_stop_session(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>(
-            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
-             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+    pub async fn handle_delete_sandbox_request(&self, request: SandboxRequest) -> Result<()> {
+        // Look up the sandbox from the database using sandbox_id
+        let sandbox = sqlx::query_as::<_, Sandbox>(
+            "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
         )
-            .bind(&request.session_id)
+            .bind(&request.sandbox_id)
             .fetch_one(&self.pool)
             .await?;
 
@@ -802,29 +741,29 @@ impl SessionManager {
             .unwrap_or(5);
         if delay_secs > 0 {
             info!(
-                "Delaying close for session ID {} by {} seconds",
-                &session.id, delay_secs
+                "Delaying close for sandbox ID {} by {} seconds",
+                &sandbox.id, delay_secs
             );
             sleep(Duration::from_secs(delay_secs)).await;
         }
         // Capture prior state and created_at for runtime measurement
-        let session_row_opt: Option<(chrono::DateTime<Utc>, String)> =
-            sqlx::query_as(r#"SELECT created_at, state FROM sessions WHERE id = ?"#)
-                .bind(&session.id)
+        let sandbox_row_opt: Option<(chrono::DateTime<Utc>, String)> =
+            sqlx::query_as(r#"SELECT created_at, state FROM sandboxes WHERE id = ?"#)
+                .bind(&sandbox.id)
                 .fetch_optional(&self.pool)
                 .await?;
-        let (session_created_at, prior_state) = session_row_opt
+        let (created_at, prior_state) = sandbox_row_opt
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
 
         // Determine note: auto timeout vs user-triggered
         let auto =
-            request.payload.get("reason").and_then(|v| v.as_str()) == Some("auto_stop_timeout");
+            request.payload.get("reason").and_then(|v| v.as_str()) == Some("idle_timeout");
         let reason = if auto {
             if prior_state.to_lowercase() == "busy" {
                 "task_timeout"
             } else {
-                "stop_timeout"
+                "idle_timeout"
             }
         } else {
             "user"
@@ -833,28 +772,53 @@ impl SessionManager {
 
         if is_task_timeout {
             info!(
-                "Task timeout detected for session ID {} – cancelling task and returning to idle",
-                &session.id
+                "Task timeout detected for sandbox ID {} – cancelling task and returning to idle",
+                &sandbox.id
             );
             sqlx::query(
-                r#"UPDATE sessions SET state = 'idle', busy_from = NULL, idle_from = NOW(), last_activity_at = NOW() WHERE id = ?"#,
+                r#"UPDATE sandboxes SET state = 'idle', busy_from = NULL, idle_from = NOW(), last_activity_at = NOW() WHERE id = ?"#,
             )
-            .bind(&session.id)
+            .bind(&sandbox.id)
             .execute(&self.pool)
             .await?;
         } else {
-            info!("Stopping container for session ID {}", &session.id);
+            info!("Stopping sandbox {}", &sandbox.id);
 
-            // Close the Docker container but keep the persistent volume
-            self.docker_manager.stop_container(&session.id).await?;
+            // Create snapshot before stopping (graceful failure - don't block stop)
+            let snapshot_id = uuid::Uuid::new_v4().to_string();
+            match self.docker_manager.create_snapshot(&sandbox.id, &snapshot_id).await {
+                Ok(_) => {
+                    info!("Snapshot {} created for sandbox {}", snapshot_id, &sandbox.id);
 
-            // Update session state to stopped
-            sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE id = ?"#)
-                .bind(&session.id)
+                    // Record snapshot in database
+                    let snapshot_req = CreateSnapshotRequest {
+                        metadata: serde_json::json!({
+                            "trigger": "sandbox_stop",
+                            "stopped_at": chrono::Utc::now().to_rfc3339(),
+                            "reason": reason
+                        })
+                    };
+
+                    match Snapshot::create(&self.pool, &sandbox.id, "sandbox_close", snapshot_req).await {
+                        Ok(_) => info!("Snapshot {} recorded in database", snapshot_id),
+                        Err(e) => warn!("Failed to record snapshot {} in database: {}", snapshot_id, e),
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to create snapshot for sandbox {}: {}", &sandbox.id, e);
+                }
+            }
+
+            // Close the Docker container (no individual volumes to keep)
+            self.docker_manager.stop_container(&sandbox.id).await?;
+
+            // Update sandbox state to deleted (this is now effectively deleted in the new model)
+            sqlx::query(r#"UPDATE sandboxes SET state = 'deleted' WHERE id = ?"#)
+                .bind(&sandbox.id)
                 .execute(&self.pool)
                 .await?;
 
-            info!("Session ID {} state updated to stopped", &session.id);
+            info!("Sandbox {} state updated to deleted", &sandbox.id);
         }
 
         // Create a chat marker task to indicate the action taken
@@ -865,21 +829,21 @@ impl SessionManager {
             if reason == "task_timeout" {
                 "Task timeout"
             } else {
-                "Stop timeout"
+                "Idle timeout"
             }
         } else {
             request
                 .payload
                 .get("note")
                 .and_then(|v| v.as_str())
-                .unwrap_or("User requested stop")
+                .unwrap_or("User requested delete")
         };
 
         // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)
         if let Some((task_id, output_json)) = sqlx::query_as::<_, (String, serde_json::Value)>(
-            r#"SELECT id, output FROM session_tasks WHERE session_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+            r#"SELECT id, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
         )
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .fetch_optional(&self.pool)
         .await
         .unwrap_or(None)
@@ -903,7 +867,7 @@ impl SessionManager {
             }
             // Update task status to 'cancelled'
             let _ = sqlx::query(
-                r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
+                r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#,
             )
             .bind(&new_output)
             .bind(&task_id)
@@ -912,9 +876,9 @@ impl SessionManager {
         } else {
             // If no task row exists yet (pre-insert race), try to find the latest create_task request and insert a cancelled task
             if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM session_requests WHERE session_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+                r#"SELECT id, created_by, payload FROM sandbox_requests WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
             )
-            .bind(&session.id)
+            .bind(&sandbox.id)
             .fetch_optional(&self.pool)
             .await
             .unwrap_or(None)
@@ -924,33 +888,33 @@ impl SessionManager {
                     let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
                     let output = serde_json::json!({"text":"","items":[cancelled_item]});
                     let _ = sqlx::query(
-                        r#"INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+                        r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
                             VALUES (?, ?, ?, 'cancelled', ?, ?, NULL, NULL, NOW(), NOW())
                             ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), timeout_seconds=VALUES(timeout_seconds), timeout_at=VALUES(timeout_at), updated_at=NOW()"#
                     )
                     .bind(task_id)
-                    .bind(&session.id)
+                    .bind(&sandbox.id)
                     .bind(&created_by)
                     .bind(&input)
                     .bind(&output)
                     .execute(&self.pool)
                     .await;
-                    let _ = sqlx::query(r#"UPDATE session_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                    let _ = sqlx::query(r#"UPDATE sandbox_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
                         .bind(&request_id)
                         .execute(&self.pool)
                         .await;
                 }
             }
         }
-        // Determine runtime: time from last open marker (or session.created_at if none)
+        // Determine runtime: time from last open marker (or sandbox.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-            r#"SELECT created_at, output FROM session_tasks WHERE session_id = ? ORDER BY created_at DESC LIMIT 50"#
+            r#"SELECT created_at, output FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at DESC LIMIT 50"#
         )
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .fetch_all(&self.pool)
         .await
         .unwrap_or_default();
-        let mut start_ts = session_created_at;
+        let mut start_ts = sandbox.created_at;
         for (row_created_at, output) in recent_rows {
             if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                 let mut found = false;
@@ -983,7 +947,7 @@ impl SessionManager {
             })
         } else {
             serde_json::json!({
-                "type": "stopped",
+                "type": "deleted",
                 "note": note,
                 "reason": reason,
                 "by": created_by,
@@ -999,12 +963,12 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, NOW(), NOW())
             "#,
         )
         .bind(&task_id)
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .bind(&created_by)
         .bind(&serde_json::json!({"text": ""}))
         .bind(&output_json)
@@ -1014,158 +978,20 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_restart_session(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>(
-            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
-             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
+    pub async fn handle_create_task(&self, request: SandboxRequest) -> Result<()> {
+        // Look up the sandbox from the database using sandbox_id
+        let sandbox = sqlx::query_as::<_, Sandbox>(
+            "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
         )
-            .bind(&request.session_id)
-            .fetch_one(&self.pool)
-            .await?;
-
-        // Prefer explicitly provided principal/principal_type from payload (owner),
-        // fall back to request.created_by as a regular subject.
-        let effective_principal = request
-            .payload
-            .get("principal")
-            .and_then(|v| v.as_str())
-            .unwrap_or(&request.created_by)
-            .to_string();
-        let effective_principal_type = request
-            .payload
-            .get("principal_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("User")
-            .to_string();
-
-        info!("Restarting container for session ID {}", &session.id);
-
-        // Generate fresh tokens for restarted session
-        info!(
-            "Generating fresh tokens for restarted session ID {}",
-            &session.id
-        );
-        let restart_token = self
-            .generate_session_token(
-                &effective_principal,
-                match effective_principal_type.as_str() {
-                    "Admin" => SubjectType::Admin,
-                    _ => SubjectType::Subject,
-                },
-                &session.id,
-            )
-            .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
-
-        // All restarted sessions were stopped (container destroyed), so recreate container
-        info!(
-            "Session ID {} was stopped, restarting container with persistent volume and fresh tokens",
-            &session.id
-        );
-        self.docker_manager
-            .restart_container_with_tokens(
-                &session.id,
-                restart_token,
-                effective_principal.clone(),
-                effective_principal_type.clone(),
-                request.created_at,
-            )
-            .await?;
-
-        // Update last_activity_at and clear idle_from/busy_from since session is being restarted (will set to idle later)
-        sqlx::query(
-            r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE id = ?"#,
-        )
-        .bind(&session.id)
-        .execute(&self.pool)
-        .await?;
-
-        info!("Container restarted for session ID {}", &session.id);
-
-        // Send prompt if provided
-        if let Some(prompt) = request.payload.get("prompt").and_then(|v| v.as_str()) {
-            info!(
-                "Sending prompt to restarted session ID {}: {}",
-                &session.id, prompt
-            );
-
-            // Get the principal name from the request
-            let principal = effective_principal.clone();
-
-            // Create task record in database for restarted session
-            let task_id = uuid::Uuid::new_v4().to_string();
-            let input_json = serde_json::json!({ "text": prompt });
-            let output_json = serde_json::json!({ "text": "", "items": [] });
-            sqlx::query(
-                r#"
-                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-                VALUES (?, ?, ?, 'pending', ?, ?, NULL, NULL, NOW(), NOW())
-                "#,
-            )
-            .bind(&task_id)
-            .bind(&session.id)
-            .bind(&principal)
-            .bind(&input_json)
-            .bind(&output_json)
-            .execute(&self.pool)
-            .await?;
-            info!(
-                "Prompt task {} created for restarted session ID {}",
-                task_id, &session.id
-            );
-        }
-
-        // Insert a chat marker indicating the session has restarted
-        let task_id = uuid::Uuid::new_v4().to_string();
-        let now_text = chrono::Utc::now().to_rfc3339();
-        let reason = request
-            .payload
-            .get("reason")
-            .and_then(|v| v.as_str())
-            .unwrap_or("user_restart");
-        let note = if reason == "user_restart" {
-            "User open"
-        } else {
-            "Open"
-        };
-        let output_json = serde_json::json!({
-            "text": "",
-            "items": [ { "type": "restarted", "note": note, "reason": reason, "by": effective_principal, "at": now_text } ]
-        });
-        sqlx::query(
-            r#"
-            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, ?, ?)
-            "#,
-        )
-        .bind(&task_id)
-        .bind(&session.id)
-        .bind(&effective_principal)
-        .bind(&serde_json::json!({"text":""}))
-        .bind(&output_json)
-        .bind(&request.created_at)
-        .bind(&request.created_at)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn handle_create_task(&self, request: SessionRequest) -> Result<()> {
-        // Look up the session from the database using session_id
-        let session = sqlx::query_as::<_, Session>(
-            "SELECT id, created_by, state, description, parent_session_id, created_at, last_activity_at,
-             metadata, tags, stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sessions WHERE id = ?"
-        )
-            .bind(&request.session_id)
+            .bind(&request.sandbox_id)
             .fetch_one(&self.pool)
             .await?;
 
         let principal = request.created_by.clone();
 
-        info!("Handling create_task for session ID {}", &session.id);
+        info!("Handling create_task for sandbox ID {}", &sandbox.id);
 
         // Parse payload
         let task_id = request
@@ -1178,11 +1004,6 @@ impl SessionManager {
             .get("input")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({"text":""}));
-        let restart_if_stopped = request
-            .payload
-            .get("restart_if_stopped")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
 
         let timeout_seconds = request
             .payload
@@ -1191,71 +1012,9 @@ impl SessionManager {
             .and_then(|v| i32::try_from(v).ok())
             .filter(|v| *v > 0);
 
-        // Inspect session state
-        let state_opt: Option<(String,)> =
-            sqlx::query_as(r#"SELECT state FROM sessions WHERE id = ?"#)
-                .bind(&session.id)
-                .fetch_optional(&self.pool)
-                .await?;
-        let state = state_opt.map(|t| t.0).unwrap_or_default();
-
-        // Restart if needed
-        if restart_if_stopped && state == "stopped" {
-            info!(
-                "Session ID {} stopped; restarting prior to inserting task entry",
-                &session.id
-            );
-            let restart_token = self
-                .generate_session_token(&principal, SubjectType::Subject, &session.id)
-                .map_err(|e| anyhow::anyhow!("Failed to generate restart session token: {}", e))?;
-            self.docker_manager
-                .restart_container_with_tokens(
-                    &session.id,
-                    restart_token,
-                    principal.clone(),
-                    "User".to_string(),
-                    request.created_at,
-                )
-                .await?;
-            sqlx::query(
-                r#"UPDATE sessions SET last_activity_at = NOW(), idle_from = NULL, busy_from = NULL WHERE id = ?"#,
-            )
-            .bind(&session.id)
-            .execute(&self.pool)
-            .await?;
-
-            // Insert a restart marker for implicit restarts
-            let marker_id = uuid::Uuid::new_v4().to_string();
-            let now_text = chrono::Utc::now().to_rfc3339();
-            // Ensure the restart marker sorts before the newly created task row by using a slightly earlier timestamp
-            let marker_created_at = request
-                .created_at
-                .checked_sub_signed(chrono::Duration::milliseconds(1))
-                .unwrap_or(request.created_at);
-            let output_json = serde_json::json!({
-                "text": "",
-                "items": [ { "type": "restarted", "note": "Incoming request", "reason": "implicit_restart", "by": principal, "at": now_text } ]
-            });
-            sqlx::query(
-                r#"
-                INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-                VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, ?, ?)
-                "#,
-            )
-            .bind(&marker_id)
-            .bind(&session.id)
-            .bind(&principal)
-            .bind(&serde_json::json!({"text":""}))
-            .bind(&output_json)
-            .bind(&marker_created_at)
-            .bind(&marker_created_at)
-            .execute(&self.pool)
-            .await?;
-        }
-
         // If a task with this id already exists (e.g., pre-insert cancel), skip insertion
         if let Some((_existing_id, existing_status)) = sqlx::query_as::<_, (String, String)>(
-            r#"SELECT id, status FROM session_tasks WHERE id = ?"#,
+            r#"SELECT id, status FROM sandbox_tasks WHERE id = ?"#,
         )
         .bind(&task_id)
         .fetch_optional(&self.pool)
@@ -1282,12 +1041,12 @@ impl SessionManager {
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task_id)
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .bind(&principal)
         .bind(&input)
         .bind(&output_json)
@@ -1297,40 +1056,40 @@ impl SessionManager {
         .bind(&task_created_at)
         .execute(&self.pool)
         .await?;
-        info!("Inserted task {} for session ID {}", task_id, &session.id);
+        info!("Inserted task {} for sandbox ID {}", task_id, &sandbox.id);
 
         Ok(())
     }
 
-    /// Check health of all non-stopped sessions and mark failed containers as stopped
-    async fn check_session_health(&self) -> Result<usize> {
-        // Find all sessions that are not stopped (active sessions)
-        let active_sessions: Vec<(String, String)> = sqlx::query_as(
+    /// Check health of all non-deleted sandboxes and mark failed containers as deleted
+    async fn check_sandbox_health(&self) -> Result<usize> {
+        // Find all sandboxes that are not deleted (active sandboxes)
+        let active_sandboxes: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT id, state
-            FROM sessions
-            WHERE state != 'stopped'
+            FROM sandboxes
+            WHERE state != 'deleted'
             ORDER BY id
             "#,
         )
         .fetch_all(&self.pool)
         .await?;
 
-        if active_sessions.is_empty() {
+        if active_sandboxes.is_empty() {
             return Ok(0);
         }
 
         info!(
-            "Checking health of {} active sessions",
-            active_sessions.len()
+            "Checking health of {} active sandboxes",
+            active_sandboxes.len()
         );
         let mut recovered_count = 0;
 
-        for (session_id, current_state) in active_sessions {
+        for (sandbox_id, current_state) in active_sandboxes {
             // Check if container exists and is running
             match self
                 .docker_manager
-                .is_container_healthy(&session_id)
+                .is_container_healthy(&sandbox_id)
                 .await
             {
                 Ok(true) => {
@@ -1340,25 +1099,25 @@ impl SessionManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Session ID {} container is unhealthy or missing, marking as stopped for recovery",
-                        session_id
+                        "Sandbox ID {} container is unhealthy or missing, marking as deleted for recovery",
+                        sandbox_id
                     );
 
-                    // Mark session as stopped so it can be restarted later
+                    // Mark sandbox as deleted so it can be restarted later
                     if let Err(e) =
-                        sqlx::query(r#"UPDATE sessions SET state = 'stopped' WHERE id = ?"#)
-                            .bind(&session_id)
+                        sqlx::query(r#"UPDATE sandboxes SET state = 'deleted' WHERE id = ?"#)
+                            .bind(&sandbox_id)
                             .execute(&self.pool)
                             .await
                     {
                         error!(
-                            "Failed to mark unhealthy session ID {} as stopped: {}",
-                            session_id, e
+                            "Failed to mark unhealthy sandbox ID {} as deleted: {}",
+                            sandbox_id, e
                         );
                     } else {
                         info!(
-                            "Session ID {} marked as stopped due to container failure (was: {})",
-                            session_id, current_state
+                            "Sandbox ID {} marked as deleted due to container failure (was: {})",
+                            sandbox_id, current_state
                         );
                         recovered_count += 1;
                     }
@@ -1366,8 +1125,8 @@ impl SessionManager {
                 Err(e) => {
                     // Health check failed, likely Docker connection issues
                     error!(
-                        "Health check failed for session ID {}: {}, will retry next cycle",
-                        session_id, e
+                        "Health check failed for sandbox ID {}: {}, will retry next cycle",
+                        sandbox_id, e
                     );
                 }
             }
@@ -1375,7 +1134,7 @@ impl SessionManager {
 
         if recovered_count > 0 {
             info!(
-                "Marked {} sessions as stopped due to container failures",
+                "Marked {} sandboxes as deleted due to container failures",
                 recovered_count
             );
         }
@@ -1411,7 +1170,7 @@ impl SessionManager {
             map.insert("result".into(), result);
         }
         sqlx::query(
-            r#"UPDATE session_requests SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
+            r#"UPDATE sandbox_requests SET payload = ?, status='completed', updated_at=NOW(), completed_at=NOW(), error=NULL WHERE id = ?"#
         )
         .bind(&payload)
         .bind(request_id)
@@ -1422,7 +1181,7 @@ impl SessionManager {
 
     async fn fail_request(&self, request_id: &str, msg: String) -> Result<()> {
         sqlx::query(
-            r#"UPDATE session_requests SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
+            r#"UPDATE sandbox_requests SET status='failed', updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
         )
         .bind(&msg)
         .bind(request_id)
@@ -1431,7 +1190,7 @@ impl SessionManager {
         Ok(())
     }
 
-    pub async fn handle_file_read(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_file_read(&self, request: SandboxRequest) -> Result<()> {
         let path = request
             .payload
             .get("path")
@@ -1443,22 +1202,22 @@ impl SessionManager {
         // Do not auto-open for file APIs; require running container
         match self
             .docker_manager
-            .is_container_healthy(&request.session_id)
+            .is_container_healthy(&request.sandbox_id)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is stopped".to_string())
+                    .fail_request(&request.id, "sandbox is deleted".to_string())
                     .await;
             }
         }
-        let full_path = format!("/session/{}", safe);
+        let full_path = format!("/sandbox/{}", safe);
         // Get size and content type
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1489,7 +1248,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec!["/bin/cat".into(), full_path.clone()],
             )
             .await?;
@@ -1509,7 +1268,7 @@ impl SessionManager {
             .await
     }
 
-    pub async fn handle_file_metadata(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_file_metadata(&self, request: SandboxRequest) -> Result<()> {
         let path = request
             .payload
             .get("path")
@@ -1520,22 +1279,22 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&request.session_id)
+            .is_container_healthy(&request.sandbox_id)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is stopped".to_string())
+                    .fail_request(&request.id, "sandbox is deleted".to_string())
                     .await;
             }
         }
-        let full_path = format!("/session/{}", safe);
+        let full_path = format!("/sandbox/{}", safe);
         let fmt = "%F|%s|%a|%Y|%N";
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1584,7 +1343,7 @@ impl SessionManager {
             .await
     }
 
-    pub async fn handle_file_list(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_file_list(&self, request: SandboxRequest) -> Result<()> {
         let path = request
             .payload
             .get("path")
@@ -1609,20 +1368,20 @@ impl SessionManager {
         };
         match self
             .docker_manager
-            .is_container_healthy(&request.session_id)
+            .is_container_healthy(&request.sandbox_id)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is stopped".to_string())
+                    .fail_request(&request.id, "sandbox is deleted".to_string())
                     .await;
             }
         }
         let base = if safe.is_empty() {
-            "/session".to_string()
+            "/sandbox".to_string()
         } else {
-            format!("/session/{}", safe)
+            format!("/sandbox/{}", safe)
         };
 
         // Print one record per line so parser can split by lines()
@@ -1630,7 +1389,7 @@ impl SessionManager {
         let (code, stdout, stderr) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec![
                     "/usr/bin/find".into(),
                     base.clone(),
@@ -1701,7 +1460,7 @@ impl SessionManager {
             .await
     }
 
-    pub async fn handle_file_delete(&self, request: SessionRequest) -> Result<()> {
+    pub async fn handle_file_delete(&self, request: SandboxRequest) -> Result<()> {
         let path = request
             .payload
             .get("path")
@@ -1712,22 +1471,22 @@ impl SessionManager {
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         match self
             .docker_manager
-            .is_container_healthy(&request.session_id)
+            .is_container_healthy(&request.sandbox_id)
             .await
         {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "session is stopped".to_string())
+                    .fail_request(&request.id, "sandbox is deleted".to_string())
                     .await;
             }
         }
-        let full_path = format!("/session/{}", safe);
+        let full_path = format!("/sandbox/{}", safe);
         // Ensure it's a regular file
         let (stat_code, stat_out, _stat_err) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec![
                     "/usr/bin/stat".into(),
                     "-c".into(),
@@ -1750,7 +1509,7 @@ impl SessionManager {
         let (rm_code, _out, err) = self
             .docker_manager
             .exec_collect(
-                &request.session_id,
+                &request.sandbox_id,
                 vec!["/bin/rm".into(), "-f".into(), full_path.clone()],
             )
             .await?;

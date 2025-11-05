@@ -269,7 +269,7 @@ impl ParameterMapper for ContainerExecMapper {
         let exec_dir = args
             .get("workdir")
             .and_then(|v| v.as_str())
-            .unwrap_or("/session");
+            .unwrap_or("/sandbox");
 
         serde_json::json!({
             "exec_dir": exec_dir,

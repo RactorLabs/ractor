@@ -1,7 +1,4 @@
-// Session state constants
-pub const SESSION_STATE_INIT: &str = "init";
-pub const SESSION_STATE_IDLE: &str = "idle";
-pub const SESSION_STATE_BUSY: &str = "busy";
-pub const SESSION_STATE_STOPPED: &str = "stopped";
-
-// Message role constants removed; tasks represent full exchanges
+pub const SANDBOX_STATE_INIT: &str = "init";
+pub const SANDBOX_STATE_IDLE: &str = "idle";
+pub const SANDBOX_STATE_BUSY: &str = "busy";
+pub const SANDBOX_STATE_DELETED: &str = "deleted";

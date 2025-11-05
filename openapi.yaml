@@ -3,9 +3,9 @@ info:
   title: TaskSandbox API
   version: 0.5.3
   description: |
-    TaskSandbox is an infrastructure runtime for long-lived, stateful agent sessions.
+    TaskSandbox is an infrastructure runtime for long-lived, stateful agent sandboxes.
     This spec documents the core REST endpoints used by the Operator UI and the
-    session runtime.
+    sandbox runtime.
 servers:
   - url: http://localhost:9000/api/v0
     description: Local
@@ -22,7 +22,7 @@ tags:
   - name: Auth
   - name: Security
   - name: Operators
-  - name: Sessions
+  - name: Sandboxes
   - name: Tasks
   - name: Files
 
@@ -66,37 +66,37 @@ paths:
                 $ref: '#/components/schemas/LoginResponse'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
-  /published/sessions:
+  /published/sandboxes:
     get:
       tags: [Public]
-      summary: List published sessions
+      summary: List published sandboxes
       security: []
       responses:
         '200':
-          description: Published sessions
+          description: Published sandboxes
           content:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Session' }
+                items: { $ref: '#/components/schemas/Sandbox' }
 
-  /published/sessions/{id}:
+  /published/sandboxes/{id}:
     get:
       tags: [Public]
-      summary: Get published session by ID
+      summary: Get published sandbox by ID
       security: []
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
-          description: Published session
+          description: Published sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Session' }
+              schema: { $ref: '#/components/schemas/Sandbox' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   /auth:
@@ -297,10 +297,10 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /sessions:
+  /sandboxes:
     get:
-      tags: [Sessions]
-      summary: List sessions (admin all; others own)
+      tags: [Sandboxes]
+      summary: List sandboxes (admin all; others own)
       parameters:
         - in: query
           name: state
@@ -327,14 +327,14 @@ paths:
           schema: { type: integer, minimum: 0 }
       responses:
         '200':
-          description: Paginated sessions
+          description: Paginated sandboxes
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PaginatedSessions' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
-      tags: [Sessions]
-      summary: Start a new session
+      tags: [Sandboxes]
+      summary: Start a new sandbox
       requestBody:
         required: true
         content:
@@ -342,42 +342,42 @@ paths:
             schema: { $ref: '#/components/schemas/StartSessionRequest' }
       responses:
         '200':
-          description: Session started
+          description: Sandbox started
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Session' }
+              schema: { $ref: '#/components/schemas/Sandbox' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
 
-  /sessions/{id}:
+  /sandboxes/{id}:
     get:
-      tags: [Sessions]
-      summary: Get session by ID
+      tags: [Sandboxes]
+      summary: Get sandbox by ID
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
-          description: Session
+          description: Sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Session' }
+              schema: { $ref: '#/components/schemas/Sandbox' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     put:
-      tags: [Sessions]
-      summary: Update session metadata/timeouts
+      tags: [Sandboxes]
+      summary: Update sandbox metadata/timeouts
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -385,35 +385,35 @@ paths:
             schema: { $ref: '#/components/schemas/UpdateSessionRequest' }
       responses:
         '200':
-          description: Updated session
+          description: Updated sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Session' }
+              schema: { $ref: '#/components/schemas/Sandbox' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     delete:
-      tags: [Sessions]
-      summary: Delete session
+      tags: [Sandboxes]
+      summary: Delete sandbox
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '204': { description: Deleted }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  /sessions/{id}/state:
+  /sandboxes/{id}/state:
     put:
-      tags: [Sessions]
-      summary: Update session state (internal)
+      tags: [Sandboxes]
+      summary: Update sandbox state (internal)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -429,16 +429,16 @@ paths:
                 properties:
                   state: { type: string }
 
-  /sessions/{id}/busy:
+  /sandboxes/{id}/busy:
     post:
-      tags: [Sessions]
-      summary: Mark session busy (session container)
+      tags: [Sandboxes]
+      summary: Mark sandbox busy (sandbox container)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Busy state applied
@@ -450,16 +450,16 @@ paths:
                   success: { type: boolean }
                   state: { type: string }
 
-  /sessions/{id}/idle:
+  /sandboxes/{id}/idle:
     post:
-      tags: [Sessions]
-      summary: Mark session idle (session container)
+      tags: [Sandboxes]
+      summary: Mark sandbox idle (sandbox container)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Idle state applied
@@ -471,41 +471,16 @@ paths:
                   success: { type: boolean }
                   state: { type: string }
 
-/sessions/{id}/stop:
-    post:
-      tags: [Sessions]
-      summary: Stop session (destroy container; keep volume)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Session ID (UUID)
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/StopSessionRequest' }
-      responses:
-        '200':
-          description: Updated session
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Session' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /sessions/{id}/cancel:
+  /sandboxes/{id}/cancel:
     post:
       tags: [Tasks]
-      summary: Cancel latest in‑progress task and set session idle
+      summary: Cancel latest in‑progress task and set sandbox idle
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Cancellation result
@@ -515,71 +490,20 @@ paths:
                 type: object
                 properties:
                   status: { type: string }
-                  session: { type: string }
+                  sandbox: { type: string }
                   cancelled: { type: boolean }
-        # 404 is reserved for missing session; handler returns 200 with cancelled=false otherwise
+        # 404 is reserved for missing sandbox; handler returns 200 with cancelled=false otherwise
 
-/sessions/{id}/restart:
-    post:
-      tags: [Sessions]
-      summary: Restart session (recreate container)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Session ID (UUID)
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RestartSessionRequest' }
-      responses:
-        '200':
-          description: Updated session
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Session' }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /sessions/{id}/clone:
-    post:
-      tags: [Sessions]
-      summary: Clone a session into a new one
-      parameters:
-        - in: path
-          name: id
-          required: true
-          x-stainless-param: parent_id
-          schema: { type: string }
-          description: Session ID (UUID)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/CloneSessionRequest' }
-      responses:
-        '200':
-          description: New session
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Session' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /sessions/{id}/context:
+  /sandboxes/{id}/context:
     get:
-      tags: [Sessions]
+      tags: [Sandboxes]
       summary: Get context usage
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Usage
@@ -587,16 +511,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SessionContextUsage' }
 
-  /sessions/{id}/context/clear:
+  /sandboxes/{id}/context/clear:
     post:
-      tags: [Sessions]
+      tags: [Sandboxes]
       summary: Clear context (set new cutoff)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Updated usage
@@ -604,16 +528,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SessionContextUsage' }
 
-  /sessions/{id}/context/compact:
+  /sandboxes/{id}/context/compact:
     post:
-      tags: [Sessions]
+      tags: [Sandboxes]
       summary: Compact context (summarize)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Updated usage
@@ -621,16 +545,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SessionContextUsage' }
 
-  /sessions/{id}/context/usage:
+  /sandboxes/{id}/context/usage:
     post:
-      tags: [Sessions]
+      tags: [Sandboxes]
       summary: Report latest context length (tokens)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -651,16 +575,16 @@ paths:
                   success: { type: boolean }
                   last_context_length: { type: integer }
 
-  /sessions/{id}/publish:
+  /sandboxes/{id}/publish:
     post:
-      tags: [Sessions]
-      summary: Publish session content/env/code (as permitted)
+      tags: [Sandboxes]
+      summary: Publish sandbox content/env/code (as permitted)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -673,16 +597,16 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         # No 409 emitted by current implementation
 
-  /sessions/{id}/unpublish:
+  /sandboxes/{id}/unpublish:
     post:
-      tags: [Sessions]
-      summary: Unpublish session content
+      tags: [Sandboxes]
+      summary: Unpublish sandbox content
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200': { description: Unpublished }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -690,16 +614,16 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         # No 409 emitted by current implementation
 
-  /sessions/{id}/runtime:
+  /sandboxes/{id}/runtime:
     get:
-      tags: [Sessions]
+      tags: [Sandboxes]
       summary: Total runtime (seconds)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Runtime
@@ -708,20 +632,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  session_id: { type: string }
+                  sandbox_id: { type: string }
                   total_runtime_seconds: { type: integer }
-                  current_session_seconds: { type: integer }
+                  current_sandbox_seconds: { type: integer }
 
-  /sessions/{id}/tasks:
+  /sandboxes/{id}/tasks:
     get:
       tags: [Tasks]
-      summary: List tasks for a session
+      summary: List tasks for a sandbox
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: query
           name: limit
           schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
@@ -744,7 +668,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -759,7 +683,7 @@ paths:
         '504':
           description: Timed out waiting for completion (background=false)
 
-  /sessions/{id}/tasks/{task_id}:
+  /sandboxes/{id}/tasks/{task_id}:
     get:
       tags: [Tasks]
       summary: Get a task by id
@@ -768,7 +692,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: task_id
           required: true
@@ -789,7 +713,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: task_id
           required: true
@@ -807,16 +731,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TaskView' }
 
-  /sessions/{id}/tasks/count:
+  /sandboxes/{id}/tasks/count:
     get:
       tags: [Tasks]
-      summary: Count tasks for a session
+      summary: Count tasks for a sandbox
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
       responses:
         '200':
           description: Count
@@ -844,20 +768,20 @@ paths:
               schema: { $ref: '#/components/schemas/TaskView' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /sessions/{id}/files/read/{path}:
+  /sandboxes/{id}/files/read/{path}:
     get:
       tags: [Files]
-      summary: Read a file from session volume (<= 25MB)
+      summary: Read a file from sandbox volume (<= 25MB)
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: path
           required: true
-          description: Relative path under /session (no leading slash)
+          description: Relative path under /sandbox (no leading slash)
           schema: { type: string }
       responses:
         '200':
@@ -874,10 +798,10 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: Session is stopped }
+        '409': { description: Sandbox is deleted }
         '413': { description: File too large }
 
-  /sessions/{id}/files/metadata/{path}:
+  /sandboxes/{id}/files/metadata/{path}:
     get:
       tags: [Files]
       summary: File metadata
@@ -886,7 +810,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: path
           required: true
@@ -900,16 +824,16 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /sessions/{id}/files/list:
+  /sandboxes/{id}/files/list:
     get:
       tags: [Files]
-      summary: List session root directory
+      summary: List sandbox root directory
       parameters:
         - in: path
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: query
           name: offset
           schema: { type: integer, minimum: 0, default: 0 }
@@ -923,7 +847,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/FileList' }
 
-  /sessions/{id}/files/list/{path}:
+  /sandboxes/{id}/files/list/{path}:
     get:
       tags: [Files]
       summary: List directory
@@ -932,7 +856,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: path
           required: true
@@ -950,7 +874,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/FileList' }
 
-  /sessions/{id}/files/delete/{path}:
+  /sandboxes/{id}/files/delete/{path}:
     delete:
       tags: [Files]
       summary: Delete a regular file
@@ -959,7 +883,7 @@ paths:
           name: id
           required: true
           schema: { type: string }
-          description: Session ID (UUID)
+          description: Sandbox ID (UUID)
         - in: path
           name: path
           required: true
@@ -1050,17 +974,17 @@ components:
           type: string
           enum: [user, admin]
 
-    Session:
+    Sandbox:
       type: object
       properties:
-        id: { type: string, description: 'Session ID (UUID primary key)' }
+        id: { type: string, description: 'Sandbox ID (UUID primary key)' }
         created_by: { type: string }
         state:
           type: string
-          enum: [init, idle, busy, stopped]
-          description: Session lifecycle state
+          enum: [init, idle, busy, deleted]
+          description: Sandbox lifecycle state
         description: { type: string, nullable: true }
-        parent_session_id: { type: string, nullable: true }
+        parent_sandbox_id: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         last_activity_at: { type: string, format: date-time, nullable: true }
         metadata: { type: object }
@@ -1083,7 +1007,7 @@ components:
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Session' }
+          items: { $ref: '#/components/schemas/Sandbox' }
         total: { type: integer }
         limit: { type: integer }
         offset: { type: integer }
@@ -1124,17 +1048,8 @@ components:
       properties:
         state:
           type: string
-          description: New session state
-          enum: [init, idle, busy, stopped]
-
-    CloneSessionRequest:
-      type: object
-      properties:
-        metadata: { type: object, nullable: true }
-        code: { type: boolean, default: true }
-        env: { type: boolean, default: true }
-        content: { type: boolean, default: true }
-        prompt: { type: string, nullable: true }
+          description: New sandbox state
+          enum: [init, idle, busy, deleted]
 
     PublishSessionRequest:
       type: object
@@ -1143,21 +1058,10 @@ components:
         env: { type: boolean, default: true }
         content: { type: boolean, default: true }
 
-    RestartSessionRequest:
-      type: object
-      properties:
-        prompt: { type: string, nullable: true }
-
-    StopSessionRequest:
-      type: object
-      properties:
-        delay_seconds: { type: integer, minimum: 5, default: 5 }
-        note: { type: string, nullable: true }
-
     SessionContextUsage:
       type: object
       properties:
-        session: { type: string }
+        sandbox: { type: string }
         soft_limit_tokens: { type: integer }
         used_tokens_estimated: { type: integer }
         used_percent: { type: number, format: double }
@@ -1194,7 +1098,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        session_id: { type: string }
+        sandbox_id: { type: string }
         status: { type: string }
         input_content:
           type: array

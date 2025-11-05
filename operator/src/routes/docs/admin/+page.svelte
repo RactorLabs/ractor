@@ -195,13 +195,13 @@
           <Card class="mb-3">
             <div class="card-header fw-bold">Response Object</div>
             <div class="card-body p-3 p-sm-4 small">
-              <div class="mb-2">Standard object used by session response endpoints.</div>
+              <div class="mb-2">Standard object used by sandbox response endpoints.</div>
               <div class="table-responsive">
                 <table class="table table-sm table-bordered mb-2">
                   <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
                   <tbody>
                     <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
-                    <tr><td class="font-monospace">session_id</td><td>string</td><td>Session ID (UUID)</td></tr>
+                    <tr><td class="font-monospace">sandbox_id</td><td>string</td><td>Sandbox ID (UUID)</td></tr>
                     <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span>, <span class="font-monospace">cancelled</span></td></tr>
                     <tr><td class="font-monospace">input_content</td><td>array</td><td>User input content items (preferred shape uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">text</span> accepted)</td></tr>
                     <tr><td class="font-monospace">output_content</td><td>array</td><td>Final content items extracted from <span class="font-monospace">segments</span></td></tr>

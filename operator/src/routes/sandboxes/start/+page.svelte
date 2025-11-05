@@ -6,9 +6,8 @@
   import { apiFetch } from '$lib/api/client.js';
   import { isAuthenticated } from '$lib/auth.js';
 
-  setPageTitle('Start Session');
-let stopTimeoutSeconds = 300; // default 5 minutes
-let archiveTimeoutSeconds = 86400; // default 24 hours
+  setPageTitle('Start Sandbox');
+let idleTimeoutSeconds = 300; // default 5 minutes
   let metadataText = '{}';
   // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
   let tagsInput = '';
@@ -61,22 +60,21 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
         description: description?.trim() ? description : null,
         metadata,
         tags: parseTags(),
-        stop_timeout_seconds: Number(stopTimeoutSeconds) || 300,
-        archive_timeout_seconds: Number(archiveTimeoutSeconds) || 86400,
+        idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
         env: asEnvMap()
       };
 
-      const res = await apiFetch('/sessions', { method: 'POST', body: JSON.stringify(body) });
+      const res = await apiFetch('/sandboxes', { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) {
         const msg = res?.data?.message || res?.data?.error || `Create failed (HTTP ${res.status})`;
         throw new Error(msg);
       }
-      // Navigate to the started session page using the session ID from the response
-      const newSession = res.data;
-      goto(`/sessions/${encodeURIComponent(newSession.id)}`);
+      // Navigate to the started sandbox page using the sandbox ID from the response
+      const newSandbox = res.data;
+      goto(`/sandboxes/${encodeURIComponent(newSandbox.id)}`);
     } catch (e) {
       error = e.message || String(e);
     } finally {
@@ -92,7 +90,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
   <div class="col-xl-12">
     <Card class="mb-3">
       <div class="card-header d-flex align-items-center">
-        <div class="fw-bold fs-20px">Start Session</div>
+        <div class="fw-bold fs-20px">Start Sandbox</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
           <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
@@ -110,7 +108,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>
-              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this session" />
+              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this sandbox" />
             </div>
             
 
@@ -127,18 +125,18 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
                   }
                 }}
               ></textarea>
-              <div class="form-text">Press Ctrl+Enter to start the session.</div>
+              <div class="form-text">Press Ctrl+Enter to start the sandbox.</div>
             </div>
 
             <div class="col-12 col-md-6">
               <label class="form-label" for="instructions">Starting System Instruction (Markdown)</label>
               <textarea id="instructions" class="form-control font-monospace" rows="6" bind:value={instructions}></textarea>
-              <div class="form-text">You can change these later by directly asking the session to update its instructions.</div>
+              <div class="form-text">You can change these later by directly asking the sandbox to update its instructions.</div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label" for="setup">Starting Setup Script (bash)</label>
               <textarea id="setup" class="form-control font-monospace" rows="6" bind:value={setup}></textarea>
-              <div class="form-text">You can modify this later by asking the session to update its setup.sh.</div>
+              <div class="form-text">You can modify this later by asking the sandbox to update its setup.sh.</div>
             </div>
 
             <div class="col-12">
@@ -158,16 +156,11 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
               </div>
             </div>
 
-            <!-- Move Timeouts and Tags after Environment Variables, before Metadata -->
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="stop-timeout">Stop Timeout (seconds)</label>
-              <input id="stop-timeout" type="number" min="1" class="form-control" bind:value={stopTimeoutSeconds} />
+            <!-- Timeout and Tags -->
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
               <div class="form-text">Stop after inactivity (default 300).</div>
-            </div>
-            <div class="col-12 col-md-3">
-              <label class="form-label" for="archive-timeout">Archive Timeout (seconds)</label>
-              <input id="archive-timeout" type="number" min="0" class="form-control" bind:value={archiveTimeoutSeconds} />
-              <div class="form-text">Reserved for future archival workflows (default 86400).</div>
             </div>
 
             <div class="col-12">
@@ -184,7 +177,7 @@ let archiveTimeoutSeconds = 86400; // default 24 hours
 
             <div class="col-12 d-flex gap-2">
               <button type="button" class="btn btn-outline-theme" on:click|preventDefault={submit} disabled={loading}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Submitting…{:else}Submit{/if}</button>
-              <a class="btn btn-outline-secondary" href="/sessions">Cancel</a>
+              <a class="btn btn-outline-secondary" href="/sandboxes">Cancel</a>
             </div>
           </div>
         </form>

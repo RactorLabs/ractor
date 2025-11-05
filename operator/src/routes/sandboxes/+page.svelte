@@ -6,11 +6,11 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
 
-  setPageTitle('Sessions');
+  setPageTitle('Sandboxes');
 
   let loading = true;
   let error = null;
-  let sessions = [];
+  let sandboxes = [];
   // Filters + pagination
   let q = '';
   let stateFilter = '';
@@ -28,6 +28,7 @@
     if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
     if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
     if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
+    if (s === 'deleted') return 'badge rounded-pill bg-transparent border border-danger text-danger';
     return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
   function stateColorClass(state) {
@@ -35,12 +36,13 @@
     if (s === 'idle') return 'bg-success border-success';
     if (s === 'busy') return 'bg-warning border-warning';
     if (s === 'init') return 'bg-secondary border-secondary';
+    if (s === 'deleted') return 'bg-danger border-danger';
     return 'bg-secondary border-secondary';
   }
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'stopped') return 'bi bi-stop-circle';
+    if (s === 'deleted') return 'bi bi-trash';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -62,16 +64,16 @@ import { getHostUrl } from '$lib/branding.js';
     return params.toString();
   }
 
-  async function fetchSessions() {
+  async function fetchSandboxes() {
     const qs = buildQuery();
-    const res = await apiFetch(`/sessions?${qs}`);
+    const res = await apiFetch(`/sandboxes?${qs}`);
     if (!res.ok) {
-      error = res?.data?.message || `Failed to load sessions (HTTP ${res.status})`;
+      error = res?.data?.message || `Failed to load sandboxes (HTTP ${res.status})`;
       loading = false;
       return;
     }
     const data = res.data || {};
-    sessions = Array.isArray(data.items) ? data.items : [];
+    sandboxes = Array.isArray(data.items) ? data.items : [];
     total = Number(data.total || 0);
     limit = Number(data.limit || limit);
     const offset = Number(data.offset || 0);
@@ -79,7 +81,7 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function stopSession(session) {
+  async function stopSandbox(sandbox) {
     let delaySeconds = 5;
     try {
       const input = prompt('Stop in how many seconds? (min 5)', '5');
@@ -88,31 +90,19 @@ import { getHostUrl } from '$lib/branding.js';
         if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
       }
     } catch (_) {}
-    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
+    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
     if (!res.ok) { error = res?.data?.message || 'Stop failed'; return; }
     // Give the controller time to perform delayed stop before refreshing
     await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
-    await refresh();
+    await fetchSandboxes();
   }
-  async function restartSession(session) {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/restart`, { method: 'POST', body: JSON.stringify({}) });
-    if (!res.ok) { error = res?.data?.message || 'Restart failed'; return; }
-    await refresh();
-  }
-  async function cloneSession(session) {
-    const ok = confirm(`Clone session '${session.id || ''}'?`);
+
+  async function deleteSandbox(sandbox) {
+    const ok = confirm(`Delete sandbox '${sandbox.id || ''}'? This cannot be undone.`);
     if (!ok) return;
-    const body = { code: true, env: true, content: true };
-    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}/clone`, { method: 'POST', body: JSON.stringify(body) });
-    if (!res.ok) { error = res?.data?.message || 'Clone failed'; return; }
-    await refresh();
-  }
-  async function deleteSession(session) {
-    const ok = confirm(`Delete session '${session.id || ''}'? This cannot be undone.`);
-    if (!ok) return;
-    const res = await apiFetch(`/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' });
+    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
-    await refresh();
+    await fetchSandboxes();
   }
 
   let pollHandle = null;
@@ -120,7 +110,7 @@ import { getHostUrl } from '$lib/branding.js';
     stopPolling();
     const filtersActive = (q && q.trim()) || (tagsText && tagsText.trim()) || (stateFilter && stateFilter.trim());
     if (!filtersActive && pageNum === 1) {
-      pollHandle = setInterval(async () => { try { await fetchSessions(); } catch (_) {} }, 3000);
+      pollHandle = setInterval(async () => { try { await fetchSandboxes(); } catch (_) {} }, 3000);
     }
   }
   function stopPolling() {
@@ -130,7 +120,7 @@ import { getHostUrl } from '$lib/branding.js';
   function syncUrl() {
     try {
       const qs = buildQuery();
-      const url = qs ? `/sessions?${qs}` : '/sessions';
+      const url = qs ? `/sandboxes?${qs}` : '/sandboxes';
       goto(url, { replaceState: true, keepfocus: true, noScroll: true });
     } catch (_) {}
   }
@@ -139,7 +129,7 @@ import { getHostUrl } from '$lib/branding.js';
     pageNum = 1;
     syncUrl();
     loading = true;
-    await fetchSessions();
+    await fetchSandboxes();
     loading = false;
     startPolling();
   }
@@ -160,7 +150,7 @@ import { getHostUrl } from '$lib/branding.js';
       limit = Number(sp.get('limit') || 30);
       pageNum = Number(sp.get('page') || 1);
     } catch (_) {}
-    await fetchSessions();
+    await fetchSandboxes();
     loading = false;
     startPolling();
   });
@@ -180,11 +170,11 @@ import { getHostUrl } from '$lib/branding.js';
   </div>
 {/if}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-  <div class="fw-bold fs-20px">Sessions</div>
+  <div class="fw-bold fs-20px">Sandboxes</div>
   <div class="ms-auto d-flex align-items-center gap-2">
-    <a href="/sessions/start" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Start Session</a>
+    <a href="/sandboxes/start" class="btn btn-outline-theme btn-sm"><i class="bi bi-plus me-1"></i>Start Sandbox</a>
   </div>
-  
+
   <!-- Filters row -->
   <div class="w-100"></div>
   <div class="w-100 mb-2">
@@ -203,7 +193,7 @@ import { getHostUrl } from '$lib/branding.js';
             <option value="init">init</option>
             <option value="idle">idle</option>
             <option value="busy">busy</option>
-            <option value="stopped">stopped</option>
+            <option value="deleted">deleted</option>
           </select>
         </div>
       </div>
@@ -232,31 +222,30 @@ import { getHostUrl } from '$lib/branding.js';
           <div class="d-flex align-items-center justify-content-center" style="min-height: 30vh;">
             <div class="text-center text-body text-opacity-75">
               <div class="spinner-border text-theme mb-3"></div>
-              <div>Loading sessions…</div>
+              <div>Loading sandboxes…</div>
             </div>
           </div>
         {:else if error}
           <div class="alert alert-danger small">{error}</div>
-        {:else if !sessions || sessions.length === 0}
-          <div class="text-body text-opacity-75">No sessions found.</div>
+        {:else if !sandboxes || sandboxes.length === 0}
+          <div class="text-body text-opacity-75">No sandboxes found.</div>
           <div class="mt-3">
-            <a href="/sessions/start" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Start your first session</a>
+            <a href="/sandboxes/start" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Start your first sandbox</a>
           </div>
         {:else}
           <div class="row g-3">
-            {#each sessions as a}
+            {#each sandboxes as a}
               <div class="col-12 col-md-6">
                 <Card class="h-100">
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sessions/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
+                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
                     </div>
                     <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
                     {#if isAdmin}
                       <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                     {/if}
-                    <!-- Public URL in main card list -->
-                    
+
                     <div class="mt-2 d-flex flex-wrap gap-1">
                       {#if Array.isArray(a.tags) && a.tags.length}
                         {#each a.tags as t}
@@ -266,7 +255,7 @@ import { getHostUrl } from '$lib/branding.js';
                         <span class="text-body-secondary small">No tags</span>
                       {/if}
                     </div>
-                    <!-- In-card actions: status on left, buttons on right; no Open button -->
+                    <!-- In-card actions: status on left, buttons on right -->
                     <div class="mt-2 d-flex align-items-center flex-wrap">
                       <div class="d-flex align-items-center gap-2">
                         <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
@@ -274,13 +263,8 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSession(a)} aria-label="Stop session">
+                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSandbox(a)} aria-label="Stop sandbox">
                             <i class="bi bi-stop-circle me-1"></i><span>Stop</span>
-                          </button>
-                        {/if}
-                        {#if String(a.state||'').toLowerCase() === 'stopped'}
-                          <button class="btn btn-outline-success btn-sm" on:click={() => restartSession(a)} aria-label="Restart session">
-                            <i class="bi bi-arrow-repeat me-1"></i><span>Restart</span>
                           </button>
                         {/if}
                         <div class="dropdown">
@@ -288,10 +272,9 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => cloneSession(a)}><i class="fa fa-clone me-2"></i>Clone</button></li>
-                            <li><button class="dropdown-item" on:click={() => goto('/sessions/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteSession(a)}><i class="bi bi-trash me-2"></i>Delete</button></li>
+                            <li><button class="dropdown-item text-danger" on:click={() => deleteSandbox(a)}><i class="bi bi-trash me-2"></i>Delete</button></li>
                           </ul>
                         </div>
                       </div>
@@ -323,15 +306,15 @@ import { getHostUrl } from '$lib/branding.js';
           </div>
           {#if pages > 1}
           <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
-            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>Prev</button>
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>Prev</button>
             {#each Array(pages) as _, idx}
               {#if Math.abs((idx+1) - pageNum) <= 2 || idx === 0 || idx+1 === pages}
-                <button class={`btn btn-sm ${idx+1===pageNum ? 'btn-theme' : 'btn-outline-secondary'}`} on:click={async () => { pageNum = idx+1; syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>{idx+1}</button>
+                <button class={`btn btn-sm ${idx+1===pageNum ? 'btn-theme' : 'btn-outline-secondary'}`} on:click={async () => { pageNum = idx+1; syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>{idx+1}</button>
               {:else if Math.abs((idx+1) - pageNum) === 3}
                 <span class="px-1">…</span>
               {/if}
             {/each}
-            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum >= pages} on:click={async () => { pageNum = Math.min(pages, pageNum+1); syncUrl(); loading = true; await fetchSessions(); loading = false; startPolling(); }}>Next</button>
+            <button class="btn btn-sm btn-outline-secondary" disabled={pageNum >= pages} on:click={async () => { pageNum = Math.min(pages, pageNum+1); syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>Next</button>
           </div>
           {/if}
         {/if}

@@ -29,6 +29,6 @@ Be sure to include a title and clear description, as much relevant information a
 
 ### Branch, Commit, and Pull Request Naming
 
-- **Branches** should follow the pattern `type/short-description` (e.g., `feat/session-timeout`, `fix/api-retry`) and use short, hyphenated descriptions that reflect the main change.
+- **Branches** should follow the pattern `type/short-description` (e.g., `feat/sandbox-timeout`, `fix/api-retry`) and use short, hyphenated descriptions that reflect the main change.
 - **Commits** must use the same conventional prefixes, keep the subject under ~50 characters, and avoid emojis or AI-assistant references; add context in the body when necessary. Examples: `fix: handle mysql reconnect`, `docs: clarify install script usage`, `chore: bump cli dependency`.
-- **Pull requests** should also use conventional commit prefixes in the title (e.g., `feat: add session timeout configuration`), reference related issues with GitHub’s `Fixes #123` syntax, and include a concise test plan.
+- **Pull requests** should also use conventional commit prefixes in the title (e.g., `feat: add sandbox timeout configuration`), reference related issues with GitHub’s `Fixes #123` syntax, and include a concise test plan.

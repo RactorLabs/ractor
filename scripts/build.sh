@@ -47,10 +47,10 @@ usage() {
   echo "Components:"
   echo "  api         Build the api image"
   echo "  controller  Build the controller image"
-  echo "  session       Build the session image"
+  echo "  sandbox     Build the sandbox image"
   echo "  operator    Build the operator UI image"
   echo "  gateway     Build the gateway image"
-  echo "  all         Build all components (api, session, controller, operator, gateway)"
+  echo "  all         Build all components (api, sandbox, controller, operator, gateway)"
   echo ""
   echo "Options:"
   echo "  -n, --no-cache          Build without cache"
@@ -93,9 +93,9 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("all")
 fi
 
-# Expand 'all' to actual components (ensure session precedes controller)
+# Expand 'all' to actual components (ensure sandbox precedes controller)
 if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
-  COMPONENTS=("api" "session" "controller" "operator" "gateway")
+  COMPONENTS=("api" "sandbox" "controller" "operator" "gateway")
 fi
 
 print_status "Building TaskSandbox Docker images"
@@ -143,9 +143,9 @@ for component in "${COMPONENTS[@]}"; do
     image_name="tsbx_controller:${TAG}"
     dockerfile="Dockerfile.controller"
     ;;
-  session)
-    image_name="tsbx_session:${TAG}"
-    dockerfile="Dockerfile.session"
+  sandbox)
+    image_name="tsbx_sandbox:${TAG}"
+    dockerfile="Dockerfile.sandbox"
     ;;
   operator)
     image_name="tsbx_operator:${TAG}"
@@ -207,7 +207,7 @@ echo ""
 print_status "Built images:"
 for component in "${COMPONENTS[@]}"; do
   case $component in
-  api | controller | session | operator | gateway)
+  api | controller | sandbox | operator | gateway)
     echo "  tsbx_${component}:${TAG}"
     ;;
   esac

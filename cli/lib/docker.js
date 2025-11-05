@@ -9,7 +9,7 @@ class DockerManager {
       mysql: 'mysql:8.0',
       api: 'registry.digitalocean.com/tsbx/tsbx_api:latest',
       controller: 'registry.digitalocean.com/tsbx/tsbx_controller:latest',
-      session: 'registry.digitalocean.com/tsbx/tsbx_session:latest',
+      sandbox: 'registry.digitalocean.com/tsbx/tsbx_sandbox:latest',
       operator: 'registry.digitalocean.com/tsbx/tsbx_operator:latest',
       gateway: 'registry.digitalocean.com/tsbx/tsbx_gateway:latest'
     };
@@ -91,7 +91,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'ollama_data', 'tsbx_api_data', 'tsbx_operator_data', 'tsbx_controller_data']) {
+    for (const volume of ['mysql_data', 'ollama_data', 'tsbx_snapshots_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -123,6 +123,7 @@ class DockerManager {
           '--network', 'tsbx_network',
           '-p', '3307:3306',
           '-v', 'mysql_data:/var/lib/mysql',
+          '--tmpfs', '/tmp:rw,noexec,nosuid,size=256m',
           '-e', 'MYSQL_ROOT_PASSWORD=root',
           '-e', 'MYSQL_DATABASE=tsbx',
           '-e', 'MYSQL_USER=tsbx',
@@ -132,14 +133,19 @@ class DockerManager {
           '--health-timeout', '5s',
           '--health-retries', '5',
           this.images.mysql,
-          // Persist logs into data volume
-          '--log-error=/var/lib/mysql/mysql-error.log',
-          '--slow_query_log=ON',
-          '--long_query_time=2',
-          '--slow_query_log_file=/var/lib/mysql/mysql-slow.log',
+          // Basic configuration
           '--default-authentication-plugin=mysql_native_password',
           '--collation-server=utf8mb4_unicode_ci',
-          '--character-set-server=utf8mb4'
+          '--character-set-server=utf8mb4',
+          '--skip-name-resolve',
+          // Performance optimizations for local development
+          '--innodb_flush_log_at_trx_commit=2',
+          '--innodb_flush_method=O_DIRECT',
+          '--innodb_doublewrite=0',
+          '--performance_schema=OFF',
+          '--slow_query_log=OFF',
+          // Logging
+          '--log-error=/var/lib/mysql/mysql-error.log'
         ]);
         
         // Wait for MySQL to be healthy
@@ -151,7 +157,6 @@ class DockerManager {
           'run', '-d',
           '--name', 'tsbx_operator',
           '--network', 'tsbx_network',
-          '-v', 'tsbx_operator_data:/app/logs',
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           this.images.operator
@@ -176,7 +181,6 @@ class DockerManager {
           '--name', 'tsbx_api',
           '--network', 'tsbx_network',
           '-p', '9000:9000',
-          '-v', 'tsbx_api_data:/app/logs',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
@@ -190,16 +194,16 @@ class DockerManager {
           '--name', 'tsbx_controller',
           '--network', 'tsbx_network',
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
-          '-v', 'tsbx_controller_data:/app/logs',
+          '-v', 'tsbx_snapshots_data:/data/snapshots',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
-          '-e', `SESSION_IMAGE=${this.images.session}`,
-          '-e', 'SESSION_CPU_LIMIT=0.5',
-          '-e', 'SESSION_MEMORY_LIMIT=536870912',
-          '-e', 'SESSION_DISK_LIMIT=1073741824',
+          '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,
+          '-e', 'SANDBOX_CPU_LIMIT=0.5',
+          '-e', 'SANDBOX_MEMORY_LIMIT=536870912',
+          '-e', 'SANDBOX_DISK_LIMIT=1073741824',
           '-e', 'RUST_LOG=info',
           this.images.controller
         ]);
@@ -251,7 +255,7 @@ class DockerManager {
       }
     }
 
-    // Clean up session containers if requested
+    // Clean up sandbox containers if requested
     if (cleanup) {
       await this.cleanupContainers();
     }
@@ -291,7 +295,7 @@ class DockerManager {
         console.log(`✅ Successfully pulled ${image}`);
       } catch (error) {
         console.warn(`⚠️  Warning: Failed to pull ${image}: ${error.message}`);
-        if (component === 'session') {
+        if (component === 'sandbox') {
           console.warn(`   The controller will attempt to pull this image when needed.`);
         }
       }
@@ -314,10 +318,10 @@ class DockerManager {
     return this.checkDocker();
   }
 
-  // Clean up session containers
+  // Clean up sandbox containers
   async cleanupContainers() {
     try {
-      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=tsbx_session_'], { silent: true });
+      const result = await this.execDocker(['ps', '-a', '-q', '--filter', 'name=tsbx_sandbox_'], { silent: true });
       
       if (result.stdout.trim()) {
         const containerIds = result.stdout.trim().split('\n').filter(id => id);

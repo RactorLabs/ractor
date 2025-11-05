@@ -163,7 +163,7 @@ echo "  tsbx --help           # Show help"
 echo "  tsbx start            # Start services"
 echo "  tsbx auth login       # Authenticate"
 echo "  tsbx api version      # Check API"
-echo "  tsbx session start      # Start interactive session"
+echo "  tsbx sandbox start    # Start interactive sandbox"
 
 # Show installed version
 package_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")

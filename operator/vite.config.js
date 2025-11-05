@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     // Allow custom hostnames when the app is accessed behind a domain
     allowedHosts: [
-      'siva.remotesession.com',
+      'siva.remotesandbox.com',
       'localhost',
       '127.0.0.1'
     ]

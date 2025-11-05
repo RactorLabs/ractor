@@ -14,11 +14,11 @@ pub mod permissions {
     pub const OPERATOR_UPDATE: (&str, &str, &str) = ("api", "operators", "update");
     pub const OPERATOR_DELETE: (&str, &str, &str) = ("api", "operators", "delete");
 
-    pub const SESSION_LIST: (&str, &str, &str) = ("api", "sessions", "list");
-    pub const SESSION_GET: (&str, &str, &str) = ("api", "sessions", "get");
-    pub const SESSION_CREATE: (&str, &str, &str) = ("api", "sessions", "create");
-    pub const SESSION_UPDATE: (&str, &str, &str) = ("api", "sessions", "update");
-    pub const SESSION_DELETE: (&str, &str, &str) = ("api", "sessions", "delete");
+    pub const SANDBOX_LIST: (&str, &str, &str) = ("api", "sandboxes", "list");
+    pub const SANDBOX_GET: (&str, &str, &str) = ("api", "sandboxes", "get");
+    pub const SANDBOX_CREATE: (&str, &str, &str) = ("api", "sandboxes", "create");
+    pub const SANDBOX_UPDATE: (&str, &str, &str) = ("api", "sandboxes", "update");
+    pub const SANDBOX_DELETE: (&str, &str, &str) = ("api", "sandboxes", "delete");
 }
 
 pub async fn check_api_permission(

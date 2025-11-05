@@ -24,20 +24,20 @@ module.exports = (program) => {
     .description('Attempt to repair common Docker/env issues for TaskSandbox')
     .option('--pull', 'Pull TaskSandbox Docker images')
     .option('--prune', 'Prune dangling images/cache after cleanup')
-    .option('--sessions', 'Also force-remove all tsbx session containers')
+    .option('--sandboxes', 'Also force-remove all tsbx sandbox containers')
     .option('--link', 'Run ./scripts/link.sh if present (dev)')
     .addHelpText('after', '\n' +
       'This command replaces ad-hoc setup.sh steps by applying safe host-side fixes.\n' +
       '\nActions performed:\n' +
       '  • Validate Docker availability\n' +
       '  • Ensure network/volumes exist\n' +
-      '  • Remove exited tsbx_* containers (optionally all sessions)\n' +
+      '  • Remove exited tsbx_* containers (optionally all sandboxes)\n' +
       '  • Optional: pull images, prune caches\n' +
       '  • Quick GPU accessibility test\n' +
       '\nExamples:\n' +
       '  $ tsbx fix\n' +
       '  $ tsbx fix --pull\n' +
-      '  $ tsbx fix --prune --sessions\n' +
+      '  $ tsbx fix --prune --sandboxes\n' +
       '  $ tsbx fix --link\n')
     .action(async (options) => {
       try {
@@ -64,7 +64,7 @@ module.exports = (program) => {
 
         // 3) Ensure volumes
         display.info('[3/6] Ensuring required volumes exist...');
-        const volumes = ['mysql_data','ollama_data','tsbx_api_data','tsbx_operator_data','tsbx_controller_data'];
+        const volumes = ['mysql_data','ollama_data','tsbx_snapshots_data'];
         for (const v of volumes) {
           try {
             await docker.execDocker(['volume','inspect', v], { silent: true });
@@ -89,15 +89,15 @@ module.exports = (program) => {
           display.warning('Could not list/remove exited containers: ' + e.message);
         }
 
-        // Optional: remove ALL session containers
-        if (options.sessions) {
-          display.info('Removing ALL tsbx session containers (force)...');
+        // Optional: remove ALL sandbox containers
+        if (options.sandboxes) {
+          display.info('Removing ALL tsbx sandbox containers (force)...');
           try {
-            const r = await docker.execDocker(['ps','-a','-q','--filter','name=tsbx_session_'], { silent: true });
+            const r = await docker.execDocker(['ps','-a','-q','--filter','name=tsbx_sandbox_'], { silent: true });
             const ids = (r.stdout || '').trim().split('\n').filter(Boolean);
-            if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} session containers`); }
-            else { display.success('No session containers found'); }
-          } catch (e) { display.warning('Session cleanup warning: ' + e.message); }
+            if (ids.length) { try { await docker.execDocker(['rm','-f', ...ids], { silent: true }); } catch (_) {} display.success(`Removed ${ids.length} sandbox containers`); }
+            else { display.success('No sandbox containers found'); }
+          } catch (e) { display.warning('Sandbox cleanup warning: ' + e.message); }
         }
 
         // 5) Optional: pull images

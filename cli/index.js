@@ -20,7 +20,7 @@ const program = new Command();
 
 program
   .name('tsbx')
-  .description('Remote Sessionic Work Orchestrator - CLI for Computer use sessions')
+  .description('Remote Sandbox Work Orchestrator - CLI for Computer use sandboxes')
   .version(pkg.version, '-v, --version', 'output the version number');
 
 // Show help automatically after errors and suggestions for mistyped commands

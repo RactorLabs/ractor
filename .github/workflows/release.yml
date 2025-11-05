@@ -77,7 +77,7 @@ jobs:
           - **Docker Images (DOCR)**:
             - \`registry.digitalocean.com/tsbx/tsbx_api:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/tsbx/tsbx_controller:${{ steps.get_version.outputs.VERSION }}\`
-            - \`registry.digitalocean.com/tsbx/tsbx_session:${{ steps.get_version.outputs.VERSION }}\`
+            - \`registry.digitalocean.com/tsbx/tsbx_sandbox:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/tsbx/tsbx_operator:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/tsbx/tsbx_content:${{ steps.get_version.outputs.VERSION }}\`
             - \`registry.digitalocean.com/tsbx/tsbx_gateway:${{ steps.get_version.outputs.VERSION }}\`

@@ -4,11 +4,11 @@ use serde_json::Value;
 use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct SessionTask {
+pub struct SandboxTask {
     pub id: String,
-    pub session_id: String,
+    pub sandbox_id: String,
     pub created_by: String,
-    pub status: String, // pending | processing | completed | failed | cancelled
+    pub status: String,
     pub input: serde_json::Value,
     pub output: serde_json::Value,
     pub timeout_seconds: Option<i32>,
@@ -19,11 +19,11 @@ pub struct SessionTask {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateTaskRequest {
-    pub input: serde_json::Value, // { content: [{ type: 'text', content: string }] }
+    pub input: serde_json::Value,
     #[serde(default)]
-    pub background: Option<bool>, // default true; when false, API blocks until terminal
+    pub background: Option<bool>,
     #[serde(default)]
-    pub timeout_seconds: Option<i32>, // per-task auto-timeout; None disables
+    pub timeout_seconds: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct UpdateTaskRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {
     pub id: String,
-    pub session_id: String,
+    pub sandbox_id: String,
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<Value>,
@@ -55,34 +55,32 @@ pub struct TaskView {
     pub updated_at: String,
 }
 
-impl SessionTask {
+impl SandboxTask {
     pub async fn create(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        sandbox_id: &str,
         created_by: &str,
         req: CreateTaskRequest,
-    ) -> Result<SessionTask, sqlx::Error> {
+    ) -> Result<SandboxTask, sqlx::Error> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
         let status = "pending".to_string();
         let timeout_seconds = req.timeout_seconds.filter(|v| *v > 0);
         let timeout_at = timeout_seconds.map(|secs| now + chrono::Duration::seconds(secs as i64));
-        // Initialize output with empty structure
         let initial_output = serde_json::json!({
             "text": "",
             "items": []
         });
-        // sqlx JSON binding wants Value; already ok
 
         sqlx::query(
             r#"
-            INSERT INTO session_tasks (id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
-        .bind(session_id)
+        .bind(sandbox_id)
         .bind(created_by)
         .bind(&status)
         .bind(&req.input)
@@ -94,9 +92,9 @@ impl SessionTask {
         .execute(pool)
         .await?;
 
-        Ok(SessionTask {
+        Ok(SandboxTask {
             id,
-            session_id: session_id.to_string(),
+            sandbox_id: sandbox_id.to_string(),
             created_by: created_by.to_string(),
             status,
             input: req.input,
@@ -108,38 +106,38 @@ impl SessionTask {
         })
     }
 
-    pub async fn find_by_session(
+    pub async fn find_by_sandbox(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        sandbox_id: &str,
         limit: Option<i64>,
         offset: Option<i64>,
-    ) -> Result<Vec<SessionTask>, sqlx::Error> {
+    ) -> Result<Vec<SandboxTask>, sqlx::Error> {
         let limit = limit.unwrap_or(100).min(1000);
         let offset = offset.unwrap_or(0);
-        sqlx::query_as::<_, SessionTask>(
+        sqlx::query_as::<_, SandboxTask>(
             r#"
-            SELECT id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
-            FROM session_tasks
-            WHERE session_id = ?
+            SELECT id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
+            FROM sandbox_tasks
+            WHERE sandbox_id = ?
             ORDER BY created_at ASC, id ASC
             LIMIT ? OFFSET ?
             "#,
         )
-        .bind(session_id)
+        .bind(sandbox_id)
         .bind(limit)
         .bind(offset)
         .fetch_all(pool)
         .await
     }
 
-    pub async fn count_by_session(
+    pub async fn count_by_sandbox(
         pool: &sqlx::MySqlPool,
-        session_id: &str,
+        sandbox_id: &str,
     ) -> Result<i64, sqlx::Error> {
         let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM session_tasks WHERE session_id = ?",
+            "SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ?",
         )
-        .bind(session_id)
+        .bind(sandbox_id)
         .fetch_one(pool)
         .await?;
         Ok(result)
@@ -148,9 +146,9 @@ impl SessionTask {
     pub async fn find_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
-    ) -> Result<Option<SessionTask>, sqlx::Error> {
-        sqlx::query_as::<_, SessionTask>(
-            r#"SELECT id, session_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM session_tasks WHERE id = ?"#
+    ) -> Result<Option<SandboxTask>, sqlx::Error> {
+        sqlx::query_as::<_, SandboxTask>(
+            r#"SELECT id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM sandbox_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -161,8 +159,7 @@ impl SessionTask {
         pool: &sqlx::MySqlPool,
         id: &str,
         req: UpdateTaskRequest,
-    ) -> Result<SessionTask, sqlx::Error> {
-        // Load existing
+    ) -> Result<SandboxTask, sqlx::Error> {
         let mut task = Self::find_by_id(pool, id)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
@@ -174,19 +171,16 @@ impl SessionTask {
             task.input = i;
         }
         if let Some(o) = req.output {
-            // Merge output with append semantics for items
             use serde_json::{Map, Value};
             let mut merged = match task.output {
                 Value::Object(map) => map,
                 _ => Map::new(),
             };
 
-            // Merge text (replace if provided)
             if let Some(t) = o.get("text") {
                 merged.insert("text".to_string(), t.clone());
             }
 
-            // Append items if provided
             if let Some(new_items_val) = o.get("items") {
                 let mut items: Vec<Value> = merged
                     .get("items")
@@ -199,7 +193,6 @@ impl SessionTask {
                 merged.insert("items".to_string(), Value::Array(items));
             }
 
-            // Carry over any other fields provided in output
             for (k, v) in o.as_object().unwrap_or(&Map::new()) {
                 if k != "text" && k != "items" {
                     merged.insert(k.clone(), v.clone());
@@ -228,7 +221,7 @@ impl SessionTask {
             }
         }
         sqlx::query(
-            r#"UPDATE session_tasks SET status=?, input=?, output=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE sandbox_tasks SET status=?, input=?, output=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&task.status)
         .bind(&task.input)

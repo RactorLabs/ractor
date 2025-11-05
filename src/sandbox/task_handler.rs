@@ -105,7 +105,7 @@ impl TaskHandler {
                         .register_tool(Box::new(super::builtin_tools::OutputTool))
                         .await;
                     // Removed deprecated output_* aliases
-                    // Planner tools removed; planning now managed via /session/plan.md file edits
+                    // Planner tools removed; planning now managed via /sandbox/plan.md file edits
                     info!("Registered built-in tools and aliases");
                 }
             });
@@ -186,7 +186,7 @@ impl TaskHandler {
         {
             let mut attempt: u32 = 0;
             loop {
-                match self.api_client.update_session_to_busy().await {
+                match self.api_client.update_sandbox_to_busy().await {
                     Ok(()) => break,
                     Err(e) => {
                         attempt += 1;
@@ -214,7 +214,7 @@ impl TaskHandler {
                 }
             }
         }
-        if let Err(e) = self.api_client.update_session_to_idle().await {
+        if let Err(e) = self.api_client.update_sandbox_to_idle().await {
             warn!("Failed to set idle: {}", e);
         }
         Ok(pending.len())
@@ -238,8 +238,8 @@ impl TaskHandler {
 
         // Build conversation from prior tasks, respecting optional context cutoff
         let all = self.api_client.get_tasks(None, None).await?;
-        let session_info = self.api_client.get_session().await?;
-        let cutoff = session_info
+        let sandbox_info = self.api_client.get_sandbox().await?;
+        let cutoff = sandbox_info
             .context_cutoff_at
             .as_deref()
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
@@ -297,10 +297,10 @@ impl TaskHandler {
             if let Some(total_tokens) = model_resp.total_tokens {
                 if let Err(e) = self
                     .api_client
-                    .update_session_context_length(total_tokens)
+                    .update_sandbox_context_length(total_tokens)
                     .await
                 {
-                    warn!("Failed to update session context length: {}", e);
+                    warn!("Failed to update sandbox context length: {}", e);
                 }
             }
 
@@ -321,7 +321,7 @@ impl TaskHandler {
                     let tool_known = self.tool_registry.get_tool(tool_name).await.is_some();
                     if !tool_known {
                         let dev_note = format!(
-                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'publish_session', 'stop_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
+                            "Developer note: Unknown tool '{}'. Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'update_plan', 'find_filecontent', 'find_filename', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                             tool_name
                         );
                         Self::push_system_note(&mut conversation, dev_note);
@@ -420,25 +420,6 @@ impl TaskHandler {
                         )
                         .await;
                     _items_sent += 1;
-                    // Special case: after successful stop, proactively inform the user and finalize
-                    if tool_name == "stop_session" {
-                        let delay = output_value_preview
-                            .get("delay_seconds")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(5);
-                        let msg = format!("Okay — I will stop the session in {} seconds.", delay);
-                        let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
-                        let _ = self
-                            .api_client
-                            .update_task(
-                                &task.id,
-                                Some("completed".to_string()),
-                                None,
-                                Some(vec![final_seg]),
-                            )
-                            .await;
-                        return Ok(());
-                    }
                     // Special case: unified output tool finalizes immediately
                     if tool_name == "output" {
                         match plan_status {
@@ -542,7 +523,7 @@ impl TaskHandler {
                     .is_some();
                 if !tool_known {
                     let dev_note = format!(
-                        "Developer note: Unknown tool '{}' (salvaged from content). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'publish_session', 'stop_session', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
+                        "Developer note: Unknown tool '{}' (salvaged from content). Use one of: 'run_bash', 'open_file', 'create_file', 'str_replace', 'insert', 'remove_str', 'find_filecontent', 'find_filename', 'output'. Always emit a tool_call each turn; call 'output' if you are ready to reply to the user.",
                         tool_name
                     );
                     Self::push_system_note(&mut conversation, dev_note);
@@ -716,24 +697,6 @@ impl TaskHandler {
                             .await;
                         return Ok(());
                     }
-                    if tool_name == "stop_session" {
-                        let delay = output_value_preview
-                            .get("delay_seconds")
-                            .and_then(|v| v.as_u64())
-                            .unwrap_or(5);
-                        let msg = format!("Okay — I will stop the session in {} seconds.", delay);
-                        let final_seg = serde_json::json!({"type":"commentary","channel":"analysis","text": msg});
-                        let _ = self
-                            .api_client
-                            .update_task(
-                                &task.id,
-                                Some("completed".to_string()),
-                                None,
-                                Some(vec![final_seg]),
-                            )
-                            .await;
-                        return Ok(());
-                    }
                     let tool_content_str = if let Some(s) = output_value_preview.as_str() {
                         s.to_string()
                     } else {
@@ -790,8 +753,8 @@ impl TaskHandler {
                 // If exceeded retries, fall through to finalize with an explicit fallback note
             }
 
-            // Planning is managed via /session/plan.md. For multi-step tasks,
-            // the session MUST create and maintain /session/plan.md before proceeding.
+            // Planning is managed via /sandbox/plan.md. For multi-step tasks,
+            // the sandbox MUST create and maintain /sandbox/plan.md before proceeding.
 
             // Final answer (no tool_call in this turn)
             // Enforce: final content must be sent via the 'output' tool.
@@ -1035,9 +998,9 @@ impl TaskHandler {
             std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         let base_url = base_url_env.trim_end_matches('/').to_string();
 
-        // Fetch session info from API/DB (ID)
-        let session_id_ctx = match self.api_client.get_session().await {
-            Ok(session) => session.id.clone(),
+        // Fetch sandbox info from API/DB (ID)
+        let sandbox_id_ctx = match self.api_client.get_sandbox().await {
+            Ok(sandbox) => sandbox.id.clone(),
             Err(_) => "unknown".to_string(),
         };
 
@@ -1054,15 +1017,15 @@ impl TaskHandler {
 Include a short plain-text 'commentary' field in every tool call's args, written in gerund form (e.g., "Opening...", "Building...", "Creating...") to briefly explain what you are doing and why.
 
 ```json
-{"tool_call": {"tool": "open_file", "args": {"path": "/session/src/main.rs", "start_line": 1, "end_line": 60, "commentary": "Opening main.rs to inspect the CLI entrypoint."}}}
+{"tool_call": {"tool": "open_file", "args": {"path": "/sandbox/src/main.rs", "start_line": 1, "end_line": 60, "commentary": "Opening main.rs to inspect the CLI entrypoint."}}}
 ```
 
 ```json
-{"tool_call": {"tool": "run_bash", "args": {"exec_dir": "/session", "commands": "cargo build --release", "commentary": "Building the Rust workspace in release mode to validate changes."}}}
+{"tool_call": {"tool": "run_bash", "args": {"exec_dir": "/sandbox", "commands": "cargo build --release", "commentary": "Building the Rust workspace in release mode to validate changes."}}}
 ```
 
 ```json
-{"tool_call": {"tool": "create_file", "args": {"path": "/session/report.html", "content": "<html>...</html>", "commentary": "Creating an HTML report under /session/."}}}
+{"tool_call": {"tool": "create_file", "args": {"path": "/sandbox/report.html", "content": "<html>...</html>", "commentary": "Creating an HTML report under /sandbox/."}}}
 ```
 
 ```json
@@ -1074,20 +1037,20 @@ Include a short plain-text 'commentary' field in every tool call's args, written
 ```
 "#;
 
-        // Planning is managed via /session/plan.md using the update_plan tool
+        // Planning is managed via /sandbox/plan.md using the update_plan tool
 
         // Start with System Context specific to TaskSandbox runtime
         let mut prompt = String::from(format!(
             r#"## System Context
 
-You are running as an Session in the {host_name} system.
+You are running as a Sandbox in the {host_name} system.
 
 - System Name: {host_name}
 - Base URL: {base_url}
 - Current Time (UTC): {current_time_utc}
 - Operator URL: {operator_url}
 - API URL: {api_url}
-- Your Session ID: {session_id}
+- Your Sandbox ID: {sandbox_id}
 
 ### Platform Endpoints
 - API Server: {base_url}/api — JSON API used by the Operator and runtimes for management, not for end users.
@@ -1095,16 +1058,16 @@ You are running as an Session in the {host_name} system.
 ### Environment Variables
 - When you need an environment variable, follow this priority order:
   1. Run `echo $VAR_NAME` (or `printenv VAR_NAME`) to see if it already exists in the current process environment.
-  2. If it is absent, inspect `/session/.env` for a line such as `VAR_NAME=value`.
-  3. Only when both checks fail should you ask the user for the value, then (with explicit approval) persist it in `/session/.env` before use.
-- The runtime automatically sources `/session/.env` at the start of every bash command; rely on those values instead of exporting ad-hoc variables.
-- Any environment value the user shares in chat must be recorded in `/session/.env` (with explicit approval) before it is used.
-- `/session/.env` stores one `KEY=value` entry per line. Do not edit this file unless you have explicit approval from the user.
+  2. If it is absent, inspect `/sandbox/.env` for a line such as `VAR_NAME=value`.
+  3. Only when both checks fail should you ask the user for the value, then (with explicit approval) persist it in `/sandbox/.env` before use.
+- The runtime automatically sources `/sandbox/.env` at the start of every bash command; rely on those values instead of exporting ad-hoc variables.
+- Any environment value the user shares in chat must be recorded in `/sandbox/.env` (with explicit approval) before it is used.
+- `/sandbox/.env` stores one `KEY=value` entry per line. Do not edit this file unless you have explicit approval from the user.
 - Never ask the user for an environment value before completing steps 1 and 2 above. If either check returns a value, use it silently and continue; if you skipped the checks, treat it as a mistake, perform the checks, and correct yourself without prompting the user.
 
-- Planning: For any task that requires more than one action, immediately call the `update_plan` tool to create `/session/plan.md`, then refresh it only after a step is fully completed (never before or during a step, and always replacing the full contents). Stay in execution mode—finish the current checklist item, then call `update_plan` before moving to the next one. Never invoke `update_plan` twice in a row; batch all checklist changes into a single call and, once the plan accurately reflects the current status, move on to the next task instead of calling it again. Do not open or edit `/session/plan.md` directly; when all work is complete, call `update_plan` with an empty checklist rather than deleting the file.
+- Planning: For any task that requires more than one action, immediately call the `update_plan` tool to create `/sandbox/plan.md`, then refresh it only after a step is fully completed (never before or during a step, and always replacing the full contents). Stay in execution mode—finish the current checklist item, then call `update_plan` before moving to the next one. Never invoke `update_plan` twice in a row; batch all checklist changes into a single call and, once the plan accurately reflects the current status, move on to the next task instead of calling it again. Do not open or edit `/sandbox/plan.md` directly; when all work is complete, call `update_plan` with an empty checklist rather than deleting the file.
 - FINALIZE EVERY TASK WITH A SINGLE `output` CALL containing the user-facing summary or results, and only once no active plan remains.
-- If you plan to ask the user for any API key or credential via `output`, first run `echo $VAR_NAME` and inspect `/session/.env`; only request the value if both checks fail.
+- If you plan to ask the user for any API key or credential via `output`, first run `echo $VAR_NAME` and inspect `/sandbox/.env`; only request the value if both checks fail.
 - IMPORTANT: Always format code and JSON using backticks. For multi-line code or any JSON, use fenced code blocks (prefer ```json for JSON). Do not emit raw JSON in assistant text; use tool_calls for actions and wrap examples in code fences.
 - STRICT: Every assistant turn MUST emit exactly one `tool_call`. Do not produce assistant text outside a tool_call payload. If you need to communicate with the user, call `output` with the message content.
 - Never produce an `output` message just to acknowledge or restate developer notes; those instructions are internal and should only influence tool choices.
@@ -1176,7 +1139,7 @@ You are RemoteSession, a software engineer and pro computer user using a real co
             
 ## Core Capabilities
 
-You are an AI session with unrestricted access to:
+You are an AI sandbox with unrestricted access to:
 - **Bash shell**: Execute any command using semicolons to chain operations efficiently
 - **Text editor**: Create, modify, and view files with precision
 - **Package management**: Install pip, npm, apt packages, or any other tools needed
@@ -1184,7 +1147,7 @@ You are an AI session with unrestricted access to:
 - **Development**: Code in any language, run scripts, build applications
 - **System administration**: Full control within your container environment
 
-## Directory Structure (/session/)
+## Directory Structure (/sandbox/)
 
 ```
 ├── logs/            - Automatic command logs (read-only)
@@ -1194,11 +1157,11 @@ You are an AI session with unrestricted access to:
 └── <your files>     - All your development files, scripts, source code, data, HTML, visualizations
 ```
 
-**Working directory**: All your files live directly under `/session/` - scripts, data files, projects, executables, HTML, visualizations, reports, dashboards
+**Working directory**: All your files live directly under `/sandbox/` - scripts, data files, projects, executables, HTML, visualizations, reports, dashboards
 
 ## Tools
 
-Note: All file and directory paths must be absolute paths under `/session`. Paths outside `/session` are rejected.
+Note: All file and directory paths must be absolute paths under `/sandbox`. Paths outside `/sandbox` are rejected.
 
 ### Tool: run_bash
 
@@ -1278,10 +1241,10 @@ Note: All file and directory paths must be absolute paths under `/session`. Path
 {commentary_examples}
 ### Planning with plan.md
 
-- Use the `update_plan` tool to create or refresh `/session/plan.md` before acting whenever you expect two or more tool calls, multi-file edits, multi-service changes, or environment setup.
+- Use the `update_plan` tool to create or refresh `/sandbox/plan.md` before acting whenever you expect two or more tool calls, multi-file edits, multi-service changes, or environment setup.
 - Keep the checklist concise and update it via `update_plan` immediately after each step; mark completed items and add new ones only when scope changes. Leave the file in place even when everything is complete.
-- Never call `output` while `/session/plan.md` exists or has unchecked items. Update the plan, finish outstanding tasks, and use `update_plan` to rewrite it as an empty checklist once everything is complete before invoking `output`.
-- Do not open, read, or edit `/session/plan.md` directly; rely on the embedded plan in this prompt and the `update_plan` tool. If you hit blockers or the task changes, revise the plan via `update_plan` or ask the user for guidance before proceeding.
+- Never call `output` while `/sandbox/plan.md` exists or has unchecked items. Update the plan, finish outstanding tasks, and use `update_plan` to rewrite it as an empty checklist once everything is complete before invoking `output`.
+- Do not open, read, or edit `/sandbox/plan.md` directly; rely on the embedded plan in this prompt and the `update_plan` tool. If you hit blockers or the task changes, revise the plan via `update_plan` or ask the user for guidance before proceeding.
 
 - All tools return JSON strings with the following envelope:
   - status: "ok" | "error"
@@ -1293,13 +1256,13 @@ Note: All file and directory paths must be absolute paths under `/session`. Path
 Examples:
 ```json
 // Assistant message (tool_call)
-{{"tool_call":{{"tool":"run_bash","args":{{"exec_dir":"/session","commands":"echo hi"}}}}}}
+{{"tool_call":{{"tool":"run_bash","args":{{"exec_dir":"/sandbox","commands":"echo hi"}}}}}}
 
 // Tool message (tool_result)
 {{"status":"ok","tool":"run_bash","exit_code":null,"truncated":false,"stdout":"hi\n","stderr":""}}
 
 // Assistant message (tool_call)
-{{"tool_call":{{"tool":"open_file","args":{{"path":"/session/app.py","start_line":1,"end_line":3}}}}}}
+{{"tool_call":{{"tool":"open_file","args":{{"path":"/sandbox/app.py","start_line":1,"end_line":3}}}}}}
 
 // Tool message (tool_result)
 {{"status":"ok","tool":"open_file","content":"def main():\n    pass\n"}}
@@ -1309,10 +1272,10 @@ Examples:
 
 Tool resolution order (prefer local tools):
 - When a user asks you to use a tool by name (e.g., "run foo" or "use tool bar"), prefer locally provided tools in the workspace before system-wide tools:
-  - First, check for an executable or script in `/session/` with the requested name.
-  - Consider common forms: `/session/<name>`, `/session/<name>.sh`, `/session/<name>.py`, `/session/<name>.js`, or `/session/bin/<name>`.
+  - First, check for an executable or script in `/sandbox/` with the requested name.
+  - Consider common forms: `/sandbox/<name>`, `/sandbox/<name>.sh`, `/sandbox/<name>.py`, `/sandbox/<name>.js`, or `/sandbox/bin/<name>`.
   - If a matching local tool exists, use it. Only fall back to system-installed tools if no local tool is found.
-  - If multiple candidates exist, prefer the one in `/session/bin/`, then the exact name in `/session/`.
+  - If multiple candidates exist, prefer the one in `/sandbox/bin/`, then the exact name in `/sandbox/`.
 
 Usage policy:
 - Do NOT repeat the same tool call or command again and again if the previous step completed successfully.
@@ -1325,8 +1288,8 @@ Usage policy:
 **Be proactive**: Don't ask for permission to install tools or packages - just do what's needed
 **Chain operations**: Combine multiple commands with `;` or `&&` for efficiency
 **Use virtual environments for Python**: `python3 -m venv venv; source venv/bin/activate; pip install packages`
-**Create visual outputs**: Build HTML dashboards, charts, and interactive content in `/session/`
-**Save your work**: All your files persist in `/session/` automatically
+**Create visual outputs**: Build HTML dashboards, charts, and interactive content in `/sandbox/`
+**Save your work**: All your files persist in `/sandbox/` automatically
 **Document as you go**: Create clear file structures; only add code comments when necessary
 
 ## Examples
@@ -1353,12 +1316,12 @@ You have complete freedom to execute commands, install packages, and create solu
             base_url = base_url,
             operator_url = operator_url,
             api_url = api_url,
-            session_id = session_id_ctx,
+            sandbox_id = sandbox_id_ctx,
             current_time_utc = current_time_utc,
         ));
 
-        // Read instructions from /session/instructions.md if it exists
-        let instructions_path = std::path::Path::new("/session/instructions.md");
+        // Read instructions from /sandbox/instructions.md if it exists
+        let instructions_path = std::path::Path::new("/sandbox/instructions.md");
         info!(
             "Checking for instructions file at: {}",
             instructions_path.display()
@@ -1370,7 +1333,7 @@ You have complete freedom to execute commands, install packages, and create solu
                     info!("Read instructions content: '{}'", instructions.trim());
                     prompt.push_str("\n\nSPECIAL INSTRUCTIONS FROM USER:\n");
                     prompt.push_str(&instructions);
-                    info!("Loaded instructions from /session/instructions.md");
+                    info!("Loaded instructions from /sandbox/instructions.md");
                 }
                 Err(e) => {
                     warn!("Failed to read instructions file: {}", e);
@@ -1385,7 +1348,7 @@ You have complete freedom to execute commands, install packages, and create solu
 
         // If an active plan file exists, embed its content directly into the prompt so the model
         // never needs to open the file manually. Continue encouraging plan maintenance.
-        let plan_path = std::path::Path::new("/session/plan.md");
+        let plan_path = std::path::Path::new("/sandbox/plan.md");
         if plan_path.exists() {
             match tokio::fs::read_to_string(plan_path).await {
                 Ok(plan_contents) => {
@@ -1393,7 +1356,7 @@ You have complete freedom to execute commands, install packages, and create solu
                         plan_contents.lines().any(|line| !line.trim().is_empty());
                     if !has_non_empty_content {
                         prompt.push_str(
-                            "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/session/plan.md` with the initial tasks.\n",
+                            "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/sandbox/plan.md` with the initial tasks.\n",
                         );
                         return prompt;
                     }
@@ -1411,7 +1374,7 @@ You have complete freedom to execute commands, install packages, and create solu
                         })
                         .filter(|s| !s.is_empty());
                     prompt.push_str(
-                        "\n\n## Active Plan\n\nThe current task plan from /session/plan.md is inlined below. Never open `/session/plan.md` just to read it; rely on this embedded copy. Continue working the checklist via the `update_plan` tool after every completed step, and keep iterating until the list is finished.\n\n",
+                        "\n\n## Active Plan\n\nThe current task plan from /sandbox/plan.md is inlined below. Never open `/sandbox/plan.md` just to read it; rely on this embedded copy. Continue working the checklist via the `update_plan` tool after every completed step, and keep iterating until the list is finished.\n\n",
                     );
                     prompt.push_str("```plan\n");
                     prompt.push_str(plan_contents.trim_end());
@@ -1434,12 +1397,12 @@ You have complete freedom to execute commands, install packages, and create solu
                         plan_path.display(),
                         e
                     );
-                    prompt.push_str("\n\nWarning: /session/plan.md exists but could not be read. Do not open it manually. Use the `update_plan` tool to recreate or adjust it if necessary.\n");
+                    prompt.push_str("\n\nWarning: /sandbox/plan.md exists but could not be read. Do not open it manually. Use the `update_plan` tool to recreate or adjust it if necessary.\n");
                 }
             }
         } else {
             prompt.push_str(
-                "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/session/plan.md` with the initial tasks.\n",
+                "\n\nNo active plan detected. Before taking any multi-step action, decide whether a checklist is needed. If you expect more than one tool call or edit, first call `update_plan` to create `/sandbox/plan.md` with the initial tasks.\n",
             );
         }
 
@@ -1449,7 +1412,7 @@ You have complete freedom to execute commands, install packages, and create solu
     async fn plan_note_and_status(&self) -> (serde_json::Value, PlanStatus) {
         use std::path::Path;
 
-        let plan_path = Path::new("/session/plan.md");
+        let plan_path = Path::new("/sandbox/plan.md");
         if !plan_path.exists() {
             return (
                 serde_json::json!({

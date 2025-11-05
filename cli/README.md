@@ -1,6 +1,6 @@
 # @tsbx/cli
 
-Remote Sessionic Work Orchestrator - CLI for Computer use sessions
+Remote Sandboxic Work Orchestrator - CLI for Computer use sandboxes
 
 ## Getting Started
 

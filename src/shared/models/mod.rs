@@ -2,19 +2,17 @@ use sqlx::{MySql, Pool};
 use thiserror::Error;
 
 pub mod constants;
-pub mod session;
-// message module removed in favor of task records
+pub mod sandbox;
+pub mod snapshot;
 pub mod state_helpers;
 pub mod task;
 
-pub use session::{
-    CloneSessionRequest, RestartSessionRequest, Session, StartSessionRequest,
-    UpdateSessionRequest, UpdateSessionStateRequest,
+pub use sandbox::{
+    CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest,
 };
-// legacy message exports removed
-pub use task::{CreateTaskRequest, SessionTask, TaskView, UpdateTaskRequest};
+pub use snapshot::{CreateSnapshotRequest, Snapshot};
+pub use task::{CreateTaskRequest, SandboxTask, TaskView, UpdateTaskRequest};
 
-// Database errors
 #[derive(Error, Debug)]
 pub enum DatabaseError {
     #[error("Database connection error: {0}")]
@@ -33,7 +31,6 @@ pub enum DatabaseError {
 
 impl From<sqlx::Error> for DatabaseError {
     fn from(err: sqlx::Error) -> Self {
-        // Check for MySQL unique constraint violation (error code 1062)
         if let sqlx::Error::Database(db_err) = &err {
             if let Some(code) = db_err.code() {
                 if code == "23000" || code == "1062" {
@@ -45,7 +42,6 @@ impl From<sqlx::Error> for DatabaseError {
     }
 }
 
-// Application state
 #[derive(Clone)]
 pub struct AppState {
     pub db: std::sync::Arc<Pool<MySql>>,

@@ -1,4 +1,5 @@
 pub mod operators;
+pub mod sandboxes;
 pub mod security;
-pub mod sessions;
+pub mod snapshots;
 pub mod tasks;

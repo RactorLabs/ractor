@@ -47,5 +47,5 @@ name = "tsbx-controller"
 path = "src/controller/main.rs"
 
 [[bin]]
-name = "tsbx-session"
-path = "src/session/main.rs"
+name = "tsbx-sandbox"
+path = "src/sandbox/main.rs"

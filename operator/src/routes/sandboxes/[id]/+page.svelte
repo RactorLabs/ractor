@@ -61,13 +61,13 @@
     return `<pre class="mb-0">${esc(s)}</pre>`;
   }
 
-  // Note: 'id' param contains the session ID
-  let sessionId = '';
-  $: sessionId = $page.params.id;
+  // Note: 'id' param contains the sandbox ID
+  let sandboxId = '';
+  $: sandboxId = $page.params.id;
 
-  let session = null;
-  // Update page title to show session ID
-  $: setPageTitle(session?.id ? `Session ${session.id}` : 'Session');
+  let sandbox = null;
+  // Update page title to show sandbox ID
+  $: setPageTitle(sandbox?.id ? `Sandbox ${sandbox.id}` : 'Sandbox');
   let stateStr = '';
   // Chat rendering derived from Tasks
   let chat = [];
@@ -168,12 +168,12 @@
   let sending = false;
   let pollHandle = null;
   let runtimeSeconds = 0;
-  let currentSessionSeconds = 0;
-  // Equalize top card heights (left Session card and right Info card)
+  let currentSandboxSeconds = 0;
+  // Equalize top card heights (left Sandbox card and right Info card)
   // No JS equal-height logic; use layout-based alignment
 
   // ---------------- File panel state (right side) ----------------
-  // Start at /session/ (represented as empty relative path "")
+  // Start at /sandbox/ (represented as empty relative path "")
   let fmLoading = false;
   let fmError = null;
   let fmEntries = [];
@@ -182,7 +182,7 @@
   let fmNextOffset = null;
   let fmTotal = 0;
   let fmListKey = 0; // force remount of scroll area after list refresh
-  // Maintain relative path segments under /session
+  // Maintain relative path segments under /sandbox
   let fmSegments = [];
   // Reactive full path label for toolbar (current folder only; no selection state)
   let currentFullPath = '';
@@ -200,7 +200,7 @@
       const segs = [...(target.segs || []), target.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       // Attempt delete (not supported in read-only API; will likely fail)
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/files/delete/${relEnc}`, { method: 'DELETE' });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/files/delete/${relEnc}`, { method: 'DELETE' });
       if (!res.ok) {
         throw new Error(res?.data?.message || res?.data?.error || 'Delete not supported');
       }
@@ -222,14 +222,14 @@
     try { return (fmSegments || []).map(encodeURIComponent).join('/'); } catch (_) { return ''; }
   }
   function fmDisplayPath() {
-    try { return ['/session'].concat(fmSegments || []).join('/'); } catch (_) { return '/session'; }
+    try { return ['/sandbox'].concat(fmSegments || []).join('/'); } catch (_) { return '/sandbox'; }
   }
   function fmDisplayPathShort() {
     try { return (fmSegments && fmSegments.length) ? ('/' + (fmSegments || []).join('/')) : '/'; } catch (_) { return '/'; }
   }
   function fmCurrentFullPath(segs, fileName) {
     try {
-      const base = ['/session'].concat(segs || []);
+      const base = ['/sandbox'].concat(segs || []);
       if (fileName) return base.concat([fileName]).join('/');
       return base.join('/');
     } catch (_) { return fmDisplayPath(); }
@@ -265,8 +265,8 @@
     try {
       let path = fmPathStr();
       let url;
-      if (!path) url = `/sessions/${encodeURIComponent(sessionId)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
-      else url = `/sessions/${encodeURIComponent(sessionId)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      if (!path) url = `/sandboxes/${encodeURIComponent(sandboxId)}/files/list?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
+      else url = `/sandboxes/${encodeURIComponent(sandboxId)}/files/list/${path}?offset=${reset ? 0 : fmOffset}&limit=${fmLimit}`;
       const res = await apiFetch(url);
       if (seq !== fmListSeq) return; // outdated
       if (!res.ok) {
@@ -345,7 +345,7 @@
       const segs = [...fmSegments, fmPreviewName].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/sessions/${encodeURIComponent(sessionId)}/files/read/${relEnc}`;
+      const url = `/api/v0/sandboxes/${encodeURIComponent(sandboxId)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {}, signal: fmPreviewAbort ? fmPreviewAbort.signal : undefined });
       if (!res.ok) {
         fmPreviewError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Open failed (HTTP ${res.status})`));
@@ -402,7 +402,7 @@
       const segs = [...fmSegments, entry?.name].filter(Boolean);
       const relEnc = segs.map(encodeURIComponent).join('/');
       const token = getToken();
-      const url = `/api/v0/sessions/${encodeURIComponent(sessionId)}/files/read/${relEnc}`;
+      const url = `/api/v0/sandboxes/${encodeURIComponent(sandboxId)}/files/read/${relEnc}`;
       const res = await fetch(url, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
       if (!res.ok) { fmError = (res.status === 404 ? 'Not found' : (res.status === 413 ? 'File too large (>25MB)' : `Download failed (HTTP ${res.status})`)); return; }
       const blob = await res.blob();
@@ -519,7 +519,7 @@
   async function fetchContextUsage() {
     try {
       ctxLoading = true;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context`);
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context`);
       if (res.ok) {
         ctx = res.data || null;
         // Update banner flag if over soft limit
@@ -532,7 +532,7 @@
   }
   async function clearContext() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context/clear`, { method: 'POST' });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context/clear`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Clear failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -548,7 +548,7 @@
     try {
       isCompacting = true;
       ctxLoading = true;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/context/compact`, { method: 'POST' });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context/compact`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
       error = null;
       contextFull = false;
@@ -565,7 +565,7 @@
   }
   let _runtimeFetchedAt = 0;
   let inputEl = null; // chat textarea element
-  // Content preview via session ports has been removed.
+  // Content preview via sandbox ports has been removed.
   // Details (analysis + tool calls/results) visibility controlled via toggles
 
   function stateClass(state) {
@@ -586,7 +586,7 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'stopped') return 'bi bi-stop-circle';
+    if (s === 'deleted') return 'bi bi-trash';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -594,10 +594,10 @@
   }
 
   function normState(v) { return String(v || '').trim().toLowerCase(); }
-  $: stateStr = normState(session?.state);
+  $: stateStr = normState(sandbox?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
-  function isStopped() { return stateStr === 'stopped'; }
+  function isStopped() { return stateStr === 'deleted'; }
   function isActive() { return stateStr === 'idle' || stateStr === 'busy'; }
   function isInitOrDeleted() { return stateStr === 'init'; }
 
@@ -608,7 +608,7 @@
   let showTagsModal = false;
   let tagsInput = '';
   function openEditTags() {
-    const current = Array.isArray(session?.tags) ? session.tags : [];
+    const current = Array.isArray(sandbox?.tags) ? sandbox.tags : [];
     tagsInput = current.join(', ');
     showTagsModal = true;
   }
@@ -624,11 +624,11 @@
   async function saveTags() {
     try {
       const tags = parseTagsInput();
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}`, { method: 'PUT', body: JSON.stringify({ tags }) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
-      // Update local session tags
-      session = res.data || session;
-      if (session && !Array.isArray(session.tags)) session.tags = tags;
+      // Update local sandbox tags
+      sandbox = res.data || sandbox;
+      if (sandbox && !Array.isArray(sandbox.tags)) sandbox.tags = tags;
       showTagsModal = false;
     } catch (e) {
       alert(e.message || String(e));
@@ -637,28 +637,23 @@
 
   // Edit timeouts modal state and helpers
   let showTimeoutsModal = false;
-  let stopTimeoutInput = 0;
-  let archiveTimeoutInput = 0;
+  let idleTimeoutInput = 0;
   function openEditTimeouts() {
-    const stop = Number(session?.stop_timeout_seconds ?? 0);
-    const archive = Number(session?.archive_timeout_seconds ?? 0);
-    stopTimeoutInput = Number.isFinite(stop) && stop >= 0 ? stop : 0;
-    archiveTimeoutInput = Number.isFinite(archive) && archive >= 0 ? archive : 0;
+    const idle = Number(sandbox?.idle_timeout_seconds ?? 900);
+    idleTimeoutInput = Number.isFinite(idle) && idle >= 0 ? idle : 900;
     showTimeoutsModal = true;
   }
   function closeEditTimeouts() { showTimeoutsModal = false; }
   async function saveTimeouts() {
     try {
-      const stop = Math.max(0, Math.floor(Number(stopTimeoutInput || 0)));
-      const archive = Math.max(0, Math.floor(Number(archiveTimeoutInput || 0)));
-      const body = { stop_timeout_seconds: stop, archive_timeout_seconds: archive };
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`, { method: 'PUT', body: JSON.stringify(body) });
+      const idle = Math.max(0, Math.floor(Number(idleTimeoutInput || 900)));
+      const body = { idle_timeout_seconds: idle };
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}`, { method: 'PUT', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
-      // Update local session snapshot
-      session = res.data || session;
-      if (session) {
-        session.stop_timeout_seconds = stop;
-        session.archive_timeout_seconds = archive;
+      // Update local sandbox snapshot
+      sandbox = res.data || sandbox;
+      if (sandbox) {
+        sandbox.idle_timeout_seconds = idle;
       }
       showTimeoutsModal = false;
     } catch (e) {
@@ -666,39 +661,43 @@
     }
   }
 
-  // Clone modal state and actions
-  let showCloneModal = false;
-  let cloneError = null;
-  function openCloneModal() {
-    cloneError = null;
-    showCloneModal = true;
-  }
-  function closeCloneModal() { showCloneModal = false; }
-  async function confirmClone() {
-    try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/clone`, {
-        method: 'POST',
-        body: JSON.stringify({ code: true, env: true, content: true })
-      });
-      if (!res.ok) {
-        cloneError = res?.data?.message || res?.data?.error || `Clone failed (HTTP ${res.status})`;
-        return;
-      }
-      showCloneModal = false;
-      // Navigate to the new session using its ID from the response
-      const newSession = res.data;
-      goto(`/sessions/${encodeURIComponent(newSession.id)}`);
-    } catch (e) {
-      cloneError = e.message || String(e);
-    }
-  }
 
   // Delete modal state and actions
   let showDeleteModal = false;
   let deleteConfirm = '';
   function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
   function closeDeleteModal() { showDeleteModal = false; }
-  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(session?.id || sessionId || '').trim();
+  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(sandbox?.id || sandboxId || '').trim();
+
+  // Snapshot modal state and actions
+  let showSnapshotModal = false;
+  let snapshotError = null;
+  function openSnapshotModal() {
+    snapshotError = null;
+    showSnapshotModal = true;
+  }
+  function closeSnapshotModal() { showSnapshotModal = false; }
+  async function confirmCreateSnapshot() {
+    try {
+      snapshotError = null;
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/snapshots`, {
+        method: 'POST',
+        body: JSON.stringify({ trigger_type: 'manual' })
+      });
+      if (!res.ok) {
+        snapshotError = res?.data?.message || res?.data?.error || `Snapshot creation failed (HTTP ${res.status})`;
+        return;
+      }
+      showSnapshotModal = false;
+      // Optionally redirect to snapshots page or show success message
+      const snapshot = res.data;
+      if (snapshot && snapshot.id) {
+        alert(`Snapshot created: ${snapshot.id}`);
+      }
+    } catch (e) {
+      snapshotError = e.message || String(e);
+    }
+  }
 
   // Stop modal state and actions
   let showStopModal = false;
@@ -713,13 +712,13 @@
   async function confirmStop() {
     const d = Math.max(5, Math.floor(Number(stopDelayInput || 5)));
     showStopModal = false;
-    await stopSession(d, stopNoteInput);
+    await stopSandbox(d, stopNoteInput);
   }
 
-  async function fetchSession() {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}`);
+  async function fetchSandbox() {
+    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}`);
     if (res.ok && res.data) {
-      session = res.data;
+      sandbox = res.data;
     }
     // No content frame to compute; panel shows status only.
   }
@@ -727,19 +726,19 @@
   async function fetchRuntime(force = false) {
     try {
       if (!force && Date.now() - _runtimeFetchedAt < 10000) return; // throttle to 10s
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/runtime`);
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/runtime`);
       if (res.ok) {
         const v = Number(res?.data?.total_runtime_seconds ?? 0);
         if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
-        const cs = Number(res?.data?.current_session_seconds ?? 0);
-        currentSessionSeconds = Number.isFinite(cs) && cs >= 0 ? cs : 0;
+        const cs = Number(res?.data?.current_sandbox_seconds ?? 0);
+        currentSandboxSeconds = Number.isFinite(cs) && cs >= 0 ? cs : 0;
         _runtimeFetchedAt = Date.now();
       }
     } catch (_) {}
   }
 
   async function fetchTasks() {
-    const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/tasks?limit=200`);
+    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
       // Only auto-stick if near bottom before refresh
@@ -772,7 +771,7 @@
         const meta = { type: 'composite_step', in_progress: String(r?.status || '').toLowerCase() === 'processing' };
         const outputContent = Array.isArray(r?.output_content) ? r.output_content : [];
         transformed.push({
-          role: 'session',
+          role: 'sandbox',
           id: r.id + ':out',
           content: contentText,
           metadata: meta,
@@ -793,7 +792,7 @@
     pollHandle = setInterval(async () => {
       await fetchTasks();
       await fetchContextUsage();
-      await fetchSession();
+      await fetchSandbox();
       await fetchRuntime();
     }, 2000);
   }
@@ -865,11 +864,11 @@
   function typeIconClass(t) {
     try {
       const n = String(t || '').toLowerCase();
-      if (n === 'markdown') return 'fa-brands fa-markdown';
-      if (n === 'json') return 'fa fa-code';
-      if (n === 'url') return 'fa fa-link';
-      return 'fa fa-file';
-    } catch (_) { return 'fa fa-file'; }
+      if (n === 'markdown') return 'bi bi-markdown';
+      if (n === 'json') return 'bi bi-code';
+      if (n === 'url') return 'bi bi-link-45deg';
+      return 'bi bi-file-earmark';
+    } catch (_) { return 'bi bi-file-earmark'; }
   }
 
   // Parse helpers for rare top-level tool_result card content
@@ -911,17 +910,17 @@
     try { return String(s?.note || '').trim(); } catch (_) { return ''; }
   }
   function hasStoppedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'stopped'); } catch(_) { return false; }
+    try { return segmentsOf(m).some((x) => segType(x) === 'deleted'); } catch(_) { return false; }
   }
   function stoppedNoteFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'stopped');
+      const s = segmentsOf(m).find((x) => segType(x) === 'deleted');
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
   function stoppedRuntimeFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'stopped');
+      const s = segmentsOf(m).find((x) => segType(x) === 'deleted');
       const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
       return Number.isFinite(v) && v >= 0 ? v : 0;
     } catch(_) { return 0; }
@@ -1004,8 +1003,8 @@
       let raw = String(p ?? '').trim();
       if (!raw) return '';
       raw = raw.split('\\').join('/');
-      if (raw.startsWith('/session/')) raw = raw.slice('/session/'.length);
-      else if (raw === '/session' || raw === '/session/') raw = '';
+      if (raw.startsWith('/sandbox/')) raw = raw.slice('/sandbox/'.length);
+      else if (raw === '/sandbox' || raw === '/sandbox/') raw = '';
       else if (raw.startsWith('/')) raw = raw.slice(1);
       raw = raw.replace(/^\.\/+/, '');
       raw = raw.replace(/\/+/g, '/');
@@ -1117,7 +1116,7 @@
       if (glob) addTextPart(glob);
       return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filename)' };
     }
-    if (t === 'stop_session') {
+    if (t === 'stop_sandbox') {
       const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
       const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
       const label = [`close${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
@@ -1340,10 +1339,10 @@
     e?.preventDefault?.();
     if (isCompacting) { return; }
     const content = (input || '').trim();
-    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Session is busy'; } return; }
+    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Sandbox is busy'; } return; }
     sending = true;
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/tasks`, {
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks`, {
         method: 'POST',
         body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
       });
@@ -1380,12 +1379,12 @@
     sending = false;
   }
 
-  async function stopSession(delaySeconds = 5, note = '') {
+  async function stopSandbox(delaySeconds = 5, note = '') {
     try {
       const body = { delay_seconds: delaySeconds };
       const t = String(note || '').trim();
       if (t) body['note'] = t;
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/stop`, { method: 'POST', body: JSON.stringify(body) });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/stop`, { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Stop failed (HTTP ${res.status})`);
       // Do not optimistically flip state; let polling update when controller stops it
       error = null;
@@ -1394,46 +1393,20 @@
     }
   }
 
-  async function restartSession() {
-    try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/restart`, { method: 'POST', body: JSON.stringify({}) });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Restart failed (HTTP ${res.status})`);
-      // Optimistically set to init; controller will flip to idle/busy
-      if (session) session = { ...(session || {}), state: 'init' };
-      const deadline = Date.now() + 120000; // wait up to 2 minutes
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 1000));
-        await fetchSession();
-        const s = normState(session?.state);
-        if (s && s !== 'init') break;
-      }
-      // If we progressed past init, refresh files once now
-      if (normState(session?.state) !== 'init') {
-        await fetchFiles(true);
-      }
-      error = null;
-    } catch (e) {
-      error = e.message || String(e);
-    } finally {
-    }
-  }
-
   async function cancelActive() {
     try {
-      const res = await apiFetch(`/sessions/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' });
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/cancel`, { method: 'POST' });
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
-      await fetchSession();
+      await fetchSandbox();
       await fetchTasks();
     } catch (e) {
       error = e.message || String(e);
     }
   }
 
-  // Clone action: open modal instead of prompt
-  function cloneSession() { openCloneModal(); }
 
   // Delete action: open modal instead of prompt
-  function deleteSession() { openDeleteModal(); }
+  function deleteSandbox() { openDeleteModal(); }
 
 
 
@@ -1443,7 +1416,7 @@
     // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
     try {
-      await fetchSession();
+      await fetchSandbox();
       await fetchRuntime(true);
       await fetchTasks();
       // Render the chat before attempting to scroll
@@ -1496,15 +1469,10 @@
         </div>
         <div class="modal-body">
           <div class="row g-3">
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="stop-timeout">Stop Timeout (seconds)</label>
-              <input id="stop-timeout" type="number" min="0" step="1" class="form-control" bind:value={stopTimeoutInput} />
-              <div class="form-text">Time of inactivity before auto-stop. 0 disables the stop timeout.</div>
-            </div>
-            <div class="col-12 col-md-6">
-              <label class="form-label" for="archive-timeout">Archive Timeout (seconds)</label>
-              <input id="archive-timeout" type="number" min="0" step="1" class="form-control" bind:value={archiveTimeoutInput} />
-              <div class="form-text">Reserved for future archival workflows. 0 disables the archive timeout.</div>
+            <div class="col-12">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
+              <div class="form-text">Time of inactivity before sandbox is automatically deleted. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
             </div>
           </div>
         </div>
@@ -1523,13 +1491,13 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Stop Session</h5>
+          <h5 class="modal-title">Stop Sandbox</h5>
           <button type="button" class="btn-close" aria-label="Close" on:click={closeStopModal}></button>
         </div>
         <div class="modal-body">
           <label class="form-label" for="stop-delay">Stop in (seconds)</label>
           <input id="stop-delay" type="number" min="5" step="1" class="form-control" bind:value={stopDelayInput} />
-          <div class="form-text">Minimum 5 seconds. The session will stop after this delay.</div>
+          <div class="form-text">Minimum 5 seconds. The sandbox will stop after this delay.</div>
           <div class="mt-3">
             <label class="form-label" for="stop-note">Note (optional)</label>
             <input id="stop-note" type="text" class="form-control" bind:value={stopNoteInput} placeholder="e.g., Taking a break" />
@@ -1545,29 +1513,6 @@
   </div>
 {/if}
 
-<!-- Clone Modal -->
-{#if showCloneModal}
-  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Clone Session</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeCloneModal}></button>
-        </div>
-        <div class="modal-body">
-          {#if cloneError}
-            <div class="alert alert-danger small">{cloneError}</div>
-          {/if}
-          <p class="mb-0">This will create a copy of the current session with a new auto-generated ID.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeCloneModal}>Cancel</button>
-          <button class="btn btn-theme" on:click={confirmClone}>Clone</button>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <!-- Delete Modal -->
 {#if showDeleteModal}
@@ -1575,26 +1520,50 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Delete Session</h5>
+          <h5 class="modal-title">Delete Sandbox</h5>
           <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold font-monospace">{session?.id || sessionId}</span> to confirm permanent deletion.</p>
-          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={session?.id || sessionId} />
+          <p class="mb-2">Type <span class="fw-bold font-monospace">{sandbox?.id || sandboxId}</span> to confirm permanent deletion.</p>
+          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={sandbox?.id || sandboxId} />
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
           <button class="btn btn-danger" disabled={!canConfirmDelete} on:click={async () => {
             try {
-              const cur = String(sessionId || '').trim();
-              const res = await apiFetch(`/sessions/${encodeURIComponent(cur)}`, { method: 'DELETE' });
+              const cur = String(sandboxId || '').trim();
+              const res = await apiFetch(`/sandboxes/${encodeURIComponent(cur)}`, { method: 'DELETE' });
               if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
               showDeleteModal = false;
-              goto('/sessions');
+              goto('/sandboxes');
             } catch (e) {
               alert(e.message || String(e));
             }
           }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Snapshot Modal -->
+{#if showSnapshotModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Create Snapshot</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeSnapshotModal}></button>
+        </div>
+        <div class="modal-body">
+          {#if snapshotError}
+            <div class="alert alert-danger small">{snapshotError}</div>
+          {/if}
+          <p class="mb-2">Create a snapshot of this sandbox's current state. You can use snapshots to create new sandboxes later.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeSnapshotModal}>Cancel</button>
+          <button class="btn btn-theme" on:click={confirmCreateSnapshot}><i class="bi bi-camera me-1"></i>Create Snapshot</button>
         </div>
       </div>
     </div>
@@ -1610,45 +1579,45 @@
         <Card class="h-100">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
-              {#if session}
-                <a class="fw-bold text-decoration-none fs-22px font-monospace" href={'/sessions/' + encodeURIComponent(session.id || '')}>{session.id || '-'}</a>
+              {#if sandbox}
+                <a class="fw-bold text-decoration-none fs-22px font-monospace" href={'/sandboxes/' + encodeURIComponent(sandbox.id || '')}>{sandbox.id || '-'}</a>
               {:else}
                 <div class="fw-bold fs-22px">Loading...</div>
               {/if}
             </div>
-            <div class="small text-body text-opacity-75 flex-grow-1">{session?.description || session?.desc || 'No description'}</div>
-            {#if isAdmin && session}
-              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{session.created_by}</span></div>
+            <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
+            {#if isAdmin && sandbox}
+              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
             {/if}
             <!-- Public URL in main card -->
             
             <!-- Tags removed from detail page -->
-            <!-- In-card actions (publish, clone, stop/restart, kebab) -->
+            <!-- In-card actions (publish, stop, kebab) -->
             <div class="mt-2 d-flex align-items-center flex-wrap top-actions">
               <!-- Compact status indicator on the left -->
               <div class="d-flex align-items-center gap-2">
-                {#if session}
-                  <i class={`${stateIconClass(session.state || session.status)} me-1`}></i>
-                  <span class="text-uppercase small fw-bold text-body">{session.state || session.status || 'unknown'}</span>
+                {#if sandbox}
+                  <i class={`${stateIconClass(sandbox.state || sandbox.status)} me-1`}></i>
+                  <span class="text-uppercase small fw-bold text-body">{sandbox.state || sandbox.status || 'unknown'}</span>
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-primary btn-sm" on:click={openStopModal} aria-label="Stop session">
-                    <i class="fa fa-stop-circle me-1"></i><span>Stop</span>
+                  <button class="btn btn-outline-primary btn-sm" on:click={openStopModal} aria-label="Delete sandbox">
+                    <i class="bi bi-trash me-1"></i><span>Delete</span>
                   </button>
                 {/if}
                 <div class="dropdown">
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
-                    <i class="fa fa-ellipsis-h"></i>
+                    <i class="bi bi-three-dots"></i>
                   </button>
-                  <ul class="dropdown-menu dropdown-menu-end">
-                    <li><button class="dropdown-item" on:click={cloneSession}><i class="fa fa-clone me-2"></i>Clone</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTags}><i class="fa fa-tags me-2"></i>Edit Tags</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="fa fa-hourglass-half me-2"></i>Edit Timeouts</button></li>
+                  <ul class="dropdown-menu dropdown-menu-end">                    <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteSession}><i class="fa fa-trash me-2"></i>Delete</button></li>
+                    <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                    <li><hr class="dropdown-divider" /></li>
+                    <li><button class="dropdown-item text-danger" on:click={deleteSandbox}><i class="bi bi-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>
@@ -1657,13 +1626,12 @@
         </Card>
       </div>
       <div class="col-12 col-lg-6 d-none d-lg-block">
-        {#if session}
+        {#if sandbox}
           <Card class="h-100">
             <div class="card-body small">
               <!-- Last Activity removed per design -->
-              <div class="mt-1">Stop Timeout: {fmtDuration(session.stop_timeout_seconds)}</div>
-              <div class="mt-1">Archive Timeout: {fmtDuration(session.archive_timeout_seconds)}</div>
-              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSessionSeconds > 0}&nbsp;(Current session: {fmtDuration(currentSessionSeconds)}){/if}</div>
+              <div class="mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
+              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
                   <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 128000)} ({fmtPct(ctx?.used_percent || 0)})</div>
@@ -1720,18 +1688,18 @@
       </button>
       <span class="vr mx-1"></span>
       <button class="btn btn-sm border-0" title="Expand all" on:click={expandAllDetails} aria-label="Expand all">
-        <i class="fa fa-angle-double-down"></i>
+        <i class="bi bi-chevron-double-down"></i>
       </button>
       <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
-        <i class="fa fa-angle-double-up"></i>
+        <i class="bi bi-chevron-double-up"></i>
       </button>
       <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of thinking (analysis/commentary)">
         <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-thinking"><i class="fas fa-brain"></i></label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-thinking"><i class="bi bi-lightbulb"></i></label>
       </div>
       <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of tool calls/results">
         <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-tools"><i class="fas fa-screwdriver-wrench"></i></label>
+        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-tools"><i class="bi bi-tools"></i></label>
       </div>
     </div>
 
@@ -1741,7 +1709,7 @@
     {#if contextFull}
           <div class="alert alert-warning py-2 small m-2 d-flex align-items-center justify-content-between" role="alert">
             <div>
-          <i class="fa fa-exclamation-triangle me-2"></i>
+          <i class="bi bi-exclamation-triangle me-2"></i>
           Context is full — clear it to continue.
             </div>
         <div class="ms-2">
@@ -1767,7 +1735,7 @@
                 </div>
               </div>
             {:else}
-              <!-- Session side -->
+              <!-- Sandbox side -->
               {#if hasComposite(m)}
                 <!-- Composite rendering: thinking, tool calls/results, final in one message -->
                 <div class="mb-3">
@@ -1983,7 +1951,7 @@
                   </details>
                 </div>
               {:else}
-                <!-- Tool task card or regular session message -->
+                <!-- Tool task card or regular sandbox message -->
                 {#if isToolResult(m) && showTools}
                   <!-- Compact single-line summary that toggles details for ALL tool tasks -->
                   <div class="d-flex mb-2 justify-content-start">
@@ -2100,7 +2068,7 @@
           <textarea
             aria-label="Message input"
             class="form-control shadow-none rounded-0 chat-input chat-no-zoom"
-            disabled={isCompacting || stateStr === 'busy'}
+            disabled={isCompacting || stateStr === 'busy' || stateStr === 'deleted'}
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -2117,14 +2085,14 @@
           ></textarea>
           {#if stateStr === 'busy'}
             <button type="button" class="btn btn-outline-danger rounded-0 shadow-none chat-action-btn" aria-label="Cancel active" on:click={cancelActive}>
-              <i class="fa fa-stop"></i>
+              <i class="bi bi-stop-circle"></i>
             </button>
           {:else}
-            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim()}>
+            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'deleted'}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
-                <i class="fa fa-paper-plane"></i>
+                <i class="bi bi-send"></i>
               {/if}
             </button>
           {/if}
@@ -2139,18 +2107,17 @@
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
           <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-            {#if stateStr === 'stopped'}
+            {#if stateStr === 'deleted'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><i class="bi bi-stop-circle me-2"></i>Session is stopped</div>
-                  <p class="small mb-3 text-body-secondary">Restart the session to browse its workspace files.</p>
-                  <button class="btn btn-outline-success btn-sm" on:click={restartSession}><i class="bi bi-arrow-repeat me-1"></i>Restart</button>
+                  <div class="fs-5 mb-2"><i class="bi bi-trash me-2"></i>Sandbox is deleted</div>
+                  <p class="small mb-3 text-body-secondary">This sandbox has been deleted and is read-only.</p>
                 </div>
               </div>
             {:else if stateStr === 'init'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for session to start up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for sandbox to start up</div>
                 </div>
               </div>
             {:else}
@@ -2162,9 +2129,9 @@
                 <!-- Path on the left with spacing and an icon -->
                 <div class="small text-body text-opacity-75 ms-2">
                   {#if fmPreviewName}
-                    <i class="fa fa-file me-1"></i>
+                    <i class="bi bi-file-earmark me-1"></i>
                   {:else}
-                    <i class="fa fa-folder me-1"></i>
+                    <i class="bi bi-folder me-1"></i>
                   {/if}
                   {currentFullPath}
                 </div>

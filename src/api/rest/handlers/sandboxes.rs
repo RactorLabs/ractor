@@ -7,7 +7,6 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
-use sqlx::query;
 use sqlx::Row;
 use std::sync::Arc;
 
@@ -15,11 +14,10 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, CloneSessionRequest, RestartSessionRequest, Session,
-    StartSessionRequest, UpdateSessionRequest, UpdateSessionStateRequest,
+    AppState, CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest,
 };
 use crate::shared::rbac::PermissionContext;
-// Use fully-qualified names for task records to avoid name conflict with local SessionResponse
+// Use fully-qualified names for task records to avoid name conflict with local SandboxResponse
 use crate::shared::models::task as task_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
@@ -35,19 +33,27 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
     }
 }
 
+// Helper: check if sandbox is deleted and return error if attempting write operation
+fn check_not_deleted(sandbox: &Sandbox) -> ApiResult<()> {
+    if sandbox.state == "deleted" {
+        return Err(ApiError::BadRequest(
+            "Sandbox is deleted. Please create a new one.".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
-pub struct SessionResponse {
+pub struct SandboxResponse {
     pub id: String, // Primary key - UUID
     pub created_by: String,
     pub state: String,
     pub description: Option<String>,
-    pub parent_session_id: Option<String>,
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
     pub tags: Vec<String>,
-    pub stop_timeout_seconds: i32,
-    pub archive_timeout_seconds: i32,
+    pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     pub context_cutoff_at: Option<String>,
@@ -55,7 +61,7 @@ pub struct SessionResponse {
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct ListSessionsQuery {
+pub struct ListSandboxesQuery {
     pub state: Option<String>,
     pub q: Option<String>,
     // Accept both tags=alpha (single), tags=alpha&tags=beta (repeat), or tags[]=alpha
@@ -116,8 +122,8 @@ where
 }
 
 #[derive(Debug, Serialize)]
-pub struct PaginatedSessions {
-    pub items: Vec<SessionResponse>,
+pub struct PaginatedSandboxes {
+    pub items: Vec<SandboxResponse>,
     pub total: i64,
     pub limit: i64,
     pub offset: i64,
@@ -125,10 +131,10 @@ pub struct PaginatedSessions {
     pub pages: i64,
 }
 
-impl SessionResponse {
-    async fn from_session(session: Session, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
+impl SandboxResponse {
+    async fn from_sandbox(sandbox: Sandbox, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
         // Convert tags from JSON value to Vec<String>
-        let tags: Vec<String> = match session.tags {
+        let tags: Vec<String> = match sandbox.tags {
             serde_json::Value::Array(arr) => arr
                 .into_iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
@@ -136,51 +142,49 @@ impl SessionResponse {
             _ => Vec::new(),
         };
         Ok(Self {
-            id: session.id,
-            created_by: session.created_by,
-            state: session.state,
-            description: session.description,
-            parent_session_id: session.parent_session_id,
-            created_at: session.created_at.to_rfc3339(),
-            last_activity_at: session.last_activity_at.map(|dt| dt.to_rfc3339()),
-            metadata: session.metadata,
+            id: sandbox.id,
+            created_by: sandbox.created_by,
+            state: sandbox.state,
+            description: sandbox.description,
+            created_at: sandbox.created_at.to_rfc3339(),
+            last_activity_at: sandbox.last_activity_at.map(|dt| dt.to_rfc3339()),
+            metadata: sandbox.metadata,
             tags,
-            stop_timeout_seconds: session.stop_timeout_seconds,
-            archive_timeout_seconds: session.archive_timeout_seconds,
-            idle_from: session.idle_from.map(|dt| dt.to_rfc3339()),
-            busy_from: session.busy_from.map(|dt| dt.to_rfc3339()),
-            context_cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
-            last_context_length: session.last_context_length,
+            idle_timeout_seconds: sandbox.idle_timeout_seconds,
+            idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
+            busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
+            context_cutoff_at: sandbox.context_cutoff_at.map(|dt| dt.to_rfc3339()),
+            last_context_length: sandbox.last_context_length,
         })
     }
 }
 
-// Helper function to find session by ID
-async fn find_session_by_id(
+// Helper function to find sandbox by ID
+async fn find_sandbox_by_id(
     state: &AppState,
     id: &str,
     created_by: &str,
     is_admin: bool,
-) -> Result<Session, ApiError> {
+) -> Result<Sandbox, ApiError> {
     // Try to find by id
-    if let Some(session) = Session::find_by_id(&state.db, id)
+    if let Some(sandbox) = Sandbox::find_by_id(&state.db, id)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch session: {}", e)))?
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch sandbox: {}", e)))?
     {
-        // Admins can access any session, regular users only their own
-        if is_admin || session.created_by == created_by {
-            return Ok(session);
+        // Admins can access any sandbox, regular users only their own
+        if is_admin || sandbox.created_by == created_by {
+            return Ok(sandbox);
         } else {
             return Err(ApiError::Forbidden(
-                "Access denied to this session".to_string(),
+                "Access denied to this sandbox".to_string(),
             ));
         }
     }
 
-    Err(ApiError::NotFound("Session not found".to_string()))
+    Err(ApiError::NotFound("Sandbox not found".to_string()))
 }
 
-// -------- Session Files (read-only) --------
+// -------- Sandbox Files (read-only) --------
 
 #[derive(Debug, Deserialize, Default)]
 pub struct ListFilesQuery {
@@ -208,12 +212,12 @@ fn map_file_request_error(err: &str) -> ApiError {
         ApiError::BadRequest("Path is a directory".to_string())
     } else if lower.contains("invalid path") {
         ApiError::BadRequest("Invalid path".to_string())
-    } else if lower.contains("stopped")
+    } else if lower.contains("deleted")
         || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Session is stopped".to_string())
+        ApiError::Conflict("Sandbox is deleted".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -221,15 +225,15 @@ fn map_file_request_error(err: &str) -> ApiError {
     }
 }
 
-pub async fn read_session_file(
+pub async fn read_sandbox_file(
     State(state): State<Arc<AppState>>,
     Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> Result<Response, ApiError> {
-    // Admins require explicit permission; owners can access their own sessions
+    // Admins require explicit permission; owners can access their own sandboxes
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to read files".to_string())
@@ -240,7 +244,7 @@ pub async fn read_session_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
@@ -256,11 +260,11 @@ pub async fn read_session_file(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_read', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -271,7 +275,7 @@ pub async fn read_session_file(
     let start = std::time::Instant::now();
     loop {
         let row =
-            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
                 .bind(&request_id)
                 .fetch_optional(&*state.db)
                 .await
@@ -324,14 +328,14 @@ pub async fn read_session_file(
     }
 }
 
-pub async fn get_session_file_metadata(
+pub async fn get_sandbox_file_metadata(
     State(state): State<Arc<AppState>>,
     Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to read files".to_string())
@@ -341,7 +345,7 @@ pub async fn get_session_file_metadata(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -352,11 +356,11 @@ pub async fn get_session_file_metadata(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_metadata', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -371,7 +375,7 @@ pub async fn get_session_file_metadata(
     let start = std::time::Instant::now();
     loop {
         let row =
-            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
                 .bind(&request_id)
                 .fetch_optional(&*state.db)
                 .await
@@ -402,7 +406,7 @@ pub async fn get_session_file_metadata(
     }
 }
 
-pub async fn list_session_files(
+pub async fn list_sandbox_files(
     State(state): State<Arc<AppState>>,
     Path((id, path)): Path<(String, String)>,
     Query(paging): Query<ListFilesQuery>,
@@ -410,7 +414,7 @@ pub async fn list_session_files(
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to list files".to_string())
@@ -420,7 +424,7 @@ pub async fn list_session_files(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -435,11 +439,11 @@ pub async fn list_session_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -449,7 +453,7 @@ pub async fn list_session_files(
     let start = std::time::Instant::now();
     loop {
         let row =
-            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
                 .bind(&request_id)
                 .fetch_optional(&*state.db)
                 .await
@@ -481,7 +485,7 @@ pub async fn list_session_files(
 }
 
 // List at root when no path segment provided
-pub async fn list_session_files_root(
+pub async fn list_sandbox_files_root(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Query(paging): Query<ListFilesQuery>,
@@ -489,7 +493,7 @@ pub async fn list_session_files_root(
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to list files".to_string())
@@ -499,7 +503,7 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
@@ -511,11 +515,11 @@ pub async fn list_session_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_list', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -525,7 +529,7 @@ pub async fn list_session_files_root(
     let start = std::time::Instant::now();
     loop {
         let row =
-            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
                 .bind(&request_id)
                 .fetch_optional(&*state.db)
                 .await
@@ -556,14 +560,14 @@ pub async fn list_session_files_root(
     }
 }
 
-pub async fn delete_session_file(
+pub async fn delete_sandbox_file(
     State(state): State<Arc<AppState>>,
     Path((id, path)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to delete files".to_string())
@@ -573,18 +577,19 @@ pub async fn delete_session_file(
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({ "path": path });
     sqlx::query(
-        r#"INSERT INTO session_requests (id, session_id, request_type, created_by, payload, status)
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
             VALUES (?, ?, 'file_delete', ?, ?, 'pending')"#,
     )
     .bind(&request_id)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .bind(&payload)
     .execute(&*state.db)
@@ -599,7 +604,7 @@ pub async fn delete_session_file(
     let start = std::time::Instant::now();
     loop {
         let row =
-            sqlx::query(r#"SELECT status, payload, error FROM session_requests WHERE id = ?"#)
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
                 .bind(&request_id)
                 .fetch_optional(&*state.db)
                 .await
@@ -630,18 +635,18 @@ pub async fn delete_session_file(
     }
 }
 
-pub async fn list_sessions(
+pub async fn list_sandboxes(
     State(state): State<Arc<AppState>>,
-    Query(query): Query<ListSessionsQuery>,
+    Query(query): Query<ListSandboxesQuery>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<PaginatedSessions>> {
-    // Admins require explicit permission; non-admins can list only their own sessions
+) -> ApiResult<Json<PaginatedSandboxes>> {
+    // Admins require explicit permission; non-admins can list only their own sandboxes
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_LIST)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_LIST)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to list sessions".to_string())
+                ApiError::Forbidden("Insufficient permissions to list sandboxes".to_string())
             })?;
     }
 
@@ -702,7 +707,7 @@ pub async fn list_sessions(
     }
 
     // Count total
-    let count_sql = format!("SELECT COUNT(*) as cnt FROM sessions {}", where_sql);
+    let count_sql = format!("SELECT COUNT(*) as cnt FROM sandboxes {}", where_sql);
     let mut q_count = sqlx::query_scalar::<_, i64>(&count_sql);
     for b in binds.iter() {
         if let Some(s) = b.as_str() {
@@ -714,23 +719,23 @@ pub async fn list_sessions(
     let total: i64 = q_count
         .fetch_one(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count sessions: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count sandboxes: {}", e)))?;
 
     // Fetch page
     let select_sql = format!(
         r#"
-        SELECT id, created_by, state, description, parent_session_id,
+        SELECT id, created_by, state, description, snapshot_id,
                created_at, last_activity_at, metadata, tags,
-               stop_timeout_seconds, archive_timeout_seconds, idle_from, busy_from, context_cutoff_at,
+               idle_timeout_seconds, idle_from, busy_from, context_cutoff_at,
                last_context_length
-        FROM sessions
+        FROM sandboxes
         {}
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?
         "#,
         where_sql
     );
-    let mut q_items = sqlx::query_as::<_, Session>(&select_sql);
+    let mut q_items = sqlx::query_as::<_, Sandbox>(&select_sql);
     for b in binds.iter() {
         if let Some(s) = b.as_str() {
             q_items = q_items.bind(s);
@@ -738,14 +743,14 @@ pub async fn list_sessions(
     }
     q_items = q_items.bind(limit).bind(offset);
 
-    let sessions: Vec<Session> = q_items
+    let sandboxes: Vec<Sandbox> = q_items
         .fetch_all(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list sessions: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to list sandboxes: {}", e)))?;
 
-    let mut items: Vec<SessionResponse> = Vec::with_capacity(sessions.len());
-    for session in sessions {
-        items.push(SessionResponse::from_session(session, &state.db).await?);
+    let mut items: Vec<SandboxResponse> = Vec::with_capacity(sandboxes.len());
+    for sandbox in sandboxes {
+        items.push(SandboxResponse::from_sandbox(sandbox, &state.db).await?);
     }
     let page = if limit > 0 { (offset / limit) + 1 } else { 1 };
     let pages = if limit > 0 {
@@ -754,7 +759,7 @@ pub async fn list_sessions(
         1
     };
 
-    Ok(Json(PaginatedSessions {
+    Ok(Json(PaginatedSandboxes {
         items,
         total,
         limit,
@@ -764,18 +769,18 @@ pub async fn list_sessions(
     }))
 }
 
-pub async fn get_session(
+pub async fn get_sandbox(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SessionResponse>> {
-    // Admins require explicit permission; non-admins can access only their own session
+) -> ApiResult<Json<SandboxResponse>> {
+    // Admins require explicit permission; non-admins can access only their own sandbox
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get session".to_string())
+                ApiError::Forbidden("Insufficient permissions to get sandbox".to_string())
             })?;
     }
 
@@ -785,24 +790,24 @@ pub async fn get_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by id (admin can access any session)
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    // Find sandbox by id (admin can access any sandbox)
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
     Ok(Json(
-        SessionResponse::from_session(session, &state.db).await?,
+        SandboxResponse::from_sandbox(sandbox, &state.db).await?,
     ))
 }
 
-// Cancel the latest in-progress task for an session and set session to idle
+// Cancel the latest in-progress task for a sandbox and set sandbox to idle
 pub async fn cancel_active_task(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Admins must have SESSION_UPDATE; owners can cancel their own without RBAC grant
+    // Admins must have SANDBOX_UPDATE; owners can cancel their own without RBAC grant
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
             .await
             .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
     }
@@ -813,19 +818,20 @@ pub async fn cancel_active_task(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the session; enforce ownership for non-admins
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
-    if !is_admin && session.created_by != *username {
+    // Confirm access to the sandbox; enforce ownership for non-admins
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
+    if !is_admin && sandbox.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only cancel your own sessions".to_string(),
+            "You can only cancel your own sandboxes".to_string(),
         ));
     }
 
     // Find latest in-progress task (processing or pending)
     let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM session_tasks WHERE session_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
+        r#"SELECT id, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
     )
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .fetch_optional(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
@@ -847,7 +853,7 @@ pub async fn cancel_active_task(
             new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
         }
         sqlx::query(
-            r#"UPDATE session_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
+            r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
         )
         .bind(&new_output)
         .bind(&task_id)
@@ -860,9 +866,9 @@ pub async fn cancel_active_task(
     // If no task row, try to cancel a queued create_task request (pre-insert race)
     if !cancelled {
         if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM session_requests WHERE session_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+            r#"SELECT id, created_by, payload FROM sandbox_requests WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
         )
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .fetch_optional(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
@@ -874,19 +880,19 @@ pub async fn cancel_active_task(
                 let output = serde_json::json!({"text":"","items":[cancelled_item]});
                 // Insert cancelled task row (idempotent behavior if it already exists)
                 let _ = sqlx::query(
-                    r#"INSERT INTO session_tasks (id, session_id, created_by, status, input, output, created_at, updated_at)
+                    r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
                         ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
                 )
                 .bind(&task_id)
-                .bind(&session.id)
+                .bind(&sandbox.id)
                 .bind(&created_by)
                 .bind(&input)
                 .bind(&output)
                 .execute(&*state.db)
                 .await;
                 // Mark update completed to prevent later insertion
-                let _ = sqlx::query(r#"UPDATE session_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
+                let _ = sqlx::query(r#"UPDATE sandbox_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
                     .bind(&request_id)
                     .execute(&*state.db)
                     .await;
@@ -895,21 +901,21 @@ pub async fn cancel_active_task(
         }
     }
 
-    // Set session to idle
-    sqlx::query(r#"UPDATE sessions SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE id = ?"#)
-        .bind(&session.id)
+    // Set sandbox to idle
+    sqlx::query(r#"UPDATE sandboxes SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE id = ?"#)
+        .bind(&sandbox.id)
         .execute(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e)))?;
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox: {}", e)))?;
 
     Ok(Json(
-        serde_json::json!({"status":"ok", "session": session.id, "cancelled": cancelled}),
+        serde_json::json!({"status":"ok", "sandbox": sandbox.id, "cancelled": cancelled}),
     ))
 }
 
 #[derive(Debug, Serialize)]
-pub struct SessionContextUsageResponse {
-    pub session: String,
+pub struct SandboxContextUsageResponse {
+    pub sandbox: String,
     pub soft_limit_tokens: i64,
     pub used_tokens_estimated: i64,
     pub used_percent: f64,
@@ -944,23 +950,23 @@ fn avg_chars_per_token() -> f64 {
 #[allow(dead_code)]
 async fn estimate_history_tokens_since(
     pool: &sqlx::MySqlPool,
-    session_id: &str,
+    sandbox_id: &str,
     cutoff: Option<DateTime<Utc>>,
 ) -> Result<(i64, u32), ApiError> {
     // No ordering needed for estimation; avoid sort pressure
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ? AND created_at >= ?"#,
+            r#"SELECT status, input, output, created_at FROM sandbox_tasks WHERE sandbox_id = ? AND created_at >= ?"#,
         )
-            .bind(session_id)
+            .bind(sandbox_id)
             .bind(cut)
             .fetch_all(pool)
             .await
     } else {
         sqlx::query(
-            r#"SELECT status, input, output, created_at FROM session_tasks WHERE session_id = ?"#,
+            r#"SELECT status, input, output, created_at FROM sandbox_tasks WHERE sandbox_id = ?"#,
         )
-            .bind(session_id)
+            .bind(sandbox_id)
             .fetch_all(pool)
             .await
     }
@@ -1191,18 +1197,18 @@ async fn estimate_history_tokens_since(
     Ok((est_tokens, msg_count))
 }
 
-pub async fn get_session_context(
+pub async fn get_sandbox_context(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SessionContextUsageResponse>> {
+) -> ApiResult<Json<SandboxContextUsageResponse>> {
     // Reuse GET permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get session context".to_string())
+                ApiError::Forbidden("Insufficient permissions to get sandbox context".to_string())
             })?;
     }
 
@@ -1212,8 +1218,8 @@ pub async fn get_session_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
-    let used = session.last_context_length;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    let used = sandbox.last_context_length;
     let limit = soft_limit_tokens();
     let used_percent = if limit > 0 {
         (used as f64 * 100.0) / (limit as f64)
@@ -1221,13 +1227,13 @@ pub async fn get_session_context(
         0.0
     };
 
-    let resp = SessionContextUsageResponse {
-        session: session.id,
+    let resp = SandboxContextUsageResponse {
+        sandbox: sandbox.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: used,
         used_percent,
         basis: "ollama_last_context_length".to_string(),
-        cutoff_at: session.context_cutoff_at.map(|dt| dt.to_rfc3339()),
+        cutoff_at: sandbox.context_cutoff_at.map(|dt| dt.to_rfc3339()),
         measured_at: Utc::now().to_rfc3339(),
         total_messages_considered: 0,
     };
@@ -1235,15 +1241,15 @@ pub async fn get_session_context(
     Ok(Json(resp))
 }
 
-pub async fn clear_session_context(
+pub async fn clear_sandbox_context(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SessionContextUsageResponse>> {
+) -> ApiResult<Json<SandboxContextUsageResponse>> {
     // Require update permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to clear context".to_string())
@@ -1256,18 +1262,19 @@ pub async fn clear_session_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the session
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    // Confirm access to the sandbox
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
     // Set the cutoff now
-    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.id)
+    crate::shared::models::Sandbox::clear_context_cutoff(&state.db, &sandbox.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was cleared
-    if let Ok(created) = task_model::SessionTask::create(
+    if let Ok(created) = task_model::SandboxTask::create(
         &state.db,
-        &session.id,
+        &sandbox.id,
         username,
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1278,7 +1285,7 @@ pub async fn clear_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = task_model::SessionTask::update_by_id(
+        let _ = task_model::SandboxTask::update_by_id(
             &state.db,
             &created.id,
             task_model::UpdateTaskRequest {
@@ -1297,8 +1304,8 @@ pub async fn clear_session_context(
     // Return fresh measurement (reset to zero)
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
-    let resp = SessionContextUsageResponse {
-        session: session.id,
+    let resp = SandboxContextUsageResponse {
+        sandbox: sandbox.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1311,15 +1318,15 @@ pub async fn clear_session_context(
 }
 
 // Compact context: summarize recent conversation and set a new cutoff.
-pub async fn compact_session_context(
+pub async fn compact_sandbox_context(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SessionContextUsageResponse>> {
+) -> ApiResult<Json<SandboxContextUsageResponse>> {
     // Require update permission
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
             .await
             .map_err(|_| {
                 ApiError::Forbidden("Insufficient permissions to compact context".to_string())
@@ -1332,25 +1339,26 @@ pub async fn compact_session_context(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the session
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    // Confirm access to the sandbox
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
     // Load conversation history since the current cutoff (if any)
-    let cutoff = session.context_cutoff_at;
+    let cutoff = sandbox.context_cutoff_at;
     let rows = if let Some(cut) = cutoff {
         sqlx::query(
-            r#"SELECT input, output FROM session_tasks WHERE session_id = ? AND created_at >= ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM sandbox_tasks WHERE sandbox_id = ? AND created_at >= ? ORDER BY created_at ASC"#,
         )
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .bind(cut)
         .fetch_all(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     } else {
         sqlx::query(
-            r#"SELECT input, output FROM session_tasks WHERE session_id = ? ORDER BY created_at ASC"#,
+            r#"SELECT input, output FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#,
         )
-        .bind(&session.id)
+        .bind(&sandbox.id)
         .fetch_all(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
@@ -1472,7 +1480,7 @@ pub async fn compact_session_context(
         "(No prior conversation to compact.)".to_string()
     } else {
         // Call Ollama to summarize the transcript
-        // Prefer the same variable name used by controller/session; default to Docker network hostname
+        // Prefer the same variable name used by controller/sandbox; default to Docker network hostname
         let base_url =
             std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
         let model =
@@ -1517,14 +1525,14 @@ pub async fn compact_session_context(
     };
 
     // Set the cutoff now
-    crate::shared::models::Session::clear_context_cutoff(&state.db, &session.id)
+    crate::shared::models::Sandbox::clear_context_cutoff(&state.db, &sandbox.id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to set context cutoff: {}", e)))?;
 
     // Record a history marker indicating context was compacted, include summary as a compact_summary item
-    if let Ok(created) = task_model::SessionTask::create(
+    if let Ok(created) = task_model::SandboxTask::create(
         &state.db,
-        &session.id,
+        &sandbox.id,
         username,
         task_model::CreateTaskRequest {
             input: serde_json::json!({ "content": [] }),
@@ -1535,7 +1543,7 @@ pub async fn compact_session_context(
     .await
     {
         let cutoff_now = Utc::now().to_rfc3339();
-        let _ = task_model::SessionTask::update_by_id(
+        let _ = task_model::SandboxTask::update_by_id(
             &state.db,
             &created.id,
             task_model::UpdateTaskRequest {
@@ -1557,8 +1565,8 @@ pub async fn compact_session_context(
     // Return fresh measurement (post-compaction, reset to zero)
     let limit = soft_limit_tokens();
     let now = Utc::now().to_rfc3339();
-    let resp = SessionContextUsageResponse {
-        session: session.id,
+    let resp = SandboxContextUsageResponse {
+        sandbox: sandbox.id,
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
@@ -1570,7 +1578,7 @@ pub async fn compact_session_context(
     Ok(Json(resp))
 }
 
-pub async fn update_session_context_usage(
+pub async fn update_sandbox_context_usage(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -1582,10 +1590,11 @@ pub async fn update_session_context_usage(
     };
 
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
     let tokens = req.tokens.max(0);
-    Session::update_last_context_length(&state.db, &session.id, tokens)
+    Sandbox::update_last_context_length(&state.db, &sandbox.id, tokens)
         .await
         .map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Failed to update context length: {}", e))
@@ -1597,25 +1606,25 @@ pub async fn update_session_context_usage(
     })))
 }
 
-pub async fn start_session(
+pub async fn create_sandbox(
     State(state): State<Arc<AppState>>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<StartSessionRequest>,
-) -> ApiResult<Json<SessionResponse>> {
+    Json(req): Json<CreateSandboxRequest>,
+) -> ApiResult<Json<SandboxResponse>> {
     tracing::info!(
-        "Creating session with env: {} keys, instructions: {}, setup: {}, prompt: {}",
+        "Creating sandbox with env: {} keys, instructions: {}, setup: {}, prompt: {}",
         req.env.len(),
         req.instructions.is_some(),
         req.setup.is_some(),
         req.prompt.is_some()
     );
 
-    // Admins require explicit permission; non-admins can create their own sessions
+    // Admins require explicit permission; non-admins can create their own sandboxes
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_CREATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to create session".to_string())
+                ApiError::Forbidden("Insufficient permissions to create sandbox".to_string())
             })?;
     }
 
@@ -1625,14 +1634,14 @@ pub async fn start_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let session = Session::create(&state.db, req.clone(), created_by)
+    let sandbox = Sandbox::create(&state.db, req.clone(), created_by)
         .await
         .map_err(|e| {
-            tracing::error!("Failed to create session: {:?}", e);
-            ApiError::Internal(anyhow::anyhow!("Failed to create session: {}", e))
+            tracing::error!("Failed to create sandbox: {:?}", e);
+            ApiError::Internal(anyhow::anyhow!("Failed to create sandbox: {}", e))
         })?;
 
-    // Add request to queue for session manager to create container with session parameters
+    // Add request to queue for sandbox manager to create container with sandbox parameters
     let payload = serde_json::json!({
         "env": req.env,
         "instructions": req.instructions,
@@ -1648,337 +1657,37 @@ pub async fn start_session(
 
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
-        VALUES (?, 'start_session', ?, ?, 'pending')
+        INSERT INTO sandbox_requests (sandbox_id, request_type, created_by, payload, status)
+        VALUES (?, 'create_sandbox', ?, ?, 'pending')
         "#,
     )
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(created_by)
     .bind(payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create sandbox request: {}", e)))?;
 
-    tracing::info!("Created session request for session {}", session.id);
+    tracing::info!("Created sandbox request for sandbox {}", sandbox.id);
 
     Ok(Json(
-        SessionResponse::from_session(session, &state.db).await?,
+        SandboxResponse::from_sandbox(sandbox, &state.db).await?,
     ))
 }
 
-pub async fn clone_session(
+
+pub async fn update_sandbox(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<CloneSessionRequest>,
-) -> ApiResult<Json<SessionResponse>> {
-    // Admins require explicit permission; non-admins can clone according to publish/ownership checks
-    if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_CREATE)
-            .await
-            .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to clone session".to_string())
-            })?;
-    }
-
-    // Get username for ownership check
-    let username = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Find parent session by ID or name (admin can clone any session, users only their own)
-    let is_admin = is_admin_principal(&auth, &state).await;
-    let parent = find_session_by_id(&state, &id, username, is_admin).await?;
-
-    // Check clone permissions: only owner or admin can clone
-    if parent.created_by != *username && !is_admin {
-        return Err(ApiError::Forbidden(
-            "You can only clone your own sessions".to_string(),
-        ));
-    }
-
-    // Get the principal name for request creation (cloner becomes owner)
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Store the initial prompt before moving req into Session::clone_from
-    let initial_prompt = req.prompt.clone();
-
-    let session = Session::clone_from(&state.db, &parent.id, req.clone(), created_by)
-        .await
-        .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to clone session: {}", e))
-        })?;
-
-    // Add request to queue for session manager to create container with full volume copy
-    let request_payload = serde_json::json!({
-        "clone": true,
-        "parent_session_id": parent.id,
-        "prompt": initial_prompt,
-        "principal": created_by,
-        "principal_type": match &auth.principal {
-            crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
-            crate::shared::rbac::AuthPrincipal::Operator(_) => "Admin",
-        }
-    });
-
-    sqlx::query(
-        r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
-        VALUES (?, 'start_session', ?, ?, 'pending')
-        "#,
-    )
-    .bind(&session.id)
-    .bind(created_by)
-    .bind(request_payload)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create session request: {}", e)))?;
-
-    tracing::info!(
-        "Created session request for cloned session {}",
-        session.id
-    );
-
-    Ok(Json(
-        SessionResponse::from_session(session, &state.db).await?,
-    ))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct StopSessionRequest {
-    #[serde(default)]
-    pub delay_seconds: Option<u64>,
-    #[serde(default)]
-    pub note: Option<String>,
-}
-
-pub async fn stop_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-    maybe_req: Option<Json<StopSessionRequest>>,
-) -> ApiResult<Json<SessionResponse>> {
-    tracing::info!("Stop request received for session: {}", id);
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Find session by ID (admin can stop any session)
-    let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, created_by, is_admin).await?;
-
-    tracing::info!("Found session in state: {}", session.state);
-
-    // Check permission for updating sessions (admin only). Owners can stop without RBAC grant
-    if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
-            .await
-            .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to stop session".to_string())
-            })?;
-    }
-
-    // Allow stopping own sessions or admin can stop any session
-    let username = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    let is_admin = is_admin_principal(&auth, &state).await;
-    if !is_admin && session.created_by != *username {
-        return Err(ApiError::Forbidden(
-            "Can only stop your own sessions".to_string(),
-        ));
-    }
-    tracing::info!("Permission check passed");
-
-    // Check current state - cannot stop if already stopped
-
-    if session.state == crate::shared::models::constants::SESSION_STATE_STOPPED {
-        return Err(ApiError::BadRequest(
-            "Session is already stopped".to_string(),
-        ));
-    }
-
-    // Determine delay (min 5 seconds)
-    // Try to parse JSON body; if absent or invalid, default to 5
-    let mut delay_seconds = maybe_req
-        .as_ref()
-        .and_then(|r| r.delay_seconds)
-        .unwrap_or(5);
-    if delay_seconds < 5 {
-        delay_seconds = 5;
-    }
-    // Add request to destroy the container but keep volume after delay
-    let note = maybe_req
-        .as_ref()
-        .and_then(|r| r.note.clone())
-        .and_then(|s| {
-            let t = s.trim().to_string();
-            if t.is_empty() {
-                None
-            } else {
-                Some(t)
-            }
-        });
-    let payload = if let Some(ref n) = note {
-        serde_json::json!({ "delay_seconds": delay_seconds, "note": n })
-    } else {
-        serde_json::json!({ "delay_seconds": delay_seconds })
-    };
-    sqlx::query(
-        r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
-        VALUES (?, 'stop_session', ?, ?, 'pending')
-        "#,
-    )
-    .bind(&session.id)
-    .bind(&created_by)
-    .bind(payload)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to create stop request: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create stop request: {}", e))
-    })?;
-
-    tracing::info!("Created stop request for session {}", session.id);
-
-    // Do not insert a pre-stop marker; the controller will add a single 'stopped' marker when shutdown completes
-
-    // Fetch session (state remains as-is until controller executes stop)
-    let updated_session = Session::find_by_id(&state.db, &session.id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Session not found".to_string()))?;
-
-    Ok(Json(
-        SessionResponse::from_session(updated_session, &state.db).await?,
-    ))
-}
-
-pub async fn restart_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-    Json(req): Json<RestartSessionRequest>,
-) -> ApiResult<Json<SessionResponse>> {
-    // Check permission for updating sessions (admin only). Owners can restart without RBAC grant
-    if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
-            .await
-            .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to restart session".to_string())
-            })?;
-    }
-
-    // Get username for ownership check
-    let username = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Find session by ID or name (admin can find any session, but restore has ownership restrictions)
-    let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
-
-    // Ownership: owners can restart their own sessions; admins (with SESSION_UPDATE) may restart any session
-    if session.created_by != *username && !is_admin {
-        return Err(ApiError::Forbidden(
-            "You can only restart your own sessions.".to_string(),
-        ));
-    }
-
-    // Check current state - can only restart if stopped
-    if session.state != crate::shared::models::constants::SESSION_STATE_STOPPED {
-        return Err(ApiError::BadRequest(format!(
-            "Cannot restart session in {} state - only stopped sessions can be restarted",
-            session.state
-        )));
-    }
-
-    // Update session state to INIT and bump activity timestamp.
-    // Guard on current state to avoid races between check and update.
-    let result = query(
-        r#"
-        UPDATE sessions
-        SET state = ?, last_activity_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND state = ?
-        "#,
-    )
-    .bind(crate::shared::models::constants::SESSION_STATE_INIT)
-    .bind(&session.id)
-    .bind(crate::shared::models::constants::SESSION_STATE_STOPPED)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to restart session: {}", e)))?;
-
-    if result.rows_affected() == 0 {
-        return Err(ApiError::NotFound("Session not found".to_string()));
-    }
-
-    // Get the principal name for request creation
-    let created_by = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Add update to restart the container with optional prompt
-    // Include the session owner as principal for token generation so the
-    // container can authenticate to the API even when an admin triggers restart.
-    let restart_payload = serde_json::json!({
-        "prompt": req.prompt,
-        "reason": "user_restart",
-        "principal": session.created_by,
-        "principal_type": "User"
-    });
-
-    sqlx::query(
-        r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
-        VALUES (?, 'restart_session', ?, ?, 'pending')
-        "#,
-    )
-    .bind(&session.id)
-    .bind(username)
-    .bind(&restart_payload)
-    .execute(&*state.db)
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed to create restart request: {:?}", e);
-        ApiError::Internal(anyhow::anyhow!("Failed to create restart request: {}", e))
-    })?;
-
-    tracing::info!("Created restart request for session {}", session.id);
-
-    // Fetch updated session
-    let updated_session = Session::find_by_id(&state.db, &session.id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch updated session: {}", e)))?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
-
-    Ok(Json(
-        SessionResponse::from_session(updated_session, &state.db).await?,
-    ))
-}
-
-pub async fn update_session(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-    Json(req): Json<UpdateSessionRequest>,
-) -> ApiResult<Json<SessionResponse>> {
+    Json(req): Json<UpdateSandboxRequest>,
+) -> ApiResult<Json<SandboxResponse>> {
     // Admins require explicit permission; owners can update without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_UPDATE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to update session".to_string())
+                ApiError::Forbidden("Insufficient permissions to update sandbox".to_string())
             })?;
     }
 
@@ -1988,64 +1697,69 @@ pub async fn update_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by ID or name (admin can access any session for update/delete)
+    // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+
+    // Check if sandbox is deleted
+    check_not_deleted(&sandbox)?;
+
     // Enforce ownership: only admin or owner may update
-    if !is_admin && session.created_by != *username {
+    if !is_admin && sandbox.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only update your own sessions".to_string(),
+            "You can only update your own sandboxes".to_string(),
         ));
     }
 
-    let updated_session = Session::update(&state.db, &session.id, req)
+    let updated_sandbox = Sandbox::update(&state.db, &sandbox.id, req)
         .await
         .map_err(|e| {
             let error_msg = e.to_string();
             if error_msg.contains("No fields to update") {
                 ApiError::BadRequest(error_msg)
             } else {
-                ApiError::Internal(anyhow::anyhow!("Failed to update session: {}", e))
+                ApiError::Internal(anyhow::anyhow!("Failed to update sandbox: {}", e))
             }
         })?
-        .ok_or(ApiError::NotFound("Session not found".to_string()))?;
+        .ok_or(ApiError::NotFound("Sandbox not found".to_string()))?;
 
     Ok(Json(
-        SessionResponse::from_session(updated_session, &state.db).await?,
+        SandboxResponse::from_sandbox(updated_sandbox, &state.db).await?,
     ))
 }
 
-pub async fn update_session_state(
+pub async fn update_sandbox_state(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-    Json(req): Json<UpdateSessionStateRequest>,
+    Json(req): Json<UpdateSandboxStateRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Get session and verify ownership (same pattern as other session endpoints)
+    // Get sandbox and verify ownership (same pattern as other sandbox endpoints)
     // Get username for ownership check
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by ID or name (admin can access any session for update/delete)
+    // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
     // Update the state with ownership verification
     let result = sqlx::query(
-        "UPDATE sessions SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
+        "UPDATE sandboxes SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND created_by = ?"
     )
     .bind(&req.state)
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update session state: {}", e)))?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox state: {}", e)))?;
 
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound(
-            "Session not found or access denied".to_string(),
+            "Sandbox not found or access denied".to_string(),
         ));
     }
 
@@ -2055,17 +1769,17 @@ pub async fn update_session_state(
     })))
 }
 
-pub async fn delete_session(
+pub async fn delete_sandbox(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
-    // Check permission for deleting sessions (admin only). Owners can delete without RBAC grant
+    // Check permission for deleting sandboxes (admin only). Owners can delete without RBAC grant
     if is_admin_principal(&auth, &state).await {
-        check_api_permission(&auth, &state, &permissions::SESSION_DELETE)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_DELETE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to delete session".to_string())
+                ApiError::Forbidden("Insufficient permissions to delete sandbox".to_string())
             })?;
     }
 
@@ -2075,39 +1789,34 @@ pub async fn delete_session(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session by ID or name (admin can access any session for update/delete)
+    // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
-    // Hard delete: schedule container+volume removal, then remove DB row
-    // Add request to queue for session manager to delete container and cleanup volume
+    // Delete sandbox: schedule container stop and mark as deleted
+    // Add request to queue for sandbox manager to stop container and set state to deleted
     sqlx::query(
         r#"
-        INSERT INTO session_requests (session_id, request_type, created_by, payload, status)
-        VALUES (?, 'delete_session', ?, '{}', 'pending')
+        INSERT INTO sandbox_requests (sandbox_id, request_type, created_by, payload, status)
+        VALUES (?, 'delete_sandbox', ?, '{}', 'pending')
         "#,
     )
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .bind(username)
     .execute(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create delete request: {}", e)))?;
 
-    tracing::info!("Created delete request for session {}", session.id);
+    tracing::info!("Created delete request for sandbox {}", sandbox.id);
 
-    let deleted = Session::delete(&state.db, &session.id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to delete session: {}", e)))?;
-
-    if !deleted {
-        return Err(ApiError::NotFound("Session not found".to_string()));
-    }
+    // The controller will stop the container and set state to 'deleted'
+    // The sandbox row remains in DB for history/audit purposes
 
     Ok(())
 }
 
-// GET /sessions/{id}/runtime — total runtime across sessions
-pub async fn get_session_runtime(
+// GET /sandboxes/{id}/runtime — total runtime across sandboxes
+pub async fn get_sandbox_runtime(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
@@ -2115,10 +1824,10 @@ pub async fn get_session_runtime(
     // Permission: owner or admin
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
-        check_api_permission(&auth, &state, &permissions::SESSION_GET)
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get session runtime".to_string())
+                ApiError::Forbidden("Insufficient permissions to get sandbox runtime".to_string())
             })?;
     }
 
@@ -2128,22 +1837,22 @@ pub async fn get_session_runtime(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session (admin can access any session)
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    // Find sandbox (admin can access any sandbox)
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
-    // Fetch all tasks for this session (created_at + output JSON)
+    // Fetch all tasks for this sandbox (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM session_tasks WHERE session_id = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, output FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#
     )
-    .bind(&session.id)
+    .bind(&sandbox.id)
     .fetch_all(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
-    // Sum runtime for completed sessions; track last restart marker for current session inclusion
+    // Sum runtime for completed sandboxes; track last restart marker for current sandbox inclusion
     let mut total: i64 = 0;
     let mut last_restarted: Option<DateTime<Utc>> = None;
-    let mut current_session: i64 = 0;
+    let mut current_sandbox: i64 = 0;
     for (row_created_at, output) in rows.into_iter() {
         if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
             for it in items {
@@ -2156,7 +1865,7 @@ pub async fn get_session_runtime(
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or(row_created_at);
                     last_restarted = Some(at);
-                } else if t == "stopped" {
+                } else if t == "deleted" {
                     // Prefer embedded runtime_seconds, else compute delta
                     if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
                         if rs > 0 {
@@ -2169,7 +1878,7 @@ pub async fn get_session_runtime(
                             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                             .map(|dt| dt.with_timezone(&Utc))
                             .unwrap_or(row_created_at);
-                        let start_at = last_restarted.unwrap_or(session.created_at);
+                        let start_at = last_restarted.unwrap_or(sandbox.created_at);
                         let delta = (end_at - start_at).num_seconds();
                         if delta > 0 {
                             total += delta;
@@ -2180,44 +1889,45 @@ pub async fn get_session_runtime(
         }
     }
 
-    // Include current session up to now when session is not stopped
-    if session.state.to_lowercase() != crate::shared::models::constants::SESSION_STATE_STOPPED {
-        let start_at = last_restarted.unwrap_or(session.created_at);
+    // Include current sandbox up to now when sandbox is not deleted
+    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_DELETED {
+        let start_at = last_restarted.unwrap_or(sandbox.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
         if delta > 0 {
             total += delta;
-            current_session = delta;
+            current_sandbox = delta;
         }
     }
 
     Ok(Json(serde_json::json!({
-        "session_id": session.id,
+        "sandbox_id": sandbox.id,
         "total_runtime_seconds": total,
-        "current_session_seconds": current_session
+        "current_sandbox_seconds": current_sandbox
     })))
 }
 
-pub async fn update_session_to_busy(
+pub async fn update_sandbox_to_busy(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Only the session container should be able to call this
+    // Only the sandbox container should be able to call this
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session (session token should match session ownership)
+    // Find sandbox (sandbox token should match sandbox ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
-    // Update session to busy: clear idle_from and set busy_from (pauses stop timeout)
-    Session::update_session_to_busy(&state.db, &session.id)
+    // Update sandbox to busy: clear idle_from and set busy_from (pauses stop timeout)
+    Sandbox::update_sandbox_to_busy(&state.db, &sandbox.id)
         .await
         .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update session to busy: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to update sandbox to busy: {}", e))
         })?;
 
     Ok(Json(serde_json::json!({
@@ -2227,26 +1937,27 @@ pub async fn update_session_to_busy(
     })))
 }
 
-pub async fn update_session_to_idle(
+pub async fn update_sandbox_to_idle(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Only the session container should be able to call this
+    // Only the sandbox container should be able to call this
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Find session (session token should match session ownership)
+    // Find sandbox (sandbox token should match sandbox ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
-    let session = find_session_by_id(&state, &id, username, is_admin).await?;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
 
-    // Update session to idle: set idle_from and clear busy_from (idle timeout active)
-    Session::update_session_to_idle(&state.db, &session.id)
+    // Update sandbox to idle: set idle_from and clear busy_from (idle timeout active)
+    Sandbox::update_sandbox_to_idle(&state.db, &sandbox.id)
         .await
         .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update session to idle: {}", e))
+            ApiError::Internal(anyhow::anyhow!("Failed to update sandbox to idle: {}", e))
         })?;
 
     Ok(Json(serde_json::json!({
