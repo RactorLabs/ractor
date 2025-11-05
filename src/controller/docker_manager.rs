@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bollard::{
-    container::{Config, CreateContainerOptions, LogsOptions, RemoveContainerOptions},
+    container::{Config, CreateContainerOptions, DownloadFromContainerOptions, LogsOptions, RemoveContainerOptions},
     exec::{CreateExecOptions, StartExecResults},
     models::{HostConfig, Mount, MountTypeEnum},
     Docker,
@@ -8,6 +8,9 @@ use bollard::{
 use futures::StreamExt;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
+use std::path::Path;
+use tokio::fs;
+use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
@@ -1248,127 +1251,57 @@ echo 'Session directories created (.env, logs)'
         info!("Creating snapshot {} for sandbox {}", snapshot_id, sandbox_id);
 
         // Check if container exists
-        match self.docker.inspect_container(&container_name, None).await {
-            Ok(_) => {
-                // Container exists, copy data from it
-                info!("Copying data from running container {} to snapshot {}", container_name, snapshot_id);
-
-                // Use docker cp to copy /sandbox/ from container to /data/snapshots/{snapshot_id}/
-                // We'll use a temporary container to perform the copy since we're in controller
-                let copy_container_name = format!("tsbx_snapshot_copy_{}", snapshot_id);
-
-                let config = Config {
-                    image: Some(self.sandbox_image.clone()),
-                    user: Some("root".to_string()),
-                    cmd: Some(vec![
-                        "bash".to_string(),
-                        "-c".to_string(),
-                        format!(
-                            "mkdir -p /snapshots/{} && docker cp {}:/sandbox/. /snapshots/{}/",
-                            snapshot_id, container_name, snapshot_id
-                        ),
-                    ]),
-                    host_config: Some(HostConfig {
-                        mounts: Some(vec![
-                            Mount {
-                                typ: Some(MountTypeEnum::VOLUME),
-                                source: Some("tsbx_snapshots_data".to_string()),
-                                target: Some("/snapshots".to_string()),
-                                read_only: Some(false),
-                                ..Default::default()
-                            },
-                            Mount {
-                                typ: Some(MountTypeEnum::BIND),
-                                source: Some("/var/run/docker.sock".to_string()),
-                                target: Some("/var/run/docker.sock".to_string()),
-                                read_only: Some(false),
-                                ..Default::default()
-                            },
-                        ]),
-                        network_mode: Some("tsbx_network".to_string()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                };
-
-                // Create and start the copy container
-                self.docker
-                    .create_container(
-                        Some(CreateContainerOptions {
-                            name: copy_container_name.clone(),
-                            ..Default::default()
-                        }),
-                        config,
-                    )
-                    .await?;
-
-                self.docker
-                    .start_container::<String>(&copy_container_name, None)
-                    .await?;
-
-                // Wait for completion
-                let mut wait_stream = self
-                    .docker
-                    .wait_container::<String>(&copy_container_name, None);
-                while let Some(wait_result) = wait_stream.next().await {
-                    let exit_result = wait_result?;
-                    if exit_result.status_code == 0 {
-                        info!("Snapshot {} created successfully", snapshot_id);
-                    } else {
-                        warn!(
-                            "Snapshot copy container exited with code {}",
-                            exit_result.status_code
-                        );
-                    }
-                    break;
-                }
-
-                // Get logs for debugging
-                let logs = self.docker.logs::<String>(
-                    &copy_container_name,
-                    Some(LogsOptions {
-                        stdout: true,
-                        stderr: true,
-                        ..Default::default()
-                    }),
-                );
-
-                let log_output = logs
-                    .map(|log| match log {
-                        Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
-                        Err(_) => String::new(),
-                    })
-                    .collect::<Vec<_>>()
-                    .await
-                    .join("");
-
-                if !log_output.is_empty() {
-                    info!("Snapshot copy logs: {}", log_output.trim());
-                }
-
-                // Clean up copy container
-                let _ = self
-                    .docker
-                    .remove_container(
-                        &copy_container_name,
-                        Some(RemoveContainerOptions {
-                            force: true,
-                            ..Default::default()
-                        }),
-                    )
-                    .await;
-
-                Ok(())
-            }
-            Err(_) => {
-                // Container doesn't exist, can't create snapshot
-                warn!("Container {} not found, cannot create snapshot", container_name);
-                Err(anyhow::anyhow!(
-                    "Cannot create snapshot: container {} not found",
-                    container_name
-                ))
-            }
+        if let Err(_) = self.docker.inspect_container(&container_name, None).await {
+            warn!("Container {} not found, cannot create snapshot", container_name);
+            return Err(anyhow::anyhow!(
+                "Cannot create snapshot: container {} not found",
+                container_name
+            ));
         }
+
+        // Create snapshot directory in controller's local filesystem
+        // The controller has /data/snapshots mounted from tsbx_snapshots_data volume
+        let snapshot_dir = format!("/data/snapshots/{}", snapshot_id);
+        fs::create_dir_all(&snapshot_dir).await?;
+
+        info!("Copying data from container {} to {}", container_name, snapshot_dir);
+
+        // Download tar stream from container's /sandbox directory
+        let options = DownloadFromContainerOptions {
+            path: "/sandbox".to_string(),
+        };
+
+        let mut tar_stream = self.docker.download_from_container(&container_name, Some(options));
+
+        // Write tar file to snapshot directory
+        let tar_path = format!("{}/sandbox.tar", snapshot_dir);
+        let mut tar_file = fs::File::create(&tar_path).await?;
+
+        while let Some(chunk) = tar_stream.next().await {
+            let bytes = chunk?;
+            tar_file.write_all(&bytes).await?;
+        }
+
+        tar_file.flush().await?;
+        drop(tar_file);
+
+        // Extract the tar file
+        let extract_status = tokio::process::Command::new("tar")
+            .arg("-xf")
+            .arg("sandbox.tar")
+            .current_dir(&snapshot_dir)
+            .status()
+            .await?;
+
+        if !extract_status.success() {
+            return Err(anyhow::anyhow!("Failed to extract snapshot tar file"));
+        }
+
+        // Remove the tar file after extraction
+        let _ = fs::remove_file(&tar_path).await;
+
+        info!("Snapshot {} created successfully", snapshot_id);
+        Ok(())
     }
 
     // Restore a snapshot to a sandbox by copying from /data/snapshots/{snapshot_id}/ to container's /sandbox/

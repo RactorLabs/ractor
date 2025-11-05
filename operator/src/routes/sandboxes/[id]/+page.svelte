@@ -1615,6 +1615,7 @@
                   <ul class="dropdown-menu dropdown-menu-end">                    <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                     <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                     <li><hr class="dropdown-divider" /></li>
+                    <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
                     <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
                     <li><hr class="dropdown-divider" /></li>
                     <li><button class="dropdown-item text-danger" on:click={deleteSandbox}><i class="bi bi-trash me-2"></i>Delete</button></li>

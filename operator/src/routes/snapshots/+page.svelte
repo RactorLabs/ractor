@@ -13,6 +13,7 @@
   let snapshots = [];
   // Filters + pagination
   let q = '';
+  let sandbox_id = '';
   let limit = 30;
   let pageNum = 1; // 1-based
   let total = 0;
@@ -38,6 +39,7 @@
   function buildQuery() {
     const params = new URLSearchParams();
     if (q && q.trim().length) params.set('q', q.trim());
+    if (sandbox_id && sandbox_id.trim().length) params.set('sandbox_id', sandbox_id.trim());
     if (limit) params.set('limit', String(limit));
     if (pageNum) params.set('page', String(pageNum));
     return params.toString();
@@ -84,7 +86,7 @@
   let pollHandle = null;
   function startPolling() {
     stopPolling();
-    const filtersActive = (q && q.trim());
+    const filtersActive = (q && q.trim()) || (sandbox_id && sandbox_id.trim());
     if (!filtersActive && pageNum === 1) {
       pollHandle = setInterval(async () => { try { await fetchSnapshots(); } catch (_) {} }, 5000);
     }
@@ -120,6 +122,7 @@
     try {
       const sp = new URLSearchParams(location.search || '');
       q = sp.get('q') || '';
+      sandbox_id = sp.get('sandbox_id') || '';
       limit = Number(sp.get('limit') || 30);
       pageNum = Number(sp.get('page') || 1);
     } catch (_) {}
@@ -153,6 +156,12 @@
 {/if}
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Snapshots</div>
+  {#if sandbox_id && sandbox_id.trim()}
+    <span class="badge bg-primary-subtle text-primary-emphasis border">
+      <i class="bi bi-filter me-1"></i>Sandbox: {sandbox_id.substring(0, 8)}
+      <button type="button" class="btn-close btn-close-sm ms-1" style="font-size: 0.6rem; vertical-align: middle;" aria-label="Clear filter" on:click={() => { sandbox_id = ''; applyFilters(); }}></button>
+    </span>
+  {/if}
 
   <!-- Filters row -->
   <div class="w-100"></div>

@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use axum::{
-    extract::{Extension, Path, State},
+    extract::{Extension, Path, Query, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -41,13 +41,27 @@ pub struct PaginatedSnapshots {
     pub pages: usize,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ListSnapshotsQuery {
+    pub sandbox_id: Option<String>,
+}
+
 pub async fn list_snapshots(
     State(state): State<Arc<AppState>>,
+    Query(query): Query<ListSnapshotsQuery>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<PaginatedSnapshots>> {
-    let snapshots = Snapshot::find_all(&state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?;
+    let snapshots = if let Some(sandbox_id) = query.sandbox_id {
+        // Filter by sandbox_id
+        Snapshot::find_by_sandbox(&state.db, &sandbox_id)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+    } else {
+        // Get all snapshots
+        Snapshot::find_all(&state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+    };
 
     let total = snapshots.len();
     let items: Vec<SnapshotResponse> = snapshots.into_iter().map(SnapshotResponse::from).collect();
