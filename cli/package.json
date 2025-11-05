@@ -1,6 +1,6 @@
 {
   "name": "@tsbx/cli",
-  "version": "0.10.12",
+  "version": "0.11.0",
   "description": "TaskSandbox CLI - Computer use sessions",
   "main": "index.js",
   "bin": {

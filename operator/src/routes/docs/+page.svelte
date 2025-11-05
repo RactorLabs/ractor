@@ -6,7 +6,7 @@
   import { getHostName } from '$lib/branding.js';
 
   // Hard-coded docs version; update during version bumps
-  const API_VERSION = '0.10.12 (v0)';
+  const API_VERSION = '0.11.0 (v0)';
   const schemas = getCommonSchemas();
   // Compute docs once reactively and order Published section last
   $: docs = (() => {
