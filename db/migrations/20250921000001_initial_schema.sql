@@ -105,7 +105,9 @@ CREATE TABLE IF NOT EXISTS sandbox_requests (
     INDEX idx_sandbox_requests_status (status),
     INDEX idx_sandbox_requests_sandbox_id (sandbox_id),
     INDEX idx_sandbox_requests_created_by (created_by),
-    INDEX idx_sandbox_requests_created_at (created_at)
+    INDEX idx_sandbox_requests_created_at (created_at),
+    INDEX idx_sandbox_requests_status_created_at (status, created_at),
+    INDEX idx_sandbox_requests_sandbox_type_status_created_at (sandbox_id, request_type, status, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Snapshots
