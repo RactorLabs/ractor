@@ -1068,7 +1068,7 @@ impl SandboxManager {
             r#"
             SELECT id, state
             FROM sandboxes
-            WHERE state != 'deleted'
+            WHERE state NOT IN ('deleted', 'init')
             ORDER BY id
             "#,
         )
