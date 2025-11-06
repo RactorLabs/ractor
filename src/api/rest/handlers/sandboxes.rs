@@ -427,6 +427,11 @@ pub async fn list_sandbox_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    if sandbox.state == "deleted" {
+        return Err(ApiError::Conflict(
+            "Sandbox is deleted".to_string(),
+        ));
+    }
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -506,6 +511,11 @@ pub async fn list_sandbox_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    if sandbox.state == "deleted" {
+        return Err(ApiError::Conflict(
+            "Sandbox is deleted".to_string(),
+        ));
+    }
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
