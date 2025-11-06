@@ -439,8 +439,8 @@
     }
   }
 
-  // Auto-refresh the Files panel periodically (equivalent to pressing Refresh)
-  let fmAutoRefresh = true;
+  // Auto-refresh the Files panel periodically (equivalent to pressing Refresh). Default off.
+  let fmAutoRefresh = false;
   let fmRefreshHandle = null;
   let fmAutoRefreshReady = false;
 
@@ -805,7 +805,14 @@
   function segText(s) { return String(s?.text || ''); }
   function segContent(s) { return String(s?.content || ''); }
   function segTool(s) { return String(s?.tool || ''); }
-  function segArgs(s) { try { return (s && typeof s.args === 'object') ? s.args : null; } catch(_) { return null; } }
+  function segArgs(s) {
+    try {
+      if (!s || typeof s !== 'object') return null;
+      if (s.arguments && typeof s.arguments === 'object') return s.arguments;
+      if (s.args && typeof s.args === 'object') return s.args;
+      return null;
+    } catch(_) { return null; }
+  }
   function segOutput(s) {
     try {
       const o = s?.output;
@@ -1767,7 +1774,7 @@
                               </summary>
                               <div class="small text-body">
                                 <div class="text-body text-opacity-75 mb-1">Args</div>
-                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
+                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), arguments: segArgs(s) }, null, 2)}</code></pre>
                                 <div class="text-body text-opacity-75 mb-1">Result</div>
                                 {#if isInProgress(m) || expandAll || expandedSegments.has(segKey(m, j+1))}
                                   <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
@@ -1811,7 +1818,7 @@
                                   {/if}
                                 </span>
                               </summary>
-                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), args: segArgs(s) }, null, 2)}</code></pre>
+                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), arguments: segArgs(s) }, null, 2)}</code></pre>
                             </details>
                           </div>
                         {/if}
