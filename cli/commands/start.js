@@ -501,6 +501,7 @@ module.exports = (program) => {
               const args = ['run','-d',
                 '--name','tsbx_api',
                 '--network','tsbx_network',
+                '-v','tsbx_snapshots_data:/data/snapshots:ro',
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
