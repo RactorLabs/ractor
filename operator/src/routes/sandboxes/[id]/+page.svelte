@@ -1574,7 +1574,7 @@
               <!-- Last Activity removed per design -->
               {#if sandbox.snapshot_id}
                 <div class="mt-1">
-                  Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id.substring(0, 8)}</a>
+                  Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id}</a>
                 </div>
               {/if}
               <div class="mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
