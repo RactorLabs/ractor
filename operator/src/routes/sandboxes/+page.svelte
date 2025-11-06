@@ -312,11 +312,15 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
-                            <li><button class="dropdown-item" on:click={() => openEditTimeouts(a)}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
-                            <li><hr class="dropdown-divider" /></li>
+                            {#if String(a.state||'').toLowerCase() !== 'deleted'}
+                              <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                              <li><button class="dropdown-item" on:click={() => openEditTimeouts(a)}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
+                              <li><hr class="dropdown-divider" /></li>
+                            {/if}
                             <li><a class="dropdown-item" href="/snapshots?sandbox_id={a.id}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                            <li><button class="dropdown-item" on:click={() => openSnapshotModal(a)}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                            {#if String(a.state||'').toLowerCase() !== 'deleted'}
+                              <li><button class="dropdown-item" on:click={() => openSnapshotModal(a)}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                            {/if}
                           </ul>
                         </div>
                       </div>

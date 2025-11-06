@@ -1550,11 +1550,16 @@
                   <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="More actions">
                     <i class="bi bi-three-dots"></i>
                   </button>
-                  <ul class="dropdown-menu dropdown-menu-end">                    <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
-                    <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
-                    <li><hr class="dropdown-divider" /></li>
+                  <ul class="dropdown-menu dropdown-menu-end">
+                    {#if stateStr !== 'deleted'}
+                      <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                      <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
+                      <li><hr class="dropdown-divider" /></li>
+                    {/if}
                     <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                    <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                    {#if stateStr !== 'deleted'}
+                      <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                    {/if}
                   </ul>
                 </div>
               </div>
