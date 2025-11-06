@@ -81,28 +81,68 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function stopSandbox(sandbox) {
-    let delaySeconds = 5;
-    try {
-      const input = prompt('Stop in how many seconds? (min 5)', '5');
-      if (input !== null) {
-        const n = Math.floor(Number(input));
-        if (Number.isFinite(n)) delaySeconds = Math.max(5, n);
-      }
-    } catch (_) {}
-    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}/stop`, { method: 'POST', body: JSON.stringify({ delay_seconds: delaySeconds }) });
-    if (!res.ok) { error = res?.data?.message || 'Stop failed'; return; }
-    // Give the controller time to perform delayed stop before refreshing
-    await new Promise((r) => setTimeout(r, (delaySeconds * 1000) + 500));
-    await fetchSandboxes();
-  }
-
   async function deleteSandbox(sandbox) {
     const ok = confirm(`Delete sandbox '${sandbox.id || ''}'? This cannot be undone.`);
     if (!ok) return;
     const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}`, { method: 'DELETE' });
     if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
     await fetchSandboxes();
+  }
+
+  // Edit Timeouts modal state and actions
+  let showTimeoutsModal = false;
+  let idleTimeoutInput = 900;
+  let currentSandbox = null;
+  function openEditTimeouts(sandbox) {
+    currentSandbox = sandbox;
+    const idle = Number(sandbox?.idle_timeout_seconds ?? 900);
+    idleTimeoutInput = Number.isFinite(idle) && idle >= 0 ? idle : 900;
+    showTimeoutsModal = true;
+  }
+  function closeEditTimeouts() { showTimeoutsModal = false; currentSandbox = null; }
+  async function saveTimeouts() {
+    if (!currentSandbox) return;
+    try {
+      const idle = Math.max(0, Math.floor(Number(idleTimeoutInput || 900)));
+      const body = { idle_timeout_seconds: idle };
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(currentSandbox.id)}`, { method: 'PUT', body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Update failed (HTTP ${res.status})`);
+      showTimeoutsModal = false;
+      currentSandbox = null;
+      await fetchSandboxes();
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
+
+  // Snapshot modal state and actions
+  let showSnapshotModal = false;
+  let snapshotError = null;
+  function openSnapshotModal(sandbox) {
+    currentSandbox = sandbox;
+    snapshotError = null;
+    showSnapshotModal = true;
+  }
+  function closeSnapshotModal() { showSnapshotModal = false; currentSandbox = null; }
+  async function confirmCreateSnapshot() {
+    if (!currentSandbox) return;
+    try {
+      snapshotError = null;
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(currentSandbox.id)}/snapshots`, {
+        method: 'POST',
+        body: JSON.stringify({ trigger_type: 'manual' })
+      });
+      if (!res.ok) {
+        snapshotError = res?.data?.message || res?.data?.error || `Snapshot creation failed (HTTP ${res.status})`;
+        return;
+      }
+      showSnapshotModal = false;
+      currentSandbox = null;
+      // Redirect to snapshots page
+      goto('/snapshots');
+    } catch (e) {
+      snapshotError = e.message || String(e);
+    }
   }
 
   let pollHandle = null;
@@ -263,8 +303,8 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-primary btn-sm" on:click={() => stopSandbox(a)} aria-label="Stop sandbox">
-                            <i class="bi bi-stop-circle me-1"></i><span>Stop</span>
+                          <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSandbox(a)} aria-label="Delete sandbox">
+                            <i class="bi bi-trash me-1"></i><span>Delete</span>
                           </button>
                         {/if}
                         <div class="dropdown">
@@ -273,8 +313,10 @@ import { getHostUrl } from '$lib/branding.js';
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
                             <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
+                            <li><button class="dropdown-item" on:click={() => openEditTimeouts(a)}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                             <li><hr class="dropdown-divider" /></li>
-                            <li><button class="dropdown-item text-danger" on:click={() => deleteSandbox(a)}><i class="bi bi-trash me-2"></i>Delete</button></li>
+                            <li><a class="dropdown-item" href="/snapshots?sandbox_id={a.id}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
+                            <li><button class="dropdown-item" on:click={() => openSnapshotModal(a)}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
                           </ul>
                         </div>
                       </div>
@@ -287,7 +329,7 @@ import { getHostUrl } from '$lib/branding.js';
   :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
   :global(.list-actions .dropdown-menu) {
     position: absolute;
-    z-index: 9999 !important;
+    z-index: 3002 !important;
     /* Ensure menu obscures underlying card text on dark/light themes */
     background-color: var(--bs-dropdown-bg, var(--bs-card-bg, var(--bs-body-bg, #fff)));
     box-shadow: 0 .5rem 1rem rgba(0,0,0,.25);
@@ -299,6 +341,9 @@ import { getHostUrl } from '$lib/branding.js';
   /* Prevent decorative card arrow from overlapping dropdowns */
   :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
   .text-truncate { display: block; }
+  /* Ensure modals always sit on top */
+  :global(.modal) { z-index: 2000; }
+  :global(.modal-backdrop) { z-index: 1990; }
 </style>
                 </Card>
               </div>
@@ -322,3 +367,54 @@ import { getHostUrl } from '$lib/branding.js';
   </div>
 </div>
 </div>
+
+<!-- Edit Timeouts Modal -->
+{#if showTimeoutsModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Edit Timeouts</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeEditTimeouts}></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
+              <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
+              <div class="form-text">Time of inactivity before sandbox is automatically deleted. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeEditTimeouts}>Cancel</button>
+          <button class="btn btn-theme" on:click={saveTimeouts}>Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- Create Snapshot Modal -->
+{#if showSnapshotModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Create Snapshot</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeSnapshotModal}></button>
+        </div>
+        <div class="modal-body">
+          {#if snapshotError}
+            <div class="alert alert-danger small">{snapshotError}</div>
+          {/if}
+          <p class="mb-2">Create a snapshot of this sandbox's current state. You can use snapshots to create new sandboxes later.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeSnapshotModal}>Cancel</button>
+          <button class="btn btn-theme" on:click={confirmCreateSnapshot}><i class="bi bi-camera me-1"></i>Create Snapshot</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}

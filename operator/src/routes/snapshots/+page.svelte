@@ -211,7 +211,7 @@
                     <div class="row">
                       <div class="col-md-8">
                         <div class="d-flex align-items-center gap-2 mb-1">
-                          <span class="fw-bold text-decoration-none fs-18px font-monospace">{s.id || '-'}</span>
+                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href="/snapshots/{encodeURIComponent(s.id || '')}">{s.id || '-'}</a>
                           <span class={triggerTypeBadgeClass(s.trigger_type)}>{triggerTypeLabel(s.trigger_type)}</span>
                         </div>
                         <div class="small text-body text-opacity-75 mb-1">
@@ -226,6 +226,9 @@
                       </div>
                       <div class="col-md-4 d-flex align-items-center justify-content-md-end mt-2 mt-md-0">
                         <div class="d-flex align-items-center flex-wrap gap-2">
+                          <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
+                            <i class="bi bi-folder me-1"></i><span>View Files</span>
+                          </a>
                           <button class="btn btn-outline-theme btn-sm" on:click={() => createFromSnapshot(s)} aria-label="Create from snapshot">
                             <i class="bi bi-plus-circle me-1"></i><span>Create Sandbox</span>
                           </button>

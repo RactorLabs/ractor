@@ -689,30 +689,11 @@
         return;
       }
       showSnapshotModal = false;
-      // Optionally redirect to snapshots page or show success message
-      const snapshot = res.data;
-      if (snapshot && snapshot.id) {
-        alert(`Snapshot created: ${snapshot.id}`);
-      }
+      // Redirect to snapshots page
+      goto('/snapshots');
     } catch (e) {
       snapshotError = e.message || String(e);
     }
-  }
-
-  // Stop modal state and actions
-  let showStopModal = false;
-  let stopDelayInput = 5;
-  let stopNoteInput = '';
-  function openStopModal() {
-    stopDelayInput = 5;
-    stopNoteInput = '';
-    showStopModal = true;
-  }
-  function closeStopModal() { showStopModal = false; }
-  async function confirmStop() {
-    const d = Math.max(5, Math.floor(Number(stopDelayInput || 5)));
-    showStopModal = false;
-    await stopSandbox(d, stopNoteInput);
   }
 
   async function fetchSandbox() {
@@ -1379,20 +1360,6 @@
     sending = false;
   }
 
-  async function stopSandbox(delaySeconds = 5, note = '') {
-    try {
-      const body = { delay_seconds: delaySeconds };
-      const t = String(note || '').trim();
-      if (t) body['note'] = t;
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/stop`, { method: 'POST', body: JSON.stringify(body) });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Stop failed (HTTP ${res.status})`);
-      // Do not optimistically flip state; let polling update when controller stops it
-      error = null;
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
-
   async function cancelActive() {
     try {
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/cancel`, { method: 'POST' });
@@ -1485,35 +1452,6 @@
   </div>
 {/if}
 
-<!-- Stop Modal -->
-{#if showStopModal}
-  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Stop Sandbox</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeStopModal}></button>
-        </div>
-        <div class="modal-body">
-          <label class="form-label" for="stop-delay">Stop in (seconds)</label>
-          <input id="stop-delay" type="number" min="5" step="1" class="form-control" bind:value={stopDelayInput} />
-          <div class="form-text">Minimum 5 seconds. The sandbox will stop after this delay.</div>
-          <div class="mt-3">
-            <label class="form-label" for="stop-note">Note (optional)</label>
-            <input id="stop-note" type="text" class="form-control" bind:value={stopNoteInput} placeholder="e.g., Taking a break" />
-            <div class="form-text">Shown alongside the stop marker in chat.</div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeStopModal}>Cancel</button>
-          <button class="btn btn-primary" on:click={confirmStop}><i class="bi bi-stop-circle me-1"></i>Stop</button>
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
-
-
 <!-- Delete Modal -->
 {#if showDeleteModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
@@ -1604,7 +1542,7 @@
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-primary btn-sm" on:click={openStopModal} aria-label="Delete sandbox">
+                  <button class="btn btn-outline-danger btn-sm" on:click={deleteSandbox} aria-label="Delete sandbox">
                     <i class="bi bi-trash me-1"></i><span>Delete</span>
                   </button>
                 {/if}
@@ -1617,8 +1555,6 @@
                     <li><hr class="dropdown-divider" /></li>
                     <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
                     <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
-                    <li><hr class="dropdown-divider" /></li>
-                    <li><button class="dropdown-item text-danger" on:click={deleteSandbox}><i class="bi bi-trash me-2"></i>Delete</button></li>
                   </ul>
                 </div>
               </div>

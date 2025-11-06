@@ -100,6 +100,26 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             delete(handlers::snapshots::delete_snapshot),
         )
         .route(
+            "/snapshots/{id}/create",
+            post(handlers::snapshots::create_from_snapshot),
+        )
+        .route(
+            "/snapshots/{id}/files/read/{*path}",
+            get(handlers::snapshots::read_snapshot_file),
+        )
+        .route(
+            "/snapshots/{id}/files/metadata/{*path}",
+            get(handlers::snapshots::get_snapshot_file_metadata),
+        )
+        .route(
+            "/snapshots/{id}/files/list/{*path}",
+            get(handlers::snapshots::list_snapshot_files),
+        )
+        .route(
+            "/snapshots/{id}/files/list",
+            get(handlers::snapshots::list_snapshot_files_root),
+        )
+        .route(
             "/sandboxes/{id}/snapshots",
             get(handlers::snapshots::list_sandbox_snapshots),
         )
