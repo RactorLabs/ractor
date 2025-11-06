@@ -271,7 +271,9 @@ pub async fn read_sandbox_file(
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_read request: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to create file_read request: {}", e))
+    })?;
 
     // Poll for completion up to 15s
     let start = std::time::Instant::now();
@@ -428,9 +430,7 @@ pub async fn list_sandbox_files(
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     if sandbox.state == "deleted" {
-        return Err(ApiError::Conflict(
-            "Sandbox is deleted".to_string(),
-        ));
+        return Err(ApiError::Conflict("Sandbox is deleted".to_string()));
     }
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
@@ -455,7 +455,9 @@ pub async fn list_sandbox_files(
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e))
+    })?;
 
     let start = std::time::Instant::now();
     loop {
@@ -512,9 +514,7 @@ pub async fn list_sandbox_files_root(
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     if sandbox.state == "deleted" {
-        return Err(ApiError::Conflict(
-            "Sandbox is deleted".to_string(),
-        ));
+        return Err(ApiError::Conflict("Sandbox is deleted".to_string()));
     }
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
@@ -536,7 +536,9 @@ pub async fn list_sandbox_files_root(
     .bind(&payload)
     .execute(&*state.db)
     .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e)))?;
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to create file_list request: {}", e))
+    })?;
 
     let start = std::time::Instant::now();
     loop {
@@ -1686,7 +1688,6 @@ pub async fn create_sandbox(
         SandboxResponse::from_sandbox(sandbox, &state.db).await?,
     ))
 }
-
 
 pub async fn update_sandbox(
     State(state): State<Arc<AppState>>,

@@ -4,13 +4,16 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncReadExt;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
-use crate::shared::models::{AppState, CreateSandboxRequest, CreateSnapshotRequest, Sandbox, Snapshot};
+use crate::shared::models::{
+    AppState, CreateSandboxRequest, CreateSnapshotRequest, Sandbox, Snapshot,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotResponse {
@@ -135,11 +138,73 @@ pub async fn create_snapshot(
         ));
     }
 
-    let snapshot = Snapshot::create(&state.db, &sandbox.id, "user", req)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?;
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let snapshot_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "snapshot_id": snapshot_id,
+        "metadata": req.metadata,
+        "trigger_type": "user"
+    });
 
-    Ok((StatusCode::CREATED, Json(SnapshotResponse::from(snapshot))))
+    let username = sandbox.created_by.clone();
+
+    sqlx::query(
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+            VALUES (?, ?, 'create_snapshot', ?, ?, 'pending')"#,
+    )
+    .bind(&request_id)
+    .bind(&sandbox.id)
+    .bind(&username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to enqueue snapshot request: {}", e))
+    })?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let result = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                let snapshot_val = result.get("snapshot").cloned().ok_or_else(|| {
+                    ApiError::Internal(anyhow::anyhow!(
+                        "Snapshot creation completed without result payload"
+                    ))
+                })?;
+                let snapshot: Snapshot = serde_json::from_value(snapshot_val).map_err(|e| {
+                    ApiError::Internal(anyhow::anyhow!("Invalid snapshot payload: {}", e))
+                })?;
+                return Ok((StatusCode::CREATED, Json(SnapshotResponse::from(snapshot))));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "snapshot creation failed".to_string());
+                return Err(map_snapshot_request_error(&err));
+            }
+        }
+
+        if start.elapsed() >= std::time::Duration::from_secs(120) {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for snapshot creation".to_string(),
+            ));
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
 }
 
 pub async fn delete_snapshot(
@@ -215,6 +280,25 @@ fn get_content_type(path: &str) -> &'static str {
         "xml" => "application/xml",
         "zip" => "application/zip",
         _ => "application/octet-stream",
+    }
+}
+
+fn map_snapshot_request_error(err: &str) -> ApiError {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("too large") {
+        ApiError::PayloadTooLarge(err.to_string())
+    } else if lower.contains("no such file") || lower.contains("not found") {
+        ApiError::NotFound("Snapshot not found".to_string())
+    } else if lower.contains("deleted")
+        || lower.contains("closing")
+        || lower.contains("not running")
+        || lower.contains("container does not exist")
+    {
+        ApiError::Conflict("Sandbox is deleted".to_string())
+    } else if lower.contains("forbidden") || lower.contains("outside") {
+        ApiError::Forbidden(err.to_string())
+    } else {
+        ApiError::Internal(anyhow::anyhow!(err.to_string()))
     }
 }
 
@@ -314,7 +398,13 @@ pub async fn list_snapshot_files_root(
     Query(paging): Query<ListFilesQuery>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    list_snapshot_files(State(state), Path((snapshot_id, String::new())), Query(paging), Extension(auth)).await
+    list_snapshot_files(
+        State(state),
+        Path((snapshot_id, String::new())),
+        Query(paging),
+        Extension(auth),
+    )
+    .await
 }
 
 pub async fn read_snapshot_file(

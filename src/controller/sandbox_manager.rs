@@ -144,11 +144,7 @@ impl SandboxManager {
     }
 
     /// Ensure the sandbox container is running and healthy; wait up to timeout_secs
-    pub async fn ensure_sandbox_running(
-        &self,
-        sandbox_id: &str,
-        timeout_secs: u64,
-    ) -> Result<()> {
+    pub async fn ensure_sandbox_running(&self, sandbox_id: &str, timeout_secs: u64) -> Result<()> {
         // Quick healthy check
         match self.docker_manager.is_container_healthy(sandbox_id).await {
             Ok(true) => return Ok(()),
@@ -173,10 +169,7 @@ impl SandboxManager {
             }
         } else {
             // No row; nothing we can do
-            return Err(anyhow::anyhow!(
-                "Sandbox {} not found in DB",
-                sandbox_id
-            ));
+            return Err(anyhow::anyhow!("Sandbox {} not found in DB", sandbox_id));
         }
 
         // Wait for healthy
@@ -484,6 +477,7 @@ impl SandboxManager {
         let result = match request.request_type.as_str() {
             "create_sandbox" => self.handle_start_sandbox(request.clone()).await,
             "delete_sandbox" => self.handle_delete_sandbox_request(request.clone()).await,
+            "create_snapshot" => self.handle_create_snapshot(request.clone()).await,
             "execute_command" => self.handle_execute_command(request.clone()).await,
             "create_task" => self.handle_create_task(request.clone()).await,
             "file_read" => self.handle_file_read(request.clone()).await,
@@ -516,11 +510,11 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
         )
-            .bind(&request.sandbox_id)
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(&request.sandbox_id)
+        .fetch_one(&self.pool)
+        .await?;
 
         // Parse the payload to get sandbox creation parameters
         let env = request
@@ -603,17 +597,30 @@ impl SandboxManager {
 
         // Check if we need to restore from a snapshot
         if let Some(snapshot_id) = request.payload.get("snapshot_id").and_then(|v| v.as_str()) {
-            info!("Restoring snapshot {} to sandbox {}", snapshot_id, &sandbox.id);
+            info!(
+                "Restoring snapshot {} to sandbox {}",
+                snapshot_id, &sandbox.id
+            );
 
             // Wait a moment for container to be fully ready
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-            match self.docker_manager.restore_snapshot(&sandbox.id, snapshot_id).await {
+            match self
+                .docker_manager
+                .restore_snapshot(&sandbox.id, snapshot_id)
+                .await
+            {
                 Ok(_) => {
-                    info!("Snapshot {} successfully restored to sandbox {}", snapshot_id, &sandbox.id);
+                    info!(
+                        "Snapshot {} successfully restored to sandbox {}",
+                        snapshot_id, &sandbox.id
+                    );
                 }
                 Err(e) => {
-                    warn!("Failed to restore snapshot {} to sandbox {}: {}", snapshot_id, &sandbox.id, e);
+                    warn!(
+                        "Failed to restore snapshot {} to sandbox {}: {}",
+                        snapshot_id, &sandbox.id, e
+                    );
                     // Don't fail the entire creation - continue without the snapshot
                 }
             }
@@ -665,7 +672,10 @@ impl SandboxManager {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("Missing command in payload"))?;
 
-        info!("Executing command in sandbox ID {}: {}", &request.sandbox_id, command);
+        info!(
+            "Executing command in sandbox ID {}: {}",
+            &request.sandbox_id, command
+        );
         let _output = self
             .docker_manager
             .execute_command(&request.sandbox_id, command)
@@ -726,11 +736,11 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
         )
-            .bind(&request.sandbox_id)
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(&request.sandbox_id)
+        .fetch_one(&self.pool)
+        .await?;
 
         // Optional delay before closing (in seconds), minimum 5 seconds
         let delay_secs = request
@@ -757,8 +767,7 @@ impl SandboxManager {
             .unwrap_or((chrono::Utc::now(), String::new()));
 
         // Determine note: auto timeout vs user-triggered
-        let auto =
-            request.payload.get("reason").and_then(|v| v.as_str()) == Some("idle_timeout");
+        let auto = request.payload.get("reason").and_then(|v| v.as_str()) == Some("idle_timeout");
         let reason = if auto {
             if prior_state.to_lowercase() == "busy" {
                 "task_timeout"
@@ -786,9 +795,16 @@ impl SandboxManager {
 
             // Create snapshot before stopping (graceful failure - don't block stop)
             let snapshot_id = uuid::Uuid::new_v4().to_string();
-            match self.docker_manager.create_snapshot(&sandbox.id, &snapshot_id).await {
+            match self
+                .docker_manager
+                .create_snapshot(&sandbox.id, &snapshot_id)
+                .await
+            {
                 Ok(_) => {
-                    info!("Snapshot {} created for sandbox {}", snapshot_id, &sandbox.id);
+                    info!(
+                        "Snapshot {} created for sandbox {}",
+                        snapshot_id, &sandbox.id
+                    );
 
                     // Record snapshot in database
                     let snapshot_req = CreateSnapshotRequest {
@@ -796,16 +812,30 @@ impl SandboxManager {
                             "trigger": "sandbox_stop",
                             "stopped_at": chrono::Utc::now().to_rfc3339(),
                             "reason": reason
-                        })
+                        }),
                     };
 
-                    match Snapshot::create_with_id(&self.pool, &sandbox.id, "sandbox_close", snapshot_req, Some(snapshot_id.clone())).await {
+                    match Snapshot::create_with_id(
+                        &self.pool,
+                        &sandbox.id,
+                        "sandbox_close",
+                        snapshot_req,
+                        Some(snapshot_id.clone()),
+                    )
+                    .await
+                    {
                         Ok(_) => info!("Snapshot {} recorded in database", snapshot_id),
-                        Err(e) => warn!("Failed to record snapshot {} in database: {}", snapshot_id, e),
+                        Err(e) => warn!(
+                            "Failed to record snapshot {} in database: {}",
+                            snapshot_id, e
+                        ),
                     }
                 }
                 Err(e) => {
-                    warn!("Failed to create snapshot for sandbox {}: {}", &sandbox.id, e);
+                    warn!(
+                        "Failed to create snapshot for sandbox {}: {}",
+                        &sandbox.id, e
+                    );
                 }
             }
 
@@ -978,16 +1008,92 @@ impl SandboxManager {
         Ok(())
     }
 
+    pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
+        let sandbox = sqlx::query_as::<_, Sandbox>(
+            "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
+        )
+        .bind(&request.sandbox_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        if sandbox.state == "deleted" {
+            return self
+                .fail_request(&request.id, "sandbox is deleted".to_string())
+                .await;
+        }
+
+        let snapshot_id = request
+            .payload
+            .get("snapshot_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("Missing snapshot_id in payload"))?
+            .to_string();
+
+        let metadata = request
+            .payload
+            .get("metadata")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+
+        let trigger_type = request
+            .payload
+            .get("trigger_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("user")
+            .to_string();
+
+        match self.docker_manager.is_container_healthy(&sandbox.id).await {
+            Ok(true) => {}
+            _ => {
+                return self
+                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .await;
+            }
+        }
+
+        if let Err(e) = self
+            .docker_manager
+            .create_snapshot(&sandbox.id, &snapshot_id)
+            .await
+        {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!("failed to create snapshot {}: {}", snapshot_id, e),
+                )
+                .await;
+        }
+
+        let snapshot_req = CreateSnapshotRequest { metadata };
+        let snapshot = Snapshot::create_with_id(
+            &self.pool,
+            &sandbox.id,
+            &trigger_type,
+            snapshot_req,
+            Some(snapshot_id.clone()),
+        )
+        .await?;
+
+        let result = serde_json::json!({
+            "snapshot": snapshot,
+        });
+
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
+            .await
+    }
+
     pub async fn handle_create_task(&self, request: SandboxRequest) -> Result<()> {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?"
+             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
         )
-            .bind(&request.sandbox_id)
-            .fetch_one(&self.pool)
-            .await?;
+        .bind(&request.sandbox_id)
+        .fetch_one(&self.pool)
+        .await?;
 
         let principal = request.created_by.clone();
 
@@ -1087,11 +1193,7 @@ impl SandboxManager {
 
         for (sandbox_id, current_state) in active_sandboxes {
             // Check if container exists and is running
-            match self
-                .docker_manager
-                .is_container_healthy(&sandbox_id)
-                .await
-            {
+            match self.docker_manager.is_container_healthy(&sandbox_id).await {
                 Ok(true) => {
                     // Container is healthy, no action needed
                     continue;
