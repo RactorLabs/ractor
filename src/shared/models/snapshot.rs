@@ -73,7 +73,17 @@ impl Snapshot {
         trigger_type: &str,
         req: CreateSnapshotRequest,
     ) -> Result<Snapshot, sqlx::Error> {
-        let snapshot_id = uuid::Uuid::new_v4().to_string();
+        Self::create_with_id(pool, sandbox_id, trigger_type, req, None).await
+    }
+
+    pub async fn create_with_id(
+        pool: &sqlx::MySqlPool,
+        sandbox_id: &str,
+        trigger_type: &str,
+        req: CreateSnapshotRequest,
+        snapshot_id: Option<String>,
+    ) -> Result<Snapshot, sqlx::Error> {
+        let snapshot_id = snapshot_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
         sqlx::query(
             r#"

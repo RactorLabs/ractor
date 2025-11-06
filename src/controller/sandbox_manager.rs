@@ -799,7 +799,7 @@ impl SandboxManager {
                         })
                     };
 
-                    match Snapshot::create(&self.pool, &sandbox.id, "sandbox_close", snapshot_req).await {
+                    match Snapshot::create_with_id(&self.pool, &sandbox.id, "sandbox_close", snapshot_req, Some(snapshot_id.clone())).await {
                         Ok(_) => info!("Snapshot {} recorded in database", snapshot_id),
                         Err(e) => warn!("Failed to record snapshot {} in database: {}", snapshot_id, e),
                     }
