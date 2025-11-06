@@ -490,13 +490,34 @@ module.exports = (program) => {
 
             case 'api': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring API is running...');
-              if (await containerRunning('tsbx_api')) { console.log(chalk.green('[SUCCESS] ') + 'API already running'); console.log(); break; }
-              if (await containerExists('tsbx_api')) {
-                await docker(['start','tsbx_api']);
-                console.log(chalk.green('[SUCCESS] ') + 'API started');
-                console.log();
-                break;
+              let apiExists = await containerExists('tsbx_api');
+              if (apiExists) {
+                let hasSnapshotsMount = false;
+                try {
+                  const inspect = await execCmd('docker', ['inspect','tsbx_api','--format','{{range .Mounts}}{{println .Destination}}{{end}}'], { silent: true });
+                  const mounts = (inspect.stdout || '').split('\n').map(line => line.trim()).filter(Boolean);
+                  hasSnapshotsMount = mounts.includes('/data/snapshots');
+                } catch (_) {
+                  // If inspection fails, assume mounts are correct to avoid unnecessary recreation
+                  hasSnapshotsMount = true;
+                }
+
+                if (!hasSnapshotsMount) {
+                  console.log(chalk.blue('[INFO] ') + 'Recreating API container to attach snapshots volume...');
+                  try { await docker(['rm','-f','tsbx_api']); } catch (_) {}
+                  apiExists = false;
+                } else if (await containerRunning('tsbx_api')) {
+                  console.log(chalk.green('[SUCCESS] ') + 'API already running');
+                  console.log();
+                  break;
+                } else {
+                  await docker(['start','tsbx_api']);
+                  console.log(chalk.green('[SUCCESS] ') + 'API started');
+                  console.log();
+                  break;
+                }
               }
+              if (!apiExists) {
               const API_IMAGE = await resolveTaskSandboxImage('api','tsbx_api','registry.digitalocean.com/tsbx/tsbx_api', tag);
               const args = ['run','-d',
                 '--name','tsbx_api',
@@ -514,6 +535,7 @@ module.exports = (program) => {
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'API container started');
               console.log();
+              }
               break;
             }
 
