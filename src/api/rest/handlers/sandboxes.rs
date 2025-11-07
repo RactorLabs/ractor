@@ -1676,6 +1676,7 @@ pub async fn create_sandbox(
         "instructions": req.instructions,
         "setup": req.setup,
         "prompt": req.prompt,
+        "snapshot_id": req.snapshot_id,
         "principal": created_by,
         "principal_type": match &auth.principal {
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
