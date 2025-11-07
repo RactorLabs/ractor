@@ -20,6 +20,10 @@
   let filesLoading = false;
   let filesError = null;
   let breadcrumbs = [];
+  let previewFile = null;
+  let previewContent = '';
+  let previewLoading = false;
+  let previewError = null;
 
   function updateBreadcrumbs() {
     breadcrumbs = [{ name: 'Root', path: '' }];
@@ -52,6 +56,7 @@
   async function fetchFiles(path = '') {
     filesLoading = true;
     filesError = null;
+    resetPreview();
     try {
       const encodedPath = path ? `/list/${encodeURIComponent(path)}` : '/list';
       const res = await apiFetch(`/snapshots/${encodeURIComponent(snapshotId)}/files${encodedPath}`);
@@ -74,16 +79,45 @@
     fetchFiles(path);
   }
 
+  function resetPreview() {
+    previewFile = null;
+    previewContent = '';
+    previewLoading = false;
+    previewError = null;
+  }
+
   function openFile(file) {
     if (file.is_dir) {
       const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
       navigateToPath(newPath);
     } else {
       const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      const url = `/api/v0/snapshots/${encodeURIComponent(snapshotId)}/files/read/${encodeURIComponent(filePath)}`;
-      window.open(url, '_blank');
+      loadPreview(filePath, file.name);
     }
   }
+
+  async function loadPreview(path, name) {
+    previewFile = { name, path };
+    previewContent = '';
+    previewError = null;
+    previewLoading = true;
+    try {
+      const url = `/api/v0/snapshots/${encodeURIComponent(snapshotId)}/files/read/${encodeURIComponent(path)}`;
+      const resp = await fetch(url);
+      if (!resp.ok) {
+        previewError = `Failed to open file (HTTP ${resp.status})`;
+        previewLoading = false;
+        return;
+      }
+      const text = await resp.text();
+      previewContent = text;
+      previewLoading = false;
+    } catch (err) {
+      previewError = err?.message || String(err);
+      previewLoading = false;
+    }
+  }
+
 
   function formatSize(bytes) {
     if (!bytes || bytes === 0) return '0 B';
@@ -256,6 +290,38 @@
                   </tbody>
                 </table>
               </div>
+              {#if previewFile}
+                <div class="mt-3 border rounded">
+                  <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
+                    <div class="d-flex flex-column">
+                      <span class="fw-semibold">Preview: {previewFile.name}</span>
+                      <span class="small text-body text-opacity-75">{previewFile.path}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                      <a
+                        class="btn btn-sm btn-outline-secondary"
+                        href={`/api/v0/snapshots/${encodeURIComponent(snapshotId)}/files/read/${encodeURIComponent(previewFile.path)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open in new tab
+                      </a>
+                    </div>
+                  </div>
+                  <div class="px-3 py-3">
+                    {#if previewLoading}
+                      <div class="text-center text-body text-opacity-75 py-4">
+                        <div class="spinner-border spinner-border-sm text-theme mb-2"></div>
+                        <div class="small">Loading file…</div>
+                      </div>
+                    {:else if previewError}
+                      <div class="alert alert-danger small mb-0">{previewError}</div>
+                    {:else}
+                      <pre class="snapshot-file-preview"><code>{previewContent}</code></pre>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
             {/if}
           </div>
         </Card>
@@ -271,5 +337,18 @@
   .breadcrumb-item button {
     font-size: inherit;
     line-height: inherit;
+  }
+  .snapshot-file-preview {
+    background: #111827;
+    color: #f8fafc;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    max-height: 420px;
+    overflow: auto;
+    font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
+    font-size: 0.85rem;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>
