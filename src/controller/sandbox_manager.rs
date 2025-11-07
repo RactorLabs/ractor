@@ -1,4 +1,6 @@
 use anyhow::Result;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use bollard::Docker;
 use chrono::{DateTime, TimeZone, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
@@ -14,7 +16,7 @@ use tracing::{error, info, warn};
 pub mod constants;
 pub use constants::SANDBOX_STATE_INIT;
 
-// Using local Ollama via OLLAMA_HOST
+// Using external inference service via TSBX_INFERENCE_URL
 
 #[path = "../shared/rbac.rs"]
 pub mod rbac;
@@ -197,9 +199,6 @@ impl SandboxManager {
     ) -> Result<(i32, Vec<u8>, Vec<u8>)> {
         self.docker_manager.exec_collect(sandbox_id, cmd).await
     }
-
-    // No external API key required for local Ollama
-
     /// Process sandboxes that need auto-stopping due to timeout
     async fn process_auto_stop(&self) -> Result<usize> {
         // Ensure all idle sandboxes have idle_from set
@@ -762,7 +761,7 @@ impl SandboxManager {
                 .bind(&sandbox.id)
                 .fetch_optional(&self.pool)
                 .await?;
-        let (created_at, prior_state) = sandbox_row_opt
+        let (_created_at, prior_state) = sandbox_row_opt
             .map(|(c, s)| (c, s))
             .unwrap_or((chrono::Utc::now(), String::new()));
 
@@ -1360,7 +1359,7 @@ impl SandboxManager {
                 .await;
         }
         let ct = guess_content_type(&safe);
-        let content_b64 = base64::encode(&stdout);
+        let content_b64 = BASE64_STANDARD.encode(&stdout);
         let result = serde_json::json!({
             "content_base64": content_b64,
             "content_type": ct,

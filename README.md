@@ -14,7 +14,7 @@
 
 ## What is TaskSandbox
 
-TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agent sandboxes. It provisions Docker-isolated workspaces with persistent storage, wires them to Ollama-powered tooling, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
+TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agent sandboxes. It provisions Docker-isolated workspaces with persistent storage, wires them to an OpenAI-compatible inference endpoint, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
 
 ## Why TaskSandbox
 
@@ -22,8 +22,8 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 - Built-in agent tooling — The sandbox runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
 - Observability & lifecycle control — Controller and sandbox services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (stop, restart, remix, publish) for operators.
 - API coverage — The Rust API service exposes REST endpoints for sandboxes, tasks, operators, files, and auth, enabling external orchestration or integration.
-- LLM integration — Sessions talk to Ollama via `OLLAMA_HOST` and the configurable `TSBX_DEFAULT_MODEL`, with GPU/CPU toggles and model pre-pull support driven by the CLI.
-- Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, Ollama, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
+- LLM integration — Sessions call the configured inference service via `TSBX_INFERENCE_URL`, `TSBX_INFERENCE_API_KEY`, and `TSBX_INFERENCE_MODEL` (fallback to `TSBX_DEFAULT_MODEL`).
+- Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
 - Portable dev→prod — Docker images built via `./scripts/build.sh` are the same ones the CLI pulls or runs in CI/CD, keeping local and production stacks aligned.
 - Rust-first core — API, controller, sandbox, and content services are Rust 2021 binaries with structured logging and consistent error handling.
 
@@ -33,11 +33,11 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 - Node.js 16+ and npm (Node 20 recommended)
 - Rust 1.82+ (only required for contributors building the Rust services locally)
 - OS: Linux only (Ubuntu 22.04 LTS recommended at the moment)
-- GPU: NVIDIA H100 80GB recommended (A100 80GB / L40S 48GB work) with NVIDIA drivers and NVIDIA Container Toolkit
+- Remote inference is configured by default; no local GPU is required. If you run your own inference stack, ensure it exposes an OpenAI-compatible `/chat/completions` endpoint.
 
 > macOS and Windows hosts are not yet supported; use a Linux workstation or server (Ubuntu 22.04 LTS recommended).
 
-## Quick Start (GPU-required, model-first)
+## Quick Start
 
 1) Install the CLI
 
@@ -56,20 +56,20 @@ tsbx doctor
 
 - If any checks fail, run `tsbx fix` (with `--pull` or other flags as needed) and re-run `tsbx doctor`.
 
-3) (Optional) Warm up the LLM
+3) (Optional) Configure the inference endpoint
 
 ```bash
-# Start only the LLM service on GPU with the default 20B model
-tsbx start --require-gpu --default-model gpt-oss:20b ollama
+# Configure inference endpoint (defaults shown below)
+export TSBX_INFERENCE_URL=${TSBX_INFERENCE_URL:-https://api.positron.ai/v1}
+export TSBX_INFERENCE_API_KEY=${TSBX_INFERENCE_API_KEY:-6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM}
+export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.1-8b-instruct-good-tp2}
 
-# Pre-pull to avoid first-request latency
-docker exec ollama ollama pull gpt-oss:20b
-
-# (Optional) tune resources for larger models
-#   add to the command above: --ollama-memory 64g --ollama-shm-size 64g --ollama-context-length 131072
+# Start core services with the default model
+tsbx start --default-model llama-3.1-8b-instruct-good-tp2 mysql api controller operator gateway
 ```
 
-> Need the 120B model? Set `TSBX_DEFAULT_MODEL=gpt-oss:120b` (or pass `--default-model`) before `tsbx start` to override the default.
+> Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--default-model`) before `tsbx start` to override the default used by sandboxes. The CLI also exports `TSBX_DEFAULT_MODEL` for compatibility with downstream services.
+> Replace the sample `TSBX_INFERENCE_API_KEY` with your own key for any non-demo environment.
 
 4) Configure host branding (optional; defaults to `TaskSandbox` + `http://localhost` if unset) and any host overrides
 

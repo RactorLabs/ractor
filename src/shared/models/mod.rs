@@ -7,9 +7,7 @@ pub mod snapshot;
 pub mod state_helpers;
 pub mod task;
 
-pub use sandbox::{
-    CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest,
-};
+pub use sandbox::{CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest};
 pub use snapshot::{CreateSnapshotRequest, Snapshot};
 pub use task::{CreateTaskRequest, SandboxTask, TaskView, UpdateTaskRequest};
 

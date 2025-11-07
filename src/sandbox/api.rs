@@ -38,9 +38,12 @@ impl TaskSandboxClient {
 
         let sandbox_id = config.sandbox_id.clone();
 
-        Self { client, config, sandbox_id }
+        Self {
+            client,
+            config,
+            sandbox_id,
+        }
     }
-
 
     /// Get a task by id for current sandbox
     pub async fn get_task_by_id(&self, id: &str) -> Result<TaskView> {
@@ -406,8 +409,6 @@ impl TaskSandboxClient {
             }
         }
     }
-
-
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {

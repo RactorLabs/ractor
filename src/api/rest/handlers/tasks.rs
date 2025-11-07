@@ -364,8 +364,12 @@ async fn estimate_history_tokens_since(
                     for it in items {
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                             let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                            let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                            let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                            let arguments = it
+                                .get("arguments")
+                                .cloned()
+                                .or_else(|| it.get("args").cloned())
+                                .unwrap_or_else(|| serde_json::json!({}));
+                            let s = serde_json::json!({"action":"tool","tool": tool, "arguments": arguments})
                                 .to_string();
                             total_chars += s.len() as i64;
                         } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
@@ -397,9 +401,14 @@ async fn estimate_history_tokens_since(
             for it in items {
                 if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                     let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                    let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
+                    let arguments = it
+                        .get("arguments")
+                        .cloned()
+                        .or_else(|| it.get("args").cloned())
+                        .unwrap_or_else(|| serde_json::json!({}));
                     let s =
-                        serde_json::json!({"tool_call": {"tool": tool, "args": args}}).to_string();
+                        serde_json::json!({"action":"tool","tool": tool, "arguments": arguments})
+                            .to_string();
                     total_chars += s.len() as i64;
                 } else if it.get("type").and_then(|v| v.as_str()) == Some("tool_result") {
                     if let Some(out) = it.get("output") {
@@ -647,13 +656,14 @@ fn extract_output_content(output: &Value) -> Vec<Value> {
                 }
             }
         }
-        // Fallback: some models may record only the tool_call('output') with args.content
+        // Fallback: some models may record only the tool action ('output') with arguments.content
         for it in items.iter().rev() {
             if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
                 && it.get("tool").and_then(|v| v.as_str()) == Some("output")
             {
                 if let Some(arr) = it
-                    .get("args")
+                    .get("arguments")
+                    .or_else(|| it.get("args"))
                     .and_then(|v| v.get("content"))
                     .and_then(|v| v.as_array())
                 {

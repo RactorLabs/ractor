@@ -91,7 +91,7 @@ class DockerManager {
     }
 
     // Create volumes if they don't exist
-    for (const volume of ['mysql_data', 'ollama_data', 'tsbx_snapshots_data']) {
+    for (const volume of ['mysql_data', 'tsbx_snapshots_data']) {
       try {
         await this.execDocker(['volume', 'inspect', volume], { silent: true });
       } catch (error) {
@@ -184,6 +184,10 @@ class DockerManager {
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
+          '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
+          ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
+          '-e', `TSBX_DEFAULT_MODEL=${process.env.TSBX_DEFAULT_MODEL || 'llama-3.1-8b-instruct-good-tp2'}`,
+          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || process.env.TSBX_DEFAULT_MODEL || 'llama-3.1-8b-instruct-good-tp2'}`,
           this.images.api
         ]);
         break;
@@ -197,7 +201,10 @@ class DockerManager {
           '-v', 'tsbx_snapshots_data:/data/snapshots',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
-          ...(process.env.OLLAMA_HOST ? ['-e', `OLLAMA_HOST=${process.env.OLLAMA_HOST}`] : []),
+          '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
+          ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
+          '-e', `TSBX_DEFAULT_MODEL=${process.env.TSBX_DEFAULT_MODEL || 'llama-3.1-8b-instruct-good-tp2'}`,
+          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || process.env.TSBX_DEFAULT_MODEL || 'llama-3.1-8b-instruct-good-tp2'}`,
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,

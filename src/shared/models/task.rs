@@ -134,12 +134,11 @@ impl SandboxTask {
         pool: &sqlx::MySqlPool,
         sandbox_id: &str,
     ) -> Result<i64, sqlx::Error> {
-        let result = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ?",
-        )
-        .bind(sandbox_id)
-        .fetch_one(pool)
-        .await?;
+        let result =
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ?")
+                .bind(sandbox_id)
+                .fetch_one(pool)
+                .await?;
         Ok(result)
     }
 

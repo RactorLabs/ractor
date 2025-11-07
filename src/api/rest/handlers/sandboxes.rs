@@ -4,6 +4,8 @@ use axum::{
     extract::{Extension, Path, Query, State},
     Json,
 };
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use chrono::{DateTime, Utc};
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -301,7 +303,7 @@ pub async fn read_sandbox_file(
                     .get("content_type")
                     .and_then(|v| v.as_str())
                     .unwrap_or("application/octet-stream");
-                let bytes = base64::decode(content_b64).unwrap_or_default();
+                let bytes = BASE64_STANDARD.decode(content_b64).unwrap_or_default();
                 let mut builder = Response::builder().status(StatusCode::OK);
                 builder = builder.header("content-type", ct);
                 builder = builder.header("cache-control", "no-store");
@@ -1043,13 +1045,17 @@ async fn estimate_history_tokens_since(
                 })
                 .unwrap_or(false);
             if include_tools {
-                // For the task currently being worked on, include tool_call and tool_result outputs
+                // For the task currently being worked on, include tool actions and tool_result outputs
                 if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
                     for it in items {
                         if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                             let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                            let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                            let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                            let arguments = it
+                                .get("arguments")
+                                .cloned()
+                                .or_else(|| it.get("args").cloned())
+                                .unwrap_or_else(|| serde_json::json!({}));
+                            let s = serde_json::json!({"action":"tool","tool": tool, "arguments": arguments})
                                 .to_string();
                             total_chars += s.len() as i64;
                             msg_count += 1;
@@ -1080,8 +1086,12 @@ async fn estimate_history_tokens_since(
                 for it in items {
                     if it.get("type").and_then(|v| v.as_str()) == Some("tool_call") {
                         let tool = it.get("tool").and_then(|v| v.as_str()).unwrap_or("");
-                        let args = it.get("args").cloned().unwrap_or(serde_json::Value::Null);
-                        let s = serde_json::json!({"tool_call": {"tool": tool, "args": args}})
+                        let arguments = it
+                            .get("arguments")
+                            .cloned()
+                            .or_else(|| it.get("args").cloned())
+                            .unwrap_or_else(|| serde_json::json!({}));
+                        let s = serde_json::json!({"action":"tool","tool": tool, "arguments": arguments})
                             .to_string();
                         total_chars += s.len() as i64;
                         msg_count += 1;
@@ -1246,7 +1256,7 @@ pub async fn get_sandbox_context(
         soft_limit_tokens: limit,
         used_tokens_estimated: used,
         used_percent,
-        basis: "ollama_last_context_length".to_string(),
+        basis: "inference_last_context_length".to_string(),
         cutoff_at: sandbox.context_cutoff_at.map(|dt| dt.to_rfc3339()),
         measured_at: Utc::now().to_rfc3339(),
         total_messages_considered: 0,
@@ -1323,7 +1333,7 @@ pub async fn clear_sandbox_context(
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
-        basis: "ollama_last_context_length".to_string(),
+        basis: "inference_last_context_length".to_string(),
         cutoff_at: Some(now.clone()),
         measured_at: now,
         total_messages_considered: 0,
@@ -1493,13 +1503,13 @@ pub async fn compact_sandbox_context(
     let summary_text = if transcript.trim().is_empty() {
         "(No prior conversation to compact.)".to_string()
     } else {
-        // Call Ollama to summarize the transcript
-        // Prefer the same variable name used by controller/sandbox; default to Docker network hostname
-        let base_url =
-            std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
-        let model =
-            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
+        // Call the configured inference service to summarize the transcript
+        let base_url = std::env::var("TSBX_INFERENCE_URL")
+            .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+        let model = std::env::var("TSBX_INFERENCE_MODEL")
+            .or_else(|_| std::env::var("TSBX_DEFAULT_MODEL"))
+            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+        let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
         let system_prompt = "You are a helpful assistant that compresses conversation history into a concise context for future messages.\n- Keep key goals, decisions, constraints, URLs, files, and paths.\n- Remove chit‑chat and redundant steps.\n- Prefer bullet points.\n- Target 150–250 words.";
         let user_content = format!("Please summarize the following conversation so it can be used as compact context for future turns.\n\n{}", transcript);
         let body = serde_json::json!({
@@ -1512,17 +1522,19 @@ pub async fn compact_sandbox_context(
         });
 
         let client = reqwest::Client::new();
-        let resp = client
-            .post(&url)
-            .json(&body)
+        let mut req = client.post(&url).json(&body);
+        if let Ok(api_key) = std::env::var("TSBX_INFERENCE_API_KEY") {
+            req = req.header("Authorization", format!("Bearer {}", api_key));
+        }
+        let resp = req
             .send()
             .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Ollama request failed: {}", e)))?;
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Inference request failed: {}", e)))?;
         if !resp.status().is_success() {
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             return Err(ApiError::Internal(anyhow::anyhow!(
-                "Ollama error ({}): {}",
+                "Inference error ({}): {}",
                 status,
                 text
             )));
@@ -1530,9 +1542,12 @@ pub async fn compact_sandbox_context(
         let v: serde_json::Value = resp
             .json()
             .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Ollama parse error: {}", e)))?;
-        v.get("message")
-            .and_then(|m| m.get("content"))
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("Inference parse error: {}", e)))?;
+        v.get("choices")
+            .and_then(|c| c.as_array())
+            .and_then(|choices| choices.first())
+            .and_then(|choice| choice.get("message"))
+            .and_then(|message| message.get("content"))
             .and_then(|c| c.as_str())
             .unwrap_or("(summary unavailable)")
             .to_string()
@@ -1584,7 +1599,7 @@ pub async fn compact_sandbox_context(
         soft_limit_tokens: limit,
         used_tokens_estimated: 0,
         used_percent: 0.0,
-        basis: "ollama_last_context_length".to_string(),
+        basis: "inference_last_context_length".to_string(),
         cutoff_at: Some(now.clone()),
         measured_at: now,
         total_messages_considered: 0,

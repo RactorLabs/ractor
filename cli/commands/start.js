@@ -54,7 +54,7 @@ async function ensureNetwork() {
 }
 
 async function ensureVolumes() {
-  for (const v of ['mysql_data', 'ollama_data', 'tsbx_snapshots_data']) {
+  for (const v of ['mysql_data', 'tsbx_snapshots_data']) {
     try {
       await docker(['volume', 'inspect', v], { silent: true });
     } catch (_) {
@@ -85,19 +85,13 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, ollama, api, controller, operator, gateway (apps start only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, api, controller, operator, gateway (apps start only when listed)', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--require-gpu', 'Require GPU for Ollama (fail if missing)')
-    .option('--ollama-cpus <cpus>', 'CPUs for Ollama (e.g., 4)')
-    .option('--ollama-memory <mem>', 'Memory for Ollama (e.g., 32g)')
-    .option('--ollama-shm-size <size>', 'Shared memory for Ollama (e.g., 32g)')
-    .option('--ollama-enable-gpu', 'Enable GPU for Ollama (default true)')
-    .option('--no-ollama-enable-gpu', 'Disable GPU for Ollama')
-    .option('--default-model <model>', 'Default model name (used for Ollama pulls and controller)', 'gpt-oss:20b')
-    .option('--ollama-keep-alive <dur>', 'Ollama keep alive duration', '-1')
-    .option('--ollama-context-length <tokens>', 'Ollama context length in tokens', '131072')
+    .option('--default-model <model>', 'Default inference model name', 'llama-3.1-8b-instruct-good-tp2')
+    .option('--inference-url <url>', 'Inference API base URL', 'https://api.positron.ai/v1')
+    .option('--inference-api-key <key>', 'Inference API key (Bearer token)')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -115,13 +109,12 @@ module.exports = (program) => {
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
-    .option('--controller-ollama-host <url>', 'Controller OLLAMA_HOST (overrides autodetection)')
     .option('--controller-default-model <model>', 'Override controller default model (falls back to global default)')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
       '  • Does not stop or remove any containers.\n' +
-      '  • MySQL container name is "mysql"; Ollama container name is "ollama".\n' +
+      '  • MySQL container name is "mysql".\n' +
       '\nExamples:\n' +
       '  $ tsbx start                                # Start full stack\n' +
       '  $ tsbx start api controller                 # Start API + controller\n' +
@@ -190,15 +183,13 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
-        console.log(chalk.blue('[INFO] ') + `Require GPU for Ollama: ${!!options.requireGpu}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'ollama', 'api', 'operator', 'controller', 'gateway'];
+          components = ['mysql', 'api', 'controller', 'operator', 'gateway'];
         }
 
-        // Enforce startup order: mysql → ollama → api → controller
-        // In particular, ensure api starts before controller when both are requested.
-        const desiredOrder = ['mysql', 'ollama', 'api', 'operator', 'controller', 'gateway'];
+        // Enforce startup order: mysql → api → controller
+        const desiredOrder = ['mysql', 'api', 'controller', 'operator', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -288,6 +279,15 @@ module.exports = (program) => {
           } catch (_) { return ''; }
         }
 
+        const INFERENCE_URL = options.inferenceUrl || process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1';
+        const INFERENCE_API_KEY = options.inferenceApiKey || process.env.TSBX_INFERENCE_API_KEY || '6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM';
+        const DEFAULT_MODEL = (() => {
+          const src = getOptionSource('defaultModel');
+          if (src === 'cli') return options.defaultModel;
+          return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'llama-3.1-8b-instruct-good-tp2';
+        })();
+        const INFERENCE_MODEL = process.env.TSBX_INFERENCE_MODEL || DEFAULT_MODEL;
+
         for (const comp of components) {
           switch (comp) {
             case 'mysql': {
@@ -326,164 +326,6 @@ module.exports = (program) => {
               );
               await docker(args);
               await waitForMysql();
-              console.log();
-              break;
-            }
-
-            case 'ollama': {
-              console.log(chalk.blue('[INFO] ') + 'Ensuring Ollama runtime is running...');
-              if (await containerRunning('ollama')) {
-                console.log(chalk.green('[SUCCESS] ') + 'Ollama already running');
-                // Ensure requested model is available even when container pre-exists
-                const effectiveModel = (() => {
-                  const src = getOptionSource('defaultModel');
-                  if (src === 'cli') return options.defaultModel;
-                  return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
-                })();
-                if (effectiveModel) {
-                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
-                }
-                console.log();
-                break;
-              }
-              if (await containerExists('ollama')) {
-                await docker(['start','ollama']);
-                console.log(chalk.green('[SUCCESS] ') + 'Ollama started');
-                // Ensure requested model is available even when container pre-exists
-                const effectiveModel = (() => {
-                  const src = getOptionSource('defaultModel');
-                  if (src === 'cli') return options.defaultModel;
-                  return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
-                })();
-                if (effectiveModel) {
-                  console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-                  try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
-                }
-                console.log();
-                break;
-              }
-
-              // Determine GPU availability and flags
-              // GPU enable: flags > env > default(true). Env can be OLLAMA_ENABLE_GPU or OLLAMA_NO_GPU
-              let OLLAMA_ENABLE_GPU;
-              if (getOptionSource('ollamaEnableGpu') === 'cli') {
-                OLLAMA_ENABLE_GPU = !!options.ollamaEnableGpu;
-              } else {
-                // honor NO_GPU first if set
-                const noGpu = envBool('OLLAMA_NO_GPU', false);
-                if (noGpu) {
-                  OLLAMA_ENABLE_GPU = false;
-                } else if (process.env.OLLAMA_ENABLE_GPU !== undefined) {
-                  OLLAMA_ENABLE_GPU = envBool('OLLAMA_ENABLE_GPU', true);
-                } else {
-                  OLLAMA_ENABLE_GPU = true;
-                }
-              }
-              const REQUIRE_GPU = !!options.requireGpu;
-              let gpuAvailable = false;
-              try {
-                const r1 = await execCmd('docker', ['info','--format','{{json .Runtimes}}'], { silent: true });
-                const r2 = await execCmd('docker', ['info','--format','{{json .DefaultRuntime}}'], { silent: true });
-                if (/nvidia/i.test(r1.stdout) || /nvidia/i.test(r2.stdout)) gpuAvailable = true;
-              } catch (_) {}
-              let gpuFlags = [];
-              let cpuEnv = [];
-              if (OLLAMA_ENABLE_GPU) {
-                if (gpuAvailable) {
-                  gpuFlags = ['--gpus','all'];
-                  console.log(chalk.blue('[INFO] ') + 'GPU enabled for Ollama');
-                } else {
-                  if (REQUIRE_GPU) {
-                    console.error(chalk.red('[ERROR] ') + 'GPU required for Ollama, but Docker GPU runtime is not available.');
-                    console.error(chalk.red('[ERROR] ') + 'Install NVIDIA drivers + NVIDIA Container Toolkit, or omit --require-gpu.');
-                    process.exit(1);
-                  } else {
-                    console.log(chalk.yellow('[WARNING] ') + 'GPU requested but not available; falling back to CPU.');
-                    OLLAMA_ENABLE_GPU = false;
-                  }
-                }
-              }
-              if (!OLLAMA_ENABLE_GPU) {
-                cpuEnv = ['-e','OLLAMA_NO_GPU=1'];
-                console.log(chalk.blue('[INFO] ') + 'Running Ollama in CPU-only mode');
-              }
-
-              // Resource flags (flags > env > defaults)
-              const cpus = preferEnv('ollamaCpus', 'OLLAMA_CPUS', undefined);
-              const cpuFlag = cpus ? ['--cpus', cpus] : [];
-              let mem = preferEnv('ollamaMemory', 'OLLAMA_MEMORY', '32g');
-              let shm = preferEnv('ollamaShmSize', 'OLLAMA_SHM_SIZE', '32g');
-              if (getOptionSource('ollamaMemory') !== 'cli' && process.env.OLLAMA_MEMORY === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_MEMORY set; defaulting to ${mem}`);
-              if (getOptionSource('ollamaShmSize') !== 'cli' && process.env.OLLAMA_SHM_SIZE === undefined) console.log(chalk.blue('[INFO] ') + `No OLLAMA_SHM_SIZE set; defaulting to ${shm}`);
-              const contextLength = (() => {
-                const src = getOptionSource('ollamaContextLength');
-                if (src === 'cli') return String(options.ollamaContextLength);
-                if (process.env.OLLAMA_CONTEXT_LENGTH) return String(process.env.OLLAMA_CONTEXT_LENGTH);
-                if (process.env.OLLAMA_NUM_CTX) return String(process.env.OLLAMA_NUM_CTX);
-                return String(options.ollamaContextLength || '131072');
-              })();
-              console.log(chalk.blue('[INFO] ') + `Ollama context length: ${contextLength} tokens (128k)`);
-              const memFlag = ['--memory', mem, '--memory-swap', mem];
-              const shmFlag = ['--shm-size', shm];
-
-              // Host port mapping if free
-              const hostPublish = !(await portInUse(11434));
-              if (!hostPublish) console.log(chalk.yellow('[WARNING] ') + 'Host port 11434 in use; starting without host port mapping');
-
-              const args = ['run','-d',
-                '--name','ollama',
-                '--network','tsbx_network',
-              ];
-              if (hostPublish) args.push('-p','11434:11434');
-              args.push(
-                '-v','ollama_data:/root/.ollama',
-                '-v','ollama_data:/var/log/ollama',
-                '-e',`OLLAMA_KEEP_ALIVE=${preferEnv('ollamaKeepAlive','OLLAMA_KEEP_ALIVE','-1')}`,
-                '-e',`OLLAMA_CONTEXT_LENGTH=${contextLength}`,
-                '-e',`OLLAMA_NUM_CTX=${contextLength}`,
-                ...cpuEnv,
-                ...gpuFlags,
-                ...cpuFlag,
-                ...memFlag,
-                ...shmFlag,
-                '--entrypoint','/bin/sh',
-                'ollama/ollama:latest',
-                '-lc',
-                'mkdir -p /var/log/ollama; exec ollama serve 2>&1 | tee -a /var/log/ollama/ollama.log'
-              );
-
-              await docker(args);
-
-              // Wait until ready (new container only)
-              let timeoutMs = 600000; // 10 minutes to allow large model loads
-              const start = Date.now();
-              if (hostPublish) {
-                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama to be ready on host :11434...');
-                while (Date.now() - start < timeoutMs) {
-              try { await execCmd('bash',['-lc',`curl -fsS ${withPort(TSBX_HOST_URL,11434)}/api/tags >/dev/null`]); break; } catch(_) {}
-                  await new Promise(r=>setTimeout(r,2000));
-                }
-              } else {
-                console.log(chalk.blue('[INFO] ') + 'Waiting for Ollama container to be ready...');
-                while (Date.now() - start < timeoutMs) {
-                  try { await docker(['exec','ollama','ollama','list'], { silent: true }); break; } catch(_) {}
-                  await new Promise(r=>setTimeout(r,2000));
-                }
-              }
-              if (Date.now() - start >= timeoutMs) {
-                throw new Error('Ollama did not become ready in time');
-              }
-              console.log(chalk.green('[SUCCESS] ') + 'Ollama is ready');
-
-              // Ensure model available (best-effort)
-              const effectiveModel = (() => {
-                const src = getOptionSource('defaultModel');
-                if (src === 'cli') return options.defaultModel;
-                return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'gpt-oss:20b';
-              })();
-              console.log(chalk.blue('[INFO] ') + `Pulling ${effectiveModel} model (if needed)...`);
-              try { await docker(['exec','ollama','ollama','pull', effectiveModel], { silent: true }); console.log(chalk.green('[SUCCESS] ') + `${effectiveModel} model available`);} catch(_) { console.log(chalk.yellow('[WARNING] ') + `Failed to pull ${effectiveModel}. You may need to pull manually.`); }
               console.log();
               break;
             }
@@ -528,6 +370,10 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
+                '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
+                '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
+                '-e',`TSBX_DEFAULT_MODEL=${DEFAULT_MODEL}`,
+                '-e',`TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`,
                 ...(options.apiTaskSandboxHost ? ['-e', `TSBX_HOST=${options.apiTaskSandboxHost}`] : []),
                 ...(options.apiTaskSandboxPort ? ['-e', `TSBX_PORT=${options.apiTaskSandboxPort}`] : []),
                 API_IMAGE
@@ -541,8 +387,12 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              // Resolve desired OLLAMA_HOST for the controller
-              const DESIRED_OLLAMA_HOST = options.controllerOllamaHost || process.env.OLLAMA_HOST || 'http://ollama:11434';
+              const desiredInferenceUrl = INFERENCE_URL;
+              const desiredModel = (() => {
+                const srcCtrl = getOptionSource('controllerDefaultModel');
+                if (srcCtrl === 'cli') return options.controllerDefaultModel;
+                return DEFAULT_MODEL;
+              })();
 
               // If container exists, verify env matches; recreate if not
               if (await containerExists('tsbx_controller')) {
@@ -553,10 +403,15 @@ module.exports = (program) => {
                     const idx = e.indexOf('=');
                     return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
                   }));
-                  const currentHost = envMap['OLLAMA_HOST'];
-                  const needsRecreate = !currentHost || currentHost !== DESIRED_OLLAMA_HOST;
+                  const currentUrl = envMap['TSBX_INFERENCE_URL'];
+                  const currentModel = envMap['TSBX_DEFAULT_MODEL'];
+                  const currentKey = envMap['TSBX_INFERENCE_API_KEY'];
+                  const needsRecreate =
+                    currentUrl !== desiredInferenceUrl ||
+                    currentModel !== desiredModel ||
+                    currentKey !== INFERENCE_API_KEY;
                   if (needsRecreate) {
-                    console.log(chalk.blue('[INFO] ') + `Recreating controller to apply OLLAMA_HOST=${DESIRED_OLLAMA_HOST}`);
+                    console.log(chalk.blue('[INFO] ') + 'Recreating controller to apply updated inference configuration');
                     try { await docker(['rm','-f','tsbx_controller']); } catch (_) {}
                   } else if (!(await containerRunning('tsbx_controller'))) {
                     await docker(['start','tsbx_controller']);
@@ -572,20 +427,11 @@ module.exports = (program) => {
                   // If inspection fails, fall through to create
                 }
               }
-              // Default OLLAMA_HOST to internal service always
-              const OLLAMA_HOST = DESIRED_OLLAMA_HOST;
 
               const sandboxImage = options.controllerSandboxImage || await resolveTaskSandboxImage('sandbox','tsbx_sandbox','registry.digitalocean.com/tsbx/tsbx_sandbox', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
-              const model = (() => {
-                const srcCtrl = getOptionSource('controllerDefaultModel');
-                const srcOllama = getOptionSource('defaultModel');
-                if (srcCtrl === 'cli') return options.controllerDefaultModel;
-                if (srcOllama === 'cli') return options.defaultModel;
-                return process.env.TSBX_DEFAULT_MODEL || options.controllerDefaultModel || options.defaultModel || 'gpt-oss:20b';
-              })();
               const args = ['run','-d',
                 '--name','tsbx_controller',
                 '--network','tsbx_network',
@@ -593,12 +439,10 @@ module.exports = (program) => {
                 '-v','tsbx_snapshots_data:/data/snapshots',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
-                '-e',`OLLAMA_HOST=${OLLAMA_HOST}`,
-                '-e',`TSBX_DEFAULT_MODEL=${model}`,
-                // Model/runtime defaults for sandbox calls
-                '-e',`OLLAMA_TIMEOUT_SECS=${process.env.OLLAMA_TIMEOUT_SECS || '3600'}`,
-                '-e',`OLLAMA_REASONING_EFFORT=${process.env.OLLAMA_REASONING_EFFORT || 'high'}`,
-                '-e',`OLLAMA_THINKING_TOKENS=${process.env.OLLAMA_THINKING_TOKENS || '8192'}`,
+                '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
+                '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
+                '-e',`TSBX_DEFAULT_MODEL=${desiredModel}`,
+                '-e',`TSBX_INFERENCE_MODEL=${desiredModel}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`SANDBOX_IMAGE=${sandboxImage}`,

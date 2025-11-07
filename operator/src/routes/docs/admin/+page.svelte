@@ -224,7 +224,7 @@
                   <thead><tr><th>type</th><th>Shape</th><th>Purpose</th></tr></thead>
                   <tbody>
                     <tr><td class="font-monospace">commentary</td><td class="font-monospace">&#123; type, channel: 'analysis', text &#125;</td><td>Internal analysis</td></tr>
-                    <tr><td class="font-monospace">tool_call</td><td class="font-monospace">&#123; type, tool, args &#125;</td><td>Declares a tool invocation</td></tr>
+                    <tr><td class="font-monospace">tool_call</td><td class="font-monospace">&#123; type, tool, arguments (JSON), args (legacy) &#125;</td><td>Declares a tool invocation</td></tr>
                     <tr><td class="font-monospace">tool_result</td><td class="font-monospace">&#123; type, tool, output &#125;</td><td>Result of tool invocation</td></tr>
                     <tr><td class="font-monospace">final</td><td class="font-monospace">&#123; type, channel: 'final', text &#125;</td><td>Final answer (also reflected in <span class="font-monospace">output_content</span>)</td></tr>
                   </tbody>

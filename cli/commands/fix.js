@@ -64,7 +64,7 @@ module.exports = (program) => {
 
         // 3) Ensure volumes
         display.info('[3/6] Ensuring required volumes exist...');
-        const volumes = ['mysql_data','ollama_data','tsbx_snapshots_data'];
+        const volumes = ['mysql_data','tsbx_snapshots_data'];
         for (const v of volumes) {
           try {
             await docker.execDocker(['volume','inspect', v], { silent: true });
@@ -143,4 +143,3 @@ module.exports = (program) => {
       }
     });
 };
-

@@ -10,10 +10,9 @@ pub async fn run() -> Result<()> {
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    // Resolve OLLAMA_HOST or use default inside Docker network
-    let ollama_host =
-        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://ollama:11434".to_string());
-    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
+    let inference_url = std::env::var("TSBX_INFERENCE_URL")
+        .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+    tracing::info!("Using TSBX_INFERENCE_URL: {}", inference_url);
 
     // Initialize sandbox manager and run
     let sandbox_manager = SandboxManager::new(&database_url).await?;

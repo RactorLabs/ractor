@@ -13,7 +13,7 @@
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
 - Start services (Docker via CLI): `tsbx start [components...]`
-  - Defaults to MySQL (`3307`), Ollama, API (`9000`), Operator, Controller, Gateway (`80`).
+  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference traffic is proxied to `TSBX_INFERENCE_URL` (default `https://api.positron.ai/v1`).
   - In dev, use `./scripts/build.sh` to build images when needed.
 - Stop: `tsbx stop [components...]` (supports `sandboxes` to stop all sandbox containers).
 - Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.
@@ -38,7 +38,7 @@
 - Run all tests: `cargo test`.
 - Prefer small unit tests near code; name tests after behavior (e.g., `handles_invalid_token`).
 - Database-involving tests should be feature-gated or isolated; avoid mutating real data.
-- Integration smoke test: `./scripts/build.sh && tsbx start ollama mysql api controller && ./scripts/link.sh && tsbx --version`.
+- Integration smoke test: `./scripts/build.sh && tsbx start mysql api controller && ./scripts/link.sh && tsbx --version`.
 
 ## Commit & Pull Request Guidelines
 

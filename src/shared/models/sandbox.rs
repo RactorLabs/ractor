@@ -339,7 +339,8 @@ impl Sandbox {
         }
 
         let now = Utc::now();
-        let query_builder = String::from("UPDATE sandboxes SET state = ?, last_activity_at = ? WHERE id = ?");
+        let query_builder =
+            String::from("UPDATE sandboxes SET state = ?, last_activity_at = ? WHERE id = ?");
 
         let query = sqlx::query(&query_builder)
             .bind(req.state.clone())
@@ -416,10 +417,7 @@ impl Sandbox {
         Ok(result.rows_affected() > 0)
     }
 
-    pub async fn clear_context_cutoff(
-        pool: &sqlx::MySqlPool,
-        id: &str,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn clear_context_cutoff(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
             UPDATE sandboxes
