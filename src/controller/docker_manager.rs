@@ -1,14 +1,17 @@
 use anyhow::Result;
 use bollard::{
-    container::{Config, CreateContainerOptions, DownloadFromContainerOptions, LogsOptions, RemoveContainerOptions},
+    container::{
+        Config, CreateContainerOptions, DownloadFromContainerOptions, LogsOptions,
+        RemoveContainerOptions, UploadToContainerOptions,
+    },
     exec::{CreateExecOptions, StartExecResults},
     models::{HostConfig, Mount, MountTypeEnum},
     Docker,
 };
+use bytes::Bytes;
 use futures::StreamExt;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
-use std::path::Path;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
@@ -118,10 +121,7 @@ impl DockerManager {
         instructions: Option<&str>,
         setup: Option<&str>,
     ) -> Result<()> {
-        info!(
-            "Initializing sandbox structure for sandbox {}",
-            sandbox_id
-        );
+        info!("Initializing sandbox structure for sandbox {}", sandbox_id);
 
         // Create base directories with proper ownership
         // Use sudo to ensure proper ownership since volume may be root-owned initially
@@ -142,16 +142,13 @@ echo 'Session directories created (.env, logs)'
             "cat <<'EOF_ENV' | sudo tee /sandbox/.env >/dev/null\n{}EOF_ENV\nsudo chown sandbox:sandbox /sandbox/.env\nsudo chmod 600 /sandbox/.env\n",
             env_content
         );
-        self.execute_command(sandbox_id, &write_env_script)
-            .await?;
+        self.execute_command(sandbox_id, &write_env_script).await?;
 
         // Write instructions if provided
         if let Some(instructions_content) = instructions {
             let escaped_instructions = instructions_content.replace("'", "'\"'\"'");
-            let write_instructions_command = format!(
-                "echo '{}' > /sandbox/instructions.md",
-                escaped_instructions
-            );
+            let write_instructions_command =
+                format!("echo '{}' > /sandbox/instructions.md", escaped_instructions);
             self.execute_command(sandbox_id, &write_instructions_command)
                 .await?;
         }
@@ -327,11 +324,13 @@ echo 'Session directories created (.env, logs)'
         sandbox_id: &str,
         parent_sandbox_id: &str,
     ) -> Result<String> {
-        info!("Creating cloned sandbox {} with full copy from {}",
-              sandbox_id, parent_sandbox_id);
+        info!(
+            "Creating cloned sandbox {} with full copy from {}",
+            sandbox_id, parent_sandbox_id
+        );
 
         // First create the sandbox volume (without starting container)
-        let sandbox_volume = self.create_sandbox_volume(sandbox_id).await?;
+        self.create_sandbox_volume(sandbox_id).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!("tsbx_sandbox_data_{}", parent_sandbox_id);
@@ -494,7 +493,7 @@ echo 'Session directories created (.env, logs)'
         );
 
         // First create the sandbox volume (without starting container)
-        let sandbox_volume = self.create_sandbox_volume(sandbox_id).await?;
+        self.create_sandbox_volume(sandbox_id).await?;
 
         // Then copy specific directories from parent volume to new volume
         let parent_volume = format!("tsbx_sandbox_data_{}", parent_sandbox_id);
@@ -829,16 +828,6 @@ echo 'Session directories created (.env, logs)'
         labels.insert("tsbx.sandbox_id".to_string(), sandbox_id.to_string());
         labels.insert("tsbx.managed".to_string(), "true".to_string());
 
-        // Get user token from env (added automatically by sandbox manager)
-        let user_token = env_map
-            .as_ref()
-            .and_then(|s| s.get("TSBX_TOKEN"))
-            .cloned()
-            .unwrap_or_else(|| {
-                warn!("No TSBX_TOKEN found in env, Host authentication may fail");
-                "missing-token".to_string()
-            });
-
         // No external volume mounts - sandbox uses its own container filesystem
         let mounts: Vec<bollard::models::Mount> = vec![];
 
@@ -859,21 +848,25 @@ echo 'Session directories created (.env, logs)'
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
-            anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
-        })?;
-        env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model =
-            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", ollama_model));
-        let ollama_timeout =
-            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env_vars.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
-        // Propagate timeout for model calls; default 600s if unspecified
-        let ollama_timeout =
-            std::env::var("OLLAMA_TIMEOUT_SECS").unwrap_or_else(|_| "600".to_string());
-        env_vars.push(format!("OLLAMA_TIMEOUT_SECS={}", ollama_timeout));
+        // Configure inference endpoint for model access
+        let inference_url = std::env::var("TSBX_INFERENCE_URL")
+            .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+        env_vars.push(format!("TSBX_INFERENCE_URL={}", inference_url));
+
+        if let Ok(api_key) = std::env::var("TSBX_INFERENCE_API_KEY") {
+            env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", api_key));
+        }
+
+        if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
+            env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
+        }
+
+        let default_model = std::env::var("TSBX_DEFAULT_MODEL")
+            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+        let inference_model =
+            std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| default_model.clone());
+        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -902,9 +895,15 @@ echo 'Session directories created (.env, logs)'
             }
 
             // Add user env as environment variables, but do NOT override
-            // system-managed values like TSBX_TOKEN or OLLAMA_HOST.
+            // system-managed values like TSBX_TOKEN or inference configuration.
             for (key, value) in env_map {
-                if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
+                if matches!(
+                    key.as_str(),
+                    "TSBX_TOKEN"
+                        | "TSBX_INFERENCE_URL"
+                        | "TSBX_INFERENCE_API_KEY"
+                        | "TSBX_INFERENCE_TIMEOUT_SECS"
+                ) {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for sandbox {}",
                         key, sandbox_id
@@ -1041,14 +1040,22 @@ echo 'Session directories created (.env, logs)'
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
-        // Configure Ollama host for model inference (required; no default)
-        let ollama_host = std::env::var("OLLAMA_HOST").map_err(|_| {
-            anyhow::anyhow!("Controller requires OLLAMA_HOST to be set (e.g., http://ollama:11434)")
-        })?;
-        env_vars.push(format!("OLLAMA_HOST={}", ollama_host));
-        let ollama_model =
-            std::env::var("TSBX_DEFAULT_MODEL").unwrap_or_else(|_| "gpt-oss:20b".to_string());
-        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", ollama_model));
+        // Configure inference endpoint for model access
+        let inference_url = std::env::var("TSBX_INFERENCE_URL")
+            .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+        env_vars.push(format!("TSBX_INFERENCE_URL={}", inference_url));
+
+        if let Ok(api_key) = std::env::var("TSBX_INFERENCE_API_KEY") {
+            env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", api_key));
+        }
+
+        if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
+            env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
+        }
+
+        let default_model = std::env::var("TSBX_DEFAULT_MODEL")
+            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1065,13 +1072,18 @@ echo 'Session directories created (.env, logs)'
             ));
         }
 
-        info!("Set TSBX_TOKEN and OLLAMA_HOST as environment variables");
+        info!("Set TSBX_TOKEN and inference configuration as environment variables");
 
-        // Add user env as environment variables (but NOT TSBX_TOKEN or OLLAMA_HOST)
+        // Add user env as environment variables (but NOT TSBX_TOKEN or inference configuration)
         if let Some(env_map) = &env_map_opt {
             for (key, value) in env_map {
-                // Skip if user provided their own TSBX_TOKEN or OLLAMA_HOST - we use system-managed values
-                if key == "TSBX_TOKEN" || key == "OLLAMA_HOST" {
+                if matches!(
+                    key.as_str(),
+                    "TSBX_TOKEN"
+                        | "TSBX_INFERENCE_URL"
+                        | "TSBX_INFERENCE_API_KEY"
+                        | "TSBX_INFERENCE_TIMEOUT_SECS"
+                ) {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead",
                         key
@@ -1209,10 +1221,7 @@ echo 'Session directories created (.env, logs)'
 
                 // Cleanup the sandbox volume
                 if let Err(e) = self.cleanup_sandbox_volume(sandbox_id).await {
-                    warn!(
-                        "Failed to cleanup sandbox volume for {}: {}",
-                        sandbox_id, e
-                    );
+                    warn!("Failed to cleanup sandbox volume for {}: {}", sandbox_id, e);
                 }
 
                 Ok(())
@@ -1223,10 +1232,7 @@ echo 'Session directories created (.env, logs)'
 
                     // Still try to cleanup the sandbox volume
                     if let Err(e) = self.cleanup_sandbox_volume(sandbox_id).await {
-                        warn!(
-                            "Failed to cleanup sandbox volume for {}: {}",
-                            sandbox_id, e
-                        );
+                        warn!("Failed to cleanup sandbox volume for {}: {}", sandbox_id, e);
                     }
 
                     Ok(())
@@ -1241,18 +1247,20 @@ echo 'Session directories created (.env, logs)'
     // Removed legacy destroy_container (deprecated). Use stop_container or delete_container.
 
     // Create a snapshot of a sandbox by copying its /sandbox/ directory to the snapshots volume
-    pub async fn create_snapshot(
-        &self,
-        sandbox_id: &str,
-        snapshot_id: &str,
-    ) -> Result<()> {
+    pub async fn create_snapshot(&self, sandbox_id: &str, snapshot_id: &str) -> Result<()> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
-        info!("Creating snapshot {} for sandbox {}", snapshot_id, sandbox_id);
+        info!(
+            "Creating snapshot {} for sandbox {}",
+            snapshot_id, sandbox_id
+        );
 
         // Check if container exists
         if let Err(_) = self.docker.inspect_container(&container_name, None).await {
-            warn!("Container {} not found, cannot create snapshot", container_name);
+            warn!(
+                "Container {} not found, cannot create snapshot",
+                container_name
+            );
             return Err(anyhow::anyhow!(
                 "Cannot create snapshot: container {} not found",
                 container_name
@@ -1264,14 +1272,19 @@ echo 'Session directories created (.env, logs)'
         let snapshot_dir = format!("/data/snapshots/{}", snapshot_id);
         fs::create_dir_all(&snapshot_dir).await?;
 
-        info!("Copying data from container {} to {}", container_name, snapshot_dir);
+        info!(
+            "Copying data from container {} to {}",
+            container_name, snapshot_dir
+        );
 
         // Download tar stream from container's /sandbox directory
         let options = DownloadFromContainerOptions {
             path: "/sandbox".to_string(),
         };
 
-        let mut tar_stream = self.docker.download_from_container(&container_name, Some(options));
+        let mut tar_stream = self
+            .docker
+            .download_from_container(&container_name, Some(options));
 
         // Write tar file to snapshot directory
         let tar_path = format!("{}/sandbox.tar", snapshot_dir);
@@ -1305,129 +1318,59 @@ echo 'Session directories created (.env, logs)'
     }
 
     // Restore a snapshot to a sandbox by copying from /data/snapshots/{snapshot_id}/ to container's /sandbox/
-    pub async fn restore_snapshot(
-        &self,
-        sandbox_id: &str,
-        snapshot_id: &str,
-    ) -> Result<()> {
+    pub async fn restore_snapshot(&self, sandbox_id: &str, snapshot_id: &str) -> Result<()> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
-        info!("Restoring snapshot {} to sandbox {}", snapshot_id, sandbox_id);
-
-        // Use docker exec to copy data into the running container
-        // We need to use a temporary container since docker cp can't copy from volume to container directly
-        let restore_container_name = format!("tsbx_snapshot_restore_{}", sandbox_id);
-
-        let config = Config {
-            image: Some(self.sandbox_image.clone()),
-            user: Some("root".to_string()),
-            cmd: Some(vec![
-                "bash".to_string(),
-                "-c".to_string(),
-                format!(
-                    "if [ -d /snapshots/{} ]; then docker cp /snapshots/{}/. {}:/sandbox/; echo 'Snapshot restored'; else echo 'Snapshot not found'; exit 1; fi",
-                    snapshot_id, snapshot_id, container_name
-                ),
-            ]),
-            host_config: Some(HostConfig {
-                mounts: Some(vec![
-                    Mount {
-                        typ: Some(MountTypeEnum::VOLUME),
-                        source: Some("tsbx_snapshots_data".to_string()),
-                        target: Some("/snapshots".to_string()),
-                        read_only: Some(true),
-                        ..Default::default()
-                    },
-                    Mount {
-                        typ: Some(MountTypeEnum::BIND),
-                        source: Some("/var/run/docker.sock".to_string()),
-                        target: Some("/var/run/docker.sock".to_string()),
-                        read_only: Some(false),
-                        ..Default::default()
-                    },
-                ]),
-                network_mode: Some("tsbx_network".to_string()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        // Create and start the restore container
-        self.docker
-            .create_container(
-                Some(CreateContainerOptions {
-                    name: restore_container_name.clone(),
-                    ..Default::default()
-                }),
-                config,
-            )
-            .await?;
-
-        self.docker
-            .start_container::<String>(&restore_container_name, None)
-            .await?;
-
-        // Wait for completion
-        let mut wait_stream = self
-            .docker
-            .wait_container::<String>(&restore_container_name, None);
-        let mut exit_code = 0;
-        while let Some(wait_result) = wait_stream.next().await {
-            let exit_result = wait_result?;
-            exit_code = exit_result.status_code;
-            if exit_code == 0 {
-                info!("Snapshot {} restored successfully to sandbox {}", snapshot_id, sandbox_id);
-            } else {
-                warn!(
-                    "Snapshot restore container exited with code {}",
-                    exit_code
-                );
-            }
-            break;
-        }
-
-        // Get logs for debugging
-        let logs = self.docker.logs::<String>(
-            &restore_container_name,
-            Some(LogsOptions {
-                stdout: true,
-                stderr: true,
-                ..Default::default()
-            }),
+        info!(
+            "Restoring snapshot {} to sandbox {}",
+            snapshot_id, sandbox_id
         );
 
-        let log_output = logs
-            .map(|log| match log {
-                Ok(line) => String::from_utf8_lossy(&line.into_bytes()).to_string(),
-                Err(_) => String::new(),
-            })
-            .collect::<Vec<_>>()
-            .await
-            .join("");
-
-        if !log_output.is_empty() {
-            info!("Snapshot restore logs: {}", log_output.trim());
-        }
-
-        // Clean up restore container
-        let _ = self
-            .docker
-            .remove_container(
-                &restore_container_name,
-                Some(RemoveContainerOptions {
-                    force: true,
-                    ..Default::default()
-                }),
-            )
-            .await;
-
-        if exit_code != 0 {
+        let snapshot_dir = format!("/data/snapshots/{}", snapshot_id);
+        if tokio::fs::metadata(&snapshot_dir).await.is_err() {
             return Err(anyhow::anyhow!(
-                "Failed to restore snapshot {}: exit code {}",
-                snapshot_id,
-                exit_code
+                "Snapshot {} not found on controller",
+                snapshot_id
             ));
         }
+
+        // Clean the target directory inside the sandbox container
+        let cleanup_cmd =
+            "set -euo pipefail; rm -rf /sandbox/* /sandbox/.[!.]* /sandbox/..?* || true";
+        self.execute_command(sandbox_id, cleanup_cmd).await?;
+
+        // Create a tar stream from the snapshot directory
+        let tar_output = tokio::process::Command::new("tar")
+            .arg("-C")
+            .arg(&snapshot_dir)
+            .arg("-cf")
+            .arg("-")
+            .arg(".")
+            .output()
+            .await?;
+
+        if !tar_output.status.success() {
+            return Err(anyhow::anyhow!(
+                "Failed to archive snapshot {}",
+                snapshot_id
+            ));
+        }
+
+        // Upload tar stream into the container's /sandbox directory
+        let tar_bytes = Bytes::from(tar_output.stdout);
+        let upload_opts = UploadToContainerOptions::<&str> {
+            path: "/sandbox",
+            no_overwrite_dir_non_dir: "false",
+        };
+
+        self.docker
+            .upload_to_container(&container_name, Some(upload_opts), tar_bytes)
+            .await?;
+
+        info!(
+            "Snapshot {} restored successfully to sandbox {}",
+            snapshot_id, sandbox_id
+        );
 
         Ok(())
     }
@@ -1523,10 +1466,7 @@ echo 'Session directories created (.env, logs)'
                             return self.ping_container(&container_name).await;
                         } else {
                             // Container exists but is not running
-                            info!(
-                                "Session {} container exists but is not running",
-                                sandbox_id
-                            );
+                            info!("Session {} container exists but is not running", sandbox_id);
                             return Ok(false);
                         }
                     }
@@ -1544,10 +1484,7 @@ echo 'Session directories created (.env, logs)'
             }
             Err(e) => {
                 // Other Docker API error
-                error!(
-                    "Failed to inspect sandbox {} container: {}",
-                    sandbox_id, e
-                );
+                error!("Failed to inspect sandbox {} container: {}", sandbox_id, e);
                 Err(anyhow::anyhow!(
                     "Docker API error for sandbox {}: {}",
                     sandbox_id,
