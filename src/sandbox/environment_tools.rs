@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::tool_registry::Tool;
+use super::toolkit::Tool;
 use super::tools::run_bash;
 
 /// Tool for getting information about the execution environment
@@ -32,7 +32,10 @@ impl Tool for EnvironmentInfoTool {
     }
 
     async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        let info_type = args.get("info_type").and_then(|v| v.as_str()).unwrap_or("all");
+        let info_type = args
+            .get("info_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("all");
 
         match info_type {
             "python_packages" => get_python_packages().await,
@@ -40,34 +43,66 @@ impl Tool for EnvironmentInfoTool {
             "python_version" => get_python_version().await,
             "pip_list" => get_pip_list().await,
             "all" => get_all_info().await,
-            _ => Ok(serde_json::json!({"status":"error","tool":"environment_info","error":"Invalid info_type"})),
+            _ => Ok(
+                serde_json::json!({"status":"error","tool":"environment_info","error":"Invalid info_type"}),
+            ),
         }
     }
 }
 
 async fn get_python_packages() -> Result<serde_json::Value> {
     let common_packages = [
-        "os", "sys", "json", "re", "datetime", "time", "math", "random",
-        "urllib", "http", "pathlib", "collections", "itertools", "functools",
-        "subprocess", "threading", "multiprocessing", "sqlite3", "csv",
+        "os",
+        "sys",
+        "json",
+        "re",
+        "datetime",
+        "time",
+        "math",
+        "random",
+        "urllib",
+        "http",
+        "pathlib",
+        "collections",
+        "itertools",
+        "functools",
+        "subprocess",
+        "threading",
+        "multiprocessing",
+        "sqlite3",
+        "csv",
     ];
 
     let mut results = Vec::new();
     results.push("Built-in Python packages (always available):".to_string());
-    
+
     for package in &common_packages {
         results.push(format!("  - {}", package));
     }
 
     // Check for commonly used third-party packages
     let third_party = [
-        "requests", "numpy", "pandas", "matplotlib", "seaborn", "plotly",
-        "scipy", "sklearn", "tensorflow", "torch", "PIL", "cv2",
-        "yfinance", "beautifulsoup4", "lxml", "openpyxl", "xlrd",
+        "requests",
+        "numpy",
+        "pandas",
+        "matplotlib",
+        "seaborn",
+        "plotly",
+        "scipy",
+        "sklearn",
+        "tensorflow",
+        "torch",
+        "PIL",
+        "cv2",
+        "yfinance",
+        "beautifulsoup4",
+        "lxml",
+        "openpyxl",
+        "xlrd",
     ];
 
     results.push("\nChecking third-party packages:".to_string());
-    
+
     for package in &third_party {
         let cmd = format!("python -c \"import {}\" 2>/dev/null && echo \"  ✓ {}\" || echo \"  ✗ {} (not installed)\"", 
                          package, package, package);
@@ -77,30 +112,44 @@ async fn get_python_packages() -> Result<serde_json::Value> {
         }
     }
 
-    Ok(serde_json::json!({"status":"ok","tool":"environment_info","kind":"python_packages","output": results.join("\n")}))
+    Ok(
+        serde_json::json!({"status":"ok","tool":"environment_info","kind":"python_packages","output": results.join("\n")}),
+    )
 }
 
 async fn get_system_info() -> Result<serde_json::Value> {
     let cmd = "uname -a && echo && python --version && echo && which python && echo && which pip";
     match run_bash(cmd).await {
-        Ok(output) => Ok(serde_json::json!({"status":"ok","tool":"environment_info","kind":"system","output": output})),
-        Err(e) => Ok(serde_json::json!({"status":"error","tool":"environment_info","kind":"system","error": e.to_string()})),
+        Ok(output) => Ok(
+            serde_json::json!({"status":"ok","tool":"environment_info","kind":"system","output": output}),
+        ),
+        Err(e) => Ok(
+            serde_json::json!({"status":"error","tool":"environment_info","kind":"system","error": e.to_string()}),
+        ),
     }
 }
 
 async fn get_python_version() -> Result<serde_json::Value> {
     let cmd = "python --version && python -c \"import sys; print(f'Python executable: {sys.executable}'); print(f'Python path: {sys.path[:3]}...')\"";
     match run_bash(cmd).await {
-        Ok(output) => Ok(serde_json::json!({"status":"ok","tool":"environment_info","kind":"python_version","output": output})),
-        Err(e) => Ok(serde_json::json!({"status":"error","tool":"environment_info","kind":"python_version","error": e.to_string()})),
+        Ok(output) => Ok(
+            serde_json::json!({"status":"ok","tool":"environment_info","kind":"python_version","output": output}),
+        ),
+        Err(e) => Ok(
+            serde_json::json!({"status":"error","tool":"environment_info","kind":"python_version","error": e.to_string()}),
+        ),
     }
 }
 
 async fn get_pip_list() -> Result<serde_json::Value> {
     let cmd = "pip list --format=columns 2>/dev/null | head -20";
     match run_bash(cmd).await {
-        Ok(output) => Ok(serde_json::json!({"status":"ok","tool":"environment_info","kind":"pip_list","output": output})),
-        Err(e) => Ok(serde_json::json!({"status":"error","tool":"environment_info","kind":"pip_list","error": e.to_string()})),
+        Ok(output) => Ok(
+            serde_json::json!({"status":"ok","tool":"environment_info","kind":"pip_list","output": output}),
+        ),
+        Err(e) => Ok(
+            serde_json::json!({"status":"error","tool":"environment_info","kind":"pip_list","error": e.to_string()}),
+        ),
     }
 }
 

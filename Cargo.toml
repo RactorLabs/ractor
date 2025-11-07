@@ -37,6 +37,8 @@ regex = "1.10"
 walkdir = "2.5"
 globset = "0.4"
 base64 = "0.22"
+bytes = "1"
+quick-xml = "0.31"
 
 [[bin]]
 name = "tsbx-api"

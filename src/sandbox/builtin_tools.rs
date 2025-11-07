@@ -1,8 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
 
-use super::tool_registry::Tool;
-use super::tools::{run_bash, text_edit, TextEditAction, PLAN_PATH};
+use super::toolkit::Tool;
+use super::tools::{run_bash, text_edit, TextEditAction};
 use anyhow::anyhow;
 use globset::{GlobBuilder, GlobSetBuilder};
 use regex::Regex;
@@ -13,22 +13,6 @@ use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 
 const SESSION_ROOT: &str = "/sandbox";
-
-fn is_plan_path(path: &Path) -> bool {
-    path == Path::new(PLAN_PATH)
-}
-
-fn is_plan_path_str(path: &str) -> bool {
-    Path::new(path) == Path::new(PLAN_PATH)
-}
-
-fn plan_access_denied(tool: &str) -> serde_json::Value {
-    json!({
-        "status": "error",
-        "tool": tool,
-        "error": "plan.md is managed exclusively via the update_plan tool. Never read, edit, or delete it directly."
-    })
-}
 
 fn ensure_under_sandbox(path: &str) -> anyhow::Result<&Path> {
     let p = Path::new(path);
@@ -162,9 +146,6 @@ impl Tool for OpenFileTool {
             );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        if is_plan_path_str(path) {
-            return Ok(plan_access_denied("open_file"));
-        }
         let start_line = args
             .get("start_line")
             .and_then(|v| v.as_u64())
@@ -230,9 +211,6 @@ impl Tool for CreateFileTool {
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
-        if is_plan_path_str(path) {
-            return Ok(plan_access_denied("create_file"));
-        }
         let p = ensure_under_sandbox(path)?;
         if p.exists() {
             return Ok(
@@ -293,9 +271,6 @@ impl Tool for StrReplaceTool {
         let new_str = args.get("new_str").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
 
-        if is_plan_path_str(path) {
-            return Ok(plan_access_denied("str_replace"));
-        }
         let p = ensure_under_sandbox(path)?;
         let content = fs::read_to_string(p).await?;
         let count = content.matches(old_str).count();
@@ -356,9 +331,6 @@ impl Tool for InsertTool {
             return Ok(json!({"status":"error","tool":"insert","error":"commentary is required"}));
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        if is_plan_path_str(path) {
-            return Ok(plan_access_denied("insert"));
-        }
         let line = args
             .get("insert_line")
             .and_then(|v| v.as_u64())
@@ -417,9 +389,6 @@ impl Tool for RemoveStrTool {
             );
         }
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
-        if is_plan_path_str(path) {
-            return Ok(plan_access_denied("remove_str"));
-        }
         let remove = args.get("content").and_then(|v| v.as_str()).unwrap_or("");
         let many = args.get("many").and_then(|v| v.as_bool()).unwrap_or(false);
         let p = ensure_under_sandbox(path)?;
@@ -441,74 +410,6 @@ impl Tool for RemoveStrTool {
         let mut f = fs::File::create(p).await?;
         f.write_all(new_content.as_bytes()).await?;
         Ok(json!({"status":"ok","tool":"remove_str","removed": if many {count} else {1}}))
-    }
-}
-
-/// Planning: update_plan
-pub struct UpdatePlanTool;
-
-impl UpdatePlanTool {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl Tool for UpdatePlanTool {
-    fn name(&self) -> &str {
-        "update_plan"
-    }
-
-    fn description(&self) -> &str {
-        "Replace the entire contents of /sandbox/plan.md with the provided text. Use this after every step to keep the plan current, and call it with an empty checklist once all work is complete."
-    }
-
-    fn parameters(&self) -> serde_json::Value {
-        serde_json::json!({
-            "type":"object",
-            "properties":{
-                "commentary": {"type":"string","description":"Plain-text explanation of why you are updating the plan"},
-                "content": {"type":"string","description":"Complete markdown checklist to write to /sandbox/plan.md"}
-            },
-            "required":["commentary","content"]
-        })
-    }
-
-    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
-        if args
-            .get("commentary")
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .is_none()
-        {
-            return Ok(json!({
-                "status":"error",
-                "tool":"update_plan",
-                "error":"commentary is required"
-            }));
-        }
-        let content = match args.get("content").and_then(|v| v.as_str()) {
-            Some(s) => s,
-            None => {
-                return Ok(json!({
-                    "status":"error",
-                    "tool":"update_plan",
-                    "error":"content is required"
-                }))
-            }
-        };
-
-        let existed = fs::metadata(PLAN_PATH).await.is_ok();
-        if let Some(parent) = Path::new(PLAN_PATH).parent() {
-            fs::create_dir_all(parent).await.ok();
-        }
-        let mut file = fs::File::create(PLAN_PATH).await?;
-        file.write_all(content.as_bytes()).await?;
-        Ok(json!({
-            "status":"ok",
-            "tool":"update_plan"
-        }))
     }
 }
 
@@ -551,9 +452,6 @@ impl Tool for FindFilecontentTool {
         }
         let root = args.get("path").and_then(|v| v.as_str()).unwrap_or("");
         let pattern = args.get("regex").and_then(|v| v.as_str()).unwrap_or("");
-        if is_plan_path_str(root) {
-            return Ok(plan_access_denied("find_filecontent"));
-        }
         let re = Regex::new(pattern).map_err(|e| anyhow::anyhow!(e))?;
         let mut hits = Vec::new();
         let _ = ensure_under_sandbox(root)?;
@@ -571,10 +469,7 @@ impl Tool for FindFilecontentTool {
             });
             for entry in walker.filter_map(|e| e.ok()) {
                 let entry_path = entry.path();
-                if entry.file_type().is_file()
-                    && !matches_default_ignored_file(entry_path)
-                    && !is_plan_path(entry_path)
-                {
+                if entry.file_type().is_file() && !matches_default_ignored_file(entry_path) {
                     scan_file(entry_path, &re, &mut hits).await.ok();
                 }
             }
@@ -584,9 +479,6 @@ impl Tool for FindFilecontentTool {
 }
 
 async fn scan_file(path: &Path, re: &Regex, out: &mut Vec<String>) -> Result<()> {
-    if is_plan_path(path) {
-        return Ok(());
-    }
     let content = fs::read_to_string(path).await?;
     for (i, line) in content.lines().enumerate() {
         if re.is_match(line) {

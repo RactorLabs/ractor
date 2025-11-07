@@ -1,12 +1,15 @@
 // Sandbox (Computer Use Sandbox) modules
 mod api;
 mod builtin_tools;
+mod command;
 mod config;
+mod environment_tools;
 mod error;
 mod guardrails;
-mod ollama;
+mod inference;
+mod package_tools;
 mod task_handler;
-mod tool_registry;
+mod toolkit;
 mod tools;
 
 use anyhow::Result;
@@ -41,14 +44,10 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     };
     tracing::info!("Using TSBX_TOKEN: {}", masked_token);
 
-    // Resolve Ollama host from environment; required (no default)
-    let mut ollama_host = std::env::var("OLLAMA_HOST")
-        .map_err(|_| anyhow::anyhow!("OLLAMA_HOST environment variable is required"))?;
-    // Be tolerant of missing scheme in OLLAMA_HOST (e.g., "127.0.0.1:11434")
-    if !(ollama_host.starts_with("http://") || ollama_host.starts_with("https://")) {
-        ollama_host = format!("http://{}", ollama_host);
-    }
-    tracing::info!("Using OLLAMA_HOST: {}", ollama_host);
+    // Resolve inference service endpoint from environment
+    let inference_url = std::env::var("TSBX_INFERENCE_URL")
+        .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+    tracing::info!("Using TSBX_INFERENCE_URL: {}", inference_url);
 
     // Initialize configuration
     let config = Arc::new(config::Config {
@@ -61,24 +60,24 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     // Initialize API client
     let api_client = Arc::new(api::TaskSandboxClient::new(config.clone()));
 
-    // Initialize Ollama client
-    let ollama_client = match ollama::OllamaClient::new(&ollama_host) {
+    // Initialize inference client
+    let inference_client = match inference::InferenceClient::new(&inference_url) {
         Ok(client) => client,
         Err(e) => {
-            tracing::error!("Failed to initialize Ollama client: {}", e);
-            return Err(anyhow::anyhow!("Failed to initialize Ollama client: {}", e));
+            tracing::error!("Failed to initialize inference client: {}", e);
+            return Err(anyhow::anyhow!(
+                "Failed to initialize inference client: {}",
+                e
+            ));
         }
     };
-    let ollama_client = Arc::new(ollama_client);
+    let inference_client = Arc::new(inference_client);
 
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
 
     // Initialize sandbox directories
-    let sandbox_dirs = [
-        "/sandbox",
-        "/sandbox/logs",
-    ];
+    let sandbox_dirs = ["/sandbox", "/sandbox/logs"];
 
     for dir in sandbox_dirs.iter() {
         if let Err(e) = std::fs::create_dir_all(dir) {
@@ -157,7 +156,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     // Initialize task handler
     let task_handler = task_handler::TaskHandler::new(
         api_client.clone(),
-        ollama_client.clone(),
+        inference_client.clone(),
         guardrails.clone(),
     );
 
