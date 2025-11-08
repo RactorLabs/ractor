@@ -108,11 +108,14 @@
                 <div class="col-12">
                 <Card>
                   <div class="card-body p-3 p-sm-4">
-                    <div class="d-flex align-items-start align-items-sm-center flex-column flex-sm-row gap-2">
-                      <span class={methodClass(ep.method)}>{ep.method}</span>
-                      <details class="api-details flex-grow-1">
-                        <summary class="summary-row font-monospace text-break" aria-label="Toggle endpoint details">{ep.path}</summary>
-                        <div class="mt-3">
+                    <details class="api-details w-100">
+                      <summary class="summary-row" aria-label="Toggle endpoint details">
+                        <div class="d-flex align-items-center gap-2">
+                          <span class={methodClass(ep.method)}>{ep.method}</span>
+                          <span class="font-monospace text-break">{ep.path}</span>
+                        </div>
+                      </summary>
+                      <div class="mt-3">
                           {#if ep.desc}
                             <div class="mb-3">{ep.desc}</div>
                           {/if}
@@ -182,9 +185,8 @@
                           </div>
                         {/if}
 
-                        </div>
-                      </details>
-                    </div>
+                      </div>
+                    </details>
                   </div>
                 </Card>
               </div>
