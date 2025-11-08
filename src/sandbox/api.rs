@@ -293,7 +293,7 @@ impl TaskSandboxClient {
     /// Update sandbox to busy (clears idle_from)
     pub async fn update_sandbox_to_busy(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sandboxes/{}/busy",
+            "{}/api/v0/sandboxes/{}/state/busy",
             self.config.api_url, self.sandbox_id
         );
 
@@ -332,7 +332,7 @@ impl TaskSandboxClient {
     /// Update sandbox to idle (sets idle_from)
     pub async fn update_sandbox_to_idle(&self) -> Result<()> {
         let url = format!(
-            "{}/api/v0/sandboxes/{}/idle",
+            "{}/api/v0/sandboxes/{}/state/idle",
             self.config.api_url, self.sandbox_id
         );
 
