@@ -547,11 +547,12 @@ paths:
                     type: boolean
                   state:
                     type: string
-  /sandboxes/{id}/cancel:
+  /sandboxes/{id}/tasks/{task_id}/cancel:
     post:
       tags:
       - Tasks
-      summary: "Cancel latest in\u2011progress task and set sandbox idle"
+      summary: Cancel sandbox task
+      description: Cancel a specific pending or processing task. Returns HTTP 409 if the task is already terminal.
       parameters:
       - in: path
         name: id
@@ -559,6 +560,12 @@ paths:
         schema:
           type: string
         description: Sandbox ID (UUID)
+      - in: path
+        name: task_id
+        required: true
+        schema:
+          type: string
+        description: Task ID (UUID)
       responses:
         '200':
           description: Cancellation result
@@ -571,8 +578,12 @@ paths:
                     type: string
                   sandbox:
                     type: string
+                  task:
+                    type: string
                   cancelled:
                     type: boolean
+        '409':
+          description: Task is not in a cancellable state
   /sandboxes/{id}/context:
     get:
       tags:

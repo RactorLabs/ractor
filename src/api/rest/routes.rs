@@ -13,12 +13,10 @@ use crate::shared::models::AppState;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
-    let public_routes = Router::new()
-        .route("/version", get(version))
-        .route(
-            "/auth/operators/{name}/login",
-            post(handlers::operators::login),
-        );
+    let public_routes = Router::new().route("/version", get(version)).route(
+        "/auth/operators/{name}/login",
+        post(handlers::operators::login),
+    );
 
     // Protected routes
     let protected_routes = Router::new()
@@ -35,10 +33,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::auth::unblock_principal),
         )
         // Operator endpoints
-        .route(
-            "/auth/operators",
-            get(handlers::operators::list_operators),
-        )
+        .route("/auth/operators", get(handlers::operators::list_operators))
         .route(
             "/auth/operators",
             post(handlers::operators::create_operator),
@@ -75,10 +70,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/sandboxes/{id}/state/idle",
             post(handlers::sandboxes::update_sandbox_to_idle),
-        )
-        .route(
-            "/sandboxes/{id}/cancel",
-            post(handlers::sandboxes::cancel_active_task),
         )
         .route(
             "/sandboxes/{id}/runtime",
@@ -151,6 +142,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/sandboxes/{id}/tasks/{task_id}",
             get(handlers::sandboxes::get_task_by_id).put(handlers::sandboxes::update_task),
+        )
+        .route(
+            "/sandboxes/{id}/tasks/{task_id}/cancel",
+            post(handlers::sandboxes::cancel_task),
         )
         .route(
             "/sandboxes/{id}/tasks/count",

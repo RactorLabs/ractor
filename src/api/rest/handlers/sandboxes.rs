@@ -821,13 +821,12 @@ pub async fn get_sandbox(
     ))
 }
 
-// Cancel the latest in-progress task for a sandbox and set sandbox to idle
-pub async fn cancel_active_task(
+// Cancel a specific task for a sandbox; sets sandbox idle when no active work remains
+pub async fn cancel_task(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path((id, task_id)): Path<(String, String)>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    // Admins must have SANDBOX_UPDATE; owners can cancel their own without RBAC grant
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
         check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
@@ -835,73 +834,93 @@ pub async fn cancel_active_task(
             .map_err(|_| ApiError::Forbidden("Insufficient permissions".to_string()))?;
     }
 
-    // Resolve principal identity
     let username = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    // Confirm access to the sandbox; enforce ownership for non-admins
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
     check_not_deleted(&sandbox)?;
     if !is_admin && sandbox.created_by != *username {
         return Err(ApiError::Forbidden(
-            "You can only cancel your own sandboxes".to_string(),
+            "You can only cancel tasks for your own sandboxes".to_string(),
         ));
     }
 
-    // Find latest in-progress task (processing or pending)
-    let row: Option<(String, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT id, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#
-    )
-    .bind(&sandbox.id)
-    .fetch_optional(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+    let cancelled_item = serde_json::json!({
+        "type": "cancelled",
+        "reason": "user_cancel",
+        "at": chrono::Utc::now().to_rfc3339(),
+    });
 
     let mut cancelled = false;
-    if let Some((task_id, output)) = row {
-        let mut new_output = output.clone();
-        let mut items = new_output
-            .get("items")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_else(Vec::new);
-        items.push(serde_json::json!({
-            "type": "cancelled", "reason": "user_cancel", "at": chrono::Utc::now().to_rfc3339()
-        }));
-        if let serde_json::Value::Object(ref mut map) = new_output {
-            map.insert("items".to_string(), serde_json::Value::Array(items));
+    if let Some((status, output)) = sqlx::query_as::<_, (String, Option<serde_json::Value>)>(
+        r#"SELECT status, output FROM sandbox_tasks WHERE sandbox_id = ? AND id = ? LIMIT 1"#,
+    )
+    .bind(&sandbox.id)
+    .bind(&task_id)
+    .fetch_optional(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    {
+        let status_lower = status.to_lowercase();
+        if status_lower == "processing" || status_lower == "pending" {
+            let mut new_output = output.unwrap_or_else(|| serde_json::json!({"text":""}));
+            if let serde_json::Value::Object(ref mut map) = new_output {
+                let mut items = map
+                    .get("items")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_else(Vec::new);
+                items.push(cancelled_item.clone());
+                map.insert("items".to_string(), serde_json::Value::Array(items));
+            } else {
+                new_output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
+            }
+
+            sqlx::query(
+                r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE sandbox_id = ? AND id = ?"#
+            )
+            .bind(&new_output)
+            .bind(&sandbox.id)
+            .bind(&task_id)
+            .execute(&*state.db)
+            .await
+            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+            cancelled = true;
         } else {
-            new_output = serde_json::json!({"text":"","items":[{"type":"cancelled","reason":"user_cancel","at": chrono::Utc::now().to_rfc3339()}]});
+            return Err(ApiError::Conflict(
+                "Task is not in a cancellable state".to_string(),
+            ));
         }
-        sqlx::query(
-            r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE id = ?"#
-        )
-        .bind(&new_output)
-        .bind(&task_id)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
-        cancelled = true;
     }
 
-    // If no task row, try to cancel a queued create_task request (pre-insert race)
     if !cancelled {
-        if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload FROM sandbox_requests WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
+        let pending_requests = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+            r#"SELECT id, created_by, payload
+               FROM sandbox_requests
+               WHERE sandbox_id = ?
+                 AND request_type = 'create_task'
+                 AND status IN ('pending','processing')
+               ORDER BY created_at DESC"#,
         )
         .bind(&sandbox.id)
-        .fetch_optional(&*state.db)
+        .fetch_all(&*state.db)
         .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))? {
-            let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            if !task_id.is_empty() {
-                let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
-                let now = chrono::Utc::now();
-                let cancelled_item = serde_json::json!({"type":"cancelled","reason":"user_cancel","at": now.to_rfc3339()});
-                let output = serde_json::json!({"text":"","items":[cancelled_item]});
-                // Insert cancelled task row (idempotent behavior if it already exists)
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+        for (request_id, created_by, payload) in pending_requests {
+            if payload
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .map(|v| v == task_id)
+                .unwrap_or(false)
+            {
+                let input = payload
+                    .get("input")
+                    .cloned()
+                    .unwrap_or_else(|| serde_json::json!({"text":""}));
+                let output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
                 let _ = sqlx::query(
                     r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, created_at, updated_at)
                         VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
@@ -914,25 +933,58 @@ pub async fn cancel_active_task(
                 .bind(&output)
                 .execute(&*state.db)
                 .await;
-                // Mark update completed to prevent later insertion
-                let _ = sqlx::query(r#"UPDATE sandbox_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
-                    .bind(&request_id)
-                    .execute(&*state.db)
-                    .await;
+
+                let _ = sqlx::query(
+                    r#"UPDATE sandbox_requests
+                       SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled'
+                       WHERE id = ?"#,
+                )
+                .bind(&request_id)
+                .execute(&*state.db)
+                .await;
+
                 cancelled = true;
+                break;
             }
         }
     }
 
-    // Set sandbox to idle
-    sqlx::query(r#"UPDATE sandboxes SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL WHERE id = ?"#)
+    if !cancelled {
+        return Err(ApiError::NotFound(
+            "Task not found or already completed".to_string(),
+        ));
+    }
+
+    let (remaining_tasks,): (i64,) = sqlx::query_as(
+        r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
+    )
+    .bind(&sandbox.id)
+    .fetch_one(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    let (remaining_requests,): (i64,) = sqlx::query_as(
+        r#"SELECT COUNT(*) FROM sandbox_requests WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing')"#
+    )
+    .bind(&sandbox.id)
+    .fetch_one(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+
+    if remaining_tasks == 0 && remaining_requests == 0 {
+        sqlx::query(
+            r#"UPDATE sandboxes
+               SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL
+               WHERE id = ? AND state <> 'deleted'"#,
+        )
         .bind(&sandbox.id)
         .execute(&*state.db)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox: {}", e)))?;
+    }
 
     Ok(Json(
-        serde_json::json!({"status":"ok", "sandbox": sandbox.id, "cancelled": cancelled}),
+        serde_json::json!({"status":"ok", "sandbox": sandbox.id, "task": task_id, "cancelled": true}),
     ))
 }
 
@@ -1828,6 +1880,98 @@ pub async fn delete_sandbox(
     // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+
+    let cancelled_item = serde_json::json!({
+        "type": "cancelled",
+        "reason": "sandbox_deleted",
+        "at": chrono::Utc::now().to_rfc3339(),
+    });
+
+    let active_tasks = sqlx::query_as::<_, (String, Option<serde_json::Value>)>(
+        r#"SELECT id, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
+    )
+    .bind(&sandbox.id)
+    .fetch_all(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to load tasks: {}", e)))?;
+
+    for (task_id, output) in active_tasks {
+        let mut new_output = output.unwrap_or_else(|| serde_json::json!({"text":""}));
+        if let serde_json::Value::Object(ref mut map) = new_output {
+            let mut items = map
+                .get("items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_else(Vec::new);
+            items.push(cancelled_item.clone());
+            map.insert("items".to_string(), serde_json::Value::Array(items));
+        } else {
+            new_output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
+        }
+
+        sqlx::query(
+            r#"UPDATE sandbox_tasks
+               SET status = 'cancelled', output = ?, updated_at = NOW()
+               WHERE sandbox_id = ? AND id = ?"#,
+        )
+        .bind(&new_output)
+        .bind(&sandbox.id)
+        .bind(&task_id)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to cancel task {}: {}", task_id, e))
+        })?;
+    }
+
+    let pending_requests = sqlx::query_as::<_, (String, String, serde_json::Value)>(
+        r#"SELECT id, created_by, payload
+           FROM sandbox_requests
+           WHERE sandbox_id = ?
+             AND request_type = 'create_task'
+             AND status IN ('pending','processing')"#,
+    )
+    .bind(&sandbox.id)
+    .fetch_all(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to load pending requests: {}", e)))?;
+
+    for (request_id, created_by, payload) in pending_requests {
+        let task_id = payload
+            .get("task_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if task_id.is_empty() {
+            continue;
+        }
+        let input = payload
+            .get("input")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({"text":""}));
+        let output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
+        let _ = sqlx::query(
+            r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, created_at, updated_at)
+                VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
+                ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
+        )
+        .bind(&task_id)
+        .bind(&sandbox.id)
+        .bind(&created_by)
+        .bind(&input)
+        .bind(&output)
+        .execute(&*state.db)
+        .await;
+
+        let _ = sqlx::query(
+            r#"UPDATE sandbox_requests
+               SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled'
+               WHERE id = ?"#,
+        )
+        .bind(&request_id)
+        .execute(&*state.db)
+        .await;
+    }
 
     // Delete sandbox: schedule container stop and mark as deleted
     // Add request to queue for sandbox manager to stop container and set state to deleted

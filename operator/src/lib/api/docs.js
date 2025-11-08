@@ -341,20 +341,6 @@ export function getApiDocs(base) {
           ]
         },
         {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/cancel',
-          auth: 'bearer',
-          desc: 'Cancel the most recent pending/processing task or queued request and return sandbox to idle.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/cancel -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'CancelAck' },
-          responses: [
-            { status: 200, body: `{"status":"ok","sandbox":"fa36e542-b9b8-11f0-aadd-064ac08387fc","cancelled":true}` }
-          ]
-        },
-        {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/runtime',
           auth: 'bearer',
@@ -429,7 +415,7 @@ export function getApiDocs(base) {
           method: 'DELETE',
           path: '/api/v0/sandboxes/{id}',
           auth: 'bearer',
-          desc: 'Schedule sandbox deletion (controller stops container and marks state deleted).',
+          desc: 'Schedule sandbox deletion (controller stops container and marks state deleted). Any in-flight tasks are cancelled immediately.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
           ],
@@ -505,6 +491,21 @@ export function getApiDocs(base) {
           resp: { schema: 'TaskObject' },
           responses: [
             { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/tasks/{task_id}/cancel',
+          auth: 'bearer',
+          desc: 'Cancel a specific pending or processing task. If the task is already complete, returns HTTP 409.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id>/cancel -H "Authorization: Bearer <token>"`,
+          responses: [
+            { status: 200, body: `{"status":"ok","sandbox":"<id>","task":"<task_id>","cancelled":true}` },
+            { status: 409, body: `{"message":"Task is not in a cancellable state"}` }
           ]
         },
         {

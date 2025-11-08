@@ -71,6 +71,7 @@
   let stateStr = '';
   // Chat rendering derived from Tasks
   let chat = [];
+  let tasks = [];
   // Toggle display of thinking (analysis/commentary) text; persisted via cookie
   let showThinking = false;
   const SHOW_THINKING_COOKIE = 'tsbx_showThinking';
@@ -722,6 +723,7 @@
     const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks?limit=200`);
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
+      tasks = list;
       // Only auto-stick if near bottom before refresh
       let shouldStick = true;
       try {
@@ -1369,7 +1371,19 @@
 
   async function cancelActive() {
     try {
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/cancel`, { method: 'POST' });
+      const activeTask = [...tasks]
+        .reverse()
+        .find((t) => {
+          const st = String(t?.status || '').toLowerCase();
+          return st === 'processing' || st === 'pending';
+        });
+      if (!activeTask) {
+        throw new Error('No cancellable task is currently running.');
+      }
+      const res = await apiFetch(
+        `/sandboxes/${encodeURIComponent(sandboxId)}/tasks/${encodeURIComponent(activeTask.id)}/cancel`,
+        { method: 'POST' }
+      );
       if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Cancel failed (HTTP ${res.status})`);
       await fetchSandbox();
       await fetchTasks();
