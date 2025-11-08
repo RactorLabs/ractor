@@ -208,18 +208,6 @@
       </div>
     {/each}
 
-    <!-- Moved reference sections to end -->
-    <Card class="mb-3 mt-3">
-      <div class="card-header fw-bold">Error Format</div>
-      <div class="card-body p-3 p-sm-4 small">
-        <div>On error, endpoints return an HTTP status and a JSON body:</div>
-        <pre class="bg-light p-2 rounded mb-0 code-wrap"><code>{`{
-  "message": "Error description"
-}`}</code></pre>
-      </div>
-    </Card>
-
-
       </div>
     </Card>
   </div>
