@@ -44,6 +44,20 @@
     }
     return lines.map((l, idx) => idx < lines.length - 1 ? `${l} \\` : l).join('\n');
   }
+
+  function formatJsonSample(body) {
+    if (!body || typeof body !== 'string') return body;
+    const trimmed = body.trim();
+    if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+      return body;
+    }
+    try {
+      const parsed = JSON.parse(trimmed);
+      return JSON.stringify(parsed, null, 2);
+    } catch (_) {
+      return body;
+    }
+  }
 </script>
 
 <div class="container-xxl">
@@ -144,9 +158,9 @@
                               <div class="fw-500 small text-body text-opacity-75 mb-1">Response</div>
                               {#each ep.responses as r}
                                 <div class="mb-2"><span class="badge bg-primary">HTTP {r.status}</span></div>
-                                {#if r.body}
-                                  <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{r.body}</code></pre>
-                                {/if}
+                              {#if r.body}
+                                <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{formatJsonSample(r.body)}</code></pre>
+                              {/if}
                               {/each}
                             </div>
                           {/if}
