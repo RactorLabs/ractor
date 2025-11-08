@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { isAuthenticated } from '$lib/auth.js';
+  import { isAuthenticated, getToken } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { setPageTitle } from '$lib/utils.js';
@@ -103,7 +103,10 @@
     previewLoading = true;
     try {
       const url = `/api/v0/snapshots/${encodeURIComponent(snapshotId)}/files/read/${encodeURIComponent(path)}`;
-      const resp = await fetch(url);
+      const headers = new Headers();
+      const token = getToken();
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      const resp = await fetch(url, { headers });
       if (!resp.ok) {
         previewError = `Failed to open file (HTTP ${resp.status})`;
         previewLoading = false;
