@@ -292,16 +292,6 @@
     }
   </style>
 
-  <div class="col-xl-3">
-    <Card>
-      <div class="card-header fw-bold">Sections</div>
-      <div class="list-group list-group-flush">
-        {#each docs as section}
-          <a class="list-group-item list-group-item-action" href={'#' + section.id}>{section.title}</a>
-        {/each}
-      </div>
-    </Card>
-  </div>
       </div>
     </div>
   </div>
