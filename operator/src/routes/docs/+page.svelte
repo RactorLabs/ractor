@@ -84,77 +84,73 @@
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
-      <div class="row">
-  <div class="col-xl-9">
-    <Card class="mb-3">
-      <div class="card-body p-4">
-        <div class="text-center mb-2">
-          <div class="fs-20px fw-bold">{$page?.data?.hostName || getHostName()} REST API</div>
-          <div class="text-body text-opacity-75">Public documentation of REST endpoints. Interactive pages require login.</div>
+      <Card class="mb-3">
+        <div class="card-body p-4">
+          <div class="text-center mb-2">
+            <div class="fs-20px fw-bold">{$page?.data?.hostName || getHostName()} REST API</div>
+            <div class="text-body text-opacity-75">Public documentation of REST endpoints. Interactive pages require login.</div>
+          </div>
+          <div class="text-center">
+            <span class="badge bg-secondary">Version: {API_VERSION}</span>
+          </div>
         </div>
-        <div class="text-center">
-          <span class="badge bg-secondary">Version: {API_VERSION}</span>
-        </div>
-      </div>
-    </Card>
+      </Card>
 
-    
-
-    {#each docs as section}
-      <div id={section.id} class="mb-3">
-        <div class="mb-2">
-          <div class="fw-bold fs-20px">{section.title}</div>
-          <div class="text-body text-opacity-75 small">{section.description}</div>
-        </div>
-        <div>
-          <div class="row g-3">
-            {#each section.endpoints as ep}
-              <div class="col-12">
-                <Card>
-                  <div class="card-body p-3 p-sm-4">
-                    <div class="d-flex align-items-start align-items-sm-center flex-column flex-sm-row gap-2">
-                      <div class="d-flex align-items-center gap-2">
-                        <span class={methodClass(ep.method)}>{ep.method}</span>
-                        <span class="font-monospace">{ep.path}</span>
+      {#each docs as section}
+        <div id={section.id} class="mb-3">
+          <div class="mb-2">
+            <div class="fw-bold fs-20px">{section.title}</div>
+            <div class="text-body text-opacity-75 small">{section.description}</div>
+          </div>
+          <div>
+            <div class="row g-3">
+              {#each section.endpoints as ep}
+                <div class="col-12">
+                  <Card>
+                    <div class="card-body p-3 p-sm-4">
+                      <div class="d-flex align-items-start align-items-sm-center flex-column flex-sm-row gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                          <span class={methodClass(ep.method)}>{ep.method}</span>
+                          <span class="font-monospace">{ep.path}</span>
+                        </div>
+                        <div class="ms-sm-auto d-flex align-items-center">
+                          {#if ep.auth === 'bearer'}
+                            <span class="badge bg-dark">Bearer</span>
+                          {:else}
+                            <span class="badge bg-success">Public</span>
+                          {/if}
+                        </div>
                       </div>
-                      <div class="ms-sm-auto d-flex align-items-center">
-                        {#if ep.auth === 'bearer'}
-                          <span class="badge bg-dark">Bearer</span>
-                        {:else}
-                          <span class="badge bg-success">Public</span>
-                        {/if}
-                      </div>
-                    </div>
-                                        <details class="mt-3 api-details">
-                      <summary class="fw-semibold text-primary small">View details</summary>
-                      <div class="mt-3">
-                        {#if ep.desc}
-                          <div class="mb-3">{ep.desc}</div>
-                        {/if}
+                      <details class="mt-3 api-details">
+                        <summary class="fw-semibold text-primary small">View details</summary>
+                        <div class="mt-3">
+                          {#if ep.desc}
+                            <div class="mb-3">{ep.desc}</div>
+                          {/if}
 
-                        {#if ep.params && ep.params.length}
-                          <div class="mb-3">
-                            {#if ep.params.filter(p => p.in === 'path').length}
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Path parameters</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-2">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each ep.params.filter(p => p.in === 'path') as p}
-                                      <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
-                                    {/each}
-                                  </tbody>
-                                </table>
-                              </div>
-                            {/if}
-                            {#if ep.params.filter(p => p.in === 'query').length}
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Query parameters</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-2">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each ep.params.filter(p => p.in === 'query') as p}
-                                      <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                          {#if ep.params && ep.params.length}
+                            <div class="mb-3">
+                              {#if ep.params.filter(p => p.in === 'path').length}
+                                <div class="fw-500 small text-body text-opacity-75 mb-1">Path parameters</div>
+                                <div class="table-responsive">
+                                  <table class="table table-sm table-bordered small mb-2">
+                                    <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                                    <tbody>
+                                      {#each ep.params.filter(p => p.in === 'path') as p}
+                                        <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                      {/each}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              {/if}
+                              {#if ep.params.filter(p => p.in === 'query').length}
+                                <div class="fw-500 small text-body text-opacity-75 mb-1">Query parameters</div>
+                                <div class="table-responsive">
+                                  <table class="table table-sm table-bordered small mb-2">
+                                    <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                                    <tbody>
+                                      {#each ep.params.filter(p => p.in === 'query') as p}
+                                        <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
                                     {/each}
                                   </tbody>
                                 </table>
@@ -197,21 +193,19 @@
                           </div>
                         {/if}
 
-                      </div>
-                    </details>
-                  </div>
-                </Card>
-              </div>
-            {/each}
+                        </div>
+                      </details>
+                    </div>
+                  </Card>
+                </div>
+              {/each}
+            </div>
           </div>
         </div>
-      </div>
-    {/each}
-
-      </div>
-    </Card>
+      {/each}
+    </div>
   </div>
-  
+
   <style>
     :global(pre.code-wrap) {
       white-space: pre-wrap;
@@ -229,8 +223,4 @@
       cursor: pointer;
     }
   </style>
-
-      </div>
-    </div>
-  </div>
 </div>
