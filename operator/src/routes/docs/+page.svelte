@@ -110,12 +110,10 @@
                   <div class="card-body p-3 p-sm-4">
                     <details class="api-details">
                       <summary class="summary-row" aria-label="Toggle endpoint details">
-                        <div class="d-flex align-items-start align-items-sm-center flex-column flex-sm-row gap-2 w-100">
-                          <div class="d-flex align-items-center gap-2">
-                            <span class={methodClass(ep.method)}>{ep.method}</span>
-                            <span class="font-monospace">{ep.path}</span>
-                          </div>
-                          <span class="summary-arrow ms-sm-auto" aria-hidden="true"></span>
+                        <div class="d-flex align-items-center gap-2 w-100">
+                          <span class={methodClass(ep.method)}>{ep.method}</span>
+                          <span class="font-monospace flex-grow-1 text-break">{ep.path}</span>
+                          <span class="summary-arrow ms-auto" aria-hidden="true"></span>
                         </div>
                       </summary>
                       <div class="mt-3">
