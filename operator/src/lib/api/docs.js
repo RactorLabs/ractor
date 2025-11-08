@@ -230,7 +230,7 @@ export function getApiDocs(base) {
           auth: 'bearer',
           desc: 'List sandboxes owned by the caller (admins may filter across all sandboxes).',
           params: [
-            { in: 'query', name: 'state', type: 'string', required: false, desc: "Filter by state: 'init'|'idle'|'busy'|'deleted'" },
+            { in: 'query', name: 'state', type: 'string', required: false, desc: "Filter by state: 'init'|'idle'|'busy'|'terminated'" },
             { in: 'query', name: 'q', type: 'string', required: false, desc: 'Substring match on description (case-insensitive).' },
             { in: 'query', name: 'tags', type: 'string or string[]', required: false, desc: "Filter by tags. Provide multiple 'tags' params or a comma-separated string." },
             { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100).' },
@@ -304,7 +304,7 @@ export function getApiDocs(base) {
           desc: 'Update sandbox state directly (owner or admin).',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'state', type: 'string', required: true, desc: "Desired state ('init','idle','busy','deleted')." }
+            { in: 'body', name: 'state', type: 'string', required: true, desc: "Desired state ('init','idle','busy','terminated')." }
           ],
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/state -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"state":"idle"}'`,
           resp: { schema: 'StateAck' },
@@ -415,7 +415,7 @@ export function getApiDocs(base) {
           method: 'DELETE',
           path: '/api/v0/sandboxes/{id}',
           auth: 'bearer',
-          desc: 'Schedule sandbox deletion (controller stops container and marks state deleted). Any in-flight tasks are cancelled immediately.',
+          desc: 'Schedule sandbox termination (controller stops container and marks state terminated). Any in-flight tasks are cancelled immediately.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
           ],

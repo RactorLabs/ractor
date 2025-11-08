@@ -93,7 +93,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         .route(
             "/sandboxes/{id}",
-            delete(handlers::sandboxes::delete_sandbox),
+            delete(handlers::sandboxes::terminate_sandbox),
         )
         // Snapshot endpoints
         .route("/snapshots", get(handlers::snapshots::list_snapshots))

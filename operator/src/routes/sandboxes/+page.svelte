@@ -28,7 +28,7 @@
     if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
     if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
     if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
-    if (s === 'deleted') return 'badge rounded-pill bg-transparent border border-danger text-danger';
+    if (s === 'terminated') return 'badge rounded-pill bg-transparent border border-danger text-danger';
     return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
   function stateColorClass(state) {
@@ -36,13 +36,13 @@
     if (s === 'idle') return 'bg-success border-success';
     if (s === 'busy') return 'bg-warning border-warning';
     if (s === 'init') return 'bg-secondary border-secondary';
-    if (s === 'deleted') return 'bg-danger border-danger';
+    if (s === 'terminated') return 'bg-danger border-danger';
     return 'bg-secondary border-secondary';
   }
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'deleted') return 'bi bi-trash';
+    if (s === 'terminated') return 'bi bi-power';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -81,11 +81,11 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function deleteSandbox(sandbox) {
-    const ok = confirm(`Delete sandbox '${sandbox.id || ''}'? This cannot be undone.`);
+  async function terminateSandbox(sandbox) {
+    const ok = confirm(`Terminate sandbox '${sandbox.id || ''}'? This cannot be undone.`);
     if (!ok) return;
     const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}`, { method: 'DELETE' });
-    if (!res.ok) { error = res?.data?.message || 'Delete failed'; return; }
+    if (!res.ok) { error = res?.data?.message || 'Termination failed'; return; }
     await fetchSandboxes();
   }
 
@@ -233,7 +233,7 @@ import { getHostUrl } from '$lib/branding.js';
             <option value="init">init</option>
             <option value="idle">idle</option>
             <option value="busy">busy</option>
-            <option value="deleted">deleted</option>
+            <option value="terminated">terminated</option>
           </select>
         </div>
       </div>
@@ -303,8 +303,8 @@ import { getHostUrl } from '$lib/branding.js';
                       </div>
                       <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
                         {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSandbox(a)} aria-label="Delete sandbox">
-                            <i class="bi bi-trash me-1"></i><span>Delete</span>
+                          <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
+                            <i class="bi bi-power me-1"></i><span>Terminate</span>
                           </button>
                         {/if}
                         <div class="dropdown">
@@ -312,13 +312,13 @@ import { getHostUrl } from '$lib/branding.js';
                             <i class="bi bi-three-dots"></i>
                           </button>
                           <ul class="dropdown-menu dropdown-menu-end">
-                            {#if String(a.state||'').toLowerCase() !== 'deleted'}
+                            {#if String(a.state||'').toLowerCase() !== 'terminated'}
                               <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                               <li><button class="dropdown-item" on:click={() => openEditTimeouts(a)}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                               <li><hr class="dropdown-divider" /></li>
                             {/if}
                             <li><a class="dropdown-item" href="/snapshots?sandbox_id={a.id}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                            {#if String(a.state||'').toLowerCase() !== 'deleted'}
+                            {#if String(a.state||'').toLowerCase() !== 'terminated'}
                               <li><button class="dropdown-item" on:click={() => openSnapshotModal(a)}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
                             {/if}
                           </ul>
@@ -386,7 +386,7 @@ import { getHostUrl } from '$lib/branding.js';
             <div class="col-12">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
-              <div class="form-text">Time of inactivity before sandbox is automatically deleted. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
+              <div class="form-text">Time of inactivity before sandbox is automatically terminated. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
             </div>
           </div>
         </div>

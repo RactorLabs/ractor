@@ -132,9 +132,11 @@ pub async fn create_snapshot(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
-    if sandbox.state == "deleted" {
+    if sandbox.state.eq_ignore_ascii_case("terminated")
+        || sandbox.state.eq_ignore_ascii_case("deleted")
+    {
         return Err(ApiError::BadRequest(
-            "Cannot create snapshot of deleted sandbox".to_string(),
+            "Cannot create snapshot of terminated sandbox".to_string(),
         ));
     }
 
@@ -289,12 +291,13 @@ fn map_snapshot_request_error(err: &str) -> ApiError {
         ApiError::PayloadTooLarge(err.to_string())
     } else if lower.contains("no such file") || lower.contains("not found") {
         ApiError::NotFound("Snapshot not found".to_string())
-    } else if lower.contains("deleted")
+    } else if lower.contains("terminated")
+        || lower.contains("deleted")
         || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Sandbox is deleted".to_string())
+        ApiError::Conflict("Sandbox is terminated".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {

@@ -163,9 +163,9 @@ impl SandboxManager {
                 .fetch_optional(&self.pool)
                 .await?
         {
-            if state.to_lowercase() == "deleted" {
+            if state.eq_ignore_ascii_case("terminated") || state.eq_ignore_ascii_case("deleted") {
                 return Err(anyhow::anyhow!(
-                    "Sandbox {} is deleted and cannot be used",
+                    "Sandbox {} is terminated and cannot be used",
                     sandbox_id
                 ));
             }
@@ -267,7 +267,7 @@ impl SandboxManager {
             let request_id = uuid::Uuid::new_v4().to_string();
             sqlx::query(r#"
                 INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
-                VALUES (?, ?, 'delete_sandbox', 'system', '{"reason": "idle_timeout"}', 'pending')
+                VALUES (?, ?, 'terminate_sandbox', 'system', '{"reason": "idle_timeout"}', 'pending')
                 "#)
             .bind(&request_id)
             .bind(&sandbox_id)
@@ -494,7 +494,7 @@ impl SandboxManager {
 
         let result = match request.request_type.as_str() {
             "create_sandbox" => self.handle_start_sandbox(request.clone()).await,
-            "delete_sandbox" => self.handle_delete_sandbox_request(request.clone()).await,
+            "terminate_sandbox" => self.handle_terminate_sandbox_request(request.clone()).await,
             "create_snapshot" => self.handle_create_snapshot(request.clone()).await,
             "execute_command" => self.handle_execute_command(request.clone()).await,
             "create_task" => self.handle_create_task(request.clone()).await,
@@ -749,7 +749,7 @@ impl SandboxManager {
         Ok(())
     }
 
-    pub async fn handle_delete_sandbox_request(&self, request: SandboxRequest) -> Result<()> {
+    pub async fn handle_terminate_sandbox_request(&self, request: SandboxRequest) -> Result<()> {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
@@ -836,7 +836,7 @@ impl SandboxManager {
                     match Snapshot::create_with_id(
                         &self.pool,
                         &sandbox.id,
-                        "sandbox_close",
+                        "sandbox_terminated",
                         snapshot_req,
                         Some(snapshot_id.clone()),
                     )
@@ -860,13 +860,13 @@ impl SandboxManager {
             // Close the Docker container (no individual volumes to keep)
             self.docker_manager.stop_container(&sandbox.id).await?;
 
-            // Update sandbox state to deleted (this is now effectively deleted in the new model)
-            sqlx::query(r#"UPDATE sandboxes SET state = 'deleted' WHERE id = ?"#)
+            // Update sandbox state to terminated (sandbox no longer active)
+            sqlx::query(r#"UPDATE sandboxes SET state = 'terminated' WHERE id = ?"#)
                 .bind(&sandbox.id)
                 .execute(&self.pool)
                 .await?;
 
-            info!("Sandbox {} state updated to deleted", &sandbox.id);
+            info!("Sandbox {} state updated to terminated", &sandbox.id);
         }
 
         // Create a chat marker task to indicate the action taken
@@ -884,7 +884,7 @@ impl SandboxManager {
                 .payload
                 .get("note")
                 .and_then(|v| v.as_str())
-                .unwrap_or("User requested delete")
+                .unwrap_or("User requested terminate")
         };
 
         // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)
@@ -995,7 +995,7 @@ impl SandboxManager {
             })
         } else {
             serde_json::json!({
-                "type": "deleted",
+                "type": "terminated",
                 "note": note,
                 "reason": reason,
                 "by": created_by,
@@ -1036,9 +1036,11 @@ impl SandboxManager {
         .fetch_one(&self.pool)
         .await?;
 
-        if sandbox.state == "deleted" {
+        if sandbox.state.eq_ignore_ascii_case("terminated")
+            || sandbox.state.eq_ignore_ascii_case("deleted")
+        {
             return self
-                .fail_request(&request.id, "sandbox is deleted".to_string())
+                .fail_request(&request.id, "sandbox is terminated".to_string())
                 .await;
         }
 
@@ -1066,7 +1068,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .fail_request(&request.id, "sandbox is terminated".to_string())
                     .await;
             }
         }
@@ -1185,14 +1187,14 @@ impl SandboxManager {
         Ok(())
     }
 
-    /// Check health of all non-deleted sandboxes and mark failed containers as deleted
+    /// Check health of all non-terminated sandboxes and mark failed containers as terminated
     async fn check_sandbox_health(&self) -> Result<usize> {
-        // Find all sandboxes that are not deleted (active sandboxes)
+        // Find all sandboxes that are not terminated (active sandboxes)
         let active_sandboxes: Vec<(String, String)> = sqlx::query_as(
             r#"
             SELECT id, state
             FROM sandboxes
-            WHERE state NOT IN ('deleted', 'init')
+            WHERE state NOT IN ('terminated', 'deleted', 'init')
             ORDER BY id
             "#,
         )
@@ -1219,24 +1221,24 @@ impl SandboxManager {
                 Ok(false) => {
                     // Container is unhealthy or doesn't exist
                     warn!(
-                        "Sandbox ID {} container is unhealthy or missing, marking as deleted for recovery",
+                        "Sandbox ID {} container is unhealthy or missing, marking as terminated for recovery",
                         sandbox_id
                     );
 
-                    // Mark sandbox as deleted so it can be restarted later
+                    // Mark sandbox as terminated so it can be restarted later
                     if let Err(e) =
-                        sqlx::query(r#"UPDATE sandboxes SET state = 'deleted' WHERE id = ?"#)
+                        sqlx::query(r#"UPDATE sandboxes SET state = 'terminated' WHERE id = ?"#)
                             .bind(&sandbox_id)
                             .execute(&self.pool)
                             .await
                     {
                         error!(
-                            "Failed to mark unhealthy sandbox ID {} as deleted: {}",
+                            "Failed to mark unhealthy sandbox ID {} as terminated: {}",
                             sandbox_id, e
                         );
                     } else {
                         info!(
-                            "Sandbox ID {} marked as deleted due to container failure (was: {})",
+                            "Sandbox ID {} marked as terminated due to container failure (was: {})",
                             sandbox_id, current_state
                         );
                         recovered_count += 1;
@@ -1254,7 +1256,7 @@ impl SandboxManager {
 
         if recovered_count > 0 {
             info!(
-                "Marked {} sandboxes as deleted due to container failures",
+                "Marked {} sandboxes as terminated due to container failures",
                 recovered_count
             );
         }
@@ -1328,7 +1330,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .fail_request(&request.id, "sandbox is terminated".to_string())
                     .await;
             }
         }
@@ -1405,7 +1407,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .fail_request(&request.id, "sandbox is terminated".to_string())
                     .await;
             }
         }
@@ -1494,7 +1496,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .fail_request(&request.id, "sandbox is terminated".to_string())
                     .await;
             }
         }
@@ -1597,7 +1599,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is deleted".to_string())
+                    .fail_request(&request.id, "sandbox is terminated".to_string())
                     .await;
             }
         }
@@ -1638,7 +1640,7 @@ impl SandboxManager {
                 .fail_request(&request.id, String::from_utf8_lossy(&err).to_string())
                 .await;
         }
-        let result = serde_json::json!({ "deleted": true, "path": safe });
+        let result = serde_json::json!({ "terminated": true, "path": safe });
         self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }

@@ -188,7 +188,7 @@ paths:
                 properties:
                   blocked:
                     type: boolean
-                  deleted:
+                  terminated:
                     type: boolean
         '401':
           $ref: '#/components/responses/Unauthorized'
@@ -929,7 +929,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Sandbox is deleted
+          description: Sandbox is terminated
         '413':
           description: File too large
   /sandboxes/{id}/files/metadata/{path}:
@@ -1222,7 +1222,7 @@ components:
           - init
           - idle
           - busy
-          - deleted
+          - terminated
           description: Sandbox lifecycle state
         description:
           type: string
@@ -1351,7 +1351,7 @@ components:
           - init
           - idle
           - busy
-          - deleted
+          - terminated
     PublishSessionRequest:
       type: object
       properties:

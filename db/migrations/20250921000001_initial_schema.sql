@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     last_context_length BIGINT NOT NULL DEFAULT 0,
 
     -- Constraints
-    CONSTRAINT sandboxes_state_check CHECK (state IN ('init', 'idle', 'busy', 'deleted')),
+    CONSTRAINT sandboxes_state_check CHECK (state IN ('init', 'idle', 'busy', 'terminated')),
     CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT sandboxes_timeout_check CHECK (
         idle_timeout_seconds > 0 AND idle_timeout_seconds <= 604800
@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS sandbox_requests (
 CREATE TABLE IF NOT EXISTS snapshots (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     sandbox_id CHAR(36) NOT NULL,
-    trigger_type ENUM('sandbox_close', 'user') NOT NULL,
+    trigger_type ENUM('sandbox_terminated', 'user') NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     metadata JSON DEFAULT ('{}'),
     CONSTRAINT fk_snapshots_sandbox FOREIGN KEY (sandbox_id) REFERENCES sandboxes(id) ON DELETE CASCADE,

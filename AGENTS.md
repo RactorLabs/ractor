@@ -66,7 +66,7 @@ Note on commit message formatting:
 ## Data Model Highlights (Sessions)
 
 - UUID-based primary key: sandboxes are identified exclusively by `id` (CHAR(36) UUID).
-- Core fields: `state` (`init|idle|busy|deleted`), `created_by`, timestamps, `metadata` (JSON).
+- Core fields: `state` (`init|idle|busy|terminated`), `created_by`, timestamps, `metadata` (JSON).
 - Parent sandboxes: `parent_sandbox_id` (CHAR(36)) references parent sandbox's UUID.
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
@@ -79,7 +79,7 @@ Note on commit message formatting:
   - `POST /api/v0/sandboxes/{id}/state/idle` when ready (sets state to `idle` and starts idle timer).
   - `POST /api/v0/sandboxes/{id}/state/busy` when processing (sets state to `busy` and starts busy timer).
 - Stop/Restart actions:
-  - `POST /sandboxes/{id}/stop` schedules container stop and sets state to `deleted`.
+  - `POST /sandboxes/{id}/stop` schedules container stop and sets state to `terminated`.
   - `POST /sandboxes/{id}/restart` restarts container and transitions via `init`.
 - Tasks: `GET/POST /sandboxes/{id}/tasks` for user↔sandbox exchanges, stored in `sandbox_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.

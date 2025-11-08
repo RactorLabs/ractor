@@ -36,11 +36,13 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
     }
 }
 
-// Helper: check if sandbox is deleted and return error if attempting write operation
-fn check_not_deleted(sandbox: &Sandbox) -> ApiResult<()> {
-    if sandbox.state == "deleted" {
+// Helper: ensure sandbox is not terminated before allowing write operations
+fn check_not_terminated(sandbox: &Sandbox) -> ApiResult<()> {
+    if sandbox.state.eq_ignore_ascii_case("terminated")
+        || sandbox.state.eq_ignore_ascii_case("deleted")
+    {
         return Err(ApiError::BadRequest(
-            "Sandbox is deleted. Please create a new one.".to_string(),
+            "Sandbox is terminated. Please create a new one.".to_string(),
         ));
     }
     Ok(())
@@ -223,12 +225,13 @@ fn map_file_request_error(err: &str) -> ApiError {
         ApiError::BadRequest("Path is a directory".to_string())
     } else if lower.contains("invalid path") {
         ApiError::BadRequest("Invalid path".to_string())
-    } else if lower.contains("deleted")
+    } else if lower.contains("terminated")
+        || lower.contains("deleted")
         || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Sandbox is deleted".to_string())
+        ApiError::Conflict("Sandbox is terminated".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -438,9 +441,7 @@ pub async fn list_sandbox_files(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    if sandbox.state == "deleted" {
-        return Err(ApiError::Conflict("Sandbox is deleted".to_string()));
-    }
+    check_not_terminated(&sandbox)?;
     if !is_safe_relative_path(&path) && !path.is_empty() {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -522,9 +523,7 @@ pub async fn list_sandbox_files_root(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    if sandbox.state == "deleted" {
-        return Err(ApiError::Conflict("Sandbox is deleted".to_string()));
-    }
+    check_not_terminated(&sandbox)?;
     let request_id = uuid::Uuid::new_v4().to_string();
     let payload = serde_json::json!({
         "path": "",
@@ -601,7 +600,7 @@ pub async fn delete_sandbox_file(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
     if !is_safe_relative_path(&path) {
         return Err(ApiError::BadRequest("Invalid path".to_string()));
     }
@@ -640,7 +639,7 @@ pub async fn delete_sandbox_file(
                 let res = payload_val
                     .get("result")
                     .cloned()
-                    .unwrap_or(serde_json::json!({"deleted": true}));
+                    .unwrap_or(serde_json::json!({"terminated": true}));
                 return Ok(Json(res));
             } else if status == "failed" {
                 let err: String = row
@@ -840,7 +839,7 @@ pub async fn cancel_task(
     };
 
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
     if !is_admin && sandbox.created_by != *username {
         return Err(ApiError::Forbidden(
             "You can only cancel tasks for your own sandboxes".to_string(),
@@ -975,7 +974,7 @@ pub async fn cancel_task(
         sqlx::query(
             r#"UPDATE sandboxes
                SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL
-               WHERE id = ? AND state <> 'deleted'"#,
+               WHERE id = ? AND state NOT IN ('terminated','deleted')"#,
         )
         .bind(&sandbox.id)
         .execute(&*state.db)
@@ -1347,7 +1346,7 @@ pub async fn clear_sandbox_context(
 
     // Confirm access to the sandbox
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     // Set the cutoff now
     crate::shared::models::Sandbox::clear_context_cutoff(&state.db, &sandbox.id)
@@ -1424,7 +1423,7 @@ pub async fn compact_sandbox_context(
 
     // Confirm access to the sandbox
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     // Load conversation history since the current cutoff (if any)
     let cutoff = sandbox.context_cutoff_at;
@@ -1679,7 +1678,7 @@ pub async fn update_sandbox_context_usage(
 
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     let tokens = req.tokens.max(0);
     Sandbox::update_last_context_length(&state.db, &sandbox.id, tokens)
@@ -1789,8 +1788,8 @@ pub async fn update_sandbox(
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
-    // Check if sandbox is deleted
-    check_not_deleted(&sandbox)?;
+    // Check if sandbox is terminated
+    check_not_terminated(&sandbox)?;
 
     // Enforce ownership: only admin or owner may update
     if !is_admin && sandbox.created_by != *username {
@@ -1832,7 +1831,7 @@ pub async fn update_sandbox_state(
     // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     // Update the state with ownership verification
     let result = sqlx::query(
@@ -1857,17 +1856,17 @@ pub async fn update_sandbox_state(
     })))
 }
 
-pub async fn delete_sandbox(
+pub async fn terminate_sandbox(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
 ) -> ApiResult<()> {
-    // Check permission for deleting sandboxes (admin only). Owners can delete without RBAC grant
+    // Check permission for terminating sandboxes (admin only). Owners can terminate without RBAC grant
     if is_admin_principal(&auth, &state).await {
         check_api_permission(&auth, &state, &permissions::SANDBOX_DELETE)
             .await
             .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to delete sandbox".to_string())
+                ApiError::Forbidden("Insufficient permissions to terminate sandbox".to_string())
             })?;
     }
 
@@ -1883,7 +1882,7 @@ pub async fn delete_sandbox(
 
     let cancelled_item = serde_json::json!({
         "type": "cancelled",
-        "reason": "sandbox_deleted",
+        "reason": "sandbox_terminated",
         "at": chrono::Utc::now().to_rfc3339(),
     });
 
@@ -1973,12 +1972,12 @@ pub async fn delete_sandbox(
         .await;
     }
 
-    // Delete sandbox: schedule container stop and mark as deleted
-    // Add request to queue for sandbox manager to stop container and set state to deleted
+    // Terminate sandbox: schedule container stop and mark as terminated
+    // Add request to queue for sandbox manager to stop container and set state to terminated
     sqlx::query(
         r#"
         INSERT INTO sandbox_requests (sandbox_id, request_type, created_by, payload, status)
-        VALUES (?, 'delete_sandbox', ?, '{}', 'pending')
+        VALUES (?, 'terminate_sandbox', ?, '{}', 'pending')
         "#,
     )
     .bind(&sandbox.id)
@@ -1989,7 +1988,7 @@ pub async fn delete_sandbox(
 
     tracing::info!("Created delete request for sandbox {}", sandbox.id);
 
-    // The controller will stop the container and set state to 'deleted'
+    // The controller will stop the container and set state to 'terminated'
     // The sandbox row remains in DB for history/audit purposes
 
     Ok(())
@@ -2045,7 +2044,7 @@ pub async fn get_sandbox_runtime(
                         .map(|dt| dt.with_timezone(&Utc))
                         .unwrap_or(row_created_at);
                     last_restarted = Some(at);
-                } else if t == "deleted" {
+                } else if t == "terminated" || t == "deleted" {
                     // Prefer embedded runtime_seconds, else compute delta
                     if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
                         if rs > 0 {
@@ -2069,8 +2068,8 @@ pub async fn get_sandbox_runtime(
         }
     }
 
-    // Include current sandbox up to now when sandbox is not deleted
-    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_DELETED {
+    // Include current sandbox up to now when sandbox is not terminated
+    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
         let start_at = last_restarted.unwrap_or(sandbox.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
@@ -2101,7 +2100,7 @@ pub async fn update_sandbox_to_busy(
     // Find sandbox (sandbox token should match sandbox ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     // Update sandbox to busy: clear idle_from and set busy_from (pauses stop timeout)
     Sandbox::update_sandbox_to_busy(&state.db, &sandbox.id)
@@ -2131,7 +2130,7 @@ pub async fn update_sandbox_to_idle(
     // Find sandbox (sandbox token should match sandbox ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
 
     // Update sandbox to idle: set idle_from and clear busy_from (idle timeout active)
     Sandbox::update_sandbox_to_idle(&state.db, &sandbox.id)
@@ -2194,9 +2193,9 @@ pub async fn create_task(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_DELETED {
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
         return Err(ApiError::BadRequest(
-            "Sandbox is deleted. Please create a new one.".to_string(),
+            "Sandbox is terminated. Please create a new one.".to_string(),
         ));
     }
 
@@ -2378,9 +2377,9 @@ pub async fn update_task(
         ));
     }
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_DELETED {
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
         return Err(ApiError::BadRequest(
-            "Sandbox is deleted. Please create a new one.".to_string(),
+            "Sandbox is terminated. Please create a new one.".to_string(),
         ));
     }
 

@@ -186,8 +186,8 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
             let state = sandbox_info.state.to_lowercase();
             if state == "busy" {
                 info!("Skipping initial idle update because sandbox is marked busy");
-            } else if state == "deleted" {
-                info!("Skipping initial idle update because sandbox is deleted");
+            } else if state == "terminated" || state == "deleted" {
+                info!("Skipping initial idle update because sandbox is terminated");
             } else {
                 info!("Setting sandbox to idle to start timeout...");
                 if let Err(e) = api_client.update_sandbox_to_idle().await {

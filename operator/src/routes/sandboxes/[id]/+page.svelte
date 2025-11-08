@@ -587,7 +587,7 @@
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'deleted') return 'bi bi-trash';
+    if (s === 'terminated') return 'bi bi-power';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'init') return 'spinner-border spinner-border-sm';
@@ -598,9 +598,9 @@
   $: stateStr = normState(sandbox?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
-  function isStopped() { return stateStr === 'deleted'; }
+  function isStopped() { return stateStr === 'terminated'; }
   function isActive() { return stateStr === 'idle' || stateStr === 'busy'; }
-  function isInitOrDeleted() { return stateStr === 'init'; }
+  function isInitOrTerminated() { return stateStr === 'init' || stateStr === 'terminated'; }
 
   // Do not auto-refresh files on state changes; user triggers Refresh manually
   let _lastStateStr = '';
@@ -664,11 +664,11 @@
 
 
   // Delete modal state and actions
-  let showDeleteModal = false;
-  let deleteConfirm = '';
-  function openDeleteModal() { deleteConfirm = ''; showDeleteModal = true; }
-  function closeDeleteModal() { showDeleteModal = false; }
-  $: canConfirmDelete = String(deleteConfirm || '').trim() === String(sandbox?.id || sandboxId || '').trim();
+  let showTerminateModal = false;
+  let terminateConfirm = '';
+  function openTerminateModal() { terminateConfirm = ''; showTerminateModal = true; }
+  function closeTerminateModal() { showTerminateModal = false; }
+  $: canConfirmTerminate = String(terminateConfirm || '').trim() === String(sandbox?.id || sandboxId || '').trim();
 
   // Snapshot modal state and actions
   let showSnapshotModal = false;
@@ -900,17 +900,17 @@
     try { return String(s?.note || '').trim(); } catch (_) { return ''; }
   }
   function hasStoppedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'deleted'); } catch(_) { return false; }
+    try { return segmentsOf(m).some((x) => segType(x) === 'terminated'); } catch(_) { return false; }
   }
   function stoppedNoteFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'deleted');
+      const s = segmentsOf(m).find((x) => segType(x) === 'terminated');
       return s ? segNote(s) : '';
     } catch(_) { return ''; }
   }
   function stoppedRuntimeFrom(m) {
     try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'deleted');
+      const s = segmentsOf(m).find((x) => segType(x) === 'terminated');
       const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
       return Number.isFinite(v) && v >= 0 ? v : 0;
     } catch(_) { return 0; }
@@ -1393,8 +1393,8 @@
   }
 
 
-  // Delete action: open modal instead of prompt
-  function deleteSandbox() { openDeleteModal(); }
+  // Terminate action: open modal instead of prompt
+  function terminateSandbox() { openTerminateModal(); }
 
 
 
@@ -1460,7 +1460,7 @@
             <div class="col-12">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="0" step="1" class="form-control" bind:value={idleTimeoutInput} />
-              <div class="form-text">Time of inactivity before sandbox is automatically deleted. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
+              <div class="form-text">Time of inactivity before sandbox is automatically terminated. Minimum 60 seconds, recommended 900 (15 minutes). Set to 0 to disable.</div>
             </div>
           </div>
         </div>
@@ -1473,32 +1473,32 @@
   </div>
 {/if}
 
-<!-- Delete Modal -->
-{#if showDeleteModal}
+<!-- Terminate Modal -->
+{#if showTerminateModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">Delete Sandbox</h5>
-          <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
+          <h5 class="modal-title">Terminate Sandbox</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeTerminateModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold font-monospace">{sandbox?.id || sandboxId}</span> to confirm permanent deletion.</p>
-          <input class="form-control font-monospace" bind:value={deleteConfirm} placeholder={sandbox?.id || sandboxId} />
+          <p class="mb-2">Type <span class="fw-bold font-monospace">{sandbox?.id || sandboxId}</span> to confirm permanent termination.</p>
+          <input class="form-control font-monospace" bind:value={terminateConfirm} placeholder={sandbox?.id || sandboxId} />
         </div>
         <div class="modal-footer">
-          <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
-          <button class="btn btn-danger" disabled={!canConfirmDelete} on:click={async () => {
+          <button class="btn btn-outline-secondary" on:click={closeTerminateModal}>Cancel</button>
+          <button class="btn btn-danger" disabled={!canConfirmTerminate} on:click={async () => {
             try {
               const cur = String(sandboxId || '').trim();
               const res = await apiFetch(`/sandboxes/${encodeURIComponent(cur)}`, { method: 'DELETE' });
-              if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
-              showDeleteModal = false;
+              if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Terminate failed (HTTP ${res.status})`);
+              showTerminateModal = false;
               goto('/sandboxes');
             } catch (e) {
               alert(e.message || String(e));
             }
-          }}>Delete</button>
+          }}>Terminate</button>
         </div>
       </div>
     </div>
@@ -1563,8 +1563,8 @@
               <!-- Actions on the right (tight group) -->
               <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
                 {#if stateStr === 'idle' || stateStr === 'busy'}
-                  <button class="btn btn-outline-danger btn-sm" on:click={deleteSandbox} aria-label="Delete sandbox">
-                    <i class="bi bi-trash me-1"></i><span>Delete</span>
+                  <button class="btn btn-outline-danger btn-sm" on:click={terminateSandbox} aria-label="Terminate sandbox">
+                    <i class="bi bi-power me-1"></i><span>Terminate</span>
                   </button>
                 {/if}
                 <div class="dropdown">
@@ -1572,13 +1572,13 @@
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    {#if stateStr !== 'deleted'}
+                    {#if stateStr !== 'terminated'}
                       <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                       <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                       <li><hr class="dropdown-divider" /></li>
                     {/if}
                     <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                    {#if stateStr !== 'deleted'}
+                    {#if stateStr !== 'terminated'}
                       <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
                     {/if}
                   </ul>
@@ -2036,7 +2036,7 @@
           <textarea
             aria-label="Message input"
             class="form-control shadow-none rounded-0 chat-input chat-no-zoom"
-            disabled={isCompacting || stateStr === 'busy' || stateStr === 'deleted'}
+            disabled={isCompacting || stateStr === 'busy' || stateStr === 'terminated'}
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -2056,7 +2056,7 @@
               <i class="bi bi-stop-circle"></i>
             </button>
           {:else}
-            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'deleted'}>
+            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'terminated'}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
@@ -2075,11 +2075,11 @@
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
           <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-            {#if stateStr === 'deleted'}
+            {#if stateStr === 'terminated'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><i class="bi bi-trash me-2"></i>Sandbox is deleted</div>
-                  <p class="small mb-3 text-body-secondary">This sandbox has been deleted and is read-only.</p>
+                  <div class="fs-5 mb-2"><i class="bi bi-power me-2"></i>Sandbox is terminated</div>
+                  <p class="small mb-3 text-body-secondary">This sandbox has been terminated and is read-only.</p>
                 </div>
               </div>
             {:else if stateStr === 'init'}
