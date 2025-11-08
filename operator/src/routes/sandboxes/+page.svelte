@@ -339,7 +339,7 @@ import { getHostUrl } from '$lib/branding.js';
                             </button>
                             {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
                               <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
-                                <i class="bi bi-power me-1"></i><span>Terminate</span>
+                                <i class="bi bi-power text-danger me-1"></i><span>Terminate</span>
                               </button>
                             {/if}
                           </div>
