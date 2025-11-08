@@ -113,13 +113,6 @@
                           <span class={methodClass(ep.method)}>{ep.method}</span>
                           <span class="font-monospace">{ep.path}</span>
                         </div>
-                        <div class="ms-sm-auto d-flex align-items-center">
-                          {#if ep.auth === 'bearer'}
-                            <span class="badge bg-dark">Bearer</span>
-                          {:else}
-                            <span class="badge bg-success">Public</span>
-                          {/if}
-                        </div>
                       </div>
                       <details class="mt-3 api-details">
                         <summary class="fw-semibold text-primary small">View details</summary>
