@@ -113,7 +113,6 @@
                         <div class="d-flex align-items-center gap-2 w-100">
                           <span class={methodClass(ep.method)}>{ep.method}</span>
                           <span class="font-monospace flex-grow-1 text-break">{ep.path}</span>
-                          <span class="summary-arrow ms-auto" aria-hidden="true"></span>
                         </div>
                       </summary>
                       <div class="mt-3">
@@ -216,18 +215,6 @@
       cursor: pointer;
       list-style: none;
       padding: 0;
-    }
-    :global(details.api-details summary::-webkit-details-marker) {
-      display: none;
-    }
-    :global(.summary-arrow::before) {
-      content: '▸';
-      display: inline-block;
-      transition: transform 0.2s ease;
-      font-size: 1rem;
-    }
-    :global(details[open] .summary-arrow::before) {
-      transform: rotate(90deg);
     }
   </style>
 </div>
