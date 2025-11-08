@@ -1882,7 +1882,7 @@ pub async fn terminate_sandbox(
 
     let cancelled_item = serde_json::json!({
         "type": "cancelled",
-        "reason": "sandbox_terminated",
+        "reason": "termination",
         "at": chrono::Utc::now().to_rfc3339(),
     });
 

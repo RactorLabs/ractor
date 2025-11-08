@@ -25,26 +25,15 @@
   function triggerTypeLabel(trigger) {
     const t = String(trigger || '').toLowerCase();
     if (t === 'manual') return 'Manual';
-    if (t === 'auto') return 'Auto';
+    if (t === 'termination') return 'Termination';
     return trigger || 'Unknown';
   }
 
   function triggerTypeBadgeClass(trigger) {
     const t = String(trigger || '').toLowerCase();
     if (t === 'manual') return 'badge bg-primary-subtle text-primary-emphasis border';
-    if (t === 'auto') return 'badge bg-info-subtle text-info-emphasis border';
+    if (t === 'termination') return 'badge bg-danger-subtle text-danger-emphasis border';
     return 'badge bg-secondary-subtle text-secondary-emphasis border';
-  }
-
-  function snapshotReason(snapshot) {
-    const reason = snapshot?.metadata && typeof snapshot.metadata === 'object'
-      ? snapshot.metadata.reason
-      : undefined;
-    if (typeof reason === 'string') {
-      const trimmed = reason.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    return null;
   }
 
   function buildQuery() {
@@ -167,9 +156,13 @@
 {/if}
 <style>
   :global(.snapshot-card) { overflow: visible; }
-  :global(.snapshot-card .list-actions) { margin-left: auto; }
-  :global(.snapshot-card .list-actions .btn) { flex: 0 0 auto; }
   .snapshot-card-meta { min-width: 0; }
+  .snapshot-card-footer { width: 100%; }
+  .snapshot-trigger-badge {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.65rem;
+  }
 </style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Snapshots</div>
@@ -227,7 +220,6 @@
                   <div class="card-body d-flex flex-column">
                     <div class="d-flex align-items-center gap-2 mb-1">
                       <a class="fw-bold text-decoration-none fs-18px font-monospace" href="/snapshots/{encodeURIComponent(s.id || '')}">{s.id || '-'}</a>
-                      <span class={triggerTypeBadgeClass(s.trigger_type)}>{triggerTypeLabel(s.trigger_type)}</span>
                     </div>
                     <div class="snapshot-card-meta flex-grow-1">
                       <div class="small text-body text-opacity-75">
@@ -237,26 +229,23 @@
                       <div class="small text-body text-opacity-50 mt-1">
                         Created: {formatDate(s.created_at)}
                       </div>
-                      {#if snapshotReason(s)}
-                        <div class="small text-body text-opacity-75 mt-2">
-                          Reason:
-                          <span class="d-block fw-semibold text-body text-opacity-100">{snapshotReason(s)}</span>
-                        </div>
-                      {/if}
                       {#if isAdmin && s.created_by}
                         <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{s.created_by}</span></div>
                       {/if}
-                    </div>
-                    <div class="ms-auto list-actions d-flex align-items-center flex-wrap gap-2">
-                      <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
-                        <i class="bi bi-folder me-1"></i><span>View Files</span>
-                      </a>
-                      <button class="btn btn-outline-theme btn-sm" on:click={() => createFromSnapshot(s)} aria-label="Create from snapshot">
-                        <i class="bi bi-plus-circle me-1"></i><span>Create Sandbox</span>
-                      </button>
-                      <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSnapshot(s)} aria-label="Delete snapshot">
-                        <i class="bi bi-trash me-1"></i><span>Delete</span>
-                      </button>
+                      <div class="snapshot-card-footer d-flex align-items-center flex-wrap gap-2 mt-3">
+                        <span class={`${triggerTypeBadgeClass(s.trigger_type)} snapshot-trigger-badge`}>{triggerTypeLabel(s.trigger_type)}</span>
+                        <div class="ms-auto list-actions d-flex align-items-center flex-wrap gap-2">
+                          <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
+                            <i class="bi bi-folder me-1"></i><span>View Files</span>
+                          </a>
+                          <button class="btn btn-outline-theme btn-sm" on:click={() => createFromSnapshot(s)} aria-label="Create from snapshot">
+                            <i class="bi bi-plus-circle me-1"></i><span>Create Sandbox</span>
+                          </button>
+                          <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSnapshot(s)} aria-label="Delete snapshot">
+                            <i class="bi bi-trash me-1"></i><span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </Card>

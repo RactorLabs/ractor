@@ -143,25 +143,15 @@
   function triggerTypeLabel(trigger) {
     const t = String(trigger || '').toLowerCase();
     if (t === 'manual') return 'Manual';
-    if (t === 'auto') return 'Auto';
+    if (t === 'termination') return 'Termination';
     return trigger || 'Unknown';
   }
 
   function triggerTypeBadgeClass(trigger) {
     const t = String(trigger || '').toLowerCase();
     if (t === 'manual') return 'badge bg-primary-subtle text-primary-emphasis border';
-    if (t === 'auto') return 'badge bg-info-subtle text-info-emphasis border';
+    if (t === 'termination') return 'badge bg-danger-subtle text-danger-emphasis border';
     return 'badge bg-secondary-subtle text-secondary-emphasis border';
-  }
-
-  function snapshotReason(metadata) {
-    if (!metadata || typeof metadata !== 'object') return null;
-    const reason = metadata.reason;
-    if (typeof reason === 'string') {
-      const trimmed = reason.trim();
-      return trimmed.length ? trimmed : null;
-    }
-    return null;
   }
 
   async function deleteSnapshot() {
@@ -217,7 +207,8 @@
           <div>
             <a href="/snapshots" class="text-decoration-none text-body text-opacity-75 small"><i class="bi bi-arrow-left me-1"></i>Back to Snapshots</a>
           </div>
-          <div class="d-flex align-items-center gap-2">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class={`${triggerTypeBadgeClass(snapshot.trigger_type)} snapshot-trigger-badge`}>{triggerTypeLabel(snapshot.trigger_type)}</span>
             <button class="btn btn-outline-theme btn-sm" on:click={createFromSnapshot}>
               <i class="bi bi-plus-circle me-1"></i>Create Sandbox
             </button>
@@ -231,7 +222,6 @@
           <div class="card-body">
             <div class="d-flex align-items-center gap-2 mb-2">
               <h5 class="card-title mb-0 font-monospace">{snapshot.id}</h5>
-              <span class={triggerTypeBadgeClass(snapshot.trigger_type)}>{triggerTypeLabel(snapshot.trigger_type)}</span>
             </div>
             <div class="small text-body text-opacity-75 mb-1">
               Source Sandbox: <a href="/sandboxes/{encodeURIComponent(snapshot.sandbox_id)}" class="font-monospace">{snapshot.sandbox_id}</a>
@@ -239,12 +229,6 @@
             <div class="small text-body text-opacity-50">
               Created: {new Date(snapshot.created_at).toLocaleString()}
             </div>
-            {#if snapshotReason(snapshot.metadata)}
-              <div class="small text-body text-opacity-75 mt-2">
-                Reason:
-                <span class="d-block fw-semibold text-body text-opacity-100">{snapshotReason(snapshot.metadata)}</span>
-              </div>
-            {/if}
           </div>
         </Card>
 
@@ -369,5 +353,10 @@
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+  .snapshot-trigger-badge {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.65rem;
   }
 </style>

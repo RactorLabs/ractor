@@ -145,7 +145,7 @@ pub async fn create_snapshot(
     let payload = serde_json::json!({
         "snapshot_id": snapshot_id,
         "metadata": req.metadata,
-        "trigger_type": "user"
+        "trigger_type": "manual"
     });
 
     let username = sandbox.created_by.clone();

@@ -540,7 +540,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/snapshots?sandbox_id=<sandbox> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'PaginatedSnapshots' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","trigger_type":"user","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -554,7 +554,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/snapshots/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Snapshot' },
           responses: [
-            { status: 200, body: `{"id":"snp_123","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","trigger_type":"user","created_at":"2025-01-01T15:00:00Z","metadata":{}}` }
+            { status: 200, body: `{"id":"snp_123","sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{}}` }
           ]
         },
         {
@@ -660,7 +660,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>"`,
           resp: { schema: 'PaginatedSnapshots' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"<id>","trigger_type":"user","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -675,7 +675,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"metadata":{"note":"before deploy"}}'`,
           resp: { schema: 'Snapshot' },
           responses: [
-            { status: 201, body: `{"id":"snp_123","sandbox_id":"<id>","trigger_type":"user","created_at":"2025-01-01T15:00:00Z","metadata":{"note":"before deploy"}}` }
+            { status: 201, body: `{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{"note":"before deploy"}}` }
           ]
         }
       ]

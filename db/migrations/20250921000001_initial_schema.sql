@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS sandbox_requests (
 CREATE TABLE IF NOT EXISTS snapshots (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     sandbox_id CHAR(36) NOT NULL,
-    trigger_type ENUM('sandbox_terminated', 'user') NOT NULL,
+    trigger_type ENUM('manual', 'termination') NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     metadata JSON DEFAULT ('{}'),
     CONSTRAINT fk_snapshots_sandbox FOREIGN KEY (sandbox_id) REFERENCES sandboxes(id) ON DELETE CASCADE,

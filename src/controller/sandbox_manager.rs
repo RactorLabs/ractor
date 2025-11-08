@@ -828,15 +828,14 @@ impl SandboxManager {
                     let snapshot_req = CreateSnapshotRequest {
                         metadata: serde_json::json!({
                             "trigger": "sandbox_stop",
-                            "stopped_at": chrono::Utc::now().to_rfc3339(),
-                            "reason": reason
+                            "stopped_at": chrono::Utc::now().to_rfc3339()
                         }),
                     };
 
                     match Snapshot::create_with_id(
                         &self.pool,
                         &sandbox.id,
-                        "sandbox_terminated",
+                        "termination",
                         snapshot_req,
                         Some(snapshot_id.clone()),
                     )
@@ -1061,7 +1060,7 @@ impl SandboxManager {
             .payload
             .get("trigger_type")
             .and_then(|v| v.as_str())
-            .unwrap_or("user")
+            .unwrap_or("manual")
             .to_string();
 
         match self.docker_manager.is_container_healthy(&sandbox.id).await {
