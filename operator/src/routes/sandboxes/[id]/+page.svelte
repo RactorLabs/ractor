@@ -440,7 +440,7 @@
     }
   }
 
-  // Auto-refresh the Files panel periodically (equivalent to pressing Refresh). Default off.
+  // Auto-refresh the Files panel every 5 seconds (equivalent to pressing Refresh). Default off.
   let fmAutoRefresh = false;
   let fmRefreshHandle = null;
   let fmAutoRefreshReady = false;
@@ -462,7 +462,7 @@
         try {
           fmRefresh();
         } catch (_) {}
-      }, 2000);
+      }, 5000);
     } catch (_) {}
   }
 
