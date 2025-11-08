@@ -51,8 +51,8 @@ CREATE TABLE snapshots (
 
 ### 3.1 Rename All Endpoints
 - `/api/v0/sessions/*` → `/api/v0/sandboxes/*`
-- `/sessions/{id}/idle` → `/sandboxes/{id}/idle`
-- `/sessions/{id}/busy` → `/sandboxes/{id}/busy`
+- `/sessions/{id}/idle` → `/sandboxes/{id}/state/idle`
+- `/sessions/{id}/busy` → `/sandboxes/{id}/state/busy`
 - `/sessions/{id}/stop` → `/sandboxes/{id}/delete` (or keep as "stop" but it deletes)
 - `/sessions/{id}/tasks` → `/sandboxes/{id}/tasks`
 
@@ -108,7 +108,7 @@ CREATE TABLE snapshots (
 
 ### 5.1 API Endpoint Updates
 - Update state reporting to use `/sandboxes/*` endpoints
-- POST to `/sandboxes/{id}/idle` and `/sandboxes/{id}/busy`
+- POST to `/sandboxes/{id}/state/idle` and `/sandboxes/{id}/state/busy`
 
 ### 5.2 Binary Renaming
 - `tsbx-session` → `tsbx-sandbox` (or keep as-is for now?)

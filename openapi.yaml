@@ -1,31 +1,3 @@
-openapi: 3.0.3
-info:
-  title: TaskSandbox API
-  version: 0.5.3
-  description: |
-    TaskSandbox is an infrastructure runtime for long-lived, stateful agent sandboxes.
-    This spec documents the core REST endpoints used by the Operator UI and the
-    sandbox runtime.
-servers:
-  - url: http://localhost:9000/api/v0
-    description: Local
-  - url: https://{host}/api/v0
-    description: Hosted
-    variables:
-      host:
-        default: api.example.com
-security:
-  - bearerAuth: []
-
-tags:
-  - name: Public
-  - name: Auth
-  - name: Security
-  - name: Operators
-  - name: Sandboxes
-  - name: Tasks
-  - name: Files
-
 paths:
   /version:
     get:
@@ -38,19 +10,22 @@ paths:
               schema:
                 type: object
                 properties:
-                  version: { type: string }
-                  api: { type: string }
-
-  /operators/{name}/login:
+                  version:
+                    type: string
+                  api:
+                    type: string
+  /auth/operators/{name}/login:
     post:
-      tags: [Public]
+      tags:
+      - Public
       summary: Operator login (password)
       security: []
       parameters:
-        - in: path
-          name: name
-          required: true
-          schema: { type: string }
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -64,11 +39,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
-        '401': { $ref: '#/components/responses/Unauthorized' }
-
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /published/sandboxes:
     get:
-      tags: [Public]
+      tags:
+      - Public
       summary: List published sandboxes
       security: []
       responses:
@@ -78,30 +54,34 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Sandbox' }
-
+                items:
+                  $ref: '#/components/schemas/Sandbox'
   /published/sandboxes/{id}:
     get:
-      tags: [Public]
+      tags:
+      - Public
       summary: Get published sandbox by ID
       security: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Published sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Sandbox' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /auth:
     get:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Current principal
       responses:
         '200':
@@ -111,13 +91,19 @@ paths:
               schema:
                 type: object
                 properties:
-                  user: { type: string }
-                  type: { type: string, enum: [User, Admin] }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-
+                  user:
+                    type: string
+                  type:
+                    type: string
+                    enum:
+                    - User
+                    - Admin
+        '401':
+          $ref: '#/components/responses/Unauthorized'
   /auth/token:
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Create token for a principal (admin only)
       requestBody:
         required: true
@@ -132,11 +118,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-  /blocklist:
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/blocklist:
     get:
-      tags: [Security]
+      tags:
+      - Security
       summary: List blocked principals (admin)
       responses:
         '200':
@@ -145,19 +134,23 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/BlockedPrincipal' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /blocklist/block:
+                items:
+                  $ref: '#/components/schemas/BlockedPrincipal'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/blocklist/block:
     post:
-      tags: [Security]
+      tags:
+      - Security
       summary: Block a principal (admin)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BlockRequest' }
+            schema:
+              $ref: '#/components/schemas/BlockRequest'
       responses:
         '200':
           description: Block status
@@ -166,20 +159,25 @@ paths:
               schema:
                 type: object
                 properties:
-                  blocked: { type: boolean }
-                  created: { type: boolean }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /blocklist/unblock:
+                  blocked:
+                    type: boolean
+                  created:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/blocklist/unblock:
     post:
-      tags: [Security]
+      tags:
+      - Security
       summary: Unblock a principal (admin)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/BlockRequest' }
+            schema:
+              $ref: '#/components/schemas/BlockRequest'
       responses:
         '200':
           description: Unblock status
@@ -188,14 +186,18 @@ paths:
               schema:
                 type: object
                 properties:
-                  blocked: { type: boolean }
-                  deleted: { type: boolean }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /operators:
+                  blocked:
+                    type: boolean
+                  deleted:
+                    type: boolean
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/operators:
     get:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: List operators (admin sees all; others see self)
       responses:
         '200':
@@ -204,221 +206,289 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/Operator' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+                items:
+                  $ref: '#/components/schemas/Operator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: Create operator (admin)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateOperatorRequest' }
+            schema:
+              $ref: '#/components/schemas/CreateOperatorRequest'
       responses:
         '200':
           description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Operator' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
-  /operators/{name}:
+              schema:
+                $ref: '#/components/schemas/Operator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /auth/operators/{name}:
     get:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: Get operator (self or admin)
       parameters:
-        - in: path
-          name: name
-          required: true
-          schema: { type: string }
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Operator
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Operator' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema:
+                $ref: '#/components/schemas/Operator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: Update operator (admin)
       parameters:
-        - in: path
-          name: name
-          required: true
-          schema: { type: string }
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdateOperatorRequest' }
+            schema:
+              $ref: '#/components/schemas/UpdateOperatorRequest'
       responses:
         '200':
           description: Updated
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Operator' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema:
+                $ref: '#/components/schemas/Operator'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     delete:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: Delete operator (admin)
       parameters:
-        - in: path
-          name: name
-          required: true
-          schema: { type: string }
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       responses:
-        '204': { description: Deleted }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
-  /operators/{name}/password:
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /auth/operators/{name}/password:
     put:
-      tags: [Operators]
+      tags:
+      - Operators
       summary: Update own password (or admin)
       parameters:
-        - in: path
-          name: name
-          required: true
-          schema: { type: string }
+      - in: path
+        name: name
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdatePasswordRequest' }
+            schema:
+              $ref: '#/components/schemas/UpdatePasswordRequest'
       responses:
-        '204': { description: Updated }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
+        '204':
+          description: Updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /sandboxes:
     get:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: List sandboxes (admin all; others own)
       parameters:
-        - in: query
-          name: state
-          schema: { type: string }
-        - in: query
-          name: q
-          schema: { type: string }
-        - in: query
-          name: tags
-          description: Repeatable tag filter. Use tags=alpha&tags=beta.
-          schema:
-            type: array
-            items: { type: string }
-          style: form
-          explode: true
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
-        - in: query
-          name: page
-          schema: { type: integer, minimum: 1, default: 1 }
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0 }
+      - in: query
+        name: state
+        schema:
+          type: string
+      - in: query
+        name: q
+        schema:
+          type: string
+      - in: query
+        name: tags
+        description: Repeatable tag filter. Use tags=alpha&tags=beta.
+        schema:
+          type: array
+          items:
+            type: string
+        style: form
+        explode: true
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 30
+      - in: query
+        name: page
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
       responses:
         '200':
           description: Paginated sandboxes
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PaginatedSessions' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+              schema:
+                $ref: '#/components/schemas/PaginatedSessions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Start a new sandbox
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/StartSessionRequest' }
+            schema:
+              $ref: '#/components/schemas/StartSessionRequest'
       responses:
         '200':
           description: Sandbox started
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Sandbox' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /sandboxes/{id}:
     get:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Get sandbox by ID
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Sandbox' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Update sandbox metadata/timeouts
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdateSessionRequest' }
+            schema:
+              $ref: '#/components/schemas/UpdateSessionRequest'
       responses:
         '200':
           description: Updated sandbox
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Sandbox' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+              schema:
+                $ref: '#/components/schemas/Sandbox'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     delete:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Delete sandbox
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
-        '204': { description: Deleted }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-
+        '204':
+          description: Deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /sandboxes/{id}/state:
     put:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Update sandbox state (internal)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdateSessionStateRequest' }
+            schema:
+              $ref: '#/components/schemas/UpdateSessionStateRequest'
       responses:
         '200':
           description: Updated state
@@ -427,18 +497,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  state: { type: string }
-
-  /sandboxes/{id}/busy:
+                  state:
+                    type: string
+  /sandboxes/{id}/state/busy:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Mark sandbox busy (sandbox container)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Busy state applied
@@ -447,19 +519,22 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  state: { type: string }
-
-  /sandboxes/{id}/idle:
+                  success:
+                    type: boolean
+                  state:
+                    type: string
+  /sandboxes/{id}/state/idle:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Mark sandbox idle (sandbox container)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Idle state applied
@@ -468,19 +543,22 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  state: { type: string }
-
+                  success:
+                    type: boolean
+                  state:
+                    type: string
   /sandboxes/{id}/cancel:
     post:
-      tags: [Tasks]
-      summary: Cancel latest in‑progress task and set sandbox idle
+      tags:
+      - Tasks
+      summary: "Cancel latest in\u2011progress task and set sandbox idle"
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Cancellation result
@@ -489,72 +567,81 @@ paths:
               schema:
                 type: object
                 properties:
-                  status: { type: string }
-                  sandbox: { type: string }
-                  cancelled: { type: boolean }
-        # 404 is reserved for missing sandbox; handler returns 200 with cancelled=false otherwise
-
+                  status:
+                    type: string
+                  sandbox:
+                    type: string
+                  cancelled:
+                    type: boolean
   /sandboxes/{id}/context:
     get:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Get context usage
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Usage
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionContextUsage' }
-
+              schema:
+                $ref: '#/components/schemas/SessionContextUsage'
   /sandboxes/{id}/context/clear:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Clear context (set new cutoff)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Updated usage
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionContextUsage' }
-
+              schema:
+                $ref: '#/components/schemas/SessionContextUsage'
   /sandboxes/{id}/context/compact:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Compact context (summarize)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Updated usage
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SessionContextUsage' }
-
+              schema:
+                $ref: '#/components/schemas/SessionContextUsage'
   /sandboxes/{id}/context/usage:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Report latest context length (tokens)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
@@ -562,8 +649,11 @@ paths:
             schema:
               type: object
               properties:
-                tokens: { type: integer, minimum: 0 }
-              required: [tokens]
+                tokens:
+                  type: integer
+                  minimum: 0
+              required:
+              - tokens
       responses:
         '200':
           description: Acknowledged
@@ -572,58 +662,70 @@ paths:
               schema:
                 type: object
                 properties:
-                  success: { type: boolean }
-                  last_context_length: { type: integer }
-
+                  success:
+                    type: boolean
+                  last_context_length:
+                    type: integer
   /sandboxes/{id}/publish:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Publish sandbox content/env/code (as permitted)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PublishSessionRequest' }
+            schema:
+              $ref: '#/components/schemas/PublishSessionRequest'
       responses:
-        '200': { description: Published }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        # No 409 emitted by current implementation
-
+        '200':
+          description: Published
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /sandboxes/{id}/unpublish:
     post:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Unpublish sandbox content
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
-        '200': { description: Unpublished }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        # No 409 emitted by current implementation
-
+        '200':
+          description: Unpublished
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /sandboxes/{id}/runtime:
     get:
-      tags: [Sandboxes]
+      tags:
+      - Sandboxes
       summary: Total runtime (seconds)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Runtime
@@ -632,26 +734,37 @@ paths:
               schema:
                 type: object
                 properties:
-                  sandbox_id: { type: string }
-                  total_runtime_seconds: { type: integer }
-                  current_sandbox_seconds: { type: integer }
-
+                  sandbox_id:
+                    type: string
+                  total_runtime_seconds:
+                    type: integer
+                  current_sandbox_seconds:
+                    type: integer
   /sandboxes/{id}/tasks:
     get:
-      tags: [Tasks]
+      tags:
+      - Tasks
       summary: List tasks for a sandbox
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, default: 0 }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 100
+      - in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
       responses:
         '200':
           description: Tasks
@@ -659,88 +772,103 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/TaskView' }
+                items:
+                  $ref: '#/components/schemas/TaskView'
     post:
-      tags: [Tasks]
+      tags:
+      - Tasks
       summary: Create a task (user input)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/CreateTaskRequest' }
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
       responses:
         '200':
           description: Accepted
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TaskView' }
+              schema:
+                $ref: '#/components/schemas/TaskView'
         '504':
           description: Timed out waiting for completion (background=false)
-
   /sandboxes/{id}/tasks/{task_id}:
     get:
-      tags: [Tasks]
+      tags:
+      - Tasks
       summary: Get a task by id
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: task_id
-          required: true
-          schema: { type: string }
-          description: Task ID
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: task_id
+        required: true
+        schema:
+          type: string
+        description: Task ID
       responses:
         '200':
           description: Task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TaskView' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '404':
+          $ref: '#/components/responses/NotFound'
     put:
-      tags: [Tasks]
+      tags:
+      - Tasks
       summary: Update a task (status/output append)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: task_id
-          required: true
-          schema: { type: string }
-          description: Task ID
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: task_id
+        required: true
+        schema:
+          type: string
+        description: Task ID
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UpdateTaskRequest' }
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
       responses:
         '200':
           description: Updated task
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TaskView' }
-
+              schema:
+                $ref: '#/components/schemas/TaskView'
   /sandboxes/{id}/tasks/count:
     get:
-      tags: [Tasks]
+      tags:
+      - Tasks
       summary: Count tasks for a sandbox
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
       responses:
         '200':
           description: Count
@@ -749,145 +877,164 @@ paths:
               schema:
                 type: object
                 properties:
-                  count: { type: integer }
-
-  /tasks/{id}:
-    get:
-      tags: [Tasks]
-      summary: Get a task by id (global)
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Task
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/TaskView' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
+                  count:
+                    type: integer
   /sandboxes/{id}/files/read/{path}:
     get:
-      tags: [Files]
+      tags:
+      - Files
       summary: Read a file from sandbox volume (<= 25MB)
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: path
-          required: true
-          description: Relative path under /sandbox (no leading slash)
-          schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: path
+        required: true
+        description: Relative path under /sandbox (no leading slash)
+        schema:
+          type: string
       responses:
         '200':
           description: File contents
           headers:
             x-tsbx-file-size:
-              schema: { type: integer }
+              schema:
+                type: integer
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: Sandbox is deleted }
-        '413': { description: File too large }
-
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Sandbox is deleted
+        '413':
+          description: File too large
   /sandboxes/{id}/files/metadata/{path}:
     get:
-      tags: [Files]
+      tags:
+      - Files
       summary: File metadata
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: path
-          required: true
-          schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Metadata
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/FileMetadata' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
+              schema:
+                $ref: '#/components/schemas/FileMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /sandboxes/{id}/files/list:
     get:
-      tags: [Files]
+      tags:
+      - Files
       summary: List sandbox root directory
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, default: 0 }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
       responses:
         '200':
           description: Directory entries
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/FileList' }
-
+              schema:
+                $ref: '#/components/schemas/FileList'
   /sandboxes/{id}/files/list/{path}:
     get:
-      tags: [Files]
+      tags:
+      - Files
       summary: List directory
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: path
-          required: true
-          schema: { type: string }
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, default: 0 }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: path
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
       responses:
         '200':
           description: Directory entries
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/FileList' }
-
+              schema:
+                $ref: '#/components/schemas/FileList'
   /sandboxes/{id}/files/delete/{path}:
     delete:
-      tags: [Files]
+      tags:
+      - Files
       summary: Delete a regular file
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-          description: Sandbox ID (UUID)
-        - in: path
-          name: path
-          required: true
-          schema: { type: string }
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      - in: path
+        name: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
           description: Delete result
@@ -896,12 +1043,46 @@ paths:
               schema:
                 type: object
                 properties:
-                  deleted: { type: boolean }
-                  path: { type: string }
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
+                  deleted:
+                    type: boolean
+                  path:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+openapi: 3.0.3
+info:
+  title: TaskSandbox API
+  version: 0.5.3
+  description: 'TaskSandbox is an infrastructure runtime for long-lived, stateful
+    agent sandboxes.
 
+    This spec documents the core REST endpoints used by the Operator UI and the
+
+    sandbox runtime.
+
+    '
+servers:
+- url: http://localhost:9000/api/v0
+  description: Local
+- url: https://{host}/api/v0
+  description: Hosted
+  variables:
+    host:
+      default: api.example.com
+security:
+- bearerAuth: []
+tags:
+- name: Public
+- name: Auth
+- name: Security
+- name: Operators
+- name: Sandboxes
+- name: Tasks
+- name: Files
 components:
   securitySchemes:
     bearerAuth:
@@ -909,174 +1090,301 @@ components:
       scheme: bearer
       bearerFormat: JWT
   responses:
-    Unauthorized: { description: Unauthorized }
-    Forbidden: { description: Forbidden }
-    NotFound: { description: Not found }
-    BadRequest: { description: Bad request }
-    Conflict: { description: Conflict }
+    Unauthorized:
+      description: Unauthorized
+    Forbidden:
+      description: Forbidden
+    NotFound:
+      description: Not found
+    BadRequest:
+      description: Bad request
+    Conflict:
+      description: Conflict
   schemas:
     Operator:
       type: object
       properties:
-        user: { type: string }
-        description: { type: string, nullable: true }
-        active: { type: boolean }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-        last_login_at: { type: string, format: date-time, nullable: true }
-
+        user:
+          type: string
+        description:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
     CreateOperatorRequest:
       type: object
-      required: [user, pass]
+      required:
+      - user
+      - pass
       properties:
-        user: { type: string }
-        pass: { type: string }
-        description: { type: string }
-
+        user:
+          type: string
+        pass:
+          type: string
+        description:
+          type: string
     UpdateOperatorRequest:
       type: object
       properties:
-        description: { type: string, nullable: true }
-        active: { type: boolean, nullable: true }
-
+        description:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+          nullable: true
     UpdatePasswordRequest:
       type: object
-      required: [current_password, new_password]
+      required:
+      - current_password
+      - new_password
       properties:
-        current_password: { type: string }
-        new_password: { type: string }
-
+        current_password:
+          type: string
+        new_password:
+          type: string
     LoginRequest:
       type: object
-      required: [pass]
+      required:
+      - pass
       properties:
-        pass: { type: string }
-        ttl_hours: { type: integer, nullable: true }
-
+        pass:
+          type: string
+        ttl_hours:
+          type: integer
+          nullable: true
     CreateTokenRequest:
       type: object
-      required: [principal, type]
+      required:
+      - principal
+      - type
       properties:
-        principal: { type: string }
-        type: { type: string, enum: [User, Admin] }
-        ttl_hours: { type: integer, nullable: true }
-
+        principal:
+          type: string
+        type:
+          type: string
+          enum:
+          - User
+          - Admin
+        ttl_hours:
+          type: integer
+          nullable: true
     LoginResponse:
       type: object
       properties:
-        token: { type: string }
+        token:
+          type: string
         token_type:
           type: string
-          enum: [Bearer]
-        expires_at: { type: string, format: date-time }
-        user: { type: string }
+          enum:
+          - Bearer
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          type: string
         role:
           type: string
-          enum: [user, admin]
-
+          enum:
+          - user
+          - admin
     Sandbox:
       type: object
       properties:
-        id: { type: string, description: 'Sandbox ID (UUID primary key)' }
-        created_by: { type: string }
+        id:
+          type: string
+          description: Sandbox ID (UUID primary key)
+        created_by:
+          type: string
         state:
           type: string
-          enum: [init, idle, busy, deleted]
+          enum:
+          - init
+          - idle
+          - busy
+          - deleted
           description: Sandbox lifecycle state
-        description: { type: string, nullable: true }
-        parent_sandbox_id: { type: string, nullable: true }
-        created_at: { type: string, format: date-time }
-        last_activity_at: { type: string, format: date-time, nullable: true }
-        metadata: { type: object }
+        description:
+          type: string
+          nullable: true
+        parent_sandbox_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        last_activity_at:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
         tags:
           type: array
-          items: { type: string }
-        is_published: { type: boolean }
-        published_at: { type: string, format: date-time, nullable: true }
-        published_by: { type: string, nullable: true }
-        publish_permissions: { type: object }
-        stop_timeout_seconds: { type: integer }
-        archive_timeout_seconds: { type: integer }
-        idle_from: { type: string, format: date-time, nullable: true }
-        busy_from: { type: string, format: date-time, nullable: true }
-        context_cutoff_at: { type: string, format: date-time, nullable: true }
-        last_context_length: { type: integer }
-
+          items:
+            type: string
+        is_published:
+          type: boolean
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        published_by:
+          type: string
+          nullable: true
+        publish_permissions:
+          type: object
+        stop_timeout_seconds:
+          type: integer
+        archive_timeout_seconds:
+          type: integer
+        idle_from:
+          type: string
+          format: date-time
+          nullable: true
+        busy_from:
+          type: string
+          format: date-time
+          nullable: true
+        context_cutoff_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_context_length:
+          type: integer
     PaginatedSessions:
       type: object
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Sandbox' }
-        total: { type: integer }
-        limit: { type: integer }
-        offset: { type: integer }
-        page: { type: integer }
-        pages: { type: integer }
-
+          items:
+            $ref: '#/components/schemas/Sandbox'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        page:
+          type: integer
+        pages:
+          type: integer
     StartSessionRequest:
       type: object
       properties:
-        metadata: { type: object, default: {} }
-        description: { type: string, nullable: true }
+        metadata:
+          type: object
+          default: {}
+        description:
+          type: string
+          nullable: true
         tags:
           type: array
-          items: { type: string }
+          items:
+            type: string
         env:
           type: object
-          additionalProperties: { type: string }
-        instructions: { type: string, nullable: true }
-        setup: { type: string, nullable: true }
-        prompt: { type: string, nullable: true }
-        stop_timeout_seconds: { type: integer, nullable: true }
-        archive_timeout_seconds: { type: integer, nullable: true }
-
+          additionalProperties:
+            type: string
+        instructions:
+          type: string
+          nullable: true
+        setup:
+          type: string
+          nullable: true
+        prompt:
+          type: string
+          nullable: true
+        stop_timeout_seconds:
+          type: integer
+          nullable: true
+        archive_timeout_seconds:
+          type: integer
+          nullable: true
     UpdateSessionRequest:
       type: object
       properties:
-        metadata: { type: object, nullable: true }
-        description: { type: string, nullable: true }
+        metadata:
+          type: object
+          nullable: true
+        description:
+          type: string
+          nullable: true
         tags:
           type: array
-          items: { type: string }
+          items:
+            type: string
           nullable: true
-        stop_timeout_seconds: { type: integer, nullable: true }
-        archive_timeout_seconds: { type: integer, nullable: true }
-
+        stop_timeout_seconds:
+          type: integer
+          nullable: true
+        archive_timeout_seconds:
+          type: integer
+          nullable: true
     UpdateSessionStateRequest:
       type: object
       properties:
         state:
           type: string
           description: New sandbox state
-          enum: [init, idle, busy, deleted]
-
+          enum:
+          - init
+          - idle
+          - busy
+          - deleted
     PublishSessionRequest:
       type: object
       properties:
-        code: { type: boolean, default: true }
-        env: { type: boolean, default: true }
-        content: { type: boolean, default: true }
-
+        code:
+          type: boolean
+          default: true
+        env:
+          type: boolean
+          default: true
+        content:
+          type: boolean
+          default: true
     SessionContextUsage:
       type: object
       properties:
-        sandbox: { type: string }
-        soft_limit_tokens: { type: integer }
-        used_tokens_estimated: { type: integer }
-        used_percent: { type: number, format: double }
-        basis: { type: string }
-        cutoff_at: { type: string, format: date-time, nullable: true }
-        measured_at: { type: string, format: date-time }
-        total_messages_considered: { type: integer }
-
+        sandbox:
+          type: string
+        soft_limit_tokens:
+          type: integer
+        used_tokens_estimated:
+          type: integer
+        used_percent:
+          type: number
+          format: double
+        basis:
+          type: string
+        cutoff_at:
+          type: string
+          format: date-time
+          nullable: true
+        measured_at:
+          type: string
+          format: date-time
+        total_messages_considered:
+          type: integer
     CreateTaskRequest:
       type: object
-      required: [input]
+      required:
+      - input
       properties:
         input:
           type: object
-          description: "Recommended: { content: [{ type: 'text', content: string }] }"
+          description: 'Recommended: { content: [{ type: ''text'', content: string
+            }] }'
         background:
           type: boolean
           default: true
@@ -1084,75 +1392,136 @@ components:
           type: integer
           nullable: true
           default: 3600
-          description: Per-task timeout in seconds (defaults to 3600/1 hour; set to 0 to disable auto-cancel)
-
+          description: Per-task timeout in seconds (defaults to 3600/1 hour; set to
+            0 to disable auto-cancel)
     UpdateTaskRequest:
       type: object
       properties:
-        status: { type: string, nullable: true }
-        input: { type: object, nullable: true }
-        output: { type: object, nullable: true, description: 'Merged; items appended' }
-        timeout_seconds: { type: integer, nullable: true, description: 'Reset per-task timeout; set <=0 to clear' }
-
+        status:
+          type: string
+          nullable: true
+        input:
+          type: object
+          nullable: true
+        output:
+          type: object
+          nullable: true
+          description: Merged; items appended
+        timeout_seconds:
+          type: integer
+          nullable: true
+          description: Reset per-task timeout; set <=0 to clear
     TaskView:
       type: object
       properties:
-        id: { type: string }
-        sandbox_id: { type: string }
-        status: { type: string }
+        id:
+          type: string
+        sandbox_id:
+          type: string
+        status:
+          type: string
         input_content:
           type: array
-          items: { type: object }
+          items:
+            type: object
         output_content:
           type: array
-          items: { type: object }
+          items:
+            type: object
         segments:
           type: array
-          items: { type: object }
-        timeout_seconds: { type: integer, nullable: true }
-        timeout_at: { type: string, format: date-time, nullable: true }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-
+          items:
+            type: object
+        timeout_seconds:
+          type: integer
+          nullable: true
+        timeout_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
     BlockRequest:
       type: object
-      required: [principal]
+      required:
+      - principal
       properties:
-        principal: { type: string }
-        type: { type: string, enum: [User, Admin], nullable: true }
-
+        principal:
+          type: string
+        type:
+          type: string
+          enum:
+          - User
+          - Admin
+          nullable: true
     BlockedPrincipal:
       type: object
       properties:
-        principal: { type: string }
-        principal_type: { type: string, enum: [User, Admin] }
-        created_at: { type: string, format: date-time }
-
+        principal:
+          type: string
+        principal_type:
+          type: string
+          enum:
+          - User
+          - Admin
+        created_at:
+          type: string
+          format: date-time
     FileMetadata:
       type: object
       properties:
-        kind: { type: string, enum: [file, dir, symlink] }
-        size: { type: integer }
-        mode: { type: string, description: 'octal permissions, e.g., 0644' }
-        mtime: { type: string, format: date-time }
-        link_target: { type: string, nullable: true }
-
+        kind:
+          type: string
+          enum:
+          - file
+          - dir
+          - symlink
+        size:
+          type: integer
+        mode:
+          type: string
+          description: octal permissions, e.g., 0644
+        mtime:
+          type: string
+          format: date-time
+        link_target:
+          type: string
+          nullable: true
     FileEntry:
       type: object
       properties:
-        name: { type: string }
-        kind: { type: string, enum: [file, dir, symlink] }
-        size: { type: integer }
-        mode: { type: string }
-        mtime: { type: string, format: date-time }
-
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - file
+          - dir
+          - symlink
+        size:
+          type: integer
+        mode:
+          type: string
+        mtime:
+          type: string
+          format: date-time
     FileList:
       type: object
       properties:
         entries:
           type: array
-          items: { $ref: '#/components/schemas/FileEntry' }
-        offset: { type: integer }
-        limit: { type: integer }
-        next_offset: { type: integer, nullable: true }
-        total: { type: integer }
+          items:
+            $ref: '#/components/schemas/FileEntry'
+        offset:
+          type: integer
+        limit:
+          type: integer
+        next_offset:
+          type: integer
+          nullable: true
+        total:
+          type: integer

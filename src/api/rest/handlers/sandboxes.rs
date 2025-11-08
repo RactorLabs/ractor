@@ -16,7 +16,8 @@ use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::{
-    AppState, CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest,
+    AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskView,
+    UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
 // Use fully-qualified names for task records to avoid name conflict with local SandboxResponse
@@ -73,6 +74,12 @@ pub struct ListSandboxesQuery {
     pub limit: Option<i64>,
     pub page: Option<i64>,   // 1-based
     pub offset: Option<i64>, // takes precedence over page when provided
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListTasksQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 // Custom deserializer for query param that can be string or array
@@ -1994,4 +2001,346 @@ pub async fn update_sandbox_to_idle(
         "state": "idle",
         "timeout_status": "active"
     })))
+}
+
+pub async fn list_tasks(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Query(query): Query<ListTasksQuery>,
+    Extension(_auth): Extension<AuthContext>,
+) -> ApiResult<Json<Vec<TaskView>>> {
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    let list = SandboxTask::find_by_sandbox(&state.db, &sandbox.id, query.limit, query.offset)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
+
+    let tasks = list
+        .into_iter()
+        .map(|task| TaskView {
+            id: task.id,
+            sandbox_id: task.sandbox_id,
+            status: task.status,
+            input_content: extract_input_content(&task.input),
+            output_content: extract_output_content(&task.output),
+            segments: extract_segments(&task.output),
+            timeout_seconds: task.timeout_seconds,
+            timeout_at: task.timeout_at.map(|dt| dt.to_rfc3339()),
+            created_at: task.created_at.to_rfc3339(),
+            updated_at: task.updated_at.to_rfc3339(),
+        })
+        .collect();
+
+    Ok(Json(tasks))
+}
+
+pub async fn create_task(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<CreateTaskRequest>,
+) -> ApiResult<Json<TaskView>> {
+    use tokio::time::{sleep, Duration, Instant};
+
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_DELETED {
+        return Err(ApiError::BadRequest(
+            "Sandbox is deleted. Please create a new one.".to_string(),
+        ));
+    }
+
+    let limit_tokens = soft_limit_tokens();
+    let used_tokens = sandbox.last_context_length;
+    if used_tokens >= limit_tokens {
+        return Err(ApiError::Conflict(format!(
+            "Context is full ({} / {} tokens). Clear context via POST /api/v0/sandboxes/{}/context/clear and try again.",
+            used_tokens, limit_tokens, sandbox.id
+        )));
+    }
+
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_BUSY {
+        return Err(ApiError::Conflict("Sandbox is busy".to_string()));
+    }
+
+    if let Some(timeout) = req.timeout_seconds {
+        if timeout < 0 {
+            return Err(ApiError::BadRequest(
+                "timeout_seconds must be a non-negative integer".to_string(),
+            ));
+        }
+    }
+
+    let created_by = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_IDLE
+        || sandbox.state == crate::shared::models::constants::SANDBOX_STATE_INIT
+    {
+        sqlx::query(
+            r#"UPDATE sandboxes SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#,
+        )
+        .bind(crate::shared::models::constants::SANDBOX_STATE_BUSY)
+        .bind(&sandbox.id)
+        .bind(&sandbox.state)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox state: {}", e)))?;
+    }
+
+    let task_id = uuid::Uuid::new_v4().to_string();
+    let timeout_seconds = req.timeout_seconds.or(Some(3600));
+
+    let payload = serde_json::json!({
+        "task_id": task_id,
+        "input": req.input,
+        "background": req.background.unwrap_or(true),
+        "timeout_seconds": timeout_seconds
+    });
+    sqlx::query(
+        r#"
+        INSERT INTO sandbox_requests (sandbox_id, request_type, created_by, payload, status)
+        VALUES (?, 'create_task', ?, ?, 'pending')
+        "#,
+    )
+    .bind(&sandbox.id)
+    .bind(created_by)
+    .bind(payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create task request: {}", e)))?;
+
+    let background = req.background.unwrap_or(true);
+    if !background {
+        let start = Instant::now();
+        let timeout = Duration::from_secs(15 * 60);
+        let poll_interval = Duration::from_millis(500);
+
+        loop {
+            if start.elapsed() >= timeout {
+                return Err(ApiError::Timeout(
+                    "Timed out waiting for task to complete".to_string(),
+                ));
+            }
+
+            match SandboxTask::find_by_id(&state.db, &task_id).await {
+                Ok(Some(cur)) => {
+                    let status_lc = cur.status.to_lowercase();
+                    if matches!(status_lc.as_str(), "completed" | "failed" | "cancelled") {
+                        return Ok(Json(TaskView {
+                            id: cur.id,
+                            sandbox_id: cur.sandbox_id,
+                            status: cur.status,
+                            input_content: extract_input_content(&cur.input),
+                            output_content: extract_output_content(&cur.output),
+                            segments: extract_segments(&cur.output),
+                            timeout_seconds: cur.timeout_seconds,
+                            timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
+                            created_at: cur.created_at.to_rfc3339(),
+                            updated_at: cur.updated_at.to_rfc3339(),
+                        }));
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    return Err(ApiError::Internal(anyhow::anyhow!(
+                        "Failed to fetch task: {}",
+                        e
+                    )));
+                }
+            }
+
+            sleep(poll_interval).await;
+        }
+    }
+
+    let now = Utc::now();
+    let timeout_seconds_value = req.timeout_seconds.or(Some(3600)).filter(|v| *v > 0);
+    let timeout_at = timeout_seconds_value.and_then(|secs| {
+        now.checked_add_signed(chrono::Duration::seconds(secs as i64))
+            .map(|dt| dt.to_rfc3339())
+    });
+
+    Ok(Json(TaskView {
+        id: task_id,
+        sandbox_id: sandbox.id.clone(),
+        status: "pending".to_string(),
+        input_content: extract_input_content(&req.input),
+        output_content: vec![],
+        segments: vec![],
+        timeout_seconds: timeout_seconds_value,
+        timeout_at,
+        created_at: now.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
+    }))
+}
+
+pub async fn get_task_by_id(
+    State(state): State<Arc<AppState>>,
+    Path((sandbox_id, task_id)): Path<(String, String)>,
+    Extension(_auth): Extension<AuthContext>,
+) -> ApiResult<Json<TaskView>> {
+    let _sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    let cur = SandboxTask::find_by_id(&state.db, &task_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch task: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Task not found".to_string()))?;
+
+    Ok(Json(TaskView {
+        id: cur.id,
+        sandbox_id: cur.sandbox_id,
+        status: cur.status,
+        input_content: extract_input_content(&cur.input),
+        output_content: extract_output_content(&cur.output),
+        segments: extract_segments(&cur.output),
+        timeout_seconds: cur.timeout_seconds,
+        timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
+        created_at: cur.created_at.to_rfc3339(),
+        updated_at: cur.updated_at.to_rfc3339(),
+    }))
+}
+
+pub async fn update_task(
+    State(state): State<Arc<AppState>>,
+    Path((sandbox_id, task_id)): Path<(String, String)>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<UpdateTaskRequest>,
+) -> ApiResult<Json<TaskView>> {
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if !is_admin && sandbox.created_by != *username {
+        return Err(ApiError::Forbidden(
+            "You can only update tasks for your own sandboxes".to_string(),
+        ));
+    }
+
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_DELETED {
+        return Err(ApiError::BadRequest(
+            "Sandbox is deleted. Please create a new one.".to_string(),
+        ));
+    }
+
+    if let Some(existing) = SandboxTask::find_by_id(&state.db, &task_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    {
+        if existing.sandbox_id != sandbox_id {
+            return Err(ApiError::NotFound("Task not found".to_string()));
+        }
+    } else {
+        return Err(ApiError::NotFound("Task not found".to_string()));
+    }
+
+    if let Some(timeout) = req.timeout_seconds {
+        if timeout < 0 {
+            return Err(ApiError::BadRequest(
+                "timeout_seconds must be a non-negative integer".to_string(),
+            ));
+        }
+    }
+
+    let updated = SandboxTask::update_by_id(&state.db, &task_id, req)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update task: {}", e)))?;
+
+    Ok(Json(TaskView {
+        id: updated.id,
+        sandbox_id: updated.sandbox_id,
+        status: updated.status,
+        input_content: extract_input_content(&updated.input),
+        output_content: extract_output_content(&updated.output),
+        segments: extract_segments(&updated.output),
+        timeout_seconds: updated.timeout_seconds,
+        timeout_at: updated.timeout_at.map(|dt| dt.to_rfc3339()),
+        created_at: updated.created_at.to_rfc3339(),
+        updated_at: updated.updated_at.to_rfc3339(),
+    }))
+}
+
+pub async fn get_task_count(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(_auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    let count = SandboxTask::count_by_sandbox(&state.db, &sandbox.id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count tasks: {}", e)))?;
+
+    Ok(Json(
+        serde_json::json!({ "count": count, "sandbox_id": sandbox.id }),
+    ))
+}
+
+fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {
+    input
+        .get("content")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn extract_output_content(output: &serde_json::Value) -> Vec<serde_json::Value> {
+    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("output")
+                    .and_then(|v| v.get("items"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("arguments")
+                    .or_else(|| it.get("args"))
+                    .and_then(|v| v.get("content"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+    }
+    vec![]
+}
+
+fn extract_segments(output: &serde_json::Value) -> Vec<serde_json::Value> {
+    output
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
 }

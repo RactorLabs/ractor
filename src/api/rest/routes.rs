@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 
 use crate::api::rest::{
-    auth, handlers, logging_middleware::request_logging_middleware, middleware::auth_middleware,
+    handlers, logging_middleware::request_logging_middleware, middleware::auth_middleware,
 };
 use crate::shared::models::AppState;
 
@@ -15,36 +15,48 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     // Public routes
     let public_routes = Router::new()
         .route("/version", get(version))
-        .route("/operators/{name}/login", post(auth::login));
+        .route(
+            "/auth/operators/{name}/login",
+            post(handlers::operators::login),
+        );
 
     // Protected routes
     let protected_routes = Router::new()
-        .route("/auth", get(auth::me))
-        .route("/auth/token", post(auth::create_token))
+        .route("/auth", get(handlers::auth::me))
+        .route("/auth/token", post(handlers::auth::create_token))
         // Security / Blocklist (admin only)
-        .route("/blocklist", get(handlers::security::list_blocked))
+        .route("/auth/blocklist", get(handlers::auth::list_blocked))
         .route(
-            "/blocklist/block",
-            post(handlers::security::block_principal),
+            "/auth/blocklist/block",
+            post(handlers::auth::block_principal),
         )
         .route(
-            "/blocklist/unblock",
-            post(handlers::security::unblock_principal),
+            "/auth/blocklist/unblock",
+            post(handlers::auth::unblock_principal),
         )
         // Operator endpoints
-        .route("/operators", get(handlers::operators::list_operators))
-        .route("/operators", post(handlers::operators::create_operator))
-        .route("/operators/{name}", get(handlers::operators::get_operator))
         .route(
-            "/operators/{name}",
+            "/auth/operators",
+            get(handlers::operators::list_operators),
+        )
+        .route(
+            "/auth/operators",
+            post(handlers::operators::create_operator),
+        )
+        .route(
+            "/auth/operators/{name}",
+            get(handlers::operators::get_operator),
+        )
+        .route(
+            "/auth/operators/{name}",
             put(handlers::operators::update_operator),
         )
         .route(
-            "/operators/{name}",
+            "/auth/operators/{name}",
             delete(handlers::operators::delete_operator),
         )
         .route(
-            "/operators/{name}/password",
+            "/auth/operators/{name}/password",
             put(handlers::operators::update_operator_password),
         )
         // Sandbox endpoints
@@ -57,11 +69,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             put(handlers::sandboxes::update_sandbox_state),
         )
         .route(
-            "/sandboxes/{id}/busy",
+            "/sandboxes/{id}/state/busy",
             post(handlers::sandboxes::update_sandbox_to_busy),
         )
         .route(
-            "/sandboxes/{id}/idle",
+            "/sandboxes/{id}/state/idle",
             post(handlers::sandboxes::update_sandbox_to_idle),
         )
         .route(
@@ -128,18 +140,22 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::snapshots::create_snapshot),
         )
         // Task endpoints (composite model)
-        .route("/sandboxes/{id}/tasks", get(handlers::tasks::list_tasks))
-        .route("/sandboxes/{id}/tasks", post(handlers::tasks::create_task))
+        .route(
+            "/sandboxes/{id}/tasks",
+            get(handlers::sandboxes::list_tasks),
+        )
+        .route(
+            "/sandboxes/{id}/tasks",
+            post(handlers::sandboxes::create_task),
+        )
         .route(
             "/sandboxes/{id}/tasks/{task_id}",
-            get(handlers::tasks::get_task_by_id).put(handlers::tasks::update_task),
+            get(handlers::sandboxes::get_task_by_id).put(handlers::sandboxes::update_task),
         )
         .route(
             "/sandboxes/{id}/tasks/count",
-            get(handlers::tasks::get_task_count),
+            get(handlers::sandboxes::get_task_count),
         )
-        // Global task lookup by id
-        .route("/tasks/{id}", get(handlers::tasks::get_task_global_by_id))
         // Sandbox files (read-only)
         .route(
             "/sandboxes/{id}/files/read/{*path}",

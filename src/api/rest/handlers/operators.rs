@@ -6,11 +6,21 @@ use bcrypt::{hash, DEFAULT_COST};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::api::auth::{authenticate_operator, create_operator_jwt};
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
 use crate::shared::models::AppState;
 use crate::shared::rbac::{Operator, PermissionContext};
+
+use super::auth::LoginResponse;
+
+#[derive(Debug, Deserialize)]
+pub struct LoginRequest {
+    pub pass: String,
+    #[serde(default)]
+    pub ttl_hours: Option<i64>,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct CreateOperatorRequest {
@@ -253,6 +263,41 @@ pub async fn delete_operator(
     }
 
     Ok(())
+}
+
+pub async fn login(
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+    Json(req): Json<LoginRequest>,
+) -> ApiResult<Json<LoginResponse>> {
+    tracing::debug!("Login attempt for operator: {}", &name);
+
+    let operator = match authenticate_operator(&state, &name, &req.pass).await {
+        Ok(Some(account)) => account,
+        Ok(None) => {
+            tracing::debug!("Authentication failed: invalid credentials for {}", &name);
+            return Err(ApiError::Unauthorized);
+        }
+        Err(e) => {
+            tracing::error!(
+                "Database error during authentication for {}: {:?}",
+                &name,
+                e
+            );
+            return Err(ApiError::Database(e));
+        }
+    };
+
+    let _ = state.update_last_login(&name).await;
+
+    let ttl = req.ttl_hours.filter(|h| *h > 0);
+    let token_response = create_operator_jwt(&operator, &state.jwt_secret, ttl)?;
+
+    let mut response: LoginResponse = token_response.into();
+    response.user = operator.user.clone();
+    response.role = "admin".to_string();
+
+    Ok(Json(response))
 }
 
 pub async fn update_operator_password(

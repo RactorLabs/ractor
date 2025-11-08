@@ -1327,12 +1327,18 @@ echo 'Session directories created (.env, logs)'
         );
 
         let snapshot_dir = format!("/data/snapshots/{}", snapshot_id);
-        if tokio::fs::metadata(&snapshot_dir).await.is_err() {
+        let snapshot_root = format!("{}/sandbox", snapshot_dir);
+
+        let source_dir = if tokio::fs::metadata(&snapshot_root).await.is_ok() {
+            snapshot_root
+        } else if tokio::fs::metadata(&snapshot_dir).await.is_ok() {
+            snapshot_dir.clone()
+        } else {
             return Err(anyhow::anyhow!(
                 "Snapshot {} not found on controller",
                 snapshot_id
             ));
-        }
+        };
 
         // Clean the target directory inside the sandbox container
         let cleanup_cmd =
@@ -1342,7 +1348,7 @@ echo 'Session directories created (.env, logs)'
         // Create a tar stream from the snapshot directory
         let tar_output = tokio::process::Command::new("tar")
             .arg("-C")
-            .arg(&snapshot_dir)
+            .arg(&source_dir)
             .arg("-cf")
             .arg("-")
             .arg(".")

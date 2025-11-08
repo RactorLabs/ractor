@@ -15,7 +15,7 @@
     error = null;
     loading = true;
     try {
-      const res = await fetch(`/api/v0/operators/${encodeURIComponent(operator)}/login`, {
+      const res = await fetch(`/api/v0/auth/operators/${encodeURIComponent(operator)}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pass })

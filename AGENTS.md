@@ -76,8 +76,8 @@ Note on commit message formatting:
 
 - Controller creates the sandbox container and sets initial DB state to `init` (only if still `init`, to avoid racing sandbox requests).
 - The sandbox runtime, on boot, calls the API to report state:
-  - `POST /api/v0/sandboxes/{id}/idle` when ready (sets state to `idle` and starts idle timer).
-  - `POST /api/v0/sandboxes/{id}/busy` when processing (sets state to `busy` and starts busy timer).
+  - `POST /api/v0/sandboxes/{id}/state/idle` when ready (sets state to `idle` and starts idle timer).
+  - `POST /api/v0/sandboxes/{id}/state/busy` when processing (sets state to `busy` and starts busy timer).
 - Stop/Restart actions:
   - `POST /sandboxes/{id}/stop` schedules container stop and sets state to `deleted`.
   - `POST /sandboxes/{id}/restart` restarts container and transitions via `init`.
