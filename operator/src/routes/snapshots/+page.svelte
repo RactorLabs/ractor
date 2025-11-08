@@ -154,6 +154,22 @@
     </div>
   </div>
 {/if}
+<style>
+  :global(.snapshot-card) { overflow: visible; }
+  :global(.snapshot-card .list-actions) {
+    margin-top: auto;
+    padding-top: 0.75rem;
+  }
+  :global(.snapshot-card .list-actions .btn) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  @media (min-width: 768px) {
+    :global(.snapshot-card .list-actions .btn) {
+      flex: 0 0 auto;
+    }
+  }
+</style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Snapshots</div>
   {#if sandbox_id && sandbox_id.trim()}
@@ -204,39 +220,34 @@
           </div>
         {:else}
           <div class="row g-3">
-            {#each snapshots as s}
-              <div class="col-12">
-                <Card class="h-100">
-                  <div class="card-body">
-                    <div class="row">
-                      <div class="col-md-8">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href="/snapshots/{encodeURIComponent(s.id || '')}">{s.id || '-'}</a>
-                          <span class={triggerTypeBadgeClass(s.trigger_type)}>{triggerTypeLabel(s.trigger_type)}</span>
-                        </div>
-                        <div class="small text-body text-opacity-75 mb-1">
-                          Source Sandbox: <a href="/sandboxes/{encodeURIComponent(s.sandbox_id || '')}" class="font-monospace">{s.sandbox_id || '-'}</a>
-                        </div>
-                        <div class="small text-body text-opacity-50">
-                          Created: {formatDate(s.created_at)}
-                        </div>
-                        {#if isAdmin && s.created_by}
-                          <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{s.created_by}</span></div>
-                        {/if}
-                      </div>
-                      <div class="col-md-4 d-flex align-items-center justify-content-md-end mt-2 mt-md-0">
-                        <div class="d-flex align-items-center flex-wrap gap-2">
-                          <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
-                            <i class="bi bi-folder me-1"></i><span>View Files</span>
-                          </a>
-                          <button class="btn btn-outline-theme btn-sm" on:click={() => createFromSnapshot(s)} aria-label="Create from snapshot">
-                            <i class="bi bi-plus-circle me-1"></i><span>Create Sandbox</span>
-                          </button>
-                          <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSnapshot(s)} aria-label="Delete snapshot">
-                            <i class="bi bi-trash me-1"></i><span>Delete</span>
-                          </button>
-                        </div>
-                      </div>
+            {#each snapshots as s (s.id)}
+              <div class="col-12 col-md-6">
+                <Card class="h-100 snapshot-card">
+                  <div class="card-body d-flex flex-column">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href="/snapshots/{encodeURIComponent(s.id || '')}">{s.id || '-'}</a>
+                      <span class={triggerTypeBadgeClass(s.trigger_type)}>{triggerTypeLabel(s.trigger_type)}</span>
+                    </div>
+                    <div class="small text-body text-opacity-75">
+                      Source Sandbox:
+                      <a href="/sandboxes/{encodeURIComponent(s.sandbox_id || '')}" class="font-monospace">{s.sandbox_id || '-'}</a>
+                    </div>
+                    <div class="small text-body text-opacity-50 mt-1">
+                      Created: {formatDate(s.created_at)}
+                    </div>
+                    {#if isAdmin && s.created_by}
+                      <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{s.created_by}</span></div>
+                    {/if}
+                    <div class="list-actions d-flex align-items-center flex-wrap gap-2">
+                      <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
+                        <i class="bi bi-folder me-1"></i><span>View Files</span>
+                      </a>
+                      <button class="btn btn-outline-theme btn-sm" on:click={() => createFromSnapshot(s)} aria-label="Create from snapshot">
+                        <i class="bi bi-plus-circle me-1"></i><span>Create Sandbox</span>
+                      </button>
+                      <button class="btn btn-outline-danger btn-sm" on:click={() => deleteSnapshot(s)} aria-label="Delete snapshot">
+                        <i class="bi bi-trash me-1"></i><span>Delete</span>
+                      </button>
                     </div>
                   </div>
                 </Card>

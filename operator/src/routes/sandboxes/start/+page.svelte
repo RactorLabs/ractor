@@ -6,8 +6,8 @@
   import { apiFetch } from '$lib/api/client.js';
   import { isAuthenticated } from '$lib/auth.js';
 
-  setPageTitle('Start Sandbox');
-let idleTimeoutSeconds = 300; // default 5 minutes
+setPageTitle('Start Sandbox');
+let idleTimeoutSeconds = 900; // default 15 minutes
   let metadataText = '{}';
   // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
   let tagsInput = '';
@@ -60,7 +60,7 @@ let idleTimeoutSeconds = 300; // default 5 minutes
         description: description?.trim() ? description : null,
         metadata,
         tags: parseTags(),
-        idle_timeout_seconds: Number(idleTimeoutSeconds) || 300,
+        idle_timeout_seconds: Number(idleTimeoutSeconds) || 900,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         prompt: prompt?.trim() ? prompt : null,
@@ -160,7 +160,7 @@ let idleTimeoutSeconds = 300; // default 5 minutes
             <div class="col-12 col-md-4">
               <label class="form-label" for="idle-timeout">Idle Timeout (seconds)</label>
               <input id="idle-timeout" type="number" min="1" class="form-control" bind:value={idleTimeoutSeconds} />
-              <div class="form-text">Stop after inactivity (default 300).</div>
+              <div class="form-text">Stop after inactivity (default 900).</div>
             </div>
 
             <div class="col-12">

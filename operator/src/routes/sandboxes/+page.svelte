@@ -11,6 +11,8 @@
   let loading = true;
   let error = null;
   let sandboxes = [];
+  $: activeSandboxes = sandboxes.filter(s => String(s?.state || '').toLowerCase() !== 'terminated');
+  $: terminatedSandboxes = sandboxes.filter(s => String(s?.state || '').toLowerCase() === 'terminated');
   // Filters + pagination
   let q = '';
   let stateFilter = '';
@@ -209,6 +211,30 @@ import { getHostUrl } from '$lib/branding.js';
     </div>
   </div>
 {/if}
+
+<style>
+  :global(.card) { overflow: visible; }
+  :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
+  :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
+  .text-truncate { display: block; }
+  :global(.modal) { z-index: 2000; }
+  :global(.modal-backdrop) { z-index: 1990; }
+  .muted-card {
+    border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+    background-color: var(--bs-body-bg);
+    opacity: 0.94;
+  }
+  .muted-card .badge {
+    opacity: 0.85;
+  }
+  .muted-card .state-label {
+    color: var(--bs-secondary-color) !important;
+    font-weight: 600;
+  }
+  .muted-card i {
+    color: var(--bs-secondary-color);
+  }
+</style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Sandboxes</div>
   <div class="ms-auto d-flex align-items-center gap-2">
@@ -273,86 +299,109 @@ import { getHostUrl } from '$lib/branding.js';
             <a href="/sandboxes/start" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Start your first sandbox</a>
           </div>
         {:else}
-          <div class="row g-3">
-            {#each sandboxes as a}
-              <div class="col-12 col-md-6">
-                <Card class="h-100">
-                  <div class="card-body d-flex flex-column">
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                      <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
-                    </div>
-                    <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
-                    {#if isAdmin}
-                      <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
-                    {/if}
-
-                    <div class="mt-2 d-flex flex-wrap gap-1">
-                      {#if Array.isArray(a.tags) && a.tags.length}
-                        {#each a.tags as t}
-                          <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
-                        {/each}
-                      {:else}
-                        <span class="text-body-secondary small">No tags</span>
-                      {/if}
-                    </div>
-                    <!-- In-card actions: status on left, buttons on right -->
-                    <div class="mt-2 d-flex align-items-center flex-wrap">
-                      <div class="d-flex align-items-center gap-2">
-                        <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
-                        <span class="text-uppercase small fw-bold text-body">{a.state || a.status || 'unknown'}</span>
-                      </div>
-                      <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
-                        {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                          <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
-                            <i class="bi bi-power me-1"></i><span>Terminate</span>
-                          </button>
+          <section>
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Active Sandboxes</h6>
+              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{activeSandboxes.length}</span>
+            </div>
+            {#if activeSandboxes.length}
+              <div class="row g-3">
+                {#each activeSandboxes as a (a.id)}
+                  <div class="col-12 col-md-6">
+                    <Card class="h-100 muted-card">
+                      <div class="card-body d-flex flex-column">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
+                        </div>
+                        <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
+                        {#if isAdmin}
+                          <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                         {/if}
-                        <div class="dropdown">
-                          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false" aria-label="More actions">
-                            <i class="bi bi-three-dots"></i>
-                          </button>
-                          <ul class="dropdown-menu dropdown-menu-end">
-                            {#if String(a.state||'').toLowerCase() !== 'terminated'}
-                              <li><button class="dropdown-item" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
-                              <li><button class="dropdown-item" on:click={() => openEditTimeouts(a)}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
-                              <li><hr class="dropdown-divider" /></li>
+
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                          {#if Array.isArray(a.tags) && a.tags.length}
+                            {#each a.tags as t}
+                              <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                            {/each}
+                          {:else}
+                            <span class="text-body-secondary small">No tags</span>
+                          {/if}
+                        </div>
+                        <!-- In-card actions: status on left, buttons on right -->
+                        <div class="mt-2 d-flex align-items-center flex-wrap">
+                          <div class="d-flex align-items-center gap-2">
+                            <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
+                            <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+                          </div>
+                          <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
+                            <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
+                              <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
+                            </button>
+                            {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
+                              <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
+                                <i class="bi bi-power me-1"></i><span>Terminate</span>
+                              </button>
                             {/if}
-                            <li><a class="dropdown-item" href="/snapshots?sandbox_id={a.id}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                            {#if String(a.state||'').toLowerCase() !== 'terminated'}
-                              <li><button class="dropdown-item" on:click={() => openSnapshotModal(a)}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
-                            {/if}
-                          </ul>
+                          </div>
                         </div>
                       </div>
-</div>
-</div>
-
-<style>
-  /* Ensure dropdown menus overlay adjacent cards */
-  :global(.card) { overflow: visible; }
-  :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
-  :global(.list-actions .dropdown-menu) {
-    position: absolute;
-    z-index: 3002 !important;
-    /* Ensure menu obscures underlying card text on dark/light themes */
-    background-color: var(--bs-dropdown-bg, var(--bs-card-bg, var(--bs-body-bg, #fff)));
-    box-shadow: 0 .5rem 1rem rgba(0,0,0,.25);
-    backdrop-filter: none;
-  }
-  :global(.list-actions .dropdown-item) {
-    background-color: inherit;
-  }
-  /* Prevent decorative card arrow from overlapping dropdowns */
-  :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
-  .text-truncate { display: block; }
-  /* Ensure modals always sit on top */
-  :global(.modal) { z-index: 2000; }
-  :global(.modal-backdrop) { z-index: 1990; }
-</style>
-                </Card>
+                    </Card>
+                  </div>
+                {/each}
               </div>
-            {/each}
-          </div>
+            {:else}
+              <div class="text-body text-opacity-75 small">No active sandboxes on this page.</div>
+            {/if}
+          </section>
+          <section class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Terminated Sandboxes</h6>
+              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{terminatedSandboxes.length}</span>
+            </div>
+            {#if terminatedSandboxes.length}
+              <div class="row g-3">
+                {#each terminatedSandboxes as a (a.id)}
+                  <div class="col-12 col-md-6">
+                    <Card class="h-100">
+                      <div class="card-body d-flex flex-column">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
+                        </div>
+                        <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
+                        {#if isAdmin}
+                          <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
+                        {/if}
+
+                        <div class="mt-2 d-flex flex-wrap gap-1">
+                          {#if Array.isArray(a.tags) && a.tags.length}
+                            {#each a.tags as t}
+                              <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                            {/each}
+                          {:else}
+                            <span class="text-body-secondary small">No tags</span>
+                          {/if}
+                        </div>
+                        <!-- In-card actions: status on left, buttons on right -->
+                        <div class="mt-2 d-flex align-items-center flex-wrap">
+                          <div class="d-flex align-items-center gap-2">
+                            <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
+                            <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+                          </div>
+                          <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
+                            <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
+                              <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <div class="text-body text-opacity-75 small">No terminated sandboxes on this page.</div>
+            {/if}
+          </section>
           {#if pages > 1}
           <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
             <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>Prev</button>
