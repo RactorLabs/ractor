@@ -224,14 +224,28 @@ impl SandboxManager {
         .await;
 
         // Find sandboxes that need auto-stop due to idle timeout
-        let sandboxes_to_stop: Vec<(String,)> = sqlx::query_as(
+        let sandboxes_to_stop: Vec<(String, String)> = sqlx::query_as(
             r#"
-            SELECT id
+            SELECT id,
+                   state
             FROM sandboxes
-            WHERE state = 'idle'
-              AND idle_from IS NOT NULL
-              AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW()
-            ORDER BY TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) ASC
+            WHERE (
+                    state = 'idle'
+                    AND idle_from IS NOT NULL
+                    AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW()
+                  )
+               OR (
+                    state = 'init'
+                    AND TIMESTAMPADD(SECOND, idle_timeout_seconds, created_at) <= NOW()
+                  )
+            ORDER BY TIMESTAMPADD(
+                     SECOND,
+                     idle_timeout_seconds,
+                     CASE
+                         WHEN state = 'idle' THEN idle_from
+                         ELSE created_at
+                     END
+                 ) ASC
             LIMIT 50
             "#,
         )
@@ -241,8 +255,13 @@ impl SandboxManager {
 
         let mut stopped_count = 0;
 
-        for (sandbox_id,) in sandboxes_to_stop {
-            info!("Auto-stopping sandbox {} due to timeout", sandbox_id);
+        for (sandbox_id, state) in sandboxes_to_stop {
+            let reason = if state == "init" {
+                "startup timeout"
+            } else {
+                "idle timeout"
+            };
+            info!("Auto-stopping sandbox {} due to {}", sandbox_id, reason);
 
             // Create stop request for the sandbox
             let request_id = uuid::Uuid::new_v4().to_string();
