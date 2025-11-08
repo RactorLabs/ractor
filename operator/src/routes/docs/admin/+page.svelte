@@ -1,5 +1,5 @@
 <script>
-  import { getApiDocs, methodClass, getCommonSchemas } from '$lib/api/docs.js';
+  import { getApiDocs, methodClass } from '$lib/api/docs.js';
   import { setPageTitle } from '$lib/utils.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { page } from '$app/stores';
@@ -7,7 +7,6 @@
   import { getHostName } from '$lib/branding.js';
 
   setPageTitle('Admin APIs');
-  const schemas = getCommonSchemas();
   $: hostName = $page?.data?.hostName || getHostName();
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
   $: base = $page?.data?.hostUrl;
@@ -152,26 +151,6 @@
                             </div>
                           {/if}
 
-                          {#if ep.resp}
-                            <div class="mt-3">
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Response parameters</div>
-                              {#if schemas && ep.resp.schema && schemas[ep.resp.schema] && schemas[ep.resp.schema].length}
-                                <div class="small text-body text-opacity-50 mb-1">Schema: {ep.resp.array ? `${ep.resp.schema}[]` : ep.resp.schema}</div>
-                                <div class="table-responsive">
-                                  <table class="table table-sm table-bordered small mb-0">
-                                    <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-                                    <tbody>
-                                      {#each schemas[ep.resp.schema] as f}
-                                        <tr><td class="font-monospace">{f.name}</td><td>{f.type}</td><td>{f.desc}</td></tr>
-                                      {/each}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              {:else}
-                                <div class="small text-body text-opacity-75">No JSON body.</div>
-                              {/if}
-                            </div>
-                          {/if}
                         </div>
                       </Card>
                     </div>
@@ -189,28 +168,6 @@
               <pre class="bg-light p-2 rounded mb-0 code-wrap"><code>{`{
   "message": "Error description"
 }`}</code></pre>
-            </div>
-          </Card>
-
-          <Card class="mb-3">
-            <div class="card-header fw-bold">Response Object</div>
-            <div class="card-body p-3 p-sm-4 small">
-              <div class="mb-2">Standard object used by sandbox response endpoints.</div>
-              <div class="table-responsive">
-                <table class="table table-sm table-bordered mb-2">
-                  <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-                  <tbody>
-                    <tr><td class="font-monospace">id</td><td>string</td><td>Response ID (UUID)</td></tr>
-                    <tr><td class="font-monospace">sandbox_id</td><td>string</td><td>Sandbox ID (UUID)</td></tr>
-                    <tr><td class="font-monospace">status</td><td>string</td><td>One of: <span class="font-monospace">pending</span>, <span class="font-monospace">processing</span>, <span class="font-monospace">completed</span>, <span class="font-monospace">failed</span>, <span class="font-monospace">cancelled</span></td></tr>
-                    <tr><td class="font-monospace">input_content</td><td>array</td><td>User input content items (preferred shape uses <span class="font-monospace">content</span> array; legacy <span class="font-monospace">text</span> accepted)</td></tr>
-                    <tr><td class="font-monospace">output_content</td><td>array</td><td>Final content items extracted from <span class="font-monospace">segments</span></td></tr>
-                    <tr><td class="font-monospace">segments</td><td>array</td><td>All step-by-step segments/items including commentary, tool calls/results, markers, and final.</td></tr>
-                    <tr><td class="font-monospace">created_at</td><td>string (RFC3339)</td><td>Creation timestamp (UTC)</td></tr>
-                    <tr><td class="font-monospace">updated_at</td><td>string (RFC3339)</td><td>Last update timestamp (UTC)</td></tr>
-                  </tbody>
-                </table>
-              </div>
             </div>
           </Card>
 

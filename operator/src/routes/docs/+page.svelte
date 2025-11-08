@@ -1,5 +1,5 @@
 <script>
-  import { getApiDocs, methodClass, getCommonSchemas } from '$lib/api/docs.js';
+  import { getApiDocs, methodClass } from '$lib/api/docs.js';
   import { setPageTitle } from '$lib/utils.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import { page } from '$app/stores';
@@ -7,7 +7,6 @@
 
   // Hard-coded docs version; update during version bumps
   const API_VERSION = '0.11.0 (v0)';
-  const schemas = getCommonSchemas();
   // Compute docs once reactively and order Published section last
   $: docs = (() => {
     const list = (getApiDocs($page?.data?.hostUrl) || [])
@@ -198,26 +197,6 @@
                           </div>
                         {/if}
 
-                        {#if ep.resp}
-                          <div class="mb-3">
-                            <div class="fw-500 small text-body text-opacity-75 mb-1">Response parameters</div>
-                            {#if schemas && ep.resp.schema && schemas[ep.resp.schema] && schemas[ep.resp.schema].length}
-                              <div class="small text-body text-opacity-50 mb-1">Schema: {ep.resp.array ? `${ep.resp.schema}[]` : ep.resp.schema}</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-0">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each schemas[ep.resp.schema] as f}
-                                      <tr><td class="font-monospace">{f.name}</td><td>{f.type}</td><td>{f.desc}</td></tr>
-                                    {/each}
-                                  </tbody>
-                                </table>
-                              </div>
-                            {:else}
-                              <div class="small text-body text-opacity-75">No JSON body.</div>
-                            {/if}
-                          </div>
-                        {/if}
                       </div>
                     </details>
                   </div>
@@ -240,35 +219,6 @@
       </div>
     </Card>
 
-
-        <div class="mb-3">
-          <div class="fw-500 small text-body text-opacity-75 mb-1">Auth Profile</div>
-          <div class="table-responsive">
-            <table class="table table-sm table-bordered mb-2">
-              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr><td class="font-monospace">user</td><td>string</td><td>Principal name</td></tr>
-                <tr><td class="font-monospace">type</td><td>string</td><td><span class="font-monospace">Admin</span> or <span class="font-monospace">User</span></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="mb-3">
-          <div class="fw-500 small text-body text-opacity-75 mb-1">Token Response</div>
-          <div class="table-responsive">
-            <table class="table table-sm table-bordered mb-2">
-              <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
-              <tbody>
-                <tr><td class="font-monospace">token</td><td>string</td><td>JWT token</td></tr>
-                <tr><td class="font-monospace">token_type</td><td>string</td><td>Always <span class="font-monospace">Bearer</span></td></tr>
-                <tr><td class="font-monospace">expires_at</td><td>string (RFC3339)</td><td>Expiry timestamp</td></tr>
-                <tr><td class="font-monospace">user</td><td>string</td><td>Principal name associated with token</td></tr>
-                <tr><td class="font-monospace">role</td><td>string</td><td><span class="font-monospace">admin</span> or <span class="font-monospace">user</span></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
 
       </div>
     </Card>

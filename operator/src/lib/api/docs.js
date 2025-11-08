@@ -2,167 +2,6 @@
 // Covers endpoints defined in src/api/rest/routes.rs
 import { getHostUrl } from '../branding.js';
 
-// Common response schemas used across endpoints
-export function getCommonSchemas() {
-  return {
-    Version: [
-      { name: 'version', type: 'string', desc: 'Semantic version of server' },
-      { name: 'api', type: 'string', desc: "API namespace (e.g., 'v0')" },
-    ],
-    TokenResponse: [
-      { name: 'token', type: 'string', desc: 'JWT token' },
-      { name: 'token_type', type: 'string', desc: "Always 'Bearer'" },
-      { name: 'expires_at', type: 'string (RFC3339)', desc: 'Expiry timestamp' },
-      { name: 'user', type: 'string', desc: 'Principal name associated with token' },
-      { name: 'role', type: 'string', desc: "'admin' or 'user'" },
-    ],
-    AuthProfile: [
-      { name: 'user', type: 'string', desc: 'Principal name' },
-      { name: 'type', type: 'string', desc: "'Admin' or 'User'" },
-    ],
-    Operator: [
-      { name: 'user', type: 'string', desc: 'Operator username' },
-      { name: 'description', type: 'string|null', desc: 'Optional description' },
-      { name: 'active', type: 'boolean', desc: 'Account active flag' },
-      { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
-      { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
-      { name: 'last_login_at', type: 'string|null (RFC3339)', desc: 'Last login timestamp' },
-    ],
-    Sandbox: [
-      { name: 'id', type: 'string', desc: 'Sandbox ID (UUID)' },
-      { name: 'created_by', type: 'string', desc: 'Owner username' },
-      { name: 'state', type: 'string', desc: "'init'|'idle'|'busy'|'deleted'" },
-      { name: 'description', type: 'string|null', desc: 'Optional human-readable description' },
-      { name: 'snapshot_id', type: 'string|null', desc: 'Snapshot ID used to seed this sandbox, if any' },
-      { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
-      { name: 'last_activity_at', type: 'string|null (RFC3339)', desc: 'Most recent activity timestamp' },
-      { name: 'metadata', type: 'object', desc: 'Arbitrary JSON metadata blob' },
-      { name: 'tags', type: 'string[]', desc: "Tags stored lowercase (letters, digits, '/', '-', '_', '.' only)" },
-      { name: 'idle_timeout_seconds', type: 'int', desc: 'Idle timeout threshold in seconds' },
-      { name: 'idle_from', type: 'string|null (RFC3339)', desc: 'When sandbox entered idle (timeout tracking)' },
-      { name: 'busy_from', type: 'string|null (RFC3339)', desc: 'When sandbox entered busy (pauses idle timeout)' },
-      { name: 'context_cutoff_at', type: 'string|null (RFC3339)', desc: 'Conversation cutoff timestamp if context was cleared/compacted' },
-      { name: 'last_context_length', type: 'int', desc: 'Latest reported token count since cutoff' },
-    ],
-    ListSandboxesResult: [
-      { name: 'items', type: 'Sandbox[]', desc: 'Array of sandboxes for current page' },
-      { name: 'total', type: 'int', desc: 'Total sandboxes matching filters' },
-      { name: 'limit', type: 'int', desc: 'Page size' },
-      { name: 'offset', type: 'int', desc: 'Row offset (0-based)' },
-      { name: 'page', type: 'int', desc: 'Current page number (1-based)' },
-      { name: 'pages', type: 'int', desc: 'Total page count' },
-    ],
-    TaskObject: [
-      { name: 'id', type: 'string', desc: 'Task ID (UUID)' },
-      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
-      { name: 'status', type: 'string', desc: "'pending'|'processing'|'completed'|'failed'|'cancelled'" },
-      { name: 'input_content', type: 'array', desc: "User input content items (e.g., [{ type: 'text', content: 'hello' }]). Preferred input shape uses 'content' array; legacy { text: string } is accepted but not echoed in input_content." },
-      { name: 'output_content', type: 'array', desc: "Final content items extracted from segments (typically the 'output' tool_result payload)" },
-      { name: 'segments', type: 'array', desc: 'All step-by-step segments/items: commentary, tool calls/results, system markers, final' },
-      { name: 'timeout_seconds', type: 'int|null', desc: 'Per-task timeout in seconds (defaults to 3600/1 hour)' },
-      { name: 'timeout_at', type: 'string|null (RFC3339)', desc: 'When the task will time out automatically if still pending/processing' },
-      { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
-      { name: 'updated_at', type: 'string (RFC3339)', desc: 'Last update timestamp' },
-    ],
-    BlockedPrincipal: [
-      { name: 'principal', type: 'string', desc: 'Principal name' },
-      { name: 'principal_type', type: 'string', desc: "'User' or 'Admin'" },
-      { name: 'created_at', type: 'string (RFC3339)', desc: 'When the principal was blocked' },
-    ],
-    Count: [
-      { name: 'count', type: 'int', desc: 'Count value' },
-      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
-    ],
-    RuntimeTotal: [
-      { name: 'sandbox_id', type: 'string', desc: 'Sandbox ID (UUID)' },
-      { name: 'total_runtime_seconds', type: 'int', desc: 'Total runtime across sandboxes (seconds)' },
-      { name: 'current_sandbox_seconds', type: 'int', desc: 'Current sandbox runtime (seconds), 0 if deleted' },
-    ],
-    BusyIdleAck: [
-      { name: 'success', type: 'boolean', desc: 'true on success' },
-      { name: 'state', type: 'string', desc: "'busy' or 'idle'" },
-      { name: 'timeout_status', type: 'string', desc: "'paused' (busy) or 'active' (idle)" },
-    ],
-    StateAck: [
-      { name: 'success', type: 'boolean', desc: 'true on success' },
-      { name: 'state', type: 'string', desc: 'New state value' },
-    ],
-    SandboxContextUsage: [
-      { name: 'sandbox', type: 'string', desc: 'Sandbox ID (UUID)' },
-      { name: 'soft_limit_tokens', type: 'int', desc: 'Soft limit (tokens)' },
-      { name: 'used_tokens_estimated', type: 'int', desc: 'Estimated tokens since cutoff' },
-      { name: 'used_percent', type: 'float', desc: 'Usage percent of soft limit' },
-      { name: 'basis', type: 'string', desc: 'Estimation method' },
-      { name: 'cutoff_at', type: 'string|null (RFC3339)', desc: 'Current context cutoff (null when absent)' },
-      { name: 'measured_at', type: 'string (RFC3339)', desc: 'Measurement timestamp' },
-      { name: 'total_messages_considered', type: 'int', desc: 'Messages scanned to compute estimate' },
-    ],
-    FileEntry: [
-      { name: 'name', type: 'string', desc: 'Entry name (no path)' },
-      { name: 'kind', type: 'string', desc: "'file' | 'dir' | 'symlink'" },
-      { name: 'size', type: 'int', desc: 'Size in bytes' },
-      { name: 'mode', type: 'string', desc: 'Permissions in chmod-style octal (e.g., 0755)' },
-      { name: 'mtime', type: 'string (RFC3339)', desc: 'Last modified time' },
-    ],
-    FileListResult: [
-      { name: 'entries', type: 'FileEntry[]', desc: 'Entries for the requested folder' },
-      { name: 'offset', type: 'int', desc: 'Offset of this page' },
-      { name: 'limit', type: 'int', desc: 'Page size' },
-      { name: 'next_offset', type: 'int|null', desc: 'Offset for the next page, or null if end' },
-      { name: 'total', type: 'int', desc: 'Total number of entries' },
-    ],
-    FileMetadata: [
-      { name: 'kind', type: 'string', desc: "'file' | 'dir' | 'symlink'" },
-      { name: 'size', type: 'int', desc: 'Size in bytes' },
-      { name: 'mode', type: 'string', desc: 'Permissions in chmod-style octal (e.g., 0644)' },
-      { name: 'mtime', type: 'string (RFC3339)', desc: 'Last modified time' },
-      { name: 'link_target', type: 'string (symlink only)', desc: 'Target path for symlink', optional: true },
-    ],
-    CancelAck: [
-      { name: 'status', type: 'string', desc: "Always 'ok' on success" },
-      { name: 'sandbox', type: 'string', desc: 'Sandbox ID (UUID)' },
-      { name: 'cancelled', type: 'boolean', desc: 'true if a pending/processing task or queued update was cancelled' },
-    ],
-    ContextUsageAck: [
-      { name: 'success', type: 'boolean', desc: 'true on success' },
-      { name: 'last_context_length', type: 'int', desc: 'Persisted context length tokens' },
-    ],
-    Snapshot: [
-      { name: 'id', type: 'string', desc: 'Snapshot ID (UUID)' },
-      { name: 'sandbox_id', type: 'string', desc: 'Source sandbox ID (UUID)' },
-      { name: 'trigger_type', type: 'string', desc: "Trigger label (e.g., 'user', 'system')" },
-      { name: 'created_at', type: 'string (RFC3339)', desc: 'Creation timestamp' },
-      { name: 'metadata', type: 'object', desc: 'User-provided metadata JSON' },
-    ],
-    PaginatedSnapshots: [
-      { name: 'items', type: 'Snapshot[]', desc: 'Snapshot rows for this request' },
-      { name: 'total', type: 'int', desc: 'Total snapshots matching filters' },
-      { name: 'limit', type: 'int', desc: 'Page size (currently fixed at 100)' },
-      { name: 'offset', type: 'int', desc: 'Row offset (0-based)' },
-      { name: 'page', type: 'int', desc: 'Current page number (1-based)' },
-      { name: 'pages', type: 'int', desc: 'Total page count' },
-    ],
-    SnapshotFileEntry: [
-      { name: 'name', type: 'string', desc: 'Entry name under snapshot/sandbox root' },
-      { name: 'is_dir', type: 'boolean', desc: 'true when entry is a directory' },
-      { name: 'size', type: 'int', desc: 'Size in bytes (files only)' },
-      { name: 'modified', type: 'int|null', desc: 'Unix timestamp seconds when last modified (null if unavailable)' },
-    ],
-    SnapshotFileList: [
-      { name: 'items', type: 'SnapshotFileEntry[]', desc: 'Entries for requested directory' },
-      { name: 'total', type: 'int', desc: 'Total entries before pagination' },
-      { name: 'offset', type: 'int', desc: 'Current offset' },
-      { name: 'limit', type: 'int', desc: 'Page size' },
-    ],
-    SnapshotFileMetadata: [
-      { name: 'is_dir', type: 'boolean', desc: 'true if the path is a directory' },
-      { name: 'is_file', type: 'boolean', desc: 'true if the path is a regular file' },
-      { name: 'size', type: 'int', desc: 'Size in bytes (0 for directories)' },
-      { name: 'modified', type: 'int|null', desc: 'Unix timestamp seconds when last modified (null if unavailable)' },
-    ],
-    Empty: [],
-  };
-}
 
 export function getApiDocs(base) {
   const BASE = base || getHostUrl();
@@ -187,10 +26,39 @@ export function getApiDocs(base) {
       ]
     },
     {
-      id: 'admin',
-      title: 'Admin / Security',
-      description: 'Administrative endpoints for blocklist management (admin only).',
+      id: 'auth',
+      title: 'Authentication',
+      description: 'Token validation and blocklist management.',
       endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v0/auth',
+          auth: 'bearer',
+          desc: 'Validate token and return authenticated principal profile.',
+          params: [],
+          example: `curl -s ${BASE}/api/v0/auth -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'AuthProfile' },
+          responses: [
+            { status: 200, body: `{"user":"admin","type":"Admin"}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/auth/token',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Issue a token for a principal (admin only).',
+          params: [
+            { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or admin id)' },
+            { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" },
+            { in: 'body', name: 'ttl_hours', type: 'number', required: false, desc: 'Optional token TTL in hours (<=0 or omitted for no expiry).' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"user1","type":"User","ttl_hours":12}'`,
+          resp: { schema: 'TokenResponse' },
+          responses: [
+            { status: 200, body: `{"token":"<jwt>","token_type":"Bearer","expires_at":"2025-01-01T12:34:56Z","user":"user1","role":"user"}` }
+          ]
+        },
         {
           method: 'GET',
           path: '/api/v0/auth/blocklist',
@@ -239,9 +107,9 @@ export function getApiDocs(base) {
       ]
     },
     {
-      id: 'auth',
-      title: 'Authentication',
-      description: 'Login and token management.',
+      id: 'operators',
+      title: 'Operators',
+      description: 'Operator management endpoints (protected).',
       endpoints: [
         {
           method: 'POST',
@@ -259,42 +127,6 @@ export function getApiDocs(base) {
             { status: 200, body: `{"token":"<jwt>","token_type":"Bearer","expires_at":"2025-01-01T12:34:56Z","user":"admin","role":"admin"}` }
           ]
         },
-        {
-          method: 'GET',
-          path: '/api/v0/auth',
-          auth: 'bearer',
-          desc: 'Validate token and return authenticated principal profile.',
-          params: [],
-          example: `curl -s ${BASE}/api/v0/auth -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'AuthProfile' },
-          responses: [
-            { status: 200, body: `{"user":"admin","type":"Admin"}` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/auth/token',
-          auth: 'bearer',
-          adminOnly: true,
-          desc: 'Issue a token for a principal (admin only).',
-          params: [
-            { in: 'body', name: 'principal', type: 'string', required: true, desc: 'Principal name (user or admin id)' },
-            { in: 'body', name: 'type', type: 'string', required: true, desc: "Principal type: 'User' or 'Admin'" },
-            { in: 'body', name: 'ttl_hours', type: 'number', required: false, desc: 'Optional token TTL in hours (<=0 or omitted for no expiry).' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/auth/token -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"principal":"user1","type":"User","ttl_hours":12}'`,
-          resp: { schema: 'TokenResponse' },
-          responses: [
-            { status: 200, body: `{"token":"<jwt>","token_type":"Bearer","expires_at":"2025-01-01T12:34:56Z","user":"user1","role":"user"}` }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'operators',
-      title: 'Operators',
-      description: 'Operator management endpoints (protected).',
-      endpoints: [
         {
           method: 'GET',
           path: '/api/v0/auth/operators',
@@ -606,92 +438,89 @@ export function getApiDocs(base) {
           responses: [
             { status: 200 }
           ]
-        }
-      ]
-    },
-    {
-      id: 'sandbox-files',
-      title: 'Sandbox Files',
-      description: 'Read-only access to files inside a sandbox container.',
-      endpoints: [
+        },
         {
           method: 'GET',
-          path: '/api/v0/sandboxes/{id}/files/list',
+          path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'List files in sandbox root (/sandbox).',
+          desc: 'List tasks for a sandbox in chronological order.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0).' },
-            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500).' }
+            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max records (default 100, max 1000).' },
+            { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (default 0).' }
           ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/list?limit=50 -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'FileListResult' },
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `{"entries":[{"name":"main.rs","kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":50,"next_offset":null,"total":1}` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/tasks',
+          auth: 'bearer',
+          desc: 'Create a task (enqueue user input). Optional background=false blocks until completion or 15-minute timeout.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }." },
+            { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to true (non-blocking). Set false to wait for completion.' },
+            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 3600, 0 to disable).' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
+          resp: { schema: 'TaskObject' },
+          responses: [
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"segments":[{"type":"final","channel":"final","text":"hi there"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
         {
           method: 'GET',
-          path: '/api/v0/sandboxes/{id}/files/list/{path...}',
+          path: '/api/v0/sandboxes/{id}/tasks/{task_id}',
           auth: 'bearer',
-          desc: 'List files under a specific directory.',
+          desc: 'Fetch a task by ID within a sandbox.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Directory path relative to /sandbox (no leading slash).' },
-            { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Offset (default 0).' },
-            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 100, max 500).' }
+            { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' }
           ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/list/code/src -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'FileListResult' },
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"entries":[{"name":"main.rs","kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}],"offset":0,"limit":100,"next_offset":null,"total":1}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+          ]
+        },
+        {
+          method: 'PUT',
+          path: '/api/v0/sandboxes/{id}/tasks/{task_id}',
+          auth: 'bearer',
+          desc: 'Update a task record (status, input, output, timeout). Typically used by controller.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' },
+            { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
+            { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update (replaces existing input JSON).' },
+            { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges text/items into existing output.' },
+            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' }
+          ],
+          example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
+          resp: { schema: 'TaskObject' },
+          responses: [
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
           method: 'GET',
-          path: '/api/v0/sandboxes/{id}/files/metadata/{path...}',
+          path: '/api/v0/sandboxes/{id}/tasks/count',
           auth: 'bearer',
-          desc: 'Get metadata for a file or directory.',
+          desc: 'Count tasks for a sandbox.',
           params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash).' }
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
           ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/files/metadata/code/src/main.rs -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'FileMetadata' },
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/count -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'Count' },
           responses: [
-            { status: 200, body: `{"kind":"file","size":1024,"mode":"0644","mtime":"2025-01-01T12:00:00Z"}` }
+            { status: 200, body: `{"count":42,"sandbox_id":"<id>"}` }
           ]
         },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/files/read/{path...}',
-          auth: 'bearer',
-          desc: 'Read a file and stream its raw bytes. Sets Content-Type and X-TSBX-File-Size headers.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash).' }
-          ],
-          example: `curl -s -OJ ${BASE}/api/v0/sandboxes/<id>/files/read/code/report.html -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'Empty' },
-          responses: [
-            { status: 200 }
-          ]
-        },
-        {
-          method: 'DELETE',
-          path: '/api/v0/sandboxes/{id}/files/delete/{path...}',
-          auth: 'bearer',
-          desc: 'Delete a file or empty directory (when enabled).',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'path...', type: 'string', required: true, desc: 'Path relative to /sandbox (no leading slash).' }
-          ],
-          example: `curl -s -X DELETE ${BASE}/api/v0/sandboxes/<id>/files/delete/code/tmp.txt -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'Empty' },
-          responses: [
-            { status: 200, body: `{"deleted":true}` }
-          ]
-        }
       ]
     },
     {
@@ -846,95 +675,6 @@ export function getApiDocs(base) {
           resp: { schema: 'Snapshot' },
           responses: [
             { status: 201, body: `{"id":"snp_123","sandbox_id":"<id>","trigger_type":"user","created_at":"2025-01-01T15:00:00Z","metadata":{"note":"before deploy"}}` }
-          ]
-        }
-      ]
-    },
-    {
-      id: 'sandbox-tasks',
-      title: 'Sandbox Tasks',
-      description: 'Composite input/output exchanges scoped to a sandbox.',
-      endpoints: [
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/tasks',
-          auth: 'bearer',
-          desc: 'List tasks for a sandbox in chronological order.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max records (default 100, max 1000).' },
-            { in: 'query', name: 'offset', type: 'int', required: false, desc: 'Row offset (default 0).' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'TaskObject', array: true },
-          responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/tasks',
-          auth: 'bearer',
-          desc: 'Create a task (enqueue user input). Optional background=false blocks until completion or 15-minute timeout.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }." },
-            { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to true (non-blocking). Set false to wait for completion.' },
-            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 3600, 0 to disable).' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
-          resp: { schema: 'TaskObject' },
-          responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"segments":[{"type":"final","channel":"final","text":"hi there"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
-            { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
-          ]
-        },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/tasks/{task_id}',
-          auth: 'bearer',
-          desc: 'Fetch a task by ID within a sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'TaskObject' },
-          responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
-          ]
-        },
-        {
-          method: 'PUT',
-          path: '/api/v0/sandboxes/{id}/tasks/{task_id}',
-          auth: 'bearer',
-          desc: 'Update a task record (status, input, output, timeout). Typically used by controller.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' },
-            { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
-            { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update (replaces existing input JSON).' },
-            { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges text/items into existing output.' },
-            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' }
-          ],
-          example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
-          resp: { schema: 'TaskObject' },
-          responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
-          ]
-        },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/tasks/count',
-          auth: 'bearer',
-          desc: 'Count tasks for a sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/count -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'Count' },
-          responses: [
-            { status: 200, body: `{"count":42,"sandbox_id":"<id>"}` }
           ]
         }
       ]
