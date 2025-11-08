@@ -154,6 +154,16 @@
     return 'badge bg-secondary-subtle text-secondary-emphasis border';
   }
 
+  function snapshotReason(metadata) {
+    if (!metadata || typeof metadata !== 'object') return null;
+    const reason = metadata.reason;
+    if (typeof reason === 'string') {
+      const trimmed = reason.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    return null;
+  }
+
   async function deleteSnapshot() {
     const ok = confirm(`Delete snapshot '${snapshotId}'? This cannot be undone.`);
     if (!ok) return;
@@ -229,6 +239,12 @@
             <div class="small text-body text-opacity-50">
               Created: {new Date(snapshot.created_at).toLocaleString()}
             </div>
+            {#if snapshotReason(snapshot.metadata)}
+              <div class="small text-body text-opacity-75 mt-2">
+                Reason:
+                <span class="d-block fw-semibold text-body text-opacity-100">{snapshotReason(snapshot.metadata)}</span>
+              </div>
+            {/if}
           </div>
         </Card>
 

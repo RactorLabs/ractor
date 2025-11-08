@@ -36,6 +36,17 @@
     return 'badge bg-secondary-subtle text-secondary-emphasis border';
   }
 
+  function snapshotReason(snapshot) {
+    const reason = snapshot?.metadata && typeof snapshot.metadata === 'object'
+      ? snapshot.metadata.reason
+      : undefined;
+    if (typeof reason === 'string') {
+      const trimmed = reason.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    return null;
+  }
+
   function buildQuery() {
     const params = new URLSearchParams();
     if (q && q.trim().length) params.set('q', q.trim());
@@ -156,19 +167,9 @@
 {/if}
 <style>
   :global(.snapshot-card) { overflow: visible; }
-  :global(.snapshot-card .list-actions) {
-    margin-top: auto;
-    padding-top: 0.75rem;
-  }
-  :global(.snapshot-card .list-actions .btn) {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  @media (min-width: 768px) {
-    :global(.snapshot-card .list-actions .btn) {
-      flex: 0 0 auto;
-    }
-  }
+  :global(.snapshot-card .list-actions) { margin-left: auto; }
+  :global(.snapshot-card .list-actions .btn) { flex: 0 0 auto; }
+  .snapshot-card-meta { min-width: 0; }
 </style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Snapshots</div>
@@ -228,17 +229,25 @@
                       <a class="fw-bold text-decoration-none fs-18px font-monospace" href="/snapshots/{encodeURIComponent(s.id || '')}">{s.id || '-'}</a>
                       <span class={triggerTypeBadgeClass(s.trigger_type)}>{triggerTypeLabel(s.trigger_type)}</span>
                     </div>
-                    <div class="small text-body text-opacity-75">
-                      Source Sandbox:
-                      <a href="/sandboxes/{encodeURIComponent(s.sandbox_id || '')}" class="font-monospace">{s.sandbox_id || '-'}</a>
+                    <div class="snapshot-card-meta flex-grow-1">
+                      <div class="small text-body text-opacity-75">
+                        Source Sandbox:
+                        <a href="/sandboxes/{encodeURIComponent(s.sandbox_id || '')}" class="font-monospace">{s.sandbox_id || '-'}</a>
+                      </div>
+                      <div class="small text-body text-opacity-50 mt-1">
+                        Created: {formatDate(s.created_at)}
+                      </div>
+                      {#if snapshotReason(s)}
+                        <div class="small text-body text-opacity-75 mt-2">
+                          Reason:
+                          <span class="d-block fw-semibold text-body text-opacity-100">{snapshotReason(s)}</span>
+                        </div>
+                      {/if}
+                      {#if isAdmin && s.created_by}
+                        <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{s.created_by}</span></div>
+                      {/if}
                     </div>
-                    <div class="small text-body text-opacity-50 mt-1">
-                      Created: {formatDate(s.created_at)}
-                    </div>
-                    {#if isAdmin && s.created_by}
-                      <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{s.created_by}</span></div>
-                    {/if}
-                    <div class="list-actions d-flex align-items-center flex-wrap gap-2">
+                    <div class="ms-auto list-actions d-flex align-items-center flex-wrap gap-2">
                       <a href="/snapshots/{encodeURIComponent(s.id || '')}" class="btn btn-outline-secondary btn-sm" aria-label="View files">
                         <i class="bi bi-folder me-1"></i><span>View Files</span>
                       </a>
