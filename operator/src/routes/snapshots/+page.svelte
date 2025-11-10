@@ -32,7 +32,7 @@
   function triggerTypeBadgeClass(trigger) {
     const t = String(trigger || '').toLowerCase();
     if (t === 'manual') return 'badge bg-primary-subtle text-primary-emphasis border';
-    if (t === 'termination') return 'badge bg-danger-subtle text-danger-emphasis border';
+    if (t === 'termination') return 'badge bg-secondary-subtle text-secondary-emphasis border';
     return 'badge bg-secondary-subtle text-secondary-emphasis border';
   }
 
