@@ -2098,28 +2098,34 @@
     <div class="col-12 col-lg-6 d-none d-lg-flex flex-column h-100" style="min-height: 0; min-width: 0;">
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
-          <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-            {#if stateStr === 'terminated'}
+          {#if stateStr === 'terminated'}
+            <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
                   <div class="fs-5 mb-2"><i class="bi bi-power me-2"></i>Sandbox not available</div>
                   <p class="small mb-3 text-body-secondary">This sandbox has been terminated and is read-only.</p>
                 </div>
               </div>
-            {:else if stateStr === 'terminating'}
+            </div>
+          {:else if stateStr === 'terminating'}
+            <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
                   <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-danger"></span>Sandbox not available</div>
                   <p class="small mb-3 text-body-secondary">Termination is in progress. Please wait for the sandbox to shut down.</p>
                 </div>
               </div>
-            {:else if stateStr === 'initializing'}
+            </div>
+          {:else if stateStr === 'initializing'}
+            <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
                   <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-info"></span>Sandbox is initializing</div>
                 </div>
               </div>
-            {:else}
+            </div>
+          {:else}
+            <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
               <!-- Action bar (read-only) -->
               <div class="d-flex flex-wrap align-items-center gap-1 border-bottom px-2 py-1 small">
                 <button class="btn btn-sm border-0" aria-label="Root" title="Root" on:click={fmGoRoot}><i class="bi bi-house"></i></button>
@@ -2241,7 +2247,8 @@
                   <!-- No separate details pane; counts are shown in the action bar -->
                 </div>
               {/if}
-          </div>
+            </div>
+          {/if}
         </Card>
       </div>
     </div>
