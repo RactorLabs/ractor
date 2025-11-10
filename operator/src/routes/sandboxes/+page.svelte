@@ -318,7 +318,6 @@ import { getHostUrl } from '$lib/branding.js';
             <section>
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Active Sandboxes</h6>
-                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{activeSandboxes.length}</span>
               </div>
               {#if activeSandboxes.length}
                 <div class="row g-3">
@@ -373,7 +372,6 @@ import { getHostUrl } from '$lib/branding.js';
             <section>
               <div class="d-flex align-items-center justify-content-between mb-2">
                 <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Terminated Sandboxes</h6>
-                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{terminatedSandboxes.length}</span>
               </div>
               {#if terminatedSandboxes.length}
                 <div class="row g-3">
