@@ -69,11 +69,31 @@ import { getHostUrl } from '$lib/branding.js';
     pages = Number(data.pages || (limit ? Math.max(1, Math.ceil(total / limit)) : 1));
   }
 
-  async function terminateSandbox(sandbox) {
-    const ok = confirm(`Terminate sandbox '${sandbox.id || ''}'? This cannot be undone.`);
-    if (!ok) return;
-    const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandbox.id)}`, { method: 'DELETE' });
-    if (!res.ok) { error = res?.data?.message || 'Termination failed'; return; }
+  let showTerminateModal = false;
+  let terminateSandboxTarget = null;
+  let terminateConfirm = '';
+  $: canConfirmTerminate = terminateSandboxTarget && terminateConfirm.trim() === String(terminateSandboxTarget.id || '').trim();
+
+  function openTerminateModal(sandbox) {
+    terminateSandboxTarget = sandbox;
+    terminateConfirm = '';
+    showTerminateModal = true;
+  }
+
+  function closeTerminateModal() {
+    showTerminateModal = false;
+    terminateSandboxTarget = null;
+    terminateConfirm = '';
+  }
+
+  async function confirmTerminateSandbox() {
+    if (!terminateSandboxTarget || !canConfirmTerminate) return;
+    const res = await apiFetch(`/sandboxes/${encodeURIComponent(terminateSandboxTarget.id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      error = res?.data?.message || 'Termination failed';
+      return;
+    }
+    closeTerminateModal();
     await fetchSandboxes();
   }
 
@@ -338,7 +358,7 @@ import { getHostUrl } from '$lib/branding.js';
                               <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
                             </button>
                             {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                              <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
+                              <button class="btn btn-outline-danger btn-sm" on:click|preventDefault={() => openTerminateModal(a)} aria-label="Terminate sandbox">
                                 <i class="bi bi-power text-danger me-1"></i><span>Terminate</span>
                               </button>
                             {/if}
@@ -397,7 +417,7 @@ import { getHostUrl } from '$lib/branding.js';
               <div class="text-body text-opacity-75 small">No terminated sandboxes.</div>
             {/if}
           {/if}
-          {#if pages > 1}
+{#if pages > 1}
           <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
             <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>Prev</button>
             {#each Array(pages) as _, idx}
@@ -437,6 +457,40 @@ import { getHostUrl } from '$lib/branding.js';
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeEditTimeouts}>Cancel</button>
           <button class="btn btn-theme" on:click={saveTimeouts}>Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showTerminateModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Terminate Sandbox</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeTerminateModal}></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-body text-opacity-75 mb-3">
+            This will immediately stop sandbox <span class="font-monospace">{terminateSandboxTarget?.id}</span>. Type the full sandbox ID to confirm. This action cannot be undone.
+          </p>
+          <div class="mb-3">
+            <label class="form-label small text-uppercase text-body-secondary" for="terminate-confirm-input">Sandbox ID</label>
+            <input
+              id="terminate-confirm-input"
+              type="text"
+              class="form-control"
+              placeholder="Enter sandbox ID to confirm"
+              bind:value={terminateConfirm}
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" on:click={closeTerminateModal}>Cancel</button>
+          <button type="button" class="btn btn-danger" disabled={!canConfirmTerminate} on:click={confirmTerminateSandbox}>
+            Terminate
+          </button>
         </div>
       </div>
     </div>
