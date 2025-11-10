@@ -18,7 +18,7 @@
   let md;
   try {
     md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
-    // Ensure all markdown links open in a new tab (chat panel)
+    // Ensure all markdown links open in a new tab (task detail panel)
     if (md && md.renderer && md.renderer.rules) {
       const defaultRender = md.renderer.rules.link_open || function(tokens, idx, options, env, self) {
         return self.renderToken(tokens, idx, options);
@@ -69,9 +69,13 @@
   // Update page title to show sandbox ID
   $: setPageTitle(sandbox?.id ? `Sandbox ${sandbox.id}` : 'Sandbox');
   let stateStr = '';
-  // Chat rendering derived from Tasks
-  let chat = [];
+  // Task tracking state
   let tasks = [];
+  let selectedTaskId = '';
+  let selectedTask = null;
+  let showTaskDetail = false;
+  $: selectedTask = tasks.find((t) => t.id === selectedTaskId) || (tasks.length ? tasks[0] : null);
+  $: if (showTaskDetail && !selectedTask) { showTaskDetail = false; }
   // Toggle display of thinking (analysis/commentary) text; persisted via cookie
   let showThinking = false;
   const SHOW_THINKING_COOKIE = 'tsbx_showThinking';
@@ -151,18 +155,6 @@
   $: if (browser && toolsPrefLoaded) {
     setCookie(SHOW_TOOLS_COOKIE, showTools ? '1' : '0', 365);
   }
-  onMount(() => {
-    try {
-      if (typeof ResizeObserver !== 'undefined' && chatFooterEl) {
-        _footerRO = new ResizeObserver(() => { _updateDetailsPaneHeight(); });
-        _footerRO.observe(chatFooterEl);
-      }
-      if (typeof window !== 'undefined') {
-        window.addEventListener('resize', _updateDetailsPaneHeight);
-      }
-      _updateDetailsPaneHeight();
-    } catch (_) {}
-  });
   let loading = true;
   let error = null;
   let input = '';
@@ -212,14 +204,6 @@
       deleteFileError = e.message || String(e);
     }
   }
-  // Height sync for Files details pane
-  let chatFooterEl = null;
-  let detailsPaneHeight = 260;
-  let _footerRO = null;
-  function _updateDetailsPaneHeight() {
-    try { detailsPaneHeight = chatFooterEl ? chatFooterEl.offsetHeight : detailsPaneHeight; } catch (_) {}
-  }
-
   function fmPathStr() {
     try { return (fmSegments || []).map(encodeURIComponent).join('/'); } catch (_) { return ''; }
   }
@@ -511,10 +495,6 @@
 
   // Context usage state
   let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
-  let ctxLoading = false;
-  let contextFull = false;
-  // When compacting context, block UI interactions
-  let isCompacting = false;
   function fmtInt(n) {
     try { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString() : String(n); } catch (_) { return String(n); }
   }
@@ -530,53 +510,14 @@
   function countSymlinks() { return countKind('symlink'); }
   async function fetchContextUsage() {
     try {
-      ctxLoading = true;
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context`);
       if (res.ok) {
         ctx = res.data || null;
-        // Update banner flag if over soft limit
-        const used = Number(ctx?.used_tokens_estimated || 0);
-        const limit = Number(ctx?.soft_limit_tokens || 128000);
-        contextFull = used >= limit;
       }
     } catch (_) { /* ignore */ }
-    ctxLoading = false;
-  }
-  async function clearContext() {
-    try {
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context/clear`, { method: 'POST' });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Clear failed (HTTP ${res.status})`);
-      error = null;
-      contextFull = false;
-      await fetchContextUsage();
-      await fetchTasks();
-      await tick();
-      scrollToBottom();
-    } catch (e) {
-      error = e.message || String(e);
-    }
-  }
-  async function compactContext() {
-    try {
-      isCompacting = true;
-      ctxLoading = true;
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context/compact`, { method: 'POST' });
-      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Compact failed (HTTP ${res.status})`);
-      error = null;
-      contextFull = false;
-      await fetchContextUsage();
-      await fetchTasks();
-      await tick();
-      scrollToBottom();
-    } catch (e) {
-      error = e.message || String(e);
-    } finally {
-      isCompacting = false;
-      ctxLoading = false;
-    }
   }
   let _runtimeFetchedAt = 0;
-  let inputEl = null; // chat textarea element
+  let inputEl = null; // task textarea element
   // Content preview via sandbox ports has been removed.
   // Details (analysis + tool calls/results) visibility controlled via toggles
 
@@ -752,48 +693,11 @@
     if (res.ok) {
       const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
       tasks = list;
-      // Only auto-stick if near bottom before refresh
-      let shouldStick = true;
-      try {
-        const el = typeof document !== 'undefined' ? document.getElementById('chat-body') : null;
-        if (el) {
-          const delta = el.scrollHeight - el.scrollTop - el.clientHeight;
-          shouldStick = delta < 80;
-        }
-      } catch (_) {}
-      // Transform tasks into synthetic chat bubbles to reuse rendering
-      const transformed = [];
-      for (const r of list) {
-        const inputText = r?.input?.text || '';
-        const inputContent = Array.isArray(r?.input_content) ? r.input_content : null;
-        if (inputContent && inputContent.length > 0) {
-          // Render first text item as user bubble; future: support richer inputs
-          const firstText = inputContent.find((it) => String(it?.type || '').toLowerCase() === 'text' && typeof it?.content === 'string' && it.content.trim());
-          if (firstText) {
-            transformed.push({ role: 'user', content: firstText.content, id: r.id + ':in' });
-          } else if (inputText && inputText.trim()) {
-            transformed.push({ role: 'user', content: inputText, id: r.id + ':in' });
-          }
-        } else if (inputText && inputText.trim()) {
-          transformed.push({ role: 'user', content: inputText, id: r.id + ':in' });
-        }
-        const items = Array.isArray(r?.segments) ? r.segments : [];
-        const contentText = '';
-        const meta = { type: 'composite_step', in_progress: String(r?.status || '').toLowerCase() === 'processing' };
-        const outputContent = Array.isArray(r?.output_content) ? r.output_content : [];
-        transformed.push({
-          role: 'sandbox',
-          id: r.id + ':out',
-          content: contentText,
-          metadata: meta,
-          content_json: { composite: { segments: items }, output_content: outputContent },
-        });
+      if (!tasks.some((t) => t.id === selectedTaskId)) {
+        selectedTaskId = tasks.length ? tasks[0].id : '';
       }
-      chat = transformed;
-      await tick();
-      // If user was already near the bottom before refresh, keep them stuck to bottom
-      if (shouldStick) {
-        scrollToBottom();
+      if (!tasks.length) {
+        showTaskDetail = false;
       }
     }
   }
@@ -811,29 +715,8 @@
 
   // No content preview probing; only status is shown in the panel.
 
-  function scrollToBottom() {
-    try {
-      if (typeof document === 'undefined') return;
-      const el = document.getElementById('chat-body');
-      if (el) el.scrollTop = el.scrollHeight;
-    } catch (_) {}
-  }
-
-  // Helper: map tool key to display label
-  function toolLabel(t) {
-    // Show the tool name exactly as it appears
-    return String(t ?? '');
-  }
-
-  // Composite helpers (content_json.composite.segments)
-  function hasComposite(m) {
-    try { return Array.isArray(m?.content_json?.composite?.segments) && m.content_json.composite.segments.length > 0; } catch (_) { return false; }
-  }
-  function segmentsOf(m) { try { return Array.isArray(m?.content_json?.composite?.segments) ? m.content_json.composite.segments : []; } catch (_) { return []; } }
   function segType(s) { return String(s?.type || '').toLowerCase(); }
-  function segChannel(s) { return String(s?.channel || '').toLowerCase(); }
   function segText(s) { return String(s?.text || ''); }
-  function segContent(s) { return String(s?.content || ''); }
   function segTool(s) { return String(s?.tool || ''); }
   function segArgs(s) {
     try {
@@ -841,17 +724,15 @@
       if (s.arguments && typeof s.arguments === 'object') return s.arguments;
       if (s.args && typeof s.args === 'object') return s.args;
       return null;
-    } catch(_) { return null; }
+    } catch (_) { return null; }
   }
   function segOutput(s) {
     try {
       const o = s?.output;
-      if (typeof o === 'string') { return o; }
-      return o; // object/array/null
+      if (typeof o === 'string') return o;
+      return o;
     } catch (_) { return s?.output; }
   }
-
-  // Output_* helpers
   function isOutputToolName(t) {
     try { const n = String(t || '').toLowerCase(); return n === 'output' || n === 'output_markdown' || n === 'ouput_json' || n === 'output_json'; } catch (_) { return false; }
   }
@@ -860,7 +741,7 @@
     try {
       const out = segOutput(s);
       if (out && typeof out === 'object' && typeof out.content === 'string') return out.content;
-      if (typeof out === 'string') return out; // fallback if tool returned string
+      if (typeof out === 'string') return out;
       return '';
     } catch (_) { return ''; }
   }
@@ -871,491 +752,141 @@
       return [];
     } catch (_) { return []; }
   }
-  function typeBadge(t) {
-    try { const n = String(t || '').toLowerCase();
-      if (n === 'markdown') return 'Markdown';
-      if (n === 'json') return 'JSON';
-      if (n === 'url') return 'URL';
-      return n;
-    } catch (_) { return String(t || ''); }
+  function taskStatus(task) {
+    try { return String(task?.status || '').toLowerCase(); } catch (_) { return ''; }
   }
-  function typeIconClass(t) {
+  function taskStatusLabel(task) {
+    const status = taskStatus(task);
+    if (status === 'pending') return 'Pending';
+    if (status === 'processing') return 'Processing';
+    if (status === 'completed') return 'Completed';
+    if (status === 'failed') return 'Failed';
+    if (status === 'cancelled') return 'Cancelled';
+    return status || 'Unknown';
+  }
+  function taskStatusBadgeClass(task) {
+    const status = taskStatus(task);
+    if (status === 'completed') return 'bg-success-subtle text-success-emphasis border';
+    if (status === 'processing') return 'bg-info-subtle text-info-emphasis border';
+    if (status === 'failed' || status === 'cancelled') return 'bg-danger-subtle text-danger-emphasis border';
+    if (status === 'pending') return 'bg-warning-subtle text-warning-emphasis border';
+    return 'bg-secondary-subtle text-secondary-emphasis border';
+  }
+  function formatTaskTimestamp(task) {
     try {
-      const n = String(t || '').toLowerCase();
-      if (n === 'markdown') return 'bi bi-markdown';
-      if (n === 'json') return 'bi bi-code';
-      if (n === 'url') return 'bi bi-link-45deg';
-      return 'bi bi-file-earmark';
-    } catch (_) { return 'bi bi-file-earmark'; }
-  }
-
-  // Parse helpers for rare top-level tool_result card content
-  function parseJsonSafe(s) {
-    try { return JSON.parse(String(s ?? '')); } catch (_) { return null; }
-  }
-  function outputMarkdownFromTopCard(m) {
-    try {
-      const p = parseJsonSafe(m?.content);
-      if (p && typeof p === 'object' && typeof p.content === 'string') return p.content;
-      return '';
+      const created = task?.created_at ? new Date(task.created_at) : null;
+      if (!created || Number.isNaN(created.getTime())) return '';
+      return created.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' });
     } catch (_) { return ''; }
   }
-  function outputJsonFromTopCard(m) {
+  function taskInputItems(task) {
     try {
-      const p = parseJsonSafe(m?.content);
-      if (p && typeof p === 'object' && Object.prototype.hasOwnProperty.call(p, 'data')) return p.data;
-      return undefined;
-    } catch (_) { return undefined; }
-  }
-  function parsedItemsFromTopCard(m) {
-    try {
-      const p = parseJsonSafe(m?.content);
-      if (p && Array.isArray(p.items)) return p.items;
+      const items = Array.isArray(task?.input_content) ? task.input_content : [];
+      if (items.length) return items;
+      const text = task?.input?.text || task?.input?.content;
+      if (typeof text === 'string' && text.trim()) {
+        return [{ type: 'text', content: text }];
+      }
       return [];
     } catch (_) { return []; }
   }
+  function segmentsOfTask(task) {
+    try { return Array.isArray(task?.segments) ? task.segments : []; } catch (_) { return []; }
+  }
+  function isAnalysisSegment(seg) {
+    const type = segType(seg);
+    const channel = String(seg?.channel || '').toLowerCase();
+    return type === 'commentary' || channel === 'analysis' || channel === 'commentary';
+  }
 
-  // Summary-mode: show tool output exactly as-is (no parsing or wrapping)
-  function summaryOutputText(s) {
-    try {
-      const o = s?.output;
-      if (o == null) return '';
-      if (typeof o === 'string') return o;
-      try { return JSON.stringify(o); } catch (_) { return String(o); }
-    } catch (_) { return ''; }
+  function taskAnalysisSegments(task) {
+    const segs = segmentsOfTask(task);
+    return segs.filter((s) => isAnalysisSegment(s));
   }
-  function segNote(s) {
-    try { return String(s?.note || '').trim(); } catch (_) { return ''; }
-  }
-  function hasStoppedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'terminated'); } catch(_) { return false; }
-  }
-  function stoppedNoteFrom(m) {
-    try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'terminated');
-      return s ? segNote(s) : '';
-    } catch(_) { return ''; }
-  }
-  function stoppedRuntimeFrom(m) {
-    try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'terminated');
-      const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
-      return Number.isFinite(v) && v >= 0 ? v : 0;
-    } catch(_) { return 0; }
-  }
-  function hasTaskTimeoutSeg(m) {
-    try {
-      return segmentsOf(m).some(
-        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
-      );
-    } catch(_) { return false; }
-  }
-  function taskTimeoutNoteFrom(m) {
-    try {
-      const s = segmentsOf(m).find(
-        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
-      );
-      if (!s) return '';
-      const note = segNote(s);
-      return note || 'Per-task timeout';
-    } catch(_) { return ''; }
-  }
-  function taskTimeoutRuntimeFrom(m) {
-    try {
-      const s = segmentsOf(m).find(
-        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() === 'task_timeout'
-      );
-      const v = s && s.runtime_seconds != null ? Number(s.runtime_seconds) : NaN;
-      return Number.isFinite(v) && v >= 0 ? v : 0;
-    } catch(_) { return 0; }
-  }
-  function hasRestartedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'restarted'); } catch(_) { return false; }
-  }
-  function restartedNoteFrom(m) {
-    try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'restarted');
-      return s ? segNote(s) : '';
-    } catch(_) { return ''; }
-  }
-  function hasCancelledSeg(m) {
-    try {
-      return segmentsOf(m).some(
-        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() !== 'task_timeout'
-      );
-    } catch(_) { return false; }
-  }
-  function cancelledReasonFrom(m) {
-    try {
-      const s = segmentsOf(m).find(
-        (x) => segType(x) === 'cancelled' && String(x?.reason || '').toLowerCase() !== 'task_timeout'
-      );
-      return s ? String(s?.reason || '').trim() : '';
-    } catch(_) { return ''; }
-  }
-  function dateOnly(s) {
-    try {
-      const d = new Date(String(s || ''));
-      if (isNaN(d)) return '';
-      return d.toISOString().slice(0, 10); // YYYY-MM-DD
-    } catch (_) { return ''; }
-  }
-  function hasContextClearedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'context_cleared'); } catch(_) { return false; }
-  }
-  function contextClearedAt(m) {
-    try {
-      const s = segmentsOf(m).find((x) => segType(x) === 'context_cleared');
-      const raw = String(s?.cutoff_at || '').trim();
-      return dateOnly(raw);
-    } catch(_) { return ''; }
-  }
-  function hasContextCompactedSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'context_compacted'); } catch(_) { return false; }
-  }
-  function hasFinalSeg(m) {
-    try { return segmentsOf(m).some((x) => segType(x) === 'final'); } catch(_) { return false; }
-  }
-  function workspaceRelativePath(p) {
-    try {
-      let raw = String(p ?? '').trim();
-      if (!raw) return '';
-      raw = raw.split('\\').join('/');
-      if (raw.startsWith('/sandbox/')) raw = raw.slice('/sandbox/'.length);
-      else if (raw === '/sandbox' || raw === '/sandbox/') raw = '';
-      else if (raw.startsWith('/')) raw = raw.slice(1);
-      raw = raw.replace(/^\.\/+/, '');
-      raw = raw.replace(/\/+/g, '/');
-      raw = raw.replace(/\/+$/, '');
-      if (raw === '.') raw = '';
-      return raw;
-    } catch (_) { return ''; }
-  }
-  function normalizedPathSegments(p) {
-    try {
-      const rel = workspaceRelativePath(p);
-      return rel ? rel.split('/').map((seg) => seg.trim()).filter(Boolean) : [];
-    } catch (_) { return []; }
-  }
-  function filePanelHrefFromSegments(segs) {
-    try {
-      const encoded = (Array.isArray(segs) ? segs : []).map((s) => encodeURIComponent(s)).join('/');
-      return `?file=${encoded}`;
-    } catch (_) { return '?file='; }
-  }
-  function toolSummaryForArgs(toolName, args) {
-    const t = String(toolName || '').toLowerCase();
-    const a = args || {};
-    const parts = [];
-    const addLinkPart = (path, { isDir = false, label } = {}) => {
-      try {
-        const rel = workspaceRelativePath(path);
-        const display = String(label || rel || '/');
-        if (!display) return false;
-        const segs = normalizedPathSegments(path);
-        const href = filePanelHrefFromSegments(segs);
-        parts.push({ type: 'link', text: display, href, isDir: !!isDir, segments: segs });
-        return true;
-      } catch (_) { return false; }
-    };
-    const addTextPart = (text) => {
-      try {
-        const str = String(text ?? '').trim();
-        if (!str) return false;
-        parts.push({ type: 'text', text: str });
-        return true;
-      } catch (_) { return false; }
-    };
-
-    if (t === 'run_bash') {
-      const cwd = a.exec_dir || a.cwd || a.workdir || '';
-      const cmd = a.commands || a.command || a.cmd || '';
-      if (cwd) addLinkPart(cwd, { isDir: true });
-      if (cmd) addTextPart(truncate(String(cmd), 80));
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(run_bash)' };
-    }
-    if (t === 'open_file') {
-      const p = a.path || '';
-      const sl = a.start_line != null ? Number(a.start_line) : null;
-      const el = a.end_line != null ? Number(a.end_line) : null;
-      const range = (sl || el) ? `[${sl || ''}${el ? ':' + el : ''}]` : '';
-      if (p) addLinkPart(p, { isDir: false });
-      if (range) addTextPart(range);
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(open_file)' };
-    }
-    if (t === 'create_file') {
-      const p = a.path || '';
-      const bytes = (a.content && typeof a.content === 'string') ? a.content.length : null;
-      if (p) addLinkPart(p, { isDir: false });
-      if (bytes != null) addTextPart(`(${bytes} bytes)`);
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(create_file)' };
-    }
-    if (t === 'str_replace') {
-      const p = a.path || '';
-      const oldStr = typeof a.old_str === 'string' ? truncate(a.old_str, 30) : '';
-      const newStr = typeof a.new_str === 'string' ? truncate(a.new_str, 30) : '';
-      const pair = (oldStr || newStr) ? `${oldStr} → ${newStr}` : '';
-      const many = a.many ? ' (all)' : '';
-      if (p) addLinkPart(p, { isDir: false });
-      if (pair || many) addTextPart(`${pair}${many}`.trim());
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(str_replace)' };
-    }
-    if (t === 'insert') {
-      const p = a.path || '';
-      const line = a.insert_line != null ? `:${a.insert_line}` : '';
-      const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
-      const meta = len != null ? `(+${len})` : '';
-      if (p) addLinkPart(p, { isDir: false });
-      if (line || meta) addTextPart(`${line}${line && meta ? ' ' : ''}${meta}`.trim());
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(insert)' };
-    }
-    if (t === 'remove_str') {
-      const p = a.path || '';
-      const len = (a.content && typeof a.content === 'string') ? a.content.length : null;
-      const many = a.many ? '(all)' : '';
-      if (p) addLinkPart(p, { isDir: false });
-      if (len != null || many) {
-        const meta = `${len != null ? `(-${len})` : ''}${len != null && many ? ' ' : ''}${many}`.trim();
-        if (meta) addTextPart(meta);
+  function taskToolPairs(task) {
+    const segs = segmentsOfTask(task);
+    const pairs = [];
+    for (let i = 0; i < segs.length; i++) {
+      const seg = segs[i];
+      if (segType(seg) === 'tool_call') {
+        let result = null;
+        if (i + 1 < segs.length && segType(segs[i + 1]) === 'tool_result' && segTool(segs[i + 1]) === segTool(seg)) {
+          result = segs[i + 1];
+        }
+        const commentary = [];
+        for (let j = i - 1; j >= 0; j--) {
+          const prev = segs[j];
+          if (isAnalysisSegment(prev)) {
+            commentary.unshift(prev);
+            continue;
+          }
+          break;
+        }
+        pairs.push({ call: seg, result, commentary });
       }
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(remove_str)' };
     }
-    if (t === 'find_filecontent') {
-      const p = a.path || '';
-      const rgx = typeof a.regex === 'string' ? `/${truncate(a.regex, 40)}/` : '';
-      if (p) addLinkPart(p, { isDir: false });
-      if (rgx) addTextPart(rgx);
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filecontent)' };
-    }
-    if (t === 'find_filename') {
-      const p = a.path || '';
-      const glob = typeof a.glob === 'string' ? truncate(a.glob, 40) : '';
-      if (p) addLinkPart(p, { isDir: true });
-      if (glob) addTextPart(glob);
-      return { parts, text: parts.length ? parts.map((p) => p.text).join(' > ') : '(find_filename)' };
-    }
-    if (t === 'stop_sandbox') {
-      const d = a.delay_seconds != null ? Number(a.delay_seconds) : null;
-      const note = typeof a.note === 'string' && a.note.trim() ? `(${truncate(a.note, 50)})` : '';
-      const label = [`close${d ? ` in ${d}s` : ''}`, note].filter(Boolean).join(' ');
-      addTextPart(label || 'close');
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'close' };
-    }
-    if (t === 'create_plan') {
-      const title = typeof a.title === 'string' ? a.title : '';
-      const n = Array.isArray(a.tasks) ? a.tasks.length : 0;
-      const label = `create_plan${title ? ` ${truncate(title, 50)}` : ''}${n ? ` (${n} tasks)` : ''}`;
-      addTextPart(label);
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'create_plan' };
-    }
-    if (t === 'add_task') {
-      const task = typeof a.task === 'string' ? truncate(a.task, 60) : '';
-      const label = `add_task${task ? ` ${task}` : ''}`;
-      addTextPart(label);
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'add_task' };
-    }
-    if (t === 'complete_task') {
-      const id = a.task_id != null ? `#${a.task_id}` : '';
-      const vp = Array.isArray(a.verify_paths) ? `verify ${a.verify_paths.length}` : '';
-      const vu = typeof a.verify_url === 'string' && a.verify_url ? 'verify url' : '';
-      const force = a.force ? '[force]' : '';
-      const extras = [vp, vu, force].filter(Boolean).join(' · ');
-      const label = `complete${id ? ` ${id}` : ''}${extras ? ` (${extras})` : ''}`;
-      addTextPart(label);
-      return { parts, text: parts.map((p) => p.text).join(' > ') || 'complete' };
-    }
-    if (t === 'clear_plan') {
-      addTextPart('clear_plan');
-      return { parts, text: 'clear_plan' };
-    }
+    return pairs;
+  }
+  function formatToolSummary(callSeg) {
+    if (!callSeg) return '';
     try {
-      const json = JSON.stringify(a);
-      const short = json && json.length > 80 ? json.slice(0, 77) + '…' : (json || '(args)');
-      addTextPart(short);
+      const tool = segTool(callSeg);
+      const args = segArgs(callSeg) || {};
+      if (tool === 'run_bash' && typeof args.commands === 'string') {
+        const cmd = args.commands.trim();
+        return cmd.includes('\n') ? cmd.split('\n')[0] + ' …' : cmd;
+      }
+      const json = JSON.stringify(args);
+      if (!json) return '';
+      return json.length > 80 ? json.slice(0, 77) + '…' : json;
     } catch (_) {
-      addTextPart('(args)');
+      return '';
     }
-    return { parts, text: parts.map((p) => p.text).join(' > ') || '' };
   }
-  function segToolSummaryParts(s) {
-    try { return toolSummaryForArgs(segTool(s), segArgs(s)).parts || []; } catch (_) { return []; }
-  }
-  function segToolTitle(s) {
-    try { return toolSummaryForArgs(segTool(s), segArgs(s)).text || ''; } catch (_) { return ''; }
-  }
-  function openToolSummaryPath(part) {
-    try {
-      if (!part || !Array.isArray(part.segments)) return;
-      const segs = part.segments.filter(Boolean);
-      if (part.isDir || segs.length === 0) {
-        fmSegments = [...segs];
-        fmPendingOpenFile = '';
-        try { fmPreviewReset(); } catch (_) {}
-        try { _setPathInUrl(fmSegments); } catch (_) {}
-        try { fetchFiles(true); } catch (_) {}
-      } else {
-        const parent = segs.slice(0, -1);
-        const fileName = segs[segs.length - 1] || '';
-        fmSegments = parent;
-        fmPendingOpenFile = fileName;
-        try { fmPreviewReset(); } catch (_) {}
-        try { _setPathInUrl(parent, fileName); } catch (_) {}
-        try { fetchFiles(true); } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  // In-progress helpers
-  function isInProgress(m) {
-    try { const meta = metaOf(m); return !!(meta && meta.in_progress === true); } catch (_) { return false; }
-  }
-  function truncate(s, max = 80) {
-    try {
-      const str = String(s || '').trim();
-      if (!str) return '';
-      return str.length > max ? str.slice(0, max - 1) + '…' : str;
-    } catch (_) { return ''; }
-  }
-  // Multiline truncation for large tool outputs
-  function truncateMultiline(s, maxChars = 1200, maxLines = 24) {
-    try {
-      const str = String(s || '');
-      if (!str) return '';
-      let truncated = false;
-      let lines = str.split('\n');
-      if (lines.length > maxLines) { lines = lines.slice(0, maxLines); truncated = true; }
-      let text = lines.join('\n');
-      if (text.length > maxChars) { text = text.slice(0, maxChars); truncated = true; }
-      return truncated ? (text + '\n… truncated') : text;
-    } catch (_) { return String(s || ''); }
-  }
-
-  // Track which tool-result segments are expanded (full output) and which <details> are open
-  let expandedSegments = new Set();
-  let restartedSegments = new Set();
-  let expandAll = false; // when true, force-open all <details> blocks and full segment views
-  function segKey(m, j) { try { return `${m?.id || ''}:${j}`; } catch (_) { return `${j}`; } }
-  function expandSeg(key) {
-    try {
-      const s = new Set(expandedSegments); s.add(key); expandedSegments = s;
-      if (!expandAll) { const o = new Set(restartedSegments); o.add(key); restartedSegments = o; }
-    } catch (_) {}
-  }
-  function collapseSeg(key) {
-    try {
-      const s = new Set(expandedSegments); s.delete(key); expandedSegments = s;
-      if (!expandAll) { const o = new Set(restartedSegments); o.delete(key); restartedSegments = o; }
-    } catch (_) {}
-  }
-  function onToggleDetails(key, isOpen) {
-    try {
-      const o = new Set(restartedSegments);
-      if (isOpen) { o.add(key); } else { o.delete(key); }
-      restartedSegments = o;
-    } catch (_) {}
-  }
-  // In-progress preview and label removed; always render full details in the feed.
-
-  // Normalize metadata to an object (handles string-serialized JSON)
-  function metaOf(m) {
-    try {
-      const v = m?.metadata;
-      if (!v) return null;
-      if (typeof v === 'string') {
-        try { return JSON.parse(v); } catch (_) { return null; }
-      }
-      return v;
-    } catch (_) { return null; }
-  }
-
-  // Helper: detect a tool execution message
-  function isToolExec(m) {
-    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_execution' && meta.tool_type); } catch (_) { return false; }
-  }
-
-  // Helper: detect a tool result message
-  function isToolResult(m) {
-    try { const meta = metaOf(m); return !!(meta && meta.type === 'tool_result' && meta.tool_type); } catch (_) { return false; }
-  }
-
-  // (old text_editor helper removed)
-  function fmtSeconds(v) {
-    const n = Number(v || 0);
-    if (!isFinite(n) || n <= 0) return '';
-    if (n < 1) return `${n.toFixed(2)}s`;
-    if (n < 10) return `${n.toFixed(1)}s`;
-    return `${Math.round(n)}s`;
-  }
-
-  // Expand/Collapse all details across visible composite segments
-  function allSegmentKeys() {
-    try {
-      const keys = [];
-      for (const m of (chat || [])) {
-        if (!hasComposite(m)) continue;
-        const segs = segmentsOf(m);
-        for (let j = 0; j < segs.length; j++) {
-          keys.push(segKey(m, j));
+  function taskOutputItems(task) {
+    const direct = Array.isArray(task?.output_content) ? task.output_content : [];
+    if (direct.length) return direct;
+    const segs = segmentsOfTask(task);
+    for (const seg of segs) {
+      if (isOutputSeg(seg)) {
+        const items = outputItemsOfSeg(seg);
+        if (items.length) return items;
+        const markdown = outputMarkdownOfSeg(seg);
+        if (markdown) return [{ type: 'markdown', content: markdown }];
+        const raw = segOutput(seg);
+        if (raw != null) {
+          if (typeof raw === 'string') return [{ type: 'markdown', content: raw }];
+          return [{ type: 'json', content: raw }];
         }
       }
-      return keys;
-    } catch (_) { return []; }
+    }
+    return [];
   }
-  function expandAllDetails() {
+
+  function taskPreview(task) {
     try {
-      const s = new Set(expandedSegments);
-      for (const k of allSegmentKeys()) s.add(k);
-      expandedSegments = s;
-      expandAll = true;
-    } catch (_) {}
-  }
-  function collapseAllDetails() {
-    try {
-      expandedSegments = new Set();
-      restartedSegments = new Set();
-      expandAll = false;
-    } catch (_) {}
+      const items = taskInputItems(task);
+      const textItem = items.find((i) => String(i?.type || '').toLowerCase() === 'text');
+      const value = textItem ? String(textItem.content || '') : '';
+      const normalized = value.replace(/\s+/g, ' ').trim();
+      if (!normalized) return '';
+      return normalized.length > 120 ? `${normalized.slice(0, 117)}…` : normalized;
+    } catch (_) {
+      return '';
+    }
   }
 
-  // Format seconds as human-readable hours/minutes/seconds, e.g., 1h 5m 3s, 5m, 30s
-  function fmtDuration(v) {
-    let total = Number(v || 0);
-    if (!isFinite(total) || total < 0) total = 0;
-    const h = Math.floor(total / 3600);
-    total -= h * 3600;
-    const m = Math.floor(total / 60);
-    const s = Math.floor(total - m * 60);
-    const parts = [];
-    if (h) parts.push(`${h}h`);
-    if (m) parts.push(`${m}m`);
-    if (s || parts.length === 0) parts.push(`${s}s`);
-    return parts.join(' ');
+  function openTaskDetail(taskId) {
+    selectedTaskId = taskId;
+    showTaskDetail = true;
   }
 
-  // Expand/Collapse all tool details helpers
-  // Expand/Collapse controls removed; Show Details toggle controls visibility.
-
-  // Helper: compact args preview for tool summaries
-  function argsPreview(m) {
-    try {
-      const t = String(m?.metadata?.tool_type || '').toLowerCase();
-      const a = m?.metadata?.args;
-      if (!a || typeof a !== 'object') return '';
-      if (t === 'run_bash') {
-        const summary = toolSummaryForArgs(t, a);
-        const text = summary?.text || '';
-        return text ? `(${text})` : '';
-      }
-      const json = JSON.stringify(a);
-      if (!json) return '';
-      const short = json.length > 80 ? json.slice(0, 77) + '…' : json;
-      return `(${short})`;
-    } catch (_) { return ''; }
+  function closeTaskDetail() {
+    showTaskDetail = false;
   }
 
-  async function sendMessage(e) {
+  async function createTask(e) {
     e?.preventDefault?.();
-    if (isCompacting) { return; }
     const content = (input || '').trim();
     if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Sandbox is busy'; } return; }
     sending = true;
@@ -1366,14 +897,13 @@
       });
       if (!res.ok) {
         if (res.status === 409) {
-          // Soft limit reached; show friendly banner and fetch latest usage
-          contextFull = true;
           await fetchContextUsage();
         }
         throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       }
       input = '';
-      // Reset textarea height back to default (2 rows) after clearing
+      // Reset textarea height after clearing
+      error = null;
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
       // Wait until the server-side task row appears, then update UI
@@ -1381,14 +911,15 @@
       const deadline = Date.now() + 10000; // up to 10s
       while (Date.now() < deadline) {
         await fetchTasks();
-        const expectIn = rid ? `${rid}:in` : null;
-        if (!rid || (chat && chat.some(m => m.id === expectIn))) {
+        if (!rid || tasks.some((t) => t.id === rid)) {
+          if (rid) {
+            selectedTaskId = rid;
+            showTaskDetail = true;
+          }
           break;
         }
         await new Promise(r => setTimeout(r, 200));
       }
-      await tick();
-      scrollToBottom();
     } catch (e) {
       error = e.message || String(e);
       sending = false;
@@ -1399,15 +930,8 @@
 
   async function cancelActive() {
     try {
-      const activeTask = [...tasks]
-        .reverse()
-        .find((t) => {
-          const st = String(t?.status || '').toLowerCase();
-          return st === 'processing' || st === 'pending';
-        });
-      if (!activeTask) {
-        throw new Error('No cancellable task is currently running.');
-      }
+      const activeTask = tasks.find((t) => String(t?.status || '').toLowerCase() === 'processing');
+      if (!activeTask) return;
       const res = await apiFetch(
         `/sandboxes/${encodeURIComponent(sandboxId)}/tasks/${encodeURIComponent(activeTask.id)}/cancel`,
         { method: 'POST' }
@@ -1435,20 +959,17 @@
       await fetchSandbox();
       await fetchRuntime(true);
       await fetchTasks();
-      // Render the chat before attempting to scroll
       loading = false;
       await tick();
       try { updateTopCardsHeight(); } catch (_) {}
-      await tick();
-      scrollToBottom();
       startPolling();
     } catch (e) {
       error = e.message || String(e);
       loading = false;
     }
   });
-  onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
-  onDestroy(() => { try { _footerRO && _footerRO.disconnect(); } catch (_) {} try { if (typeof window !== 'undefined') window.removeEventListener('resize', _updateDetailsPaneHeight); } catch (_) {} fmRevokePreviewUrl(); });
+onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
+onDestroy(() => { fmRevokePreviewUrl(); });
 </script>
 
 <!-- Edit Tags Modal -->
@@ -1668,444 +1189,188 @@
     </div>
   {/if}
 
-  <!-- Bottom row: chat and files panels (2x2) -->
+  <!-- Bottom row: task and files panels -->
   <div class="row gx-3 flex-fill mt-3" style="min-height: 0; flex: 1 1 0;">
     <div class="col-12 col-lg-6 d-flex flex-column h-100" style="min-height: 0; min-width: 0;">
-        <!-- Chat & actions -->
-    <Card class="flex-fill d-flex flex-column chat-pane" style="min-height: 0;">
-      <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-    <!-- Toolbar -->
-    <div class="d-flex align-items-center flex-wrap gap-1 border-bottom px-2 py-1 small">
-      <button class="btn btn-sm border-0" on:click|preventDefault={compactContext} disabled={isCompacting || ctxLoading} title="Compact context" aria-label="Compact">
-        <i class="bi bi-arrows-collapse"></i>
-      </button>
-      <button class="btn btn-sm border-0" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context" aria-label="Clear">
-        <i class="bi bi-eraser"></i>
-      </button>
-      <span class="vr mx-1"></span>
-      <button class="btn btn-sm border-0" title="Expand all" on:click={expandAllDetails} aria-label="Expand all">
-        <i class="bi bi-chevron-double-down"></i>
-      </button>
-      <button class="btn btn-sm border-0" title="Collapse all" on:click={collapseAllDetails} aria-label="Collapse all">
-        <i class="bi bi-chevron-double-up"></i>
-      </button>
-      <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of thinking (analysis/commentary)">
-        <input class="form-check-input" type="checkbox" id="toggle-thinking" bind:checked={showThinking} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-thinking"><i class="bi bi-lightbulb"></i></label>
-      </div>
-      <div class="form-check form-switch ms-2 mt-1 d-inline-flex align-items-center" title="Toggle display of tool calls/results">
-        <input class="form-check-input" type="checkbox" id="toggle-tools" bind:checked={showTools} />
-        <label class="form-check-label small mb-0 d-inline-flex align-items-center ms-2" for="toggle-tools"><i class="bi bi-tools"></i></label>
-      </div>
-    </div>
-
-    {#if error}
-      <div class="alert alert-danger py-2 small m-2">{error}</div>
-    {/if}
-    {#if contextFull}
-          <div class="alert alert-warning py-2 small m-2 d-flex align-items-center justify-content-between" role="alert">
-            <div>
-          <i class="bi bi-exclamation-triangle me-2"></i>
-          Context is full — clear it to continue.
-            </div>
-        <div class="ms-2">
-          <button class="btn btn-sm btn-outline-secondary" on:click|preventDefault={clearContext} disabled={isCompacting || ctxLoading} title="Clear context and reset history window">Clear Context</button>
-        </div>
-      </div>
-    {/if}
-    {#if loading}
-      <div class="flex-fill d-flex align-items-center justify-content-center">
-        <div class="text-body text-opacity-75 text-center p-3">
-          <div class="spinner-border text-theme mb-3"></div>
-          <div>Loading…</div>
-        </div>
-      </div>
-    {:else}
-      <div id="chat-body" class="flex-fill px-3 pt-3 pb-0" style="flex: 1 1 0; overflow-y: auto; min-height: 0;">
-          <div class="d-flex flex-column justify-content-end" style="min-height: 100%;">
-          {#each (chat || []) as m, i}
-            {#if m.role === 'user'}
-              <div class="d-flex mb-3 justify-content-end">
-                <div class="p-2 rounded-3 bg-dark text-white" style="max-width: 80%; white-space: pre-wrap; word-break: break-word;">
-                  {m.content}
+      <Card class="flex-fill d-flex flex-column task-pane" style="min-height: 0;">
+        <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
+          <div class="flex-fill d-flex flex-column task-tracking" style="min-height: 0;">
+            {#if showTaskDetail && selectedTask}
+              <div class="task-detail flex-fill px-3 py-3 border-top" style="overflow-y: auto; min-height: 0;">
+                <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
+                  <div class="d-flex align-items-start gap-3 flex-wrap">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" on:click={closeTaskDetail} aria-label="Back to task list">
+                      <i class="bi bi-arrow-left-short me-1"></i>Back to task list
+                    </button>
+                    <div class="fw-semibold font-monospace">{selectedTask.id}</div>
+                  </div>
+                  <div class="d-flex align-items-center flex-wrap gap-3">
+                    <span class={`badge ${taskStatusBadgeClass(selectedTask)}`}>{taskStatusLabel(selectedTask)}</span>
+                    <div class="form-check form-switch m-0 d-flex align-items-center gap-2" title="Toggle display of analysis">
+                      <input class="form-check-input" type="checkbox" id="detail-thinking" bind:checked={showThinking} />
+                      <label class="form-check-label small mb-0" for="detail-thinking">Show analysis</label>
+                    </div>
+                    <div class="form-check form-switch m-0 d-flex align-items-center gap-2" title="Toggle display of tool calls">
+                      <input class="form-check-input" type="checkbox" id="detail-tools" bind:checked={showTools} />
+                      <label class="form-check-label small mb-0" for="detail-tools">Show tools</label>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            {:else}
-              <!-- Sandbox side -->
-              {#if hasComposite(m)}
-                <!-- Composite rendering: thinking, tool calls/results, final in one message -->
-                <div class="mb-3">
-                  <div class="d-flex justify-content-start">
-                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                    {#each segmentsOf(m) as s, j}
-                      {#if (segType(s) === 'commentary' || segChannel(s) === 'analysis' || segChannel(s) === 'commentary')}
-                        {#if showThinking}
-                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{segText(s)}</div>
-                        {/if}
-                      {:else if segType(s) === 'compact_summary'}
-                        {#if segContent(s)}
-                          <div class="markdown-wrap mt-2 mb-2">
-                            <div class="markdown-body">{@html renderMarkdown(segContent(s))}</div>
-                          </div>
-                        {/if}
-                      {:else if isOutputSeg(s)}
-                        <!-- Replace output box with accordion, one entry per item -->
-                        <div class="accordion mt-3 mb-3 tool-accordion" id={`acc-${m?.id || i}-seg-${j}`}>
-                          {#each outputItemsOfSeg(s) as it, k}
-                            <div class="accordion-item">
-                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-seg-${j}-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-seg-${j}-${k}`}>
-                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
-                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </button>
-                              </h2>
-                              <div id={`acc-c-${m?.id || i}-seg-${j}-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-seg-${j}`}>
-                                <div class="accordion-body">
-                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    {/if}
-                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-
-                      {:else if segType(s) === 'tool_call'}
-                        {#if showTools}
-                        <!-- Optional commentary from args.commentary -->
-                        {#if typeof (segArgs(s)?.commentary) === 'string' && String(segArgs(s)?.commentary).trim()}
-                          <div class="small text-body mb-1" style="white-space: pre-wrap;">{String(segArgs(s).commentary).trim()}</div>
-                        {/if}
-                        <!-- Combine tool call + immediate tool result if next segment matches -->
-                        {#if j + 1 < segmentsOf(m).length && segType(segmentsOf(m)[j+1]) === 'tool_result' && segTool(segmentsOf(m)[j+1]) === segTool(s)}
-                          <div class="d-flex mb-3 justify-content-start">
-                            <details class="mt-0" open={expandAll || restartedSegments.has(segKey(m, j+1))} on:toggle={(e) => onToggleDetails(segKey(m, j+1), e.currentTarget.open)}>
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
-                                <span class="text-body-secondary">
-                                  {#if segToolSummaryParts(s).length}
-                                    {#each segToolSummaryParts(s) as part, idx}
-                                      {#if idx > 0}
-                                        <span class="mx-1" aria-hidden="true">&gt;</span>
-                                      {/if}
-                                      {#if part.type === 'link'}
-                                        <a
-                                          href={part.href}
-                                          class="link-offset-2 text-decoration-underline"
-                                          style="color: inherit;"
-                                          on:click|preventDefault={() => openToolSummaryPath(part)}
-                                        >
-                                          {part.text}
-                                        </a>
-                                      {:else}
-                                        {part.text}
-                                      {/if}
-                                    {/each}
-                                  {:else}
-                                    {segToolTitle(s)}
-                                  {/if}
-                                </span>
-                              </summary>
-                              <div class="small text-body">
-                                <div class="text-body text-opacity-75 mb-1">Args</div>
-                                <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify({ tool: segTool(s), arguments: segArgs(s) }, null, 2)}</code></pre>
-                                <div class="text-body text-opacity-75 mb-1">Result</div>
-                                {#if isInProgress(m) || expandAll || expandedSegments.has(segKey(m, j+1))}
-                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{JSON.stringify({ output: segOutput(segmentsOf(m)[j+1]) }, null, 2)}</code></pre>
-                                  {#if !isInProgress(m) && !expandAll}
-                                    <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j+1))}>Show less</button>
-                                  {/if}
-                                {:else}
-                                  <pre class="small bg-dark text-white p-2 rounded code-wrap mb-1"><code>{truncateMultiline(summaryOutputText(segmentsOf(m)[j+1]))}</code></pre>
-                                  <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j+1))}>Show more</button>
-                                {/if}
-                              </div>
-                            </details>
-                          </div>
-                        {:else}
-                          <!-- Unpaired tool call -->
-                          <div class="d-flex mb-3 justify-content-start">
-                            <details class="mt-0" open={expandAll}>
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
-                                <span class="text-body-secondary">
-                                  {#if segToolSummaryParts(s).length}
-                                    {#each segToolSummaryParts(s) as part, idx}
-                                      {#if idx > 0}
-                                        <span class="mx-1" aria-hidden="true">&gt;</span>
-                                      {/if}
-                                      {#if part.type === 'link'}
-                                        <a
-                                          href={part.href}
-                                          class="link-offset-2 text-decoration-underline"
-                                          style="color: inherit;"
-                                          on:click|preventDefault={() => openToolSummaryPath(part)}
-                                        >
-                                          {part.text}
-                                        </a>
-                                      {:else}
-                                        {part.text}
-                                      {/if}
-                                    {/each}
-                                  {:else}
-                                    {segToolTitle(s)}
-                                  {/if}
-                                </span>
-                              </summary>
-                              <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: segTool(s), arguments: segArgs(s) }, null, 2)}</code></pre>
-                            </details>
-                          </div>
-                        {/if}
-                        {/if}
-                      {:else if segType(s) === 'tool_result'}
-                        {#if showTools}
-                        <!-- Orphan tool result (no preceding call) -->
-                        {#if !(j > 0 && segType(segmentsOf(m)[j-1]) === 'tool_call' && segTool(segmentsOf(m)[j-1]) === segTool(s))}
-                          <div class="d-flex mb-3 justify-content-start">
-                            <details class="mt-0" open={expandAll || restartedSegments.has(segKey(m, j))} on:toggle={(e) => onToggleDetails(segKey(m, j), e.currentTarget.open)}>
-                              <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                                <span class="badge bg-secondary-subtle text-secondary-emphasis border me-2">{toolLabel(segTool(s))}</span>
-                                <span class="text-body-secondary">Result</span>
-                              </summary>
-                              {#if isInProgress(m) || expandedSegments.has(segKey(m, j))}
-                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: segTool(s), output: segOutput(s) }, null, 2)}</code></pre>
-                                {#if !isInProgress(m) && !expandAll}
-                                  <button class="btn btn-link btn-sm p-0" on:click={() => collapseSeg(segKey(m, j))}>Show less</button>
-                                {/if}
-                              {:else}
-                                <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{truncateMultiline(summaryOutputText(s))}</code></pre>
-                                <button class="btn btn-link btn-sm p-0" on:click={() => expandSeg(segKey(m, j))}>Show more</button>
-                              {/if}
-                            </details>
-                          </div>
-                        {/if}
-                        {/if}
-                      
+                <section class="mb-3">
+                  <h6 class="fw-semibold fs-6 mb-2">Input Prompt</h6>
+                  {#if taskInputItems(selectedTask).length}
+                    {#each taskInputItems(selectedTask) as item}
+                      {#if String(item?.type || '').toLowerCase() === 'text'}
+                        <div class="markdown-body mb-2">{@html renderMarkdown(item.content || '')}</div>
+                      {:else}
+                        <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(item, null, 2)}</code></pre>
                       {/if}
                     {/each}
-                    </div>
-                  </div>
-                  {#if hasStoppedSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Stopped{#if stoppedNoteFrom(m)}&nbsp;({stoppedNoteFrom(m)}){/if}{#if stoppedRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(stoppedRuntimeFrom(m))}{/if}</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                  </div>
+                  {:else}
+                    <div class="small text-body-secondary">No input recorded.</div>
                   {/if}
-                  {#if hasTaskTimeoutSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Task Timeout{#if taskTimeoutNoteFrom(m)}&nbsp;({taskTimeoutNoteFrom(m)}){/if}{#if taskTimeoutRuntimeFrom(m)}&nbsp;-&nbsp;Runtime: {fmtDuration(taskTimeoutRuntimeFrom(m))}{/if}</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                  </div>
+                </section>
+                {#if showThinking && taskAnalysisSegments(selectedTask).length}
+                  <section class="mb-3">
+                    <h6 class="fw-semibold fs-6 mb-2">Analysis</h6>
+                    {#each taskAnalysisSegments(selectedTask) as seg}
+                      <div class="small fst-italic text-body text-opacity-75 mb-2" style="white-space: pre-wrap;">{segText(seg)}</div>
+                    {/each}
+                  </section>
+                {/if}
+                {#if showTools}
+                  <section class="mb-3">
+                    <h6 class="fw-semibold fs-6 mb-2">Tool Calls</h6>
+                    {#if taskToolPairs(selectedTask).length}
+                      {#each taskToolPairs(selectedTask) as pair}
+                        <details class="tool-call mb-2">
+                          <summary class="d-flex align-items-center gap-2">
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border text-uppercase">{pair.call ? segTool(pair.call) : ''}</span>
+                            <span class="small text-body-secondary flex-grow-1">{formatToolSummary(pair.call)}</span>
+                          </summary>
+                          <div class="ps-4 mt-2">
+                            {#if pair.commentary && pair.commentary.length}
+                              <div class="small text-body text-opacity-75 mb-2">
+                                {#each pair.commentary as seg}
+                                  <div class="mb-1" style="white-space: pre-wrap;">{segText(seg)}</div>
+                                {/each}
+                              </div>
+                            {/if}
+                            {#if pair.call}
+                              <div class="small text-body text-opacity-75 mb-1">Command</div>
+                              <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(segArgs(pair.call) || {}, null, 2)}</code></pre>
+                            {/if}
+                            {#if pair.result}
+                              <div class="small text-body text-opacity-75 mb-1">Result</div>
+                              <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify(segOutput(pair.result), null, 2)}</code></pre>
+                            {/if}
+                          </div>
+                        </details>
+                      {/each}
+                    {:else}
+                      <div class="small text-body-secondary">No tool calls recorded.</div>
+                    {/if}
+                  </section>
+                {/if}
+                <section>
+                  <h6 class="fw-semibold fs-6 mb-2">Output</h6>
+                  {#if taskOutputItems(selectedTask).length}
+                    {#each taskOutputItems(selectedTask) as item}
+                      {#if String(item?.type || '').toLowerCase() === 'markdown'}
+                        <div class="markdown-body mb-3">{@html renderMarkdown(item.content || '')}</div>
+                      {:else if String(item?.type || '').toLowerCase() === 'json'}
+                        <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item.content, null, 2)}</code></pre>
+                      {:else if String(item?.type || '').toLowerCase() === 'url'}
+                        <a class="d-inline-flex align-items-center gap-2 mb-2" href={item.content} target="_blank" rel="noopener noreferrer">
+                          <i class="bi bi-box-arrow-up-right"></i>{item.content}
+                        </a>
+                      {:else}
+                        <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item, null, 2)}</code></pre>
+                      {/if}
+                    {/each}
+                  {:else}
+                    <div class="small text-body-secondary">No output available yet.</div>
                   {/if}
-                  {#if hasCancelledSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Cancelled{#if cancelledReasonFrom(m)}&nbsp;({cancelledReasonFrom(m)}){/if}</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
+                </section>
+              </div>
+            {:else}
+              <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 small text-uppercase text-body-secondary">Task List</h6>
+                <div class="small text-body-secondary">Total: {tasks.length}</div>
+              </div>
+              <div class="task-list px-3 py-2 flex-grow-1" style="overflow-y: auto;">
+                {#if loading}
+                  <div class="d-flex align-items-center gap-2 text-body text-opacity-75 small">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Loading tasks…
                   </div>
-                  {/if}
-                  {#if hasRestartedSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Restarted{#if restartedNoteFrom(m)}&nbsp;({restartedNoteFrom(m)}){/if}</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                  </div>
-                  {/if}
-                  {#if hasContextClearedSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Context Cleared</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                  </div>
-                  {/if}
-                  {#if hasContextCompactedSeg(m)}
-                  <div class="d-flex align-items-center text-body mt-3">
-                    <span class="px-2 fst-italic text-body text-opacity-75 chat-marker-text">Context Compacted</span>
-                    <hr class="flex-grow-1 my-0 chat-marker-hr" />
-                  </div>
-                  {/if}
-                  {#if !hasFinalSeg(m) && m.content && m.content.trim()}
-                  <div class="markdown-wrap mt-2">
-                    <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
-                  </div>
-                  {/if}
-                </div>
-              {:else}
-              {#if isToolExec(m) && showTools}
-                <!-- Compact single-line summary that toggles details for ALL tool requests -->
-                <div class="d-flex mb-2 justify-content-start">
-                  <details class="mt-0" open={expandAll}>
-                    <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                      {toolLabel(metaOf(m)?.tool_type)} Request {argsPreview(m)}
-                    </summary>
-                    <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? { text: m.content }) }, null, 2)}</code></pre>
-                  </details>
-                </div>
-              {:else}
-                <!-- Tool task card or regular sandbox message -->
-                {#if isToolResult(m) && showTools}
-                  <!-- Compact single-line summary that toggles details for ALL tool tasks -->
-                  <div class="d-flex mb-2 justify-content-start">
-                    <details class="mt-0" open={expandAll}>
-                      <summary class="small fw-500 text-body text-opacity-75" style="cursor: pointer;">
-                        {toolLabel(metaOf(m)?.tool_type)} Response {argsPreview(m)}
-                      </summary>
-                      <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
-                    </details>
+                {:else if tasks.length}
+                  <div class="list-group list-group-flush">
+                    {#each tasks as task}
+                      <button
+                        type="button"
+                        class={`list-group-item list-group-item-action d-flex align-items-start justify-content-between gap-2 ${selectedTask && selectedTask.id === task.id ? 'active' : ''}`}
+                        on:click={() => openTaskDetail(task.id)}
+                      >
+                        <div class="text-start">
+                          <div class="fw-semibold font-monospace">{task.id}</div>
+                          <div class="small text-body-secondary">{formatTaskTimestamp(task)}</div>
+                          {#if taskPreview(task)}
+                            <div class="small text-body text-opacity-75 text-truncate">{taskPreview(task)}</div>
+                          {/if}
+                        </div>
+                        <span class={`badge ${taskStatusBadgeClass(task)}`}>{taskStatusLabel(task)}</span>
+                      </button>
+                    {/each}
                   </div>
                 {:else}
-                  {#if ((showThinking && typeof metaOf(m)?.thinking === 'string' && metaOf(m).thinking.trim())
-                        || (m.content && m.content.trim())
-                        || (Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0))}
-                  <div class="d-flex mb-3 justify-content-start">
-                    <div class="text-body" style="max-width: 80%; word-break: break-word;">
-                      {#if metaOf(m)?.thinking}
-                        {#if showThinking}
-                          <div class="small fst-italic text-body text-opacity-50 mb-2" style="white-space: pre-wrap;">{metaOf(m)?.thinking}</div>
-                        {/if}
-                      {/if}
-                      {#if m.content && m.content.trim()}
-                        <div class="markdown-wrap mt-1">
-                          <div class="markdown-body">{@html renderMarkdown(m.content)}</div>
-                        </div>
-                      {/if}
-                      {#if Array.isArray(m?.content_json?.output_content) && m.content_json.output_content.length > 0}
-                        <div class="accordion mt-3 mb-3 tool-accordion" id={`acc-${m?.id || i}-top`}>
-                          {#each m.content_json.output_content as it, k}
-                            <div class="accordion-item">
-                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-top-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-top-${k}`}>
-                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
-                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </button>
-                              </h2>
-                              <div id={`acc-c-${m?.id || i}-top-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-top`}>
-                                <div class="accordion-body">
-                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    {/if}
-                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify(it?.content, null, 2)}</code></pre>
-                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                  {/if}
+                  <div class="text-body text-opacity-75 small">No tasks yet.</div>
                 {/if}
-                <!-- If this is an output_* tool result card, render content inline during processing regardless of showTools -->
-                {#if isToolResult(m)}
-                  {#if (String(metaOf(m)?.tool_type || '').toLowerCase() === 'output')}
-                    {#if m.content && m.content.trim()}
-                      {#if parsedItemsFromTopCard(m).length > 0}
-                        <div class="accordion mt-3 mb-3 tool-accordion" id={`acc-${m?.id || i}-toolout`}>
-                          {#each parsedItemsFromTopCard(m) as it, k}
-                            <div class="accordion-item">
-                              <h2 class="accordion-header" id={`acc-h-${m?.id || i}-toolout-${k}`}>
-                                <button class={`accordion-button ${k === 0 ? '' : 'collapsed'}`} type="button" data-bs-toggle="collapse" data-bs-target={`#acc-c-${m?.id || i}-toolout-${k}`}>
-                                  <i class={`${typeIconClass(it?.type)} me-2 text-secondary`}></i>
-                                  {#if typeof it?.title === 'string' && it.title.trim()}<span class="text-body-secondary">{it.title}</span>{/if}
-                                </button>
-                              </h2>
-                              <div id={`acc-c-${m?.id || i}-toolout-${k}`} class={`accordion-collapse collapse ${k === 0 ? 'show' : ''}`} data-bs-parent={`#acc-${m?.id || i}-toolout`}>
-                                <div class="accordion-body">
-                                  {#if String(it?.type || '').toLowerCase() === 'markdown'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <div class="markdown-body">{@html renderMarkdown(it.content)}</div>
-                                    {/if}
-                                  {:else if String(it?.type || '').toLowerCase() === 'json'}
-                                    <pre class="small bg-dark text-white p-2 rounded mb-1 code-wrap"><code>{JSON.stringify({ tool: m?.metadata?.tool_type || 'tool', args: (m?.metadata?.args ?? null), output: m.content }, null, 2)}</code></pre>
-                                  {:else if String(it?.type || '').toLowerCase() === 'url'}
-                                    {#if typeof it?.content === 'string' && it.content.trim()}
-                                      <a class="small" href={it.content} target="_blank" rel="noopener noreferrer">{it.content}</a>
-                                    {/if}
-                                  {/if}
-                                </div>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
+              </div>
+            {/if}
+          </div>
+          <div class="px-3 pt-3 pb-3 border-top">
+            {#if error}
+              <div class="alert alert-danger small mb-3">{error}</div>
+            {/if}
+            <form class="task-form" on:submit|preventDefault={createTask}>
+              <div class="input-group task-input-group rounded-0 shadow-none">
+                <textarea
+                  aria-label="Task instructions"
+                  class="form-control shadow-none task-input"
+                  disabled={sending || stateStr === 'busy' || stateStr === 'terminating' || stateStr === 'terminated' || stateStr === 'initializing'}
+                  placeholder="Post a task to the sandbox…"
+                  rows="3"
+                  style="resize: none;"
+                  bind:this={inputEl}
+                  bind:value={input}
+                  on:keydown={(e)=>{
+                    if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                      e.preventDefault();
+                      createTask();
+                    }
+                  }}
+                  on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
+                ></textarea>
+                {#if stateStr === 'busy'}
+                  <button type="button" class="btn btn-outline-danger task-action-btn" aria-label="Cancel active task" on:click={cancelActive}>
+                    <i class="bi bi-stop-circle"></i>
+                  </button>
+                {:else}
+                  <button class="btn btn-theme task-action-btn" aria-label="Create task" disabled={sending || !input.trim() || stateStr === 'terminated' || stateStr === 'terminating' || stateStr === 'initializing'}>
+                    {#if sending}
+                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    {:else}
+                      <i class="bi bi-plus-circle"></i>
                     {/if}
-                  {/if}
-                  
+                  </button>
                 {/if}
-                {/if}
-              {/if}
-              {/if}
-          {/each}
-        {#if stateStr === 'busy'}
-          <div class="d-flex mb-2 justify-content-start">
-            <div class="small text-body-secondary d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-body-tertiary">
-              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span>Working...</span>
-            </div>
+              </div>
+            </form>
           </div>
-        {:else if stateStr === 'terminating'}
-          <div class="d-flex mb-2 justify-content-start">
-            <div class="small d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-danger-subtle text-danger">
-              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              <span>Terminating…</span>
-            </div>
-          </div>
-        {/if}
-            </div>
-          </div>
-      <div class="border-top p-2" bind:this={chatFooterEl}>
-      <form class="pt-0" on:submit|preventDefault={sendMessage}>
-        <div class="input-group chat-input-wrap rounded-0 shadow-none">
-          <textarea
-            aria-label="Message input"
-            class="form-control shadow-none rounded-0 chat-input chat-no-zoom"
-            disabled={isCompacting || stateStr === 'busy' || stateStr === 'terminating' || stateStr === 'terminated' || stateStr === 'initializing'}
-            placeholder="Type a message…"
-            rows="2"
-            style="resize: none;"
-            bind:this={inputEl}
-            bind:value={input}
-            on:keydown={(e)=>{
-              // Send only on plain Enter (no modifiers). Allow Shift/Alt/Ctrl/Meta + Enter to insert newline.
-              if (!isCompacting && e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
-            on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
-          ></textarea>
-          {#if stateStr === 'busy'}
-            <button type="button" class="btn btn-outline-danger rounded-0 shadow-none chat-action-btn" aria-label="Cancel active" on:click={cancelActive}>
-              <i class="bi bi-stop-circle"></i>
-            </button>
-          {:else}
-            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'terminated' || stateStr === 'terminating' || stateStr === 'initializing'}>
-              {#if sending}
-                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-              {:else}
-                <i class="bi bi-send"></i>
-              {/if}
-            </button>
-          {/if}
         </div>
-      </form>
-      </div>
-    {/if}
-      </div>
-    </Card>
-        </div>
+      </Card>
+    </div>
     <div class="col-12 col-lg-6 d-none d-lg-flex flex-column h-100" style="min-height: 0; min-width: 0;">
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
@@ -2266,36 +1531,122 @@
   </div>
 
   <style>
-    /* Stabilize native scrollbars in chat */
-    :global(#chat-body) {
-      scrollbar-gutter: stable both-edges;
-      overscroll-behavior: contain;
-    }
-    /* Pretty native scrollbar for chat (desktop) */
-    :global(#chat-body) { scrollbar-width: thin; scrollbar-color: rgba(var(--bs-theme-rgb), .6) transparent; }
-    :global(#chat-body::-webkit-scrollbar) { width: 10px; height: 10px; }
-    :global(#chat-body::-webkit-scrollbar-track) { background: transparent; }
-    :global(#chat-body::-webkit-scrollbar-thumb) {
-      background-color: rgba(var(--bs-theme-rgb), .6);
-      border-radius: 8px;
-      border: 2px solid transparent;
-      background-clip: content-box;
-    }
-    :global(#chat-body:hover::-webkit-scrollbar-thumb) { background-color: rgba(var(--bs-theme-rgb), .85); }
+  .muted-card {
+    border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+    background-color: var(--bs-body-bg);
+    opacity: 0.94;
+  }
+  .muted-card .badge {
+    opacity: 0.85;
+  }
+  .muted-card .state-label {
+    color: var(--bs-secondary-color) !important;
+    font-weight: 600;
+  }
 
-    /* Equal-size action buttons (Send / Cancel) */
-    :global(.chat-action-btn) {
-      width: 3rem;
-      min-width: 3rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
-    /* Remove any bottom gap inside the tasks panel */
-    :global(#chat-body > *:last-child) { margin-bottom: 0 !important; }
-    :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
-    /* Minimal code preview for file contents: match HUD typography/hljs scale */
-    :global(.preview-code) {
+  :global(.top-actions) { position: relative; z-index: 3001; }
+  :global(.top-actions .dropdown-menu) { z-index: 3002 !important; }
+  :global(.modal) { z-index: 2000; }
+  :global(.modal-backdrop) { z-index: 1990; }
+  :global(.card) { overflow: visible; }
+
+  /* Task submission layout */
+  :global(.task-pane) { position: relative; z-index: 1; }
+  :global(.task-pane .task-input) {
+    border: 1px solid var(--bs-border-color);
+    background: var(--bs-body-bg);
+    border-radius: 0;
+  }
+  :global(.task-pane .task-input:focus) {
+    box-shadow: none;
+    border-color: var(--bs-theme);
+  }
+  :global(.task-pane .task-action-btn) {
+    width: 3rem;
+    min-width: 3rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  :global(.task-pane .task-list .list-group-item) { cursor: pointer; }
+  :global(.task-pane .task-list .list-group-item.active) {
+    background-color: rgba(var(--bs-theme-rgb), .12);
+    border-color: rgba(var(--bs-theme-rgb), .35);
+    color: inherit;
+  }
+  :global(.task-pane .task-list .list-group-item.active .badge) {
+    background-color: var(--bs-theme);
+    color: var(--bs-theme-color);
+  }
+  :global(.task-pane .task-detail section + section) {
+    border-top: 1px solid rgba(var(--bs-border-color-rgb), .4);
+    padding-top: 1rem;
+    margin-top: 1rem;
+  }
+  :global(.task-pane .task-detail h6) {
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--bs-body-secondary);
+  }
+  :global(.task-pane .markdown-body) { white-space: normal; }
+  :global(.task-pane .markdown-body pre) {
+    background: #0d1117;
+    color: #e6edf3;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+  }
+  :global(.task-pane .markdown-body pre code) {
+    background: transparent !important;
+    color: inherit;
+    padding: 0;
+    border-radius: 0;
+  }
+  :global(.task-pane .markdown-body code) {
+    background: rgba(0,0,0,0.06);
+    padding: 0.1rem 0.25rem;
+    border-radius: 0.2rem;
+  }
+  :global(.task-pane .markdown-body ul) { padding-left: 1.25rem; }
+  :global(.task-pane .markdown-body li) { margin: 0.125rem 0; }
+
+  :global(.markdown-body) { white-space: normal; }
+  :global(.markdown-body p) { margin-bottom: 0.5rem; }
+  :global(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+  :global(.markdown-body th), :global(.markdown-body td) { border: 1px solid var(--bs-border-color); padding: 0.375rem 0.5rem; }
+  :global(.markdown-body thead th) { background: var(--bs-light); }
+  :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
+  :global(pre.code-wrap) { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+
+  :global(.files-pane),
+  :global(.files-pane *),
+  :global(.files-pane *::before),
+  :global(.files-pane *::after) {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
+  }
+  :global(.files-pane .border-bottom .vr) {
+      align-self: center;
+      height: 1.25rem;
+  }
+  :global(.files-pane .spinner-border) {
+      animation: .75s linear infinite spinner-border !important;
+  }
+  :global(.files-pane .spinner-grow) {
+      animation: .75s linear infinite spinner-grow !important;
+  }
+  :global(.files-pane .overlay-spin) {
+      animation: .75s linear infinite spinner-border !important;
+  }
+  :global(.file-entry-btn),
+  :global(.file-entry-btn:hover),
+  :global(.file-entry-btn:focus) {
+      color: var(--bs-body-color) !important;
+      text-decoration: none !important;
+  }
+
+  :global(.preview-code) {
       font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
       font-size: calc(var(--bs-body-font-size, 1rem) * .8);
       line-height: 1.4;
@@ -2307,150 +1658,9 @@
       color: var(--bs-body-color);
       border: 0;
       padding: 0;
-    }
-    /* Chat input container adopts border; textarea is borderless */
-    /* Borders handled via Bootstrap classes on containers */
-    :global(textarea.chat-input) {
-      border: 0 !important;
-      outline: 0 !important;
-      box-shadow: none !important;
-      background: transparent !important;
-    }
-    :global(textarea.chat-input:focus) { border-color: var(--bs-border-color) !important; }
-    :global(.markdown-body) { white-space: normal; }
-    :global(.markdown-body p) { margin-bottom: 0.5rem; }
-    :global(.markdown-body pre) {
-      background: #0d1117; /* dark theme for fenced blocks */
-      color: #e6edf3;
-      padding: 0.5rem;
-      border-radius: 0.25rem;
-      overflow: auto;
-    }
-    :global(.markdown-body pre code) {
-      background: transparent !important; /* avoid white inline code bg inside pre */
-      color: inherit;
-      padding: 0;
-      border-radius: 0;
-    }
-    :global(.markdown-body code) {
-      background: rgba(0,0,0,0.06);
-      padding: 0.1rem 0.25rem;
-      border-radius: 0.2rem;
-    }
-    /* HUD-like chat bubbles via layout selectors (no markup change) */
-    :global(#chat-body .d-flex.mb-3.justify-content-end > div) {
-      background: var(--bs-theme);
-      color: var(--bs-theme-color);
-      padding: .5rem .75rem;
-      font-size: 0.9rem;
-      border-radius: .5rem;
-      max-width: 80%;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
-    :global(#chat-body .d-flex.mb-3.justify-content-start > .text-body) {
-      background: var(--bs-body-bg);
-      border: 1px solid var(--bs-border-color);
-      color: var(--bs-body-color);
-      padding: .5rem .75rem;
-      border-radius: .5rem;
-      display: inline-block;
-      max-width: 80%;
-      word-break: break-word;
-    }
-    :global(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
-    :global(.markdown-body th), :global(.markdown-body td) { border: 1px solid var(--bs-border-color); padding: 0.375rem 0.5rem; }
-    :global(.markdown-body thead th) { background: var(--bs-light); }
-    :global(.markdown-body ul) { padding-left: 1.25rem; }
-    :global(.markdown-body li) { margin: 0.125rem 0; }
-    :global(.markdown-wrap) { border: 1px solid var(--bs-border-color); border-radius: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bs-body-bg); }
-    /* Lighter, subtle dotted separators for markers */
-    :global(#chat-body .chat-marker-hr) {
-      border: 0;
-      border-top: 1px dotted rgba(var(--bs-body-color-rgb), .35);
-    }
-    /* Slightly larger but still light marker text */
-    :global(#chat-body .chat-marker-text) {
-      font-size: 0.75rem;
-      color: rgba(var(--bs-body-color-rgb), .6);
-    }
-    /* File/Folder names should not be blue like links */
-    :global(.file-entry-btn),
-    :global(.file-entry-btn:hover),
-    :global(.file-entry-btn:focus) {
-      color: var(--bs-body-color) !important;
-      text-decoration: none !important;
-    }
-    /* Keep dropdown above chat content but below modals */
-    :global(.top-actions) { position: relative; z-index: 3001; }
-    :global(.top-actions .dropdown-menu) { z-index: 3002 !important; }
-    /* Ensure modals always sit on top within this page */
-    :global(.modal) { z-index: 2000; }
-    :global(.modal-backdrop) { z-index: 1990; }
-    :global(.card) { overflow: visible; }
-    :global(.chat-pane) { position: relative; z-index: 1; }
-    /* Prevent iOS Safari from zooming the chat textarea on focus (needs >=16px) */
-    @media (max-width: 576px) {
-      :global(textarea.chat-no-zoom) { font-size: 16px; }
-    }
-    /* Tool preview headers in chat should mirror HUD theme subtle active bg */
-    :global(#chat-body .accordion-button) {
-      background-color: var(--bs-accordion-btn-bg);
-      color: var(--bs-accordion-btn-color);
-    }
-    :global(#chat-body .accordion-button:not(.collapsed)) {
-      background-color: var(--bs-accordion-active-bg);
-      color: var(--bs-accordion-active-color);
-      box-shadow: none;
-    }
-    /* Add a tiny extra space below tool accordions */
-    :global(#chat-body .tool-accordion) {
-      margin-bottom: 0.75rem; /* mb-2 (0.5rem) + ~0.25rem */
-    }
-    /* Disable all transitions/animations within Files pane */
-    :global(.files-pane),
-    :global(.files-pane *),
-    :global(.files-pane *::before),
-    :global(.files-pane *::after) {
-      transition: none !important;
-      animation: none !important;
-      scroll-behavior: auto !important;
-    }
-    /* Normalize vertical rule height in Files header */
-    :global(.files-pane .border-bottom .vr) {
-      align-self: center;
-      height: 1.25rem;
-    }
-    /* Re-enable spinners inside Files pane (animation was globally disabled) */
-    :global(.files-pane .spinner-border) {
-      animation: .75s linear infinite spinner-border !important;
-    }
-    :global(.files-pane .spinner-grow) {
-      animation: .75s linear infinite spinner-grow !important;
-    }
-    :global(.files-pane .overlay-spin) {
-      animation: .75s linear infinite spinner-border !important;
-    }
-    /* Normalize vertical rule height in Chat header */
-    :global(.chat-pane .border-bottom .vr) {
-      align-self: center;
-      height: 1.25rem;
-    }
-    /* Center toggle switches + icons in chat header */
-    :global(.chat-pane .form-check.form-switch) {
-      display: inline-flex;
-      align-items: center;
-      margin-bottom: 0;
-      padding-top: 0;
-      padding-bottom: 0;
-    }
-    :global(.chat-pane .form-check.form-switch .form-check-input) {
-      margin-top: 0;
-    }
-    :global(.chat-pane .form-check.form-switch .form-check-label) {
-      display: inline-flex;
-      align-items: center;
-      margin-bottom: 0;
-      line-height: 1;
-    }
-  </style>
+  }
+
+  @media (max-width: 576px) {
+    :global(.task-pane .task-input) { font-size: 16px; }
+  }
+</style>
