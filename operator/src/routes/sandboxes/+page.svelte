@@ -280,7 +280,7 @@ import { getHostUrl } from '$lib/branding.js';
           aria-current={currentStateTab === 'active' ? 'page' : undefined}
           on:click={() => setStateTab('active')}
         >
-          Active
+          Active ({activeSandboxes.length})
         </button>
       </li>
       <li class="nav-item">
@@ -291,7 +291,7 @@ import { getHostUrl } from '$lib/branding.js';
           aria-current={currentStateTab === 'terminated' ? 'page' : undefined}
           on:click={() => setStateTab('terminated')}
         >
-          Terminated
+          Terminated ({terminatedSandboxes.length})
         </button>
       </li>
     </ul>
