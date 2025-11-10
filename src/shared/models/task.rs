@@ -70,7 +70,8 @@ impl SandboxTask {
         let timeout_at = timeout_seconds.map(|secs| now + chrono::Duration::seconds(secs as i64));
         let initial_output = serde_json::json!({
             "text": "",
-            "items": []
+            "items": [],
+            "content": []
         });
 
         sqlx::query(
@@ -198,7 +199,20 @@ impl SandboxTask {
                 }
             }
 
-            task.output = serde_json::Value::Object(merged);
+            let mut merged_value = serde_json::Value::Object(merged);
+            let content_items = compute_output_content(&merged_value);
+            if let serde_json::Value::Object(ref mut obj) = merged_value {
+                if content_items.is_empty() {
+                    obj.remove("content");
+                } else {
+                    obj.insert(
+                        "content".to_string(),
+                        serde_json::Value::Array(content_items),
+                    );
+                }
+            }
+
+            task.output = merged_value;
         }
 
         let mut timeout_updated = false;
@@ -234,4 +248,37 @@ impl SandboxTask {
         task.updated_at = now;
         Ok(task)
     }
+}
+
+pub fn compute_output_content(output: &serde_json::Value) -> Vec<serde_json::Value> {
+    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("output")
+                    .and_then(|v| v.get("items"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+        for it in items.iter().rev() {
+            if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
+                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
+            {
+                if let Some(arr) = it
+                    .get("arguments")
+                    .or_else(|| it.get("args"))
+                    .and_then(|v| v.get("content"))
+                    .and_then(|v| v.as_array())
+                {
+                    return arr.clone();
+                }
+            }
+        }
+    }
+    Vec::new()
 }

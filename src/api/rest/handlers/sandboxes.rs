@@ -15,6 +15,7 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
+use crate::shared::models::task::compute_output_content;
 use crate::shared::models::{
     AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskView,
     UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
@@ -989,7 +990,6 @@ pub async fn cancel_task(
     ))
 }
 
-
 fn soft_limit_tokens() -> i64 {
     std::env::var("CONTEXT_SOFT_LIMIT_TOKENS")
         .ok()
@@ -997,8 +997,6 @@ fn soft_limit_tokens() -> i64 {
         .filter(|v| *v > 0)
         .unwrap_or(128_000)
 }
-
-
 
 pub async fn create_sandbox(
     State(state): State<Arc<AppState>>,
@@ -1762,36 +1760,7 @@ fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {
 }
 
 fn extract_output_content(output: &serde_json::Value) -> Vec<serde_json::Value> {
-    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-        for it in items.iter().rev() {
-            if it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
-                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
-            {
-                if let Some(arr) = it
-                    .get("output")
-                    .and_then(|v| v.get("items"))
-                    .and_then(|v| v.as_array())
-                {
-                    return arr.clone();
-                }
-            }
-        }
-        for it in items.iter().rev() {
-            if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
-                && it.get("tool").and_then(|v| v.as_str()) == Some("output")
-            {
-                if let Some(arr) = it
-                    .get("arguments")
-                    .or_else(|| it.get("args"))
-                    .and_then(|v| v.get("content"))
-                    .and_then(|v| v.as_array())
-                {
-                    return arr.clone();
-                }
-            }
-        }
-    }
-    vec![]
+    compute_output_content(output)
 }
 
 fn extract_segments(output: &serde_json::Value) -> Vec<serde_json::Value> {
