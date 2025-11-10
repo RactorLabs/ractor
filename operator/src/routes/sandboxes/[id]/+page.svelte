@@ -76,15 +76,7 @@
   let showTaskDetail = false;
   $: selectedTask = tasks.find((t) => t.id === selectedTaskId) || (tasks.length ? tasks[0] : null);
   $: if (showTaskDetail && !selectedTask) { showTaskDetail = false; }
-  // Toggle display of thinking (analysis/commentary) text; persisted via cookie
-  let showThinking = false;
-  const SHOW_THINKING_COOKIE = 'tsbx_showThinking';
-  let thinkingPrefLoaded = false;
-  // Toggle display of tool calls/results; persisted via cookie
-  let showTools = true;
-  const SHOW_TOOLS_COOKIE = 'tsbx_showTools';
   const FM_AUTO_REFRESH_COOKIE = 'tsbx_filesAutoRefresh';
-  let toolsPrefLoaded = false;
   function getCookie(name) {
     try {
       const value = `; ${document.cookie}`;
@@ -102,18 +94,6 @@
       document.cookie = `${name}=${encodeURIComponent(value || '')}${expires}; path=/; SameSite=Lax${secure}`;
     } catch (_) {}
   }
-  onMount(() => {
-    try {
-      if (browser) {
-        const v = getCookie(SHOW_THINKING_COOKIE);
-        if (v !== null) showThinking = v === '1' || v === 'true';
-        const t = getCookie(SHOW_TOOLS_COOKIE);
-        if (t !== null) showTools = t === '1' || t === 'true';
-      }
-    } catch (_) {}
-    thinkingPrefLoaded = true;
-    toolsPrefLoaded = true;
-  });
   // Sync file path with URL (?file=seg1/seg2[/file.ext])
   function _getPathFromUrl() {
     try {
@@ -148,12 +128,6 @@
     try { await fetchFiles(true); } catch (_) {}
     // layout handles equal heights; no JS equalizer
   });
-  $: if (browser && thinkingPrefLoaded) {
-    setCookie(SHOW_THINKING_COOKIE, showThinking ? '1' : '0', 365);
-  }
-  $: if (browser && toolsPrefLoaded) {
-    setCookie(SHOW_TOOLS_COOKIE, showTools ? '1' : '0', 365);
-  }
   let loading = true;
   let error = null;
   let input = '';
@@ -1201,14 +1175,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
                     <span class={`badge ${taskStatusBadgeClass(selectedTask)}`}>{taskStatusLabel(selectedTask)}</span>
-                    <div class="form-check form-switch m-0 d-flex align-items-center gap-2" title="Toggle display of analysis">
-                      <input class="form-check-input" type="checkbox" id="detail-thinking" bind:checked={showThinking} />
-                      <label class="form-check-label small mb-0" for="detail-thinking">Show analysis</label>
-                    </div>
-                    <div class="form-check form-switch m-0 d-flex align-items-center gap-2" title="Toggle display of tool calls">
-                      <input class="form-check-input" type="checkbox" id="detail-tools" bind:checked={showTools} />
-                      <label class="form-check-label small mb-0" for="detail-tools">Show tools</label>
-                    </div>
                   </div>
                 </div>
                 <section class="mb-3">
@@ -1225,7 +1191,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <div class="small text-body-secondary">No input recorded.</div>
                   {/if}
                 </section>
-                {#if showThinking && taskAnalysisSegments(selectedTask).length}
+                {#if taskAnalysisSegments(selectedTask).length}
                   <section class="mb-3">
                     <h6 class="fw-semibold fs-6 mb-2">Analysis</h6>
                     {#each taskAnalysisSegments(selectedTask) as seg}
@@ -1233,40 +1199,38 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     {/each}
                   </section>
                 {/if}
-                {#if showTools}
-                  <section class="mb-3">
-                    <h6 class="fw-semibold fs-6 mb-2">Tool Calls</h6>
-                    {#if taskToolPairs(selectedTask).length}
-                      {#each taskToolPairs(selectedTask) as pair}
-                        <details class="tool-call mb-2">
-                          <summary class="d-flex align-items-center gap-2">
-                            <span class="badge bg-secondary-subtle text-secondary-emphasis border text-uppercase">{pair.call ? segTool(pair.call) : ''}</span>
-                            <span class="small text-body-secondary flex-grow-1">{formatToolSummary(pair.call)}</span>
-                          </summary>
-                          <div class="ps-4 mt-2">
-                            {#if pair.commentary && pair.commentary.length}
-                              <div class="small text-body text-opacity-75 mb-2">
-                                {#each pair.commentary as seg}
-                                  <div class="mb-1" style="white-space: pre-wrap;">{segText(seg)}</div>
-                                {/each}
-                              </div>
-                            {/if}
-                            {#if pair.call}
-                              <div class="small text-body text-opacity-75 mb-1">Command</div>
-                              <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(segArgs(pair.call) || {}, null, 2)}</code></pre>
-                            {/if}
-                            {#if pair.result}
-                              <div class="small text-body text-opacity-75 mb-1">Result</div>
-                              <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify(segOutput(pair.result), null, 2)}</code></pre>
-                            {/if}
-                          </div>
-                        </details>
-                      {/each}
-                    {:else}
-                      <div class="small text-body-secondary">No tool calls recorded.</div>
-                    {/if}
-                  </section>
-                {/if}
+                <section class="mb-3">
+                  <h6 class="fw-semibold fs-6 mb-2">Tool Calls</h6>
+                  {#if taskToolPairs(selectedTask).length}
+                    {#each taskToolPairs(selectedTask) as pair}
+                      <details class="tool-call mb-2">
+                        <summary class="d-flex align-items-center gap-2">
+                          <span class="badge bg-secondary-subtle text-secondary-emphasis border text-uppercase">{pair.call ? segTool(pair.call) : ''}</span>
+                          <span class="small text-body-secondary flex-grow-1">{formatToolSummary(pair.call)}</span>
+                        </summary>
+                        <div class="ps-4 mt-2">
+                          {#if pair.commentary && pair.commentary.length}
+                            <div class="small text-body text-opacity-75 mb-2">
+                              {#each pair.commentary as seg}
+                                <div class="mb-1" style="white-space: pre-wrap;">{segText(seg)}</div>
+                              {/each}
+                            </div>
+                          {/if}
+                          {#if pair.call}
+                            <div class="small text-body text-opacity-75 mb-1">Command</div>
+                            <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(segArgs(pair.call) || {}, null, 2)}</code></pre>
+                          {/if}
+                          {#if pair.result}
+                            <div class="small text-body text-opacity-75 mb-1">Result</div>
+                            <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify(segOutput(pair.result), null, 2)}</code></pre>
+                          {/if}
+                        </div>
+                      </details>
+                    {/each}
+                  {:else}
+                    <div class="small text-body-secondary">No tool calls recorded.</div>
+                  {/if}
+                </section>
                 <section>
                   <h6 class="fw-semibold fs-6 mb-2">Output</h6>
                   {#if taskOutputItems(selectedTask).length}
