@@ -177,6 +177,7 @@
   // Start at /sandbox/ (represented as empty relative path "")
   let fmLoading = false;
   let fmError = null;
+  let fmErrorNotAvailable = false;
   let fmEntries = [];
   let fmOffset = 0;
   let fmLimit = 100;
@@ -497,6 +498,16 @@
     fmOffset = Number(fmNextOffset);
     fetchFiles(false);
   }
+
+  $: fmErrorNotAvailable = (() => {
+    try {
+      if (!fmError) return false;
+      const msg = String(fmError).toLowerCase();
+      return msg.includes('sandbox not available');
+    } catch (_) {
+      return false;
+    }
+  })();
 
   // Context usage state
   let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
@@ -2159,68 +2170,76 @@
                 </div>
               </div>
               <!-- List + Details scroll region -->
-              {#if fmError}
-                <div class="alert alert-danger small m-2 py-1">{fmError}</div>
-              {/if}
-              <div class="d-flex flex-column flex-fill" style="min-height: 0;">
-                {#key fmListKey}
-                <PerfectScrollbar class="flex-fill">
-                  {#if fmPreviewName}
-                    {#if fmPreviewError}
-                      <div class="p-3 small text-danger">{fmPreviewError}</div>
-                    {/if}
-                    {#if fmPreviewType === 'image' && fmPreviewUrl}
-                      <div class="p-3"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
-                    {:else if fmPreviewType === 'text'}
-                      <div class="p-3"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
-                    {:else if fmPreviewType === 'binary'}
-                      <div class="p-3 small text-body text-opacity-75">Binary file</div>
-                    {:else if !fmPreviewError}
-                      <!-- Keep showing previous content until new content is ready; no loading indicator here. -->
-                    {/if}
-                  {:else}
-                    {#if !fmEntries || fmEntries.length === 0}
-                      {#if !fmLoading}
-                        <div class="p-3 small text-body text-opacity-75">Empty</div>
+              {#if fmErrorNotAvailable}
+                <div class="flex-fill d-flex align-items-center justify-content-center p-3">
+                  <div class="text-center text-body text-opacity-75">
+                    <div class="fs-5 mb-2"><i class="bi bi-power me-2"></i>Sandbox not available</div>
+                    <p class="small mb-3 text-body-secondary">This sandbox is currently unavailable. Please wait and try again once it finishes starting.</p>
+                  </div>
+                </div>
+              {:else}
+                {#if fmError}
+                  <div class="alert alert-danger small m-2 py-1">{fmError}</div>
+                {/if}
+                <div class="d-flex flex-column flex-fill" style="min-height: 0;">
+                  {#key fmListKey}
+                  <PerfectScrollbar class="flex-fill">
+                    {#if fmPreviewName}
+                      {#if fmPreviewError}
+                        <div class="p-3 small text-danger">{fmPreviewError}</div>
+                      {/if}
+                      {#if fmPreviewType === 'image' && fmPreviewUrl}
+                        <div class="p-3"><img src={fmPreviewUrl} alt={fmPreviewName} class="img-fluid rounded border" /></div>
+                      {:else if fmPreviewType === 'text'}
+                        <div class="p-3"><pre class="preview-code mb-0">{fmPreviewText}</pre></div>
+                      {:else if fmPreviewType === 'binary'}
+                        <div class="p-3 small text-body text-opacity-75">Binary file</div>
+                      {:else if !fmPreviewError}
+                        <!-- Keep showing previous content until new content is ready; no loading indicator here. -->
                       {/if}
                     {:else}
-                      <div class="list-group list-group-flush">
-                        {#each fmEntries as e}
-                          <div class="list-group-item d-flex align-items-center">
-                            <button type="button" class="btn btn-link text-reset text-decoration-none text-start flex-grow-1 d-flex align-items-center p-0 file-entry-btn"
-                            on:click={() => fmOpen(e)}
-                            title={`${e.name} • ${e.kind} • ${e.mtime}`}
-                          >
-                            <i class={`${fmIconFor(e)} me-2`}></i>
-                            <span class="text-truncate">{e.name}</span>
-                            </button>
-                            {#if String(e?.kind || '').toLowerCase() !== 'dir' && String(e?.kind || '').toLowerCase() !== 'directory'}
-                              <button class="btn btn-sm btn-link text-body ms-2 p-0" title="Download" aria-label="Download" on:click|stopPropagation={() => fmDownloadEntry(e)}>
-                                <i class="bi bi-download"></i>
+                      {#if !fmEntries || fmEntries.length === 0}
+                        {#if !fmLoading}
+                          <div class="p-3 small text-body text-opacity-75">Empty</div>
+                        {/if}
+                      {:else}
+                        <div class="list-group list-group-flush">
+                          {#each fmEntries as e}
+                            <div class="list-group-item d-flex align-items-center">
+                              <button type="button" class="btn btn-link text-reset text-decoration-none text-start flex-grow-1 d-flex align-items-center p-0 file-entry-btn"
+                              on:click={() => fmOpen(e)}
+                              title={`${e.name} • ${e.kind} • ${e.mtime}`}
+                            >
+                              <i class={`${fmIconFor(e)} me-2`}></i>
+                              <span class="text-truncate">{e.name}</span>
                               </button>
-                            {/if}
-                            <button class="btn btn-sm btn-link text-danger ms-2 p-0" title="Delete" aria-label="Delete" on:click|stopPropagation={() => openDeleteEntry(e)}>
-                              <i class="bi bi-trash"></i>
+                              {#if String(e?.kind || '').toLowerCase() !== 'dir' && String(e?.kind || '').toLowerCase() !== 'directory'}
+                                <button class="btn btn-sm btn-link text-body ms-2 p-0" title="Download" aria-label="Download" on:click|stopPropagation={() => fmDownloadEntry(e)}>
+                                  <i class="bi bi-download"></i>
+                                </button>
+                              {/if}
+                              <button class="btn btn-sm btn-link text-danger ms-2 p-0" title="Delete" aria-label="Delete" on:click|stopPropagation={() => openDeleteEntry(e)}>
+                                <i class="bi bi-trash"></i>
+                              </button>
+                            </div>
+                          {/each}
+                        </div>
+                        {#if fmNextOffset != null}
+                          <div class="border-top p-2 d-flex align-items-center justify-content-center">
+                            <button class="btn btn-sm btn-outline-secondary" on:click={fmLoadMore} disabled={fmLoading}>
+                              {#if fmLoading}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
+                              Load more
                             </button>
                           </div>
-                        {/each}
-                      </div>
-                      {#if fmNextOffset != null}
-                        <div class="border-top p-2 d-flex align-items-center justify-content-center">
-                          <button class="btn btn-sm btn-outline-secondary" on:click={fmLoadMore} disabled={fmLoading}>
-                            {#if fmLoading}<span class="spinner-border spinner-border-sm me-2"></span>{/if}
-                            Load more
-                          </button>
-                        </div>
+                        {/if}
                       {/if}
                     {/if}
-                  {/if}
-                </PerfectScrollbar>
-                {/key}
-                <!-- Details & Preview bottom pane (fixed height) -->
-                <!-- Preview/Details bottom pane -->
-                <!-- No separate details pane; counts are shown in the action bar -->
-              </div>
+                  </PerfectScrollbar>
+                  {/key}
+                  <!-- Details & Preview bottom pane (fixed height) -->
+                  <!-- Preview/Details bottom pane -->
+                  <!-- No separate details pane; counts are shown in the action bar -->
+                </div>
               {/if}
           </div>
         </Card>
