@@ -488,7 +488,6 @@
   let _runtimeFetchedAt = 0;
   let inputEl = null; // task textarea element
   // Content preview via sandbox ports has been removed.
-  // Details (analysis + tool calls/results) visibility controlled via toggles
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
