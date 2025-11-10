@@ -619,8 +619,19 @@
     return stateStr === 'initializing' || stateStr === 'terminating' || stateStr === 'terminated';
   }
 
-  // Do not auto-refresh files on state changes; user triggers Refresh manually
   let _lastStateStr = '';
+  $: {
+    const nextState = stateStr;
+    if (nextState !== _lastStateStr) {
+      const prevState = _lastStateStr;
+      _lastStateStr = nextState;
+      if (prevState) {
+        try {
+          fmRefresh();
+        } catch (_) {}
+      }
+    }
+  }
 
   // Edit tags modal state and helpers
   let showTagsModal = false;
