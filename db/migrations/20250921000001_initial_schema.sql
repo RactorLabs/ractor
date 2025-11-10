@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS role_bindings (
 CREATE TABLE IF NOT EXISTS sandboxes (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     created_by VARCHAR(255) NOT NULL,
-    state VARCHAR(50) NOT NULL DEFAULT 'init',
+    state VARCHAR(50) NOT NULL DEFAULT 'initializing',
     description TEXT NULL,
     snapshot_id CHAR(36) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     last_context_length BIGINT NOT NULL DEFAULT 0,
 
     -- Constraints
-    CONSTRAINT sandboxes_state_check CHECK (state IN ('init', 'idle', 'busy', 'terminated')),
+    CONSTRAINT sandboxes_state_check CHECK (state IN ('initializing', 'idle', 'busy', 'terminating', 'terminated')),
     CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
     CONSTRAINT sandboxes_timeout_check CHECK (
         idle_timeout_seconds > 0 AND idle_timeout_seconds <= 604800

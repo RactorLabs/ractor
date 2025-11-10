@@ -929,7 +929,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: Sandbox is terminated
+          description: Sandbox not available
         '413':
           description: File too large
   /sandboxes/{id}/files/metadata/{path}:
@@ -1219,9 +1219,10 @@ components:
         state:
           type: string
           enum:
-          - init
+          - initializing
           - idle
           - busy
+          - terminating
           - terminated
           description: Sandbox lifecycle state
         description:
@@ -1348,7 +1349,6 @@ components:
           type: string
           description: New sandbox state
           enum:
-          - init
           - idle
           - busy
           - terminated

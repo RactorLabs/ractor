@@ -27,9 +27,10 @@
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
+    if (s === 'initializing') return 'badge rounded-pill bg-transparent border border-info text-info';
     if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
     if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
+    if (s === 'terminating') return 'badge rounded-pill bg-transparent border border-danger text-danger';
     if (s === 'terminated') return 'badge rounded-pill bg-transparent border border-danger text-danger';
     return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
@@ -37,17 +38,18 @@
     const s = String(state || '').toLowerCase();
     if (s === 'idle') return 'bg-success border-success';
     if (s === 'busy') return 'bg-warning border-warning';
-    if (s === 'init') return 'bg-secondary border-secondary';
-    if (s === 'terminated') return 'bg-danger border-danger';
+    if (s === 'initializing') return 'bg-info border-info';
+    if (s === 'terminating' || s === 'terminated') return 'bg-danger border-danger';
     return 'bg-secondary border-secondary';
   }
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
     if (s === 'terminated') return 'bi bi-power';
+    if (s === 'terminating') return 'spinner-border spinner-border-sm text-danger';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
-    if (s === 'init') return 'spinner-border spinner-border-sm';
+    if (s === 'initializing') return 'spinner-border spinner-border-sm text-info';
     return 'bi bi-circle';
   }
 
@@ -231,8 +233,16 @@ import { getHostUrl } from '$lib/branding.js';
     color: var(--bs-secondary-color) !important;
     font-weight: 600;
   }
-  .muted-card i {
-    color: var(--bs-secondary-color);
+  .terminating-card {
+    border: 1px solid var(--bs-danger-border-subtle, rgba(220, 53, 69, 0.35));
+    background-color: var(--bs-danger-bg-subtle, rgba(220, 53, 69, 0.08));
+    opacity: 1;
+  }
+  .terminating-card .state-label {
+    color: var(--bs-danger, #dc3545) !important;
+  }
+  .terminating-card i {
+    color: var(--bs-danger, #dc3545) !important;
   }
 </style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
@@ -256,9 +266,10 @@ import { getHostUrl } from '$lib/branding.js';
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-activity"></i></span>
           <select class="form-select form-select-sm" bind:value={stateFilter} aria-label="State filter" name="state">
             <option value="">All states</option>
-            <option value="init">init</option>
+            <option value="initializing">initializing</option>
             <option value="idle">idle</option>
             <option value="busy">busy</option>
+            <option value="terminating">terminating</option>
             <option value="terminated">terminated</option>
           </select>
         </div>
@@ -308,7 +319,7 @@ import { getHostUrl } from '$lib/branding.js';
               <div class="row g-3">
                 {#each activeSandboxes as a (a.id)}
                   <div class="col-12 col-md-6">
-                    <Card class="h-100 muted-card">
+                    <Card class={`h-100 muted-card ${String(a.state || '').toLowerCase() === 'terminating' ? 'terminating-card' : ''}`}>
                       <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-2 mb-1">
                           <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>

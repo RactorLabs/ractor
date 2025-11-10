@@ -66,7 +66,7 @@ Note on commit message formatting:
 ## Data Model Highlights (Sessions)
 
 - UUID-based primary key: sandboxes are identified exclusively by `id` (CHAR(36) UUID).
-- Core fields: `state` (`init|idle|busy|terminated`), `created_by`, timestamps, `metadata` (JSON).
+- Core fields: `state` (`initializing|idle|busy|terminating|terminated`), `created_by`, timestamps, `metadata` (JSON).
 - Parent sandboxes: `parent_sandbox_id` (CHAR(36)) references parent sandbox's UUID.
 - Timeouts: `stop_timeout_seconds`, `archive_timeout_seconds` with tracking via `idle_from` and `busy_from` (archive timeout currently reserved, defaults to 24 hours).
 - Tags: `tags JSON NOT NULL DEFAULT []` — an array of alphanumeric strings used for categorization. No spaces or symbols; remix copies parent tags.
@@ -74,13 +74,13 @@ Note on commit message formatting:
 
 ## Sandbox Lifecycle & API
 
-- Controller creates the sandbox container and sets initial DB state to `init` (only if still `init`, to avoid racing sandbox requests).
+- Controller creates the sandbox container and sets initial DB state to `initializing` (only if still `initializing`, to avoid racing sandbox requests).
 - The sandbox runtime, on boot, calls the API to report state:
   - `POST /api/v0/sandboxes/{id}/state/idle` when ready (sets state to `idle` and starts idle timer).
   - `POST /api/v0/sandboxes/{id}/state/busy` when processing (sets state to `busy` and starts busy timer).
 - Stop/Restart actions:
   - `POST /sandboxes/{id}/stop` schedules container stop and sets state to `terminated`.
-  - `POST /sandboxes/{id}/restart` restarts container and transitions via `init`.
+  - `POST /sandboxes/{id}/restart` restarts container and transitions via `initializing`.
 - Tasks: `GET/POST /sandboxes/{id}/tasks` for user↔sandbox exchanges, stored in `sandbox_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
 - `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.

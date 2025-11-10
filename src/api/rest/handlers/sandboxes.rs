@@ -39,11 +39,11 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 // Helper: ensure sandbox is not terminated before allowing write operations
 fn check_not_terminated(sandbox: &Sandbox) -> ApiResult<()> {
     if sandbox.state.eq_ignore_ascii_case("terminated")
+        || sandbox.state.eq_ignore_ascii_case("terminating")
+        || sandbox.state.eq_ignore_ascii_case("initializing")
         || sandbox.state.eq_ignore_ascii_case("deleted")
     {
-        return Err(ApiError::BadRequest(
-            "Sandbox is terminated. Please create a new one.".to_string(),
-        ));
+        return Err(ApiError::BadRequest("Sandbox not available.".to_string()));
     }
     Ok(())
 }
@@ -226,12 +226,14 @@ fn map_file_request_error(err: &str) -> ApiError {
     } else if lower.contains("invalid path") {
         ApiError::BadRequest("Invalid path".to_string())
     } else if lower.contains("terminated")
+        || lower.contains("terminating")
+        || lower.contains("initializing")
         || lower.contains("deleted")
         || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Sandbox is terminated".to_string())
+        ApiError::Conflict("Sandbox not available.".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -974,7 +976,7 @@ pub async fn cancel_task(
         sqlx::query(
             r#"UPDATE sandboxes
                SET state = 'idle', last_activity_at = NOW(), idle_from = NOW(), busy_from = NULL
-               WHERE id = ? AND state NOT IN ('terminated','deleted')"#,
+               WHERE id = ? AND state NOT IN ('terminated','terminating','deleted')"#,
         )
         .bind(&sandbox.id)
         .execute(&*state.db)
@@ -1678,7 +1680,9 @@ pub async fn update_sandbox_context_usage(
 
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_terminated(&sandbox)?;
+    if !sandbox.state.eq_ignore_ascii_case("initializing") {
+        check_not_terminated(&sandbox)?;
+    }
 
     let tokens = req.tokens.max(0);
     Sandbox::update_last_context_length(&state.db, &sandbox.id, tokens)
@@ -1831,7 +1835,9 @@ pub async fn update_sandbox_state(
     // Find sandbox by ID or name (admin can access any sandbox for update/delete)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_terminated(&sandbox)?;
+    if !sandbox.state.eq_ignore_ascii_case("initializing") {
+        check_not_terminated(&sandbox)?;
+    }
 
     // Update the state with ownership verification
     let result = sqlx::query(
@@ -1971,6 +1977,19 @@ pub async fn terminate_sandbox(
         .execute(&*state.db)
         .await;
     }
+
+    // Mark sandbox as terminating so further requests treat it as unavailable
+    sqlx::query(
+        r#"UPDATE sandboxes
+           SET state = 'terminating', last_activity_at = NOW()
+           WHERE id = ? AND state <> 'terminated'"#,
+    )
+    .bind(&sandbox.id)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to mark sandbox terminating: {}", e))
+    })?;
 
     // Terminate sandbox: schedule container stop and mark as terminated
     // Add request to queue for sandbox manager to stop container and set state to terminated
@@ -2193,11 +2212,7 @@ pub async fn create_task(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
-        return Err(ApiError::BadRequest(
-            "Sandbox is terminated. Please create a new one.".to_string(),
-        ));
-    }
+    check_not_terminated(&sandbox)?;
 
     let limit_tokens = soft_limit_tokens();
     let used_tokens = sandbox.last_context_length;
@@ -2225,9 +2240,7 @@ pub async fn create_task(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_IDLE
-        || sandbox.state == crate::shared::models::constants::SANDBOX_STATE_INIT
-    {
+    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_IDLE {
         sqlx::query(
             r#"UPDATE sandboxes SET state = ?, last_activity_at = CURRENT_TIMESTAMP WHERE id = ? AND state = ?"#,
         )
@@ -2377,11 +2390,7 @@ pub async fn update_task(
         ));
     }
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
-        return Err(ApiError::BadRequest(
-            "Sandbox is terminated. Please create a new one.".to_string(),
-        ));
-    }
+    check_not_terminated(&sandbox)?;
 
     if let Some(existing) = SandboxTask::find_by_id(&state.db, &task_id)
         .await

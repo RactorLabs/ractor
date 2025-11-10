@@ -571,9 +571,11 @@
 
   function stateClass(state) {
     const s = String(state || '').toLowerCase();
-    if (s === 'init') return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
+    if (s === 'initializing') return 'badge rounded-pill bg-transparent border border-info text-info';
     if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
     if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
+    if (s === 'terminating') return 'badge rounded-pill bg-transparent border border-danger text-danger';
+    if (s === 'terminated') return 'badge rounded-pill bg-transparent border border-danger text-danger';
     return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
   }
 
@@ -581,16 +583,18 @@
     const s = String(state || '').toLowerCase();
     if (s === 'idle') return 'bg-success border-success';
     if (s === 'busy') return 'bg-warning border-warning';
-    if (s === 'init') return 'bg-secondary border-secondary';
+    if (s === 'initializing') return 'bg-info border-info';
+    if (s === 'terminating' || s === 'terminated') return 'bg-danger border-danger';
     return 'bg-secondary border-secondary';
   }
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
     if (s === 'terminated') return 'bi bi-power';
+    if (s === 'terminating') return 'spinner-border spinner-border-sm text-danger';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
-    if (s === 'init') return 'spinner-border spinner-border-sm';
+    if (s === 'initializing') return 'spinner-border spinner-border-sm text-info';
     return 'bi bi-circle';
   }
 
@@ -598,9 +602,11 @@
   $: stateStr = normState(sandbox?.state);
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
 
-  function isStopped() { return stateStr === 'terminated'; }
+  function isStopped() { return stateStr === 'terminated' || stateStr === 'terminating'; }
   function isActive() { return stateStr === 'idle' || stateStr === 'busy'; }
-  function isInitOrTerminated() { return stateStr === 'init' || stateStr === 'terminated'; }
+  function isUnavailable() {
+    return stateStr === 'initializing' || stateStr === 'terminating' || stateStr === 'terminated';
+  }
 
   // Do not auto-refresh files on state changes; user triggers Refresh manually
   let _lastStateStr = '';
@@ -1572,13 +1578,13 @@
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    {#if stateStr !== 'terminated'}
+                    {#if !['terminated','terminating','initializing'].includes(stateStr)}
                       <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                       <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                       <li><hr class="dropdown-divider" /></li>
                     {/if}
                     <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                    {#if stateStr !== 'terminated'}
+                    {#if !['terminated','terminating','initializing'].includes(stateStr)}
                       <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
                     {/if}
                   </ul>
@@ -2027,7 +2033,14 @@
               <span>Working...</span>
             </div>
           </div>
-              {/if}
+        {:else if stateStr === 'terminating'}
+          <div class="d-flex mb-2 justify-content-start">
+            <div class="small d-flex align-items-center gap-2 px-2 py-1 rounded-2 border bg-danger-subtle text-danger">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span>Terminating…</span>
+            </div>
+          </div>
+        {/if}
             </div>
           </div>
       <div class="border-top p-2" bind:this={chatFooterEl}>
@@ -2036,7 +2049,7 @@
           <textarea
             aria-label="Message input"
             class="form-control shadow-none rounded-0 chat-input chat-no-zoom"
-            disabled={isCompacting || stateStr === 'busy' || stateStr === 'terminated'}
+            disabled={isCompacting || stateStr === 'busy' || stateStr === 'terminating' || stateStr === 'terminated' || stateStr === 'initializing'}
             placeholder="Type a message…"
             rows="2"
             style="resize: none;"
@@ -2056,7 +2069,7 @@
               <i class="bi bi-stop-circle"></i>
             </button>
           {:else}
-            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'terminated'}>
+            <button class="btn btn-outline-theme rounded-0 shadow-none chat-action-btn" aria-label="Send message" disabled={isCompacting || sending || !input.trim() || stateStr === 'terminated' || stateStr === 'terminating' || stateStr === 'initializing'}>
               {#if sending}
                 <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
               {:else}
@@ -2078,14 +2091,21 @@
             {#if stateStr === 'terminated'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><i class="bi bi-power me-2"></i>Sandbox is terminated</div>
+                  <div class="fs-5 mb-2"><i class="bi bi-power me-2"></i>Sandbox not available</div>
                   <p class="small mb-3 text-body-secondary">This sandbox has been terminated and is read-only.</p>
                 </div>
               </div>
-            {:else if stateStr === 'init'}
+            {:else if stateStr === 'terminating'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin"></span>Waiting for sandbox to start up</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-danger"></span>Sandbox not available</div>
+                  <p class="small mb-3 text-body-secondary">Termination is in progress. Please wait for the sandbox to shut down.</p>
+                </div>
+              </div>
+            {:else if stateStr === 'initializing'}
+              <div class="flex-fill d-flex align-items-center justify-content-center p-3">
+                <div class="text-center text-body text-opacity-75">
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-info"></span>Sandbox is starting</div>
                 </div>
               </div>
             {:else}

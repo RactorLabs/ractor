@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::SANDBOX_STATE_INIT;
+pub use constants::SANDBOX_STATE_INITIALIZING;
 
 // Using external inference service via TSBX_INFERENCE_URL
 
@@ -163,7 +163,10 @@ impl SandboxManager {
                 .fetch_optional(&self.pool)
                 .await?
         {
-            if state.eq_ignore_ascii_case("terminated") || state.eq_ignore_ascii_case("deleted") {
+            if state.eq_ignore_ascii_case("terminated")
+                || state.eq_ignore_ascii_case("terminating")
+                || state.eq_ignore_ascii_case("deleted")
+            {
                 return Err(anyhow::anyhow!(
                     "Sandbox {} is terminated and cannot be used",
                     sandbox_id
@@ -235,7 +238,7 @@ impl SandboxManager {
                     AND TIMESTAMPADD(SECOND, idle_timeout_seconds, idle_from) <= NOW()
                   )
                OR (
-                    state = 'init'
+                    state = 'initializing'
                     AND TIMESTAMPADD(SECOND, idle_timeout_seconds, created_at) <= NOW()
                   )
             ORDER BY TIMESTAMPADD(
@@ -256,7 +259,7 @@ impl SandboxManager {
         let mut stopped_count = 0;
 
         for (sandbox_id, state) in sandboxes_to_stop {
-            let reason = if state == "init" {
+            let reason = if state == "initializing" {
                 "startup timeout"
             } else {
                 "idle timeout"
@@ -676,8 +679,8 @@ impl SandboxManager {
 
         // Set sandbox state to INIT after container creation only if it hasn't changed yet.
         // This avoids overwriting a sandbox that already set itself to IDLE.
-        sqlx::query(r#"UPDATE sandboxes SET state = ?, last_activity_at = NOW() WHERE id = ? AND state = 'init'"#)
-            .bind(SANDBOX_STATE_INIT)
+        sqlx::query(r#"UPDATE sandboxes SET state = ?, last_activity_at = NOW() WHERE id = ? AND state = 'initializing'"#)
+            .bind(SANDBOX_STATE_INITIALIZING)
             .bind(&sandbox.id)
             .execute(&self.pool)
             .await?;
@@ -1036,10 +1039,12 @@ impl SandboxManager {
         .await?;
 
         if sandbox.state.eq_ignore_ascii_case("terminated")
+            || sandbox.state.eq_ignore_ascii_case("terminating")
+            || sandbox.state.eq_ignore_ascii_case("initializing")
             || sandbox.state.eq_ignore_ascii_case("deleted")
         {
             return self
-                .fail_request(&request.id, "sandbox is terminated".to_string())
+                .fail_request(&request.id, "sandbox not available".to_string())
                 .await;
         }
 
@@ -1067,7 +1072,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is terminated".to_string())
+                    .fail_request(&request.id, "sandbox not available".to_string())
                     .await;
             }
         }
@@ -1193,7 +1198,7 @@ impl SandboxManager {
             r#"
             SELECT id, state
             FROM sandboxes
-            WHERE state NOT IN ('terminated', 'deleted', 'init')
+            WHERE state NOT IN ('terminated', 'terminating', 'deleted', 'initializing')
             ORDER BY id
             "#,
         )
@@ -1329,7 +1334,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is terminated".to_string())
+                    .fail_request(&request.id, "sandbox not available".to_string())
                     .await;
             }
         }
@@ -1406,7 +1411,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is terminated".to_string())
+                    .fail_request(&request.id, "sandbox not available".to_string())
                     .await;
             }
         }
@@ -1495,7 +1500,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is terminated".to_string())
+                    .fail_request(&request.id, "sandbox not available".to_string())
                     .await;
             }
         }
@@ -1598,7 +1603,7 @@ impl SandboxManager {
             Ok(true) => {}
             _ => {
                 return self
-                    .fail_request(&request.id, "sandbox is terminated".to_string())
+                    .fail_request(&request.id, "sandbox not available".to_string())
                     .await;
             }
         }

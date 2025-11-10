@@ -230,7 +230,7 @@ export function getApiDocs(base) {
           auth: 'bearer',
           desc: 'List sandboxes owned by the caller (admins may filter across all sandboxes).',
           params: [
-            { in: 'query', name: 'state', type: 'string', required: false, desc: "Filter by state: 'init'|'idle'|'busy'|'terminated'" },
+            { in: 'query', name: 'state', type: 'string', required: false, desc: "Filter by state: 'initializing'|'idle'|'busy'|'terminating'|'terminated'" },
             { in: 'query', name: 'q', type: 'string', required: false, desc: 'Substring match on description (case-insensitive).' },
             { in: 'query', name: 'tags', type: 'string or string[]', required: false, desc: "Filter by tags. Provide multiple 'tags' params or a comma-separated string." },
             { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Page size (default 30, max 100).' },
@@ -262,7 +262,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"]}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"init","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
           ]
         },
         {
@@ -304,7 +304,7 @@ export function getApiDocs(base) {
           desc: 'Update sandbox state directly (owner or admin).',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'state', type: 'string', required: true, desc: "Desired state ('init','idle','busy','terminated')." }
+            { in: 'body', name: 'state', type: 'string', required: true, desc: "Desired state ('idle','busy','terminated'). System-managed states include 'initializing' and 'terminating'." }
           ],
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/state -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"state":"idle"}'`,
           resp: { schema: 'StateAck' },
@@ -583,7 +583,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/snapshots/<id>/create -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Restored"}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"new_sandbox","created_by":"admin","state":"init","description":"Restored","snapshot_id":"<id>","created_at":"2025-01-01T16:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
+            { status: 200, body: `{"id":"new_sandbox","created_by":"admin","state":"initializing","description":"Restored","snapshot_id":"<id>","created_at":"2025-01-01T16:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
           ]
         },
         {

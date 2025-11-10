@@ -133,11 +133,11 @@ pub async fn create_snapshot(
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
     if sandbox.state.eq_ignore_ascii_case("terminated")
+        || sandbox.state.eq_ignore_ascii_case("terminating")
+        || sandbox.state.eq_ignore_ascii_case("initializing")
         || sandbox.state.eq_ignore_ascii_case("deleted")
     {
-        return Err(ApiError::BadRequest(
-            "Cannot create snapshot of terminated sandbox".to_string(),
-        ));
+        return Err(ApiError::BadRequest("Sandbox not available.".to_string()));
     }
 
     let request_id = uuid::Uuid::new_v4().to_string();
@@ -292,12 +292,14 @@ fn map_snapshot_request_error(err: &str) -> ApiError {
     } else if lower.contains("no such file") || lower.contains("not found") {
         ApiError::NotFound("Snapshot not found".to_string())
     } else if lower.contains("terminated")
+        || lower.contains("terminating")
+        || lower.contains("initializing")
         || lower.contains("deleted")
         || lower.contains("closing")
         || lower.contains("not running")
         || lower.contains("container does not exist")
     {
-        ApiError::Conflict("Sandbox is terminated".to_string())
+        ApiError::Conflict("Sandbox not available.".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
