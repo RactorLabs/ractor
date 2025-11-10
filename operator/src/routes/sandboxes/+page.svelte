@@ -37,8 +37,6 @@
     return 'bi bi-circle';
   }
 
-import { getHostUrl } from '$lib/branding.js';
-
   function buildQuery() {
     const params = new URLSearchParams();
     if (q && q.trim().length) params.set('q', q.trim());
@@ -71,23 +69,19 @@ import { getHostUrl } from '$lib/branding.js';
 
   let showTerminateModal = false;
   let terminateSandboxTarget = null;
-  let terminateConfirm = '';
-  $: canConfirmTerminate = terminateSandboxTarget && terminateConfirm.trim() === String(terminateSandboxTarget.id || '').trim();
 
   function openTerminateModal(sandbox) {
     terminateSandboxTarget = sandbox;
-    terminateConfirm = '';
     showTerminateModal = true;
   }
 
   function closeTerminateModal() {
     showTerminateModal = false;
     terminateSandboxTarget = null;
-    terminateConfirm = '';
   }
 
   async function confirmTerminateSandbox() {
-    if (!terminateSandboxTarget || !canConfirmTerminate) return;
+    if (!terminateSandboxTarget) return;
     const res = await apiFetch(`/sandboxes/${encodeURIComponent(terminateSandboxTarget.id)}`, { method: 'DELETE' });
     if (!res.ok) {
       error = res?.data?.message || 'Termination failed';
@@ -475,20 +469,13 @@ import { getHostUrl } from '$lib/branding.js';
           <p class="small text-body text-opacity-75 mb-3">
             This will immediately stop sandbox <span class="font-monospace">{terminateSandboxTarget?.id}</span>. Type the full sandbox ID to confirm. This action cannot be undone.
           </p>
-          <div class="mb-3">
-            <label class="form-label small text-uppercase text-body-secondary" for="terminate-confirm-input">Sandbox ID</label>
-            <input
-              id="terminate-confirm-input"
-              type="text"
-              class="form-control"
-              placeholder="Enter sandbox ID to confirm"
-              bind:value={terminateConfirm}
-            />
+          <div class="alert alert-warning small mb-0">
+            This will immediately stop the sandbox. Tasks in progress will be cancelled and the runtime shut down.
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" on:click={closeTerminateModal}>Cancel</button>
-          <button type="button" class="btn btn-danger" disabled={!canConfirmTerminate} on:click={confirmTerminateSandbox}>
+          <button type="button" class="btn btn-danger" on:click={confirmTerminateSandbox}>
             Terminate
           </button>
         </div>

@@ -602,10 +602,19 @@
 
   // Delete modal state and actions
   let showTerminateModal = false;
-  let terminateConfirm = '';
-  function openTerminateModal() { terminateConfirm = ''; showTerminateModal = true; }
+  function openTerminateModal() { showTerminateModal = true; }
   function closeTerminateModal() { showTerminateModal = false; }
-  $: canConfirmTerminate = String(terminateConfirm || '').trim() === String(sandbox?.id || sandboxId || '').trim();
+  async function confirmTerminateSandbox() {
+    try {
+      const cur = String(sandboxId || '').trim();
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(cur)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Terminate failed (HTTP ${res.status})`);
+      showTerminateModal = false;
+      goto('/sandboxes');
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
 
   // Snapshot modal state and actions
   let showSnapshotModal = false;
@@ -1000,22 +1009,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
           <button type="button" class="btn-close" aria-label="Close" on:click={closeTerminateModal}></button>
         </div>
         <div class="modal-body">
-          <p class="mb-2">Type <span class="fw-bold font-monospace">{sandbox?.id || sandboxId}</span> to confirm permanent termination.</p>
-          <input class="form-control font-monospace" bind:value={terminateConfirm} placeholder={sandbox?.id || sandboxId} />
+          <p class="small text-body text-opacity-75 mb-0">
+            Terminating this sandbox immediately stops its runtime and cancels any in-flight tasks. This action cannot be undone.
+          </p>
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline-secondary" on:click={closeTerminateModal}>Cancel</button>
-          <button class="btn btn-danger" disabled={!canConfirmTerminate} on:click={async () => {
-            try {
-              const cur = String(sandboxId || '').trim();
-              const res = await apiFetch(`/sandboxes/${encodeURIComponent(cur)}`, { method: 'DELETE' });
-              if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Terminate failed (HTTP ${res.status})`);
-              showTerminateModal = false;
-              goto('/sandboxes');
-            } catch (e) {
-              alert(e.message || String(e));
-            }
-          }}>Terminate</button>
+          <button class="btn btn-danger" on:click={confirmTerminateSandbox}>Terminate</button>
         </div>
       </div>
     </div>
