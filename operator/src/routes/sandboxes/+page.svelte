@@ -361,7 +361,7 @@ import { getHostUrl } from '$lib/branding.js';
                 {/each}
               </div>
             {:else}
-              <div class="text-body text-opacity-75 small">No active sandboxes on this page.</div>
+              <div class="text-body text-opacity-75 small">No active sandboxes.</div>
             {/if}
           {:else}
             {#if terminatedSandboxes.length}
@@ -405,7 +405,7 @@ import { getHostUrl } from '$lib/branding.js';
                 {/each}
               </div>
             {:else}
-              <div class="text-body text-opacity-75 small">No terminated sandboxes on this page.</div>
+              <div class="text-body text-opacity-75 small">No terminated sandboxes.</div>
             {/if}
           {/if}
           {#if pages > 1}
