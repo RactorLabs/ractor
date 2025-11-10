@@ -1,5 +1,5 @@
 <script>
-  import { onMount, onDestroy, tick } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
   import { isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
@@ -16,6 +16,8 @@
   // Filters + pagination
   let q = '';
   let stateFilter = '';
+  let currentStateTab = 'active';
+  $: currentStateTab = stateFilter === 'terminated' ? 'terminated' : 'active';
   let tagsText = '';
   let limit = 30;
   let pageNum = 1; // 1-based
@@ -24,24 +26,6 @@
   import { auth, getOperatorName } from '$lib/auth.js';
   let operatorName = '';
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
-
-  function stateClass(state) {
-    const s = String(state || '').toLowerCase();
-    if (s === 'initializing') return 'badge rounded-pill bg-transparent border border-info text-info';
-    if (s === 'idle') return 'badge rounded-pill bg-transparent border border-success text-success';
-    if (s === 'busy') return 'badge rounded-pill bg-transparent border border-warning text-warning';
-    if (s === 'terminating') return 'badge rounded-pill bg-transparent border border-danger text-danger';
-    if (s === 'terminated') return 'badge rounded-pill bg-transparent border border-danger text-danger';
-    return 'badge rounded-pill bg-transparent border border-secondary text-secondary';
-  }
-  function stateColorClass(state) {
-    const s = String(state || '').toLowerCase();
-    if (s === 'idle') return 'bg-success border-success';
-    if (s === 'busy') return 'bg-warning border-warning';
-    if (s === 'initializing') return 'bg-info border-info';
-    if (s === 'terminating' || s === 'terminated') return 'bg-danger border-danger';
-    return 'bg-secondary border-secondary';
-  }
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
@@ -178,6 +162,13 @@ import { getHostUrl } from '$lib/branding.js';
     startPolling();
   }
 
+  function setStateTab(tab) {
+    const newFilter = tab === 'terminated' ? 'terminated' : '';
+    if (stateFilter === newFilter) return;
+    stateFilter = newFilter;
+    applyFilters();
+  }
+
   onMount(async () => {
     if (!isAuthenticated()) {
       goto('/login');
@@ -261,20 +252,7 @@ import { getHostUrl } from '$lib/branding.js';
           <input class="form-control" placeholder="Search by ID or description" bind:value={q} name="q" autocapitalize="none" />
         </div>
       </div>
-      <div class="col-6 col-md-3">
-        <div class="input-group input-group-sm flex-nowrap">
-          <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-activity"></i></span>
-          <select class="form-select form-select-sm" bind:value={stateFilter} aria-label="State filter" name="state">
-            <option value="">All states</option>
-            <option value="initializing">initializing</option>
-            <option value="idle">idle</option>
-            <option value="busy">busy</option>
-            <option value="terminating">terminating</option>
-            <option value="terminated">terminated</option>
-          </select>
-        </div>
-      </div>
-      <div class="col-6 col-md-3">
+      <div class="col-12 col-md-4 col-lg-3">
         <div class="input-group input-group-sm flex-nowrap">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-tags"></i></span>
           <input class="form-control" placeholder="tags,comma,separated" bind:value={tagsText} name="tags" autocapitalize="none" />
@@ -291,6 +269,32 @@ import { getHostUrl } from '$lib/branding.js';
         <div class="small text-body text-opacity-75">{total} total</div>
       </div>
     </form>
+  </div>
+  <div class="w-100 mb-2">
+    <ul class="nav nav-pills gap-2 flex-wrap small">
+      <li class="nav-item">
+        <button
+          type="button"
+          class="nav-link rounded-pill px-3 py-1"
+          class:active={currentStateTab === 'active'}
+          aria-current={currentStateTab === 'active' ? 'page' : undefined}
+          on:click={() => setStateTab('active')}
+        >
+          Active
+        </button>
+      </li>
+      <li class="nav-item">
+        <button
+          type="button"
+          class="nav-link rounded-pill px-3 py-1"
+          class:active={currentStateTab === 'terminated'}
+          aria-current={currentStateTab === 'terminated' ? 'page' : undefined}
+          on:click={() => setStateTab('terminated')}
+        >
+          Terminated
+        </button>
+      </li>
+    </ul>
   </div>
 </div>
 
@@ -310,109 +314,112 @@ import { getHostUrl } from '$lib/branding.js';
             <a href="/sandboxes/start" class="btn btn-outline-theme"><i class="bi bi-plus me-1"></i>Start your first sandbox</a>
           </div>
         {:else}
-          <section>
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Active Sandboxes</h6>
-              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{activeSandboxes.length}</span>
-            </div>
-            {#if activeSandboxes.length}
-              <div class="row g-3">
-                {#each activeSandboxes as a (a.id)}
-                  <div class="col-12 col-md-6">
-                    <Card class={`h-100 muted-card ${String(a.state || '').toLowerCase() === 'terminating' ? 'terminating-card' : ''}`}>
-                      <div class="card-body d-flex flex-column">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
-                        </div>
-                        <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
-                        {#if isAdmin}
-                          <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
-                        {/if}
-
-                        <div class="mt-2 d-flex flex-wrap gap-1">
-                          {#if Array.isArray(a.tags) && a.tags.length}
-                            {#each a.tags as t}
-                              <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
-                            {/each}
-                          {:else}
-                            <span class="text-body-secondary small">No tags</span>
-                          {/if}
-                        </div>
-                        <!-- In-card actions: status on left, buttons on right -->
-                        <div class="mt-2 d-flex align-items-center flex-wrap">
-                          <div class="d-flex align-items-center gap-2">
-                            <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
-                            <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+          {#if currentStateTab === 'active'}
+            <section>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Active Sandboxes</h6>
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{activeSandboxes.length}</span>
+              </div>
+              {#if activeSandboxes.length}
+                <div class="row g-3">
+                  {#each activeSandboxes as a (a.id)}
+                    <div class="col-12 col-md-6">
+                      <Card class={`h-100 muted-card ${String(a.state || '').toLowerCase() === 'terminating' ? 'terminating-card' : ''}`}>
+                        <div class="card-body d-flex flex-column">
+                          <div class="d-flex align-items-center gap-2 mb-1">
+                            <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
                           </div>
-                          <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
-                            <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
-                              <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
-                            </button>
-                            {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
-                              <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
-                                <i class="bi bi-power text-danger me-1"></i><span>Terminate</span>
-                              </button>
+                          <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
+                          {#if isAdmin}
+                            <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
+                          {/if}
+
+                          <div class="mt-2 d-flex flex-wrap gap-1">
+                            {#if Array.isArray(a.tags) && a.tags.length}
+                              {#each a.tags as t}
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                              {/each}
+                            {:else}
+                              <span class="text-body-secondary small">No tags</span>
                             {/if}
                           </div>
+                          <!-- In-card actions: status on left, buttons on right -->
+                          <div class="mt-2 d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center gap-2">
+                              <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
+                              <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+                            </div>
+                            <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
+                              <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
+                                <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
+                              </button>
+                              {#if ['idle','busy'].includes(String(a.state||'').toLowerCase())}
+                                <button class="btn btn-outline-danger btn-sm" on:click={() => terminateSandbox(a)} aria-label="Terminate sandbox">
+                                  <i class="bi bi-power text-danger me-1"></i><span>Terminate</span>
+                                </button>
+                              {/if}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </Card>
-                  </div>
-                {/each}
+                      </Card>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="text-body text-opacity-75 small">No active sandboxes on this page.</div>
+              {/if}
+            </section>
+          {:else}
+            <section>
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Terminated Sandboxes</h6>
+                <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{terminatedSandboxes.length}</span>
               </div>
-            {:else}
-              <div class="text-body text-opacity-75 small">No active sandboxes on this page.</div>
-            {/if}
-          </section>
-          <section class="mt-4">
-            <div class="d-flex align-items-center justify-content-between mb-2">
-              <h6 class="mb-0 fw-semibold text-uppercase small text-body-secondary">Terminated Sandboxes</h6>
-              <span class="badge rounded-pill bg-secondary-subtle text-secondary-emphasis border">{terminatedSandboxes.length}</span>
-            </div>
-            {#if terminatedSandboxes.length}
-              <div class="row g-3">
-                {#each terminatedSandboxes as a (a.id)}
-                  <div class="col-12 col-md-6">
-                    <Card class="h-100">
-                      <div class="card-body d-flex flex-column">
-                        <div class="d-flex align-items-center gap-2 mb-1">
-                          <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
-                        </div>
-                        <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
-                        {#if isAdmin}
-                          <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
-                        {/if}
-
-                        <div class="mt-2 d-flex flex-wrap gap-1">
-                          {#if Array.isArray(a.tags) && a.tags.length}
-                            {#each a.tags as t}
-                              <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
-                            {/each}
-                          {:else}
-                            <span class="text-body-secondary small">No tags</span>
+              {#if terminatedSandboxes.length}
+                <div class="row g-3">
+                  {#each terminatedSandboxes as a (a.id)}
+                    <div class="col-12 col-md-6">
+                      <Card class="h-100">
+                        <div class="card-body d-flex flex-column">
+                          <div class="d-flex align-items-center gap-2 mb-1">
+                            <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
+                          </div>
+                          <div class="small text-body text-opacity-75 flex-grow-1 text-truncate" title={a.description || a.desc || ''}>{a.description || a.desc || 'No description'}</div>
+                          {#if isAdmin}
+                            <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{a.created_by}</span></div>
                           {/if}
-                        </div>
-                        <!-- In-card actions: status on left, buttons on right -->
-                        <div class="mt-2 d-flex align-items-center flex-wrap">
-                          <div class="d-flex align-items-center gap-2">
-                            <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
-                            <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+
+                          <div class="mt-2 d-flex flex-wrap gap-1">
+                            {#if Array.isArray(a.tags) && a.tags.length}
+                              {#each a.tags as t}
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border">{t}</span>
+                              {/each}
+                            {:else}
+                              <span class="text-body-secondary small">No tags</span>
+                            {/if}
                           </div>
-                          <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
-                            <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
-                              <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
-                            </button>
+                          <!-- In-card actions: status on left, buttons on right -->
+                          <div class="mt-2 d-flex align-items-center flex-wrap">
+                            <div class="d-flex align-items-center gap-2">
+                              <i class={`${stateIconClass(a.state || a.status)} me-1`}></i>
+                              <span class="text-uppercase small fw-bold text-body state-label">{a.state || a.status || 'unknown'}</span>
+                            </div>
+                            <div class="ms-auto d-flex align-items-center flex-wrap gap-2 list-actions">
+                              <button class="btn btn-outline-secondary btn-sm" on:click={() => goto('/sandboxes/' + encodeURIComponent(a.id))} aria-label="Open sandbox">
+                                <i class="bi bi-box-arrow-up-right me-1"></i><span>Open</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Card>
-                  </div>
-                {/each}
-              </div>
-            {:else}
-              <div class="text-body text-opacity-75 small">No terminated sandboxes on this page.</div>
-            {/if}
-          </section>
+                      </Card>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="text-body text-opacity-75 small">No terminated sandboxes on this page.</div>
+              {/if}
+            </section>
+          {/if}
           {#if pages > 1}
           <div class="d-flex align-items-center justify-content-center mt-3 gap-1">
             <button class="btn btn-sm btn-outline-secondary" disabled={pageNum <= 1} on:click={async () => { pageNum = Math.max(1, pageNum-1); syncUrl(); loading = true; await fetchSandboxes(); loading = false; startPolling(); }}>Prev</button>
