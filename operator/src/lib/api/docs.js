@@ -355,63 +355,6 @@ export function getApiDocs(base) {
           ]
         },
         {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/context',
-          auth: 'bearer',
-          desc: 'Get the latest context usage estimation for a sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/context -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'SandboxContextUsage' },
-          responses: [
-            { status: 200, body: `{"sandbox":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":12345,"used_percent":9.6,"basis":"inference_last_context_length","cutoff_at":"2025-01-01T12:34:56Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/context/clear',
-          auth: 'bearer',
-          desc: 'Clear sandbox context and set a new cutoff timestamp.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/clear -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'SandboxContextUsage' },
-          responses: [
-            { status: 200, body: `{"sandbox":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0,"basis":"inference_last_context_length","cutoff_at":"2025-01-01T13:00:00Z","measured_at":"2025-01-01T13:00:00Z","total_messages_considered":0}` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/context/compact',
-          auth: 'bearer',
-          desc: 'Compact sandbox context (summarize recent history and reset usage).',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/compact -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'SandboxContextUsage' },
-          responses: [
-            { status: 200, body: `{"sandbox":"fa36e542-b9b8-11f0-aadd-064ac08387fc","soft_limit_tokens":128000,"used_tokens_estimated":0,"used_percent":0,"basis":"inference_last_context_length","cutoff_at":"2025-01-01T13:05:00Z","measured_at":"2025-01-01T13:05:00Z","total_messages_considered":0}` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/context/usage',
-          auth: 'bearer',
-          desc: 'Report the latest context length (tokens) after an inference call.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'tokens', type: 'int', required: true, desc: 'Latest context length tokens (non-negative).' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/context/usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"tokens":4096}'`,
-          resp: { schema: 'ContextUsageAck' },
-          responses: [
-            { status: 200, body: `{"success":true,"last_context_length":4096}` }
-          ]
-        },
-        {
           method: 'DELETE',
           path: '/api/v0/sandboxes/{id}',
           auth: 'bearer',

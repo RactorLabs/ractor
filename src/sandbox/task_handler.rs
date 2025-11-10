@@ -169,16 +169,6 @@ impl TaskHandler {
                 Err(e) => return Err(e),
             };
 
-            if let Some(total_tokens) = response.total_tokens {
-                if let Err(e) = self
-                    .api_client
-                    .update_sandbox_context_length(total_tokens)
-                    .await
-                {
-                    warn!("Failed to update context length: {}", e);
-                }
-            }
-
             let raw = response.content.trim();
             if raw.is_empty() {
                 Self::push_system_note(

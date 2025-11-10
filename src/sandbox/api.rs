@@ -368,47 +368,6 @@ impl TaskSandboxClient {
         }
     }
 
-    pub async fn update_sandbox_context_length(&self, tokens: i64) -> Result<()> {
-        #[derive(Serialize)]
-        struct ContextUsageReq {
-            tokens: i64,
-        }
-
-        let url = format!(
-            "{}/api/v0/sandboxes/{}/context/usage",
-            self.config.api_url, self.sandbox_id
-        );
-
-        let body = ContextUsageReq {
-            tokens: tokens.max(0),
-        };
-
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&body)
-            .send()
-            .await?;
-
-        match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to update context usage ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {

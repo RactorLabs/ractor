@@ -145,7 +145,6 @@
         fmPendingOpenFile = init[init.length - 1] || '';
       }
     } catch (_) {}
-    try { await fetchContextUsage(); } catch (_) {}
     try { await fetchFiles(true); } catch (_) {}
     // layout handles equal heights; no JS equalizer
   });
@@ -493,8 +492,6 @@
     }
   })();
 
-  // Context usage state
-  let ctx = null; // raw response { soft_limit_tokens, used_tokens_estimated, used_percent, cutoff_at, measured_at }
   function fmtInt(n) {
     try { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString() : String(n); } catch (_) { return String(n); }
   }
@@ -508,14 +505,12 @@
   function countFiles() { return countKind('file'); }
   function countDirs() { try { return (fmEntries || []).filter(e => { const k = String(e?.kind || '').toLowerCase(); return k === 'dir' || k === 'directory'; }).length; } catch (_) { return 0; } }
   function countSymlinks() { return countKind('symlink'); }
-  async function fetchContextUsage() {
-    try {
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/context`);
-      if (res.ok) {
-        ctx = res.data || null;
-      }
-    } catch (_) { /* ignore */ }
-  }
+  const CONTEXT_SOFT_LIMIT_TOKENS = 128000; // Keep aligned with backend default
+  $: contextTokensUsed = Number(sandbox?.last_context_length ?? 0);
+  $: contextSoftLimit = CONTEXT_SOFT_LIMIT_TOKENS;
+  $: contextUsedPercent = contextSoftLimit > 0
+    ? Math.min(100, (contextTokensUsed / contextSoftLimit) * 100)
+    : 0;
   let _runtimeFetchedAt = 0;
   let inputEl = null; // task textarea element
   // Content preview via sandbox ports has been removed.
@@ -706,7 +701,6 @@
     stopPolling();
     pollHandle = setInterval(async () => {
       await fetchTasks();
-      await fetchContextUsage();
       await fetchSandbox();
       await fetchRuntime();
     }, 2000);
@@ -897,7 +891,8 @@
       });
       if (!res.ok) {
         if (res.status === 409) {
-          await fetchContextUsage();
+          // Refresh sandbox details so local context usage reflects backend limits
+          await fetchSandbox();
         }
         throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       }
@@ -1151,10 +1146,10 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
-                  <div class="me-2">Context: {fmtInt(ctx?.used_tokens_estimated || 0)} / {fmtInt(ctx?.soft_limit_tokens || 128000)} ({fmtPct(ctx?.used_percent || 0)})</div>
+                  <div class="me-2">Context: {fmtInt(contextTokensUsed)} / {fmtInt(contextSoftLimit)} ({fmtPct(contextUsedPercent)})</div>
                 </div>
-                <div class="progress mt-1" role="progressbar" aria-valuenow={Number(ctx?.used_percent || 0)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
-                  <div class="progress-bar {Number(ctx?.used_percent || 0) >= 90 ? 'bg-danger' : 'bg-theme'}" style={`width: ${Math.min(100, Number(ctx?.used_percent || 0)).toFixed(1)}%;`}></div>
+                <div class="progress mt-1" role="progressbar" aria-valuenow={Number(contextUsedPercent)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
+                  <div class={`progress-bar ${Number(contextUsedPercent) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${Number(contextUsedPercent).toFixed(1)}%;`}></div>
                 </div>
               </div>
             </div>

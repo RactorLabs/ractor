@@ -76,22 +76,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::sandboxes::get_sandbox_runtime),
         )
         .route(
-            "/sandboxes/{id}/context",
-            get(handlers::sandboxes::get_sandbox_context),
-        )
-        .route(
-            "/sandboxes/{id}/context/clear",
-            post(handlers::sandboxes::clear_sandbox_context),
-        )
-        .route(
-            "/sandboxes/{id}/context/compact",
-            post(handlers::sandboxes::compact_sandbox_context),
-        )
-        .route(
-            "/sandboxes/{id}/context/usage",
-            post(handlers::sandboxes::update_sandbox_context_usage),
-        )
-        .route(
             "/sandboxes/{id}",
             delete(handlers::sandboxes::terminate_sandbox),
         )

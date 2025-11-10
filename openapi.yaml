@@ -584,99 +584,6 @@ paths:
                     type: boolean
         '409':
           description: Task is not in a cancellable state
-  /sandboxes/{id}/context:
-    get:
-      tags:
-      - Sandboxes
-      summary: Get context usage
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        description: Sandbox ID (UUID)
-      responses:
-        '200':
-          description: Usage
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionContextUsage'
-  /sandboxes/{id}/context/clear:
-    post:
-      tags:
-      - Sandboxes
-      summary: Clear context (set new cutoff)
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        description: Sandbox ID (UUID)
-      responses:
-        '200':
-          description: Updated usage
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionContextUsage'
-  /sandboxes/{id}/context/compact:
-    post:
-      tags:
-      - Sandboxes
-      summary: Compact context (summarize)
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        description: Sandbox ID (UUID)
-      responses:
-        '200':
-          description: Updated usage
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SessionContextUsage'
-  /sandboxes/{id}/context/usage:
-    post:
-      tags:
-      - Sandboxes
-      summary: Report latest context length (tokens)
-      parameters:
-      - in: path
-        name: id
-        required: true
-        schema:
-          type: string
-        description: Sandbox ID (UUID)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                tokens:
-                  type: integer
-                  minimum: 0
-              required:
-              - tokens
-      responses:
-        '200':
-          description: Acknowledged
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  last_context_length:
-                    type: integer
   /sandboxes/{id}/publish:
     post:
       tags:
@@ -1364,29 +1271,6 @@ components:
         content:
           type: boolean
           default: true
-    SessionContextUsage:
-      type: object
-      properties:
-        sandbox:
-          type: string
-        soft_limit_tokens:
-          type: integer
-        used_tokens_estimated:
-          type: integer
-        used_percent:
-          type: number
-          format: double
-        basis:
-          type: string
-        cutoff_at:
-          type: string
-          format: date-time
-          nullable: true
-        measured_at:
-          type: string
-          format: date-time
-        total_messages_considered:
-          type: integer
     CreateTaskRequest:
       type: object
       required:
