@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 use super::command::{CommandChild, CommandInvocation};
-use super::{builtin_tools, environment_tools, package_tools};
+use super::builtin_tools;
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -37,8 +37,6 @@ impl ToolCatalog {
             "find_filecontent",
             "find_filename",
             "output",
-            "environment_info",
-            "python_package",
         ]
     }
 
@@ -84,17 +82,6 @@ impl ToolCatalog {
         guide
             .push_str(r#"<find_filename commentary="..." path="/sandbox/..." glob="*.rs; *.ts"/>"#);
         guide.push_str("\n  • Glob search for file names.\n");
-        guide.push_str(r#"<environment_info info_type="system"/>"#);
-        guide.push_str("\n  • Inspect the runtime environment (info_type: system | python_packages | python_version | pip_list | all).\n");
-        guide.push_str(
-            r#"<python_package action="check" upgrade="false">
-  <package>requests</package>
-  <package>numpy</package>
-</python_package>"#,
-        );
-        guide.push_str(
-            "\n  • Check/install Python packages. Use <package> children for each package.\n",
-        );
         guide.push_str(r#"<output><![CDATA[FINAL RESPONSE TO USER]]></output>"#);
         guide.push_str(
             "\n  • Send the final user-facing message. Only use markdown/plain text inside the body.\n",
@@ -114,8 +101,6 @@ impl ToolCatalog {
             "find_filecontent" => builtin_tools::FindFilecontentTool.execute(&args).await,
             "find_filename" => builtin_tools::FindFilenameTool.execute(&args).await,
             "output" => builtin_tools::OutputTool.execute(&args).await,
-            "environment_info" => environment_tools::EnvironmentInfoTool.execute(&args).await,
-            "python_package" => package_tools::PythonPackageTool.execute(&args).await,
             other => Err(anyhow::anyhow!("unknown command '{}'", other)),
         }?;
         Ok(ExecutionResult { args, output })
@@ -231,42 +216,6 @@ impl ToolCatalog {
                         "title": "Result",
                         "content": body
                     })]),
-                );
-            }
-            "environment_info" => {
-                map.insert(
-                    "info_type".into(),
-                    Value::String(
-                        attrs
-                            .get("info_type")
-                            .cloned()
-                            .unwrap_or_else(|| "all".to_string()),
-                    ),
-                );
-            }
-            "python_package" => {
-                map.insert(
-                    "action".into(),
-                    Value::String(
-                        attrs
-                            .get("action")
-                            .cloned()
-                            .unwrap_or_else(|| "check".to_string()),
-                    ),
-                );
-                if let Some(upgrade) = attrs.get("upgrade") {
-                    map.insert("upgrade".into(), Value::Bool(parse_bool(upgrade)?));
-                }
-                let packages = if let Some(items) = child_map.get("package") {
-                    items.clone()
-                } else if !body.trim().is_empty() {
-                    body.split_whitespace().map(|s| s.to_string()).collect()
-                } else {
-                    Vec::new()
-                };
-                map.insert(
-                    "packages".into(),
-                    Value::Array(packages.into_iter().map(Value::String).collect()),
                 );
             }
             other => return Err(anyhow::anyhow!("unknown command '{}'", other)),

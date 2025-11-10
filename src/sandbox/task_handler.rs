@@ -391,9 +391,6 @@ impl TaskHandler {
     async fn build_system_prompt(&self) -> String {
         let host_name =
             std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
-        let base_url_env =
-            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
-        let base_url = base_url_env.trim_end_matches('/').to_string();
         let sandbox_id = match self.api_client.get_sandbox().await {
             Ok(sandbox) => sandbox.id,
             Err(_) => "unknown".to_string(),
@@ -402,11 +399,13 @@ impl TaskHandler {
 
         let mut prompt = String::new();
         prompt.push_str(&format!(
-            "You are a TaskSandbox: an intelligent subagent used primarily by an AI Agent to accomplish delegated work.\n\
-You are operating inside the {host_name} environment.\n\
-Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\
-Operator URL: {base_url}\nAPI URL: {base_url}/api\n\n"
+            "You are TaskSandbox, a secure delegated workspace that other agents invoke to execute end-to-end tasks.\n\
+You operate inside the {host_name} environment, running within an isolated container that persists context across steps.\n\
+Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         ));
+        prompt.push_str("Agents reach you through standard APIs or MCP; treat each session as part of a coordinated workflow that keeps tool activity grouped while minimizing unnecessary external data transfer.\n");
+        prompt.push_str("Use the built-in helpers for filesystem, shell execution, and browser automation to perform work locally, keeping sensitive data inside the sandbox whenever possible.\n");
+        prompt.push_str("You pair well with open-source language models; provide precise, tool-centric responses that help them delegate reliably.\n\n");
         prompt.push_str("Follow these rules:\n");
         prompt.push_str("- Always respond with exactly ONE XML element (a tool command). Plain text responses are forbidden.\n");
         prompt.push_str("- Communicate final answers back to the AI Agent exclusively via the `<output>` tool call. Do not use `<output>` for intermediate status updates.\n");

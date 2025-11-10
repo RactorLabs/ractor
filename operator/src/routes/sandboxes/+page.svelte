@@ -224,17 +224,6 @@ import { getHostUrl } from '$lib/branding.js';
     color: var(--bs-secondary-color) !important;
     font-weight: 600;
   }
-  .terminating-card {
-    border: 1px solid var(--bs-danger-border-subtle, rgba(220, 53, 69, 0.35));
-    background-color: var(--bs-danger-bg-subtle, rgba(220, 53, 69, 0.08));
-    opacity: 1;
-  }
-  .terminating-card .state-label {
-    color: var(--bs-danger, #dc3545) !important;
-  }
-  .terminating-card i {
-    color: var(--bs-danger, #dc3545) !important;
-  }
 </style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Sandboxes</div>
@@ -319,7 +308,7 @@ import { getHostUrl } from '$lib/branding.js';
               <div class="row g-3">
                 {#each activeSandboxes as a (a.id)}
                   <div class="col-12 col-md-6">
-                    <Card class={`h-100 muted-card ${String(a.state || '').toLowerCase() === 'terminating' ? 'terminating-card' : ''}`}>
+                    <Card class="h-100 muted-card">
                       <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-2 mb-1">
                           <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
