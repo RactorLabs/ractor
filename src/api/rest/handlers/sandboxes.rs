@@ -2149,7 +2149,9 @@ pub async fn update_sandbox_to_idle(
     // Find sandbox (sandbox token should match sandbox ownership)
     let is_admin = is_admin_principal(&auth, &state).await;
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_terminated(&sandbox)?;
+    if !sandbox.state.eq_ignore_ascii_case("initializing") {
+        check_not_terminated(&sandbox)?;
+    }
 
     // Update sandbox to idle: set idle_from and clear busy_from (idle timeout active)
     Sandbox::update_sandbox_to_idle(&state.db, &sandbox.id)

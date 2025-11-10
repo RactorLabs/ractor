@@ -2105,7 +2105,7 @@
             {:else if stateStr === 'initializing'}
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
-                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-info"></span>Sandbox is starting</div>
+                  <div class="fs-5 mb-2"><span class="spinner-border spinner-border-sm me-2 overlay-spin text-info"></span>Sandbox is initializing</div>
                 </div>
               </div>
             {:else}
