@@ -558,9 +558,10 @@ impl SandboxManager {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let prompt = request
+        let startup_task = request
             .payload
-            .get("prompt")
+            .get("startup_task")
+            .or_else(|| request.payload.get("prompt"))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
@@ -594,8 +595,8 @@ impl SandboxManager {
             &sandbox.id, principal
         );
 
-        info!("Creating sandbox ID {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, prompt: {}",
-              &sandbox.id, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), prompt.is_some());
+        info!("Creating sandbox ID {} for principal {} ({:?}) with {} env, instructions: {}, setup: {}, startup_task: {}",
+              &sandbox.id, principal, principal_type, env.len(), instructions.is_some(), setup.is_some(), startup_task.is_some());
 
         info!("Creating new sandbox {}", &sandbox.id);
 
@@ -644,14 +645,17 @@ impl SandboxManager {
             }
         }
 
-        // Send prompt if provided (BEFORE setting state to IDLE)
-        if let Some(prompt) = prompt {
-            info!("Sending prompt to sandbox ID {}: {}", &sandbox.id, prompt);
+        // Send startup task if provided (BEFORE setting state to IDLE)
+        if let Some(startup_task) = startup_task {
+            info!(
+                "Submitting startup task to sandbox ID {}: {}",
+                &sandbox.id, startup_task
+            );
 
             // Create task record in database (pending)
             let task_id = uuid::Uuid::new_v4().to_string();
             let input_json =
-                serde_json::json!({ "content": [ { "type": "text", "content": prompt } ] });
+                serde_json::json!({ "content": [ { "type": "text", "content": startup_task } ] });
             let output_json = serde_json::json!({ "text": "", "content": [] });
             let steps_json = serde_json::json!([]);
             sqlx::query(
@@ -670,10 +674,7 @@ impl SandboxManager {
             .bind(Option::<chrono::DateTime<Utc>>::None)
             .execute(&self.pool)
             .await?;
-            info!(
-                "Prompt task {} created for sandbox ID {}",
-                task_id, &sandbox.id
-            );
+            info!("Startup task {} created for sandbox ID {}", task_id, &sandbox.id);
         }
 
         // Set sandbox state to INIT after container creation only if it hasn't changed yet.

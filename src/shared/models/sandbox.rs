@@ -34,8 +34,8 @@ pub struct CreateSandboxRequest {
     pub instructions: Option<String>,
     #[serde(default)]
     pub setup: Option<String>,
-    #[serde(default)]
-    pub prompt: Option<String>,
+    #[serde(default, alias = "prompt")]
+    pub startup_task: Option<String>,
     #[serde(
         default = "default_idle_timeout",
         deserialize_with = "deserialize_strict_option_i32"

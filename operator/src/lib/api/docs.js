@@ -255,7 +255,7 @@ export function getApiDocs(base) {
             { in: 'body', name: 'env', type: 'object<string,string>', required: false, desc: 'Environment variable map to inject on boot.' },
             { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions passed to the sandbox runtime.' },
             { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script executed on boot.' },
-            { in: 'body', name: 'prompt', type: 'string|null', required: false, desc: 'Optional initial prompt for the sandbox task loop.' },
+            { in: 'body', name: 'startup_task', type: 'string|null', required: false, desc: 'Optional startup task queued immediately after sandbox creation.' },
             { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Override idle timeout seconds (defaults to 900).' },
             { in: 'body', name: 'snapshot_id', type: 'string|null', required: false, desc: 'Restore from an existing snapshot (files copied by the controller).' }
           ],

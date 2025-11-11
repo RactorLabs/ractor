@@ -23,7 +23,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
   let instructions = '';
   let setup = '';
   // (Samples removed with About section)
-  let prompt = '';
+  let startupTask = '';
   let description = '';
 
   // Environment entries as dynamic rows
@@ -63,7 +63,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
         idle_timeout_seconds: Number(idleTimeoutSeconds) || 900,
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
-        prompt: prompt?.trim() ? prompt : null,
+        startup_task: startupTask?.trim() ? startupTask : null,
         env: asEnvMap()
       };
 
@@ -113,19 +113,19 @@ let idleTimeoutSeconds = 900; // default 15 minutes
             
 
             <div class="col-12">
-              <label class="form-label" for="prompt">Starting Prompt (optional)</label>
+              <label class="form-label" for="startup-task">Startup Task (optional)</label>
               <textarea
-                id="prompt"
+                id="startup-task"
                 class="form-control"
                 rows="3"
-                bind:value={prompt}
+                bind:value={startupTask}
                 on:keydown={(event) => {
                   if (event.key === 'Enter' && event.ctrlKey && !loading) {
                     submit(event);
                   }
                 }}
               ></textarea>
-              <div class="form-text">Press Ctrl+Enter to start the sandbox.</div>
+              <div class="form-text">Press Ctrl+Enter to queue the startup task.</div>
             </div>
 
             <div class="col-12 col-md-6">

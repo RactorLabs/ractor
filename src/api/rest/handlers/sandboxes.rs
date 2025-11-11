@@ -972,11 +972,11 @@ pub async fn create_sandbox(
     Json(req): Json<CreateSandboxRequest>,
 ) -> ApiResult<Json<SandboxResponse>> {
     tracing::info!(
-        "Creating sandbox with env: {} keys, instructions: {}, setup: {}, prompt: {}",
+        "Creating sandbox with env: {} keys, instructions: {}, setup: {}, startup_task: {}",
         req.env.len(),
         req.instructions.is_some(),
         req.setup.is_some(),
-        req.prompt.is_some()
+        req.startup_task.is_some()
     );
 
     // Admins require explicit permission; non-admins can create their own sandboxes
@@ -1006,7 +1006,7 @@ pub async fn create_sandbox(
         "env": req.env,
         "instructions": req.instructions,
         "setup": req.setup,
-        "prompt": req.prompt,
+        "startup_task": req.startup_task,
         "snapshot_id": req.snapshot_id,
         "principal": created_by,
         "principal_type": match &auth.principal {

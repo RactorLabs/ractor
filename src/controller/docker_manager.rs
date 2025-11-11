@@ -862,7 +862,7 @@ echo 'Session directories created (.env, logs)'
         }
 
         let default_model = std::env::var("TSBX_DEFAULT_MODEL")
-            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         let inference_model =
             std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| default_model.clone());
         env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
@@ -1054,7 +1054,7 @@ echo 'Session directories created (.env, logs)'
         }
 
         let default_model = std::env::var("TSBX_DEFAULT_MODEL")
-            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY

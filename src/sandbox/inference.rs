@@ -100,7 +100,7 @@ impl InferenceClient {
         const PARSE_RETRIES: usize = 5;
         let model_name = std::env::var("TSBX_INFERENCE_MODEL")
             .or_else(|_| std::env::var("TSBX_DEFAULT_MODEL"))
-            .unwrap_or_else(|_| "llama-3.1-8b-instruct-good-tp2".to_string());
+            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         let url = format!("{}/chat/completions", self.base_url);
         let format_hint =
             "Format notice: Respond with a single XML element (e.g. <run_bash .../> or <output>...</output>).";

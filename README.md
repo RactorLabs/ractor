@@ -62,10 +62,10 @@ tsbx doctor
 # Configure inference endpoint (defaults shown below)
 export TSBX_INFERENCE_URL=${TSBX_INFERENCE_URL:-https://api.positron.ai/v1}
 export TSBX_INFERENCE_API_KEY=${TSBX_INFERENCE_API_KEY:-6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM}
-export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.1-8b-instruct-good-tp2}
+export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.2-3b-instruct-fast-tp2}
 
 # Start core services with the default model
-tsbx start --default-model llama-3.1-8b-instruct-good-tp2 mysql api controller operator gateway
+tsbx start --default-model llama-3.2-3b-instruct-fast-tp2 mysql api controller operator gateway
 ```
 
 > Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--default-model`) before `tsbx start` to override the default used by sandboxes. The CLI also exports `TSBX_DEFAULT_MODEL` for compatibility with downstream services.

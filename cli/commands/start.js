@@ -89,7 +89,7 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--default-model <model>', 'Default inference model name', 'llama-3.1-8b-instruct-good-tp2')
+    .option('--default-model <model>', 'Default inference model name', 'llama-3.2-3b-instruct-fast-tp2')
     .option('--inference-url <url>', 'Inference API base URL', 'https://api.positron.ai/v1')
     .option('--inference-api-key <key>', 'Inference API key (Bearer token)')
     // MySQL options
@@ -284,7 +284,7 @@ module.exports = (program) => {
         const DEFAULT_MODEL = (() => {
           const src = getOptionSource('defaultModel');
           if (src === 'cli') return options.defaultModel;
-          return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'llama-3.1-8b-instruct-good-tp2';
+          return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'llama-3.2-3b-instruct-fast-tp2';
         })();
         const INFERENCE_MODEL = process.env.TSBX_INFERENCE_MODEL || DEFAULT_MODEL;
 
