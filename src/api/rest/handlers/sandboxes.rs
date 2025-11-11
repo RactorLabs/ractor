@@ -1486,7 +1486,7 @@ pub async fn create_task(
     }
 
     let task_id = uuid::Uuid::new_v4().to_string();
-    let timeout_seconds = req.timeout_seconds.or(Some(3600));
+    let timeout_seconds = req.timeout_seconds.or(Some(300));
 
     let payload = serde_json::json!({
         "task_id": task_id,
@@ -1554,7 +1554,7 @@ pub async fn create_task(
     }
 
     let now = Utc::now();
-    let timeout_seconds_value = req.timeout_seconds.or(Some(3600)).filter(|v| *v > 0);
+    let timeout_seconds_value = req.timeout_seconds.or(Some(300)).filter(|v| *v > 0);
     let timeout_at = timeout_seconds_value.and_then(|secs| {
         now.checked_add_signed(chrono::Duration::seconds(secs as i64))
             .map(|dt| dt.to_rfc3339())
