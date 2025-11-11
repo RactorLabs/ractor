@@ -1558,7 +1558,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                           <div class="fw-semibold font-monospace">{task.id}</div>
                           <div class="small text-body-secondary">{formatTaskTimestamp(task)}</div>
                           {#if taskPreview(task)}
-                            <div class="small text-body text-opacity-75 text-truncate">{taskPreview(task)}</div>
+                            <div class="small text-body text-opacity-75 task-preview">{taskPreview(task)}</div>
                           {/if}
                         </div>
                         <span class={`badge ${taskStatusBadgeClass(task)}`}>{taskStatusLabel(task)}</span>
@@ -1819,6 +1819,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   :global(.task-pane .task-list .list-group-item.active .badge) {
     background-color: var(--bs-theme);
     color: var(--bs-theme-color);
+  }
+  :global(.task-pane .task-list .task-preview) {
+    max-width: 18rem;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   :global(.task-pane .task-detail section + section) {
     border-top: 1px solid rgba(var(--bs-border-color-rgb), .4);
