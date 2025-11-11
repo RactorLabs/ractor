@@ -7,7 +7,6 @@ use super::toolkit::{ExecutionResult, ToolCatalog};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -154,7 +153,6 @@ impl TaskHandler {
         if let Some(msg) = render_task_input(task) {
             conversation.push(msg);
         }
-        let mut tool_history: Vec<(String, String)> = Vec::new();
 
         loop {
             if !self.is_task_active(&task.id).await? {
@@ -162,30 +160,15 @@ impl TaskHandler {
             }
 
             let system_prompt = self.build_system_prompt().await;
-            let context_overview =
-                self.build_context_overview(&system_prompt, &conversation, &tool_history);
-            let user_message = conversation
-                .iter()
-                .rev()
-                .find(|m| m.role.eq_ignore_ascii_case("user"))
-                .map(|m| m.content.clone())
-                .unwrap_or_else(|| "(no user request available)".to_string());
-            let mut model_messages = Vec::with_capacity(2);
-            model_messages.push(ChatMessage {
-                role: "system".to_string(),
-                content: context_overview,
-                name: None,
-                tool_call_id: None,
-            });
-            model_messages.push(ChatMessage {
-                role: "user".to_string(),
-                content: user_message,
-                name: None,
-                tool_call_id: None,
-            });
+            let mut model_conversation = conversation.clone();
+            for msg in &mut model_conversation {
+                if msg.role.eq_ignore_ascii_case("tool") {
+                    msg.role = "user".to_string();
+                }
+            }
             let response = match self
                 .inference_client
-                .complete(model_messages, None)
+                .complete(model_conversation, Some(system_prompt))
                 .await
             {
                 Ok(resp) => resp,
@@ -266,12 +249,6 @@ impl TaskHandler {
             let mut truncated_output = false;
             let output_text =
                 truncate_output_text(&output, MAX_TOOL_OUTPUT_CHARS, &mut truncated_output);
-            if command_name != "output" {
-                tool_history.push((command_text.clone(), output_text.clone()));
-                if tool_history.len() > 10 {
-                    tool_history.remove(0);
-                }
-            }
 
             let tool_call_segment = json!({
                 "type": "tool_call",
@@ -465,50 +442,6 @@ fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
             name: None,
             tool_call_id: None,
         })
-    }
-}
-
-impl TaskHandler {
-    fn build_context_overview(
-        &self,
-        system_prompt: &str,
-        conversation: &[ChatMessage],
-        tool_history: &[(String, String)],
-    ) -> String {
-        let mut overview = String::new();
-        let _ = writeln!(overview, "=== System Prompt ===");
-        let _ = writeln!(overview, "{}\n", system_prompt.trim());
-
-        let _ = writeln!(overview, "=== Tool Catalog ===");
-        let _ = writeln!(
-            overview,
-            "{}\n",
-            self.toolkit.command_catalog_prompt().trim()
-        );
-
-        let user_input = conversation
-            .iter()
-            .find(|m| m.role.eq_ignore_ascii_case("user"))
-            .map(|m| m.content.trim())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("(no user request available)");
-        let _ = writeln!(overview, "=== User Request ===");
-        let _ = writeln!(overview, "{}\n", user_input);
-
-        let _ = writeln!(overview, "=== Tool History (most recent) ===");
-        if tool_history.is_empty() {
-            let _ = writeln!(overview, "None yet.\n");
-        } else {
-            for (idx, (command_xml, output_summary)) in tool_history.iter().enumerate() {
-                let _ = writeln!(overview, "{}. Command:", idx + 1);
-                let _ = writeln!(overview, "{}\n", command_xml.trim());
-                let _ = writeln!(overview, "Result:");
-                let _ = writeln!(overview, "{}\n", output_summary.trim());
-            }
-        }
-        let _ = writeln!(overview, "Use the user request and the tool history above to choose the next single XML tool call.");
-
-        overview
     }
 }
 
