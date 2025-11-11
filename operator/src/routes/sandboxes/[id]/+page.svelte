@@ -1232,6 +1232,11 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 </section>
                 <section>
                   <h6 class="fw-semibold fs-6 mb-2">Output</h6>
+                  {#if selectedTask?.output?.text && selectedTask.output.text.trim()}
+                    <div class="markdown-body mb-3">
+                      {@html renderMarkdown(selectedTask.output.text.trim())}
+                    </div>
+                  {/if}
                   {#if taskOutputItems(selectedTask).length}
                     {#each taskOutputItems(selectedTask) as item}
                       {#if String(item?.type || '').toLowerCase() === 'markdown'}
