@@ -369,7 +369,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("Follow these rules:\n");
         prompt.push_str("- Always respond with exactly ONE XML element (a tool call). Plain text responses are forbidden.\n");
         prompt.push_str("- Communicate final answers back to the AI Agent exclusively via the `<output>` tool call. Do not use `<output>` for intermediate status updates.\n");
-        prompt.push_str("- Keep `commentary` attributes short (gerund form: \"Inspecting…\").\n");
+        prompt.push_str("- Keep `commentary` attributes short (gerund form like \"Inspecting\"), and never use ellipses (\"...\").\n");
         prompt.push_str("- Use only the tools listed below; do not invent new tool names.\n");
         prompt.push_str("- Continue issuing tool calls until the task is complete, then send a single `<output>` summarizing the result or question.\n");
         prompt.push_str("- When you receive a `<tool_result>` message, use its information to decide your next tool call.\n");
