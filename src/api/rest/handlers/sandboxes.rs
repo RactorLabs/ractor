@@ -21,8 +21,6 @@ use crate::shared::models::{
     UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
-// Use fully-qualified names for task records to avoid name conflict with local SandboxResponse
-use crate::shared::models::task as task_model;
 
 // Helper: determine if principal has admin-like privileges via RBAC (wildcard rule)
 async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
@@ -1230,8 +1228,8 @@ pub async fn terminate_sandbox(
         })?;
     }
 
-    let pending_requests = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-        r#"SELECT id, created_by, payload
+    let pending_requests = sqlx::query_as::<_, (String, serde_json::Value)>(
+        r#"SELECT id, payload
            FROM sandbox_requests
            WHERE sandbox_id = ?
              AND request_type = 'create_task'
@@ -1242,38 +1240,14 @@ pub async fn terminate_sandbox(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to load pending requests: {}", e)))?;
 
-    for (request_id, created_by, payload) in pending_requests {
-        let task_id = payload
-            .get("task_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if task_id.is_empty() {
-            continue;
-        }
-        let input = payload
-            .get("input")
-            .cloned()
-            .unwrap_or_else(|| serde_json::json!({"text":""}));
-        let output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
-        let _ = sqlx::query(
-            r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, created_at, updated_at)
-                VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
-                ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
-        )
-        .bind(&task_id)
-        .bind(&sandbox.id)
-        .bind(&created_by)
-        .bind(&input)
-        .bind(&output)
-        .execute(&*state.db)
-        .await;
-
+    for (request_id, payload) in pending_requests {
+        let cancelled_payload = payload.get("input").cloned();
         let _ = sqlx::query(
             r#"UPDATE sandbox_requests
-               SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled'
+               SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled', payload = ?
                WHERE id = ?"#,
         )
+        .bind(cancelled_payload.unwrap_or_else(|| serde_json::json!({ "cancelled": true })))
         .bind(&request_id)
         .execute(&*state.db)
         .await;

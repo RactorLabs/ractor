@@ -923,39 +923,17 @@ impl SandboxManager {
             .bind(&task_id)
             .execute(&self.pool)
             .await;
-        } else {
-            // If no task row exists yet (pre-insert race), try to find the latest create_task request and insert a cancelled task
-            if let Some((request_id, created_by, payload)) = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-                r#"SELECT id, created_by, payload FROM sandbox_requests WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing') ORDER BY created_at DESC LIMIT 1"#
-            )
-            .bind(&sandbox.id)
-            .fetch_optional(&self.pool)
-            .await
-            .unwrap_or(None)
-            {
-                if let Some(task_id) = payload.get("task_id").and_then(|v| v.as_str()) {
-                    let input = payload.get("input").cloned().unwrap_or_else(|| serde_json::json!({"text":""}));
-                    let cancelled_item = serde_json::json!({"type":"cancelled","reason": reason, "at": now_text});
-                    let output = serde_json::json!({"text":"","items":[cancelled_item]});
-                    let _ = sqlx::query(
-                        r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-                            VALUES (?, ?, ?, 'cancelled', ?, ?, NULL, NULL, NOW(), NOW())
-                            ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), timeout_seconds=VALUES(timeout_seconds), timeout_at=VALUES(timeout_at), updated_at=NOW()"#
-                    )
-                    .bind(task_id)
-                    .bind(&sandbox.id)
-                    .bind(&created_by)
-                    .bind(&input)
-                    .bind(&output)
-                    .execute(&self.pool)
-                    .await;
-                    let _ = sqlx::query(r#"UPDATE sandbox_requests SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled' WHERE id = ?"#)
-                        .bind(&request_id)
-                        .execute(&self.pool)
-                        .await;
-                }
-            }
         }
+
+        let _ = sqlx::query(
+            r#"UPDATE sandbox_requests
+               SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled'
+               WHERE sandbox_id = ? AND request_type = 'create_task' AND status IN ('pending','processing')"#,
+        )
+        .bind(&sandbox.id)
+        .execute(&self.pool)
+        .await;
+
         // Determine runtime: time from last open marker (or sandbox.created_at if none)
         let recent_rows: Vec<(chrono::DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
             r#"SELECT created_at, output FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at DESC LIMIT 50"#
