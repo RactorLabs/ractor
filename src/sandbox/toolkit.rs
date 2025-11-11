@@ -45,9 +45,9 @@ impl ToolCatalog {
     }
 
     pub fn command_catalog_prompt(&self) -> String {
-        let mut guide = String::from("Command Reference:\n");
-        guide.push_str("You have the following commands at your disposal to achieve the task at hand. At each turn, you must output your next command. The command will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent commands are possible, you may emit them sequentially across turns, but never output more than one XML command in a single response. Prefer dedicated commands over shell fallbacks when available.\n\n");
-        guide.push_str("Available commands (always respond with ONE of the XML elements below):\n");
+        let mut guide = String::from("Tool Reference:\n");
+        guide.push_str("You have the following tools at your disposal to achieve the task at hand. At each turn, you must output your next tool call. The tool will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent tools are possible, you may emit them sequentially across turns, but never output more than one XML tool call in a single response. Prefer dedicated tools over shell fallbacks when available.\n\n");
+        guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
         guide.push_str(r#"<run_bash commentary="..." exec_dir="/sandbox/..." commands="..."/>"#);
         guide.push_str(
             "\n  • Execute shell commands. Use `exec_dir=\"/sandbox/...\"` for the working directory.\n",
@@ -101,7 +101,7 @@ impl ToolCatalog {
             "find_filecontent" => builtin_tools::FindFilecontentTool.execute(&args).await,
             "find_filename" => builtin_tools::FindFilenameTool.execute(&args).await,
             "output" => builtin_tools::OutputTool.execute(&args).await,
-            other => Err(anyhow::anyhow!("unknown command '{}'", other)),
+            other => Err(anyhow::anyhow!("unknown tool '{}'", other)),
         }?;
         Ok(ExecutionResult { args, output })
     }
@@ -218,7 +218,7 @@ impl ToolCatalog {
                     })]),
                 );
             }
-            other => return Err(anyhow::anyhow!("unknown command '{}'", other)),
+            other => return Err(anyhow::anyhow!("unknown tool '{}'", other)),
         }
 
         Ok(Value::Object(map))
