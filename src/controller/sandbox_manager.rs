@@ -871,9 +871,6 @@ impl SandboxManager {
             info!("Sandbox {} state updated to terminated", &sandbox.id);
         }
 
-        // Create a chat marker task to indicate the action taken
-        let task_id = uuid::Uuid::new_v4().to_string();
-        let created_by = request.created_by.clone();
         let now_text = chrono::Utc::now().to_rfc3339();
         let note = if auto {
             if reason == "task_timeout" {
@@ -964,44 +961,10 @@ impl SandboxManager {
             runtime_seconds = 0;
         }
 
-        let marker = if is_task_timeout {
-            serde_json::json!({
-                "type": "cancelled",
-                "note": note,
-                "reason": reason,
-                "by": created_by,
-                "at": now_text,
-                "runtime_seconds": runtime_seconds
-            })
-        } else {
-            serde_json::json!({
-                "type": "terminated",
-                "note": note,
-                "reason": reason,
-                "by": created_by,
-                "delay_seconds": delay_secs,
-                "at": now_text,
-                "runtime_seconds": runtime_seconds
-            })
-        };
-        let output_json = serde_json::json!({
-            "text": "",
-            "items": [ marker ]
-        });
-
-        sqlx::query(
-            r#"
-            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, 'completed', ?, ?, NULL, NULL, NOW(), NOW())
-            "#,
-        )
-        .bind(&task_id)
-        .bind(&sandbox.id)
-        .bind(&created_by)
-        .bind(&serde_json::json!({"text": ""}))
-        .bind(&output_json)
-        .execute(&self.pool)
-        .await?;
+        info!(
+            "Sandbox {} terminated (reason: {}, runtime {}s)",
+            sandbox.id, reason, runtime_seconds
+        );
 
         Ok(())
     }
