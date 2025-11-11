@@ -1174,12 +1174,6 @@ components:
           type: string
           format: date-time
           nullable: true
-        context_cutoff_at:
-          type: string
-          format: date-time
-          nullable: true
-        last_context_length:
-          type: integer
     PaginatedSessions:
       type: object
       properties:
@@ -1306,6 +1300,10 @@ components:
           type: integer
           nullable: true
           description: Reset per-task timeout; set <=0 to clear
+        context_length:
+          type: integer
+          nullable: true
+          description: Updated context length (tokens) associated with the task
     TaskView:
       type: object
       properties:
@@ -1340,6 +1338,9 @@ components:
         updated_at:
           type: string
           format: date-time
+        context_length:
+          type: integer
+          description: Total context length in tokens for the latest inference cycle
     BlockRequest:
       type: object
       required:

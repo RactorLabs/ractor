@@ -16,8 +16,6 @@ pub struct Sandbox {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
-    pub context_cutoff_at: Option<DateTime<Utc>>,
-    pub last_context_length: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,10 +254,9 @@ impl Sandbox {
     pub async fn find_all(pool: &sqlx::MySqlPool) -> Result<Vec<Sandbox>, sqlx::Error> {
         sqlx::query_as::<_, Sandbox>(
             r#"
-            SELECT id, created_by, state, description,
+            SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from, context_cutoff_at,
-                   last_context_length
+                   idle_timeout_seconds, idle_from, busy_from
             FROM sandboxes
             ORDER BY created_at DESC
             "#,
@@ -276,8 +273,7 @@ impl Sandbox {
             r#"
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from, context_cutoff_at,
-                   last_context_length
+                   idle_timeout_seconds, idle_from, busy_from
             FROM sandboxes
             WHERE id = ?
             "#,
@@ -415,43 +411,6 @@ impl Sandbox {
             .execute(pool)
             .await?;
         Ok(result.rows_affected() > 0)
-    }
-
-    pub async fn clear_context_cutoff(pool: &sqlx::MySqlPool, id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query(
-            r#"
-            UPDATE sandboxes
-            SET context_cutoff_at = NOW(),
-                last_context_length = 0
-            WHERE id = ?
-            "#,
-        )
-        .bind(id)
-        .execute(pool)
-        .await?;
-
-        Ok(())
-    }
-
-    pub async fn update_last_context_length(
-        pool: &sqlx::MySqlPool,
-        id: &str,
-        tokens: i64,
-    ) -> Result<(), sqlx::Error> {
-        let clamped = if tokens < 0 { 0 } else { tokens };
-        sqlx::query(
-            r#"
-            UPDATE sandboxes
-            SET last_context_length = ?
-            WHERE id = ?
-            "#,
-        )
-        .bind(clamped)
-        .bind(id)
-        .execute(pool)
-        .await?;
-
-        Ok(())
     }
 
     pub async fn update_sandbox_to_idle(

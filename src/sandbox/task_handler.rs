@@ -168,12 +168,22 @@ impl TaskHandler {
             }
             let response = match self
                 .inference_client
-                .complete(model_conversation, Some(system_prompt))
+                .complete(model_conversation.clone(), Some(system_prompt))
                 .await
             {
                 Ok(resp) => resp,
                 Err(e) => return Err(e),
             };
+            let context_length = response
+                .context_length
+                .unwrap_or_else(|| Self::estimate_context_length(&model_conversation));
+            if let Err(err) = self
+                .api_client
+                .update_task_context_length(&task.id, context_length)
+                .await
+            {
+                warn!("Failed to update context length: {}", err);
+            }
 
             let raw = response.content.trim();
             if raw.is_empty() {
@@ -215,6 +225,7 @@ impl TaskHandler {
                         Some("completed".to_string()),
                         Some(sanitized.clone()),
                         Some(vec![segment]),
+                        Some(context_length),
                     )
                     .await;
                 conversation.push(ChatMessage {
@@ -236,91 +247,141 @@ impl TaskHandler {
                 continue;
             }
 
-            let ExecutionResult { args, output } =
-                match self.toolkit.execute_invocation(&command).await {
-                    Ok(result) => result,
-                    Err(err) => {
-                        warn!("Tool execution error: {}", err);
-                        conversation.pop();
-                        continue;
+            match self.toolkit.execute_invocation(&command).await {
+                Ok(ExecutionResult { args, output }) => {
+                    let mut truncated_output = false;
+                    let output_text =
+                        truncate_output_text(&output, MAX_TOOL_OUTPUT_CHARS, &mut truncated_output);
+
+                    let tool_call_segment = json!({
+                        "type": "tool_call",
+                        "tool": command_name,
+                        "xml": command_text,
+                        "arguments": args.clone(),
+                    });
+                    let tool_result_segment = json!({
+                        "type": "tool_result",
+                        "tool": command_name,
+                        "output": output_text.clone(),
+                        "truncated": truncated_output,
+                    });
+
+                    let _ = self
+                        .api_client
+                        .update_task(
+                            &task.id,
+                            Some("processing".to_string()),
+                            None,
+                            Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
+                            Some(context_length),
+                        )
+                        .await;
+
+                    let output_xml = if output_text.is_empty() {
+                        String::new()
+                    } else {
+                        format!("<output>{}</output>", escape_xml(&output_text))
+                    };
+
+                    let combined_segments = output_xml;
+                    let result_message = format!(
+                        "<tool_result tool=\"{}\">{}</tool_result>",
+                        command_name, combined_segments
+                    );
+
+                    conversation.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: result_message,
+                        name: None,
+                        tool_call_id: None,
+                    });
+
+                    if command_name == "output" {
+                        let fallback = command.body.as_deref().unwrap_or("No content provided.");
+                        let summary_raw = render_output_summary(&output, fallback);
+                        let sanitized = self.guardrails.validate_output(&summary_raw)?;
+                        let final_segment = json!({
+                            "type": "final",
+                            "tool": "output",
+                            "content": sanitized,
+                        });
+
+                        let _ = self
+                            .api_client
+                            .update_task(
+                                &task.id,
+                                Some("completed".to_string()),
+                                Some(sanitized.clone()),
+                                Some(vec![final_segment.clone()]),
+                                Some(context_length),
+                            )
+                            .await;
+
+                        conversation.push(ChatMessage {
+                            role: "assistant".to_string(),
+                            content: sanitized.clone(),
+                            name: None,
+                            tool_call_id: None,
+                        });
+                        return Ok(());
                     }
-                };
+                }
+                Err(exec_error) => {
+                    let args = exec_error.args;
+                    let error_message =
+                        format!("Tool '{}' failed: {}", command_name, exec_error.message);
+                    warn!("{}", error_message);
 
-            let mut truncated_output = false;
-            let output_text =
-                truncate_output_text(&output, MAX_TOOL_OUTPUT_CHARS, &mut truncated_output);
+                    let tool_call_segment = json!({
+                        "type": "tool_call",
+                        "tool": command_name,
+                        "xml": command_text,
+                        "arguments": args.clone(),
+                    });
 
-            let tool_call_segment = json!({
-                "type": "tool_call",
-                "tool": command_name,
-                "xml": command_text,
-                "arguments": args,
-            });
-            let tool_result_segment = json!({
-                "type": "tool_result",
-                "tool": command_name,
-                "output": output_text.clone(),
-                "truncated": truncated_output,
-            });
+                    let mut truncated_error = false;
+                    let error_value = serde_json::Value::String(error_message.clone());
+                    let error_display = truncate_output_text(
+                        &error_value,
+                        MAX_TOOL_OUTPUT_CHARS,
+                        &mut truncated_error,
+                    );
 
-            let _ = self
-                .api_client
-                .update_task(
-                    &task.id,
-                    Some("processing".to_string()),
-                    None,
-                    Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
-                )
-                .await;
+                    let tool_result_segment = json!({
+                        "type": "tool_result",
+                        "tool": command_name,
+                        "error": {
+                            "message": error_display.clone()
+                        },
+                        "truncated": truncated_error,
+                    });
 
-            let output_xml = if output_text.is_empty() {
-                String::new()
-            } else {
-                format!("<output>{}</output>", escape_xml(&output_text))
-            };
+                    let _ = self
+                        .api_client
+                        .update_task(
+                            &task.id,
+                            Some("processing".to_string()),
+                            None,
+                            Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
+                            Some(context_length),
+                        )
+                        .await;
 
-            let combined_segments = output_xml;
-            let result_message = format!(
-                "<tool_result tool=\"{}\">{}</tool_result>",
-                command_name, combined_segments
-            );
+                    let result_message = format!(
+                        "<tool_result tool=\"{}\" error=\"true\"><![CDATA[{}]]></tool_result>",
+                        command_name, error_display
+                    );
 
-            conversation.push(ChatMessage {
-                role: "tool".to_string(),
-                content: result_message,
-                name: None,
-                tool_call_id: None,
-            });
+                    conversation.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: result_message,
+                        name: None,
+                        tool_call_id: None,
+                    });
 
-            if command_name == "output" {
-                let fallback = command.body.as_deref().unwrap_or("No content provided.");
-                let summary_raw = render_output_summary(&output, fallback);
-                let sanitized = self.guardrails.validate_output(&summary_raw)?;
-                let final_segment = json!({
-                    "type": "final",
-                    "tool": "output",
-                    "content": sanitized,
-                });
-
-                let _ = self
-                    .api_client
-                    .update_task(
-                        &task.id,
-                        Some("completed".to_string()),
-                        Some(sanitized.clone()),
-                        Some(vec![final_segment.clone()]),
-                    )
-                    .await;
-
-                conversation.push(ChatMessage {
-                    role: "assistant".to_string(),
-                    content: sanitized.clone(),
-                    name: None,
-                    tool_call_id: None,
-                });
-                return Ok(());
+                    continue;
+                }
             }
-
         }
     }
 
@@ -383,9 +444,13 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- When using `run_bash`, set `exec_dir` to `/sandbox` or a subdirectory and keep every command scoped inside `/sandbox`.\n");
         prompt.push_str("- For `run_bash`, use simple portable commands, echo the action before running them, run one command at a time, and avoid aliases or prompts.\n");
         prompt.push_str("- On tool failure, capture the exit code, show the last 20 lines of stderr, explain a safer plan, and retry once with adjusted parameters.\n");
-        prompt.push_str("- If a path is missing, suggest creating it and confirm before proceeding.\n");
+        prompt.push_str(
+            "- If a path is missing, suggest creating it and confirm before proceeding.\n",
+        );
         prompt.push_str("- When output is very large, redirect to a file under /sandbox and show the head plus the saved path.\n");
-        prompt.push_str("- Never ask the user to run anything; you execute tasks via the available tools.\n");
+        prompt.push_str(
+            "- Never ask the user to run anything; you execute tasks via the available tools.\n",
+        );
         prompt.push_str("- Prefer incremental edits: open -> edit -> verify.\n\n");
         prompt.push_str("Examples of forbidden extra work:\n");
         prompt.push_str("- Do not scaffold or create test files after cloning a repository unless the user asks for tests.\n");
@@ -400,7 +465,22 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
 
         prompt
     }
+}
 
+impl TaskHandler {
+    fn estimate_context_length(messages: &[ChatMessage]) -> i64 {
+        messages.iter().fold(0i64, |acc, msg| {
+            let content = msg.content.trim();
+            if content.is_empty() {
+                return acc;
+            }
+            let char_count = content.chars().count() as i64;
+            let word_count = content.split_whitespace().filter(|w| !w.is_empty()).count() as i64;
+            let approx_content_tokens =
+                std::cmp::max((char_count + 3) / 4, std::cmp::max(word_count, 1));
+            acc.saturating_add(approx_content_tokens + 4)
+        })
+    }
 }
 
 fn extract_first_text(items: &[Value]) -> String {

@@ -527,8 +527,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
         .fetch_one(&self.pool)
@@ -674,7 +674,10 @@ impl SandboxManager {
             .bind(Option::<chrono::DateTime<Utc>>::None)
             .execute(&self.pool)
             .await?;
-            info!("Startup task {} created for sandbox ID {}", task_id, &sandbox.id);
+            info!(
+                "Startup task {} created for sandbox ID {}",
+                task_id, &sandbox.id
+            );
         }
 
         // Set sandbox state to INIT after container creation only if it hasn't changed yet.
@@ -756,8 +759,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
         .fetch_one(&self.pool)
@@ -974,8 +977,8 @@ impl SandboxManager {
     pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
         .fetch_one(&self.pool)
@@ -1055,8 +1058,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             context_cutoff_at, last_context_length FROM sandboxes WHERE id = ?",
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
         .fetch_one(&self.pool)

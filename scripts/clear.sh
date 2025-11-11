@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# Clears all data from the default MySQL database used by the TSBX dev stack.
-# Connects via docker exec to the running MySQL container and truncates every table.
+# Clears and recreates the default MySQL database used by the TSBX dev stack.
+# Connects via docker exec to the running MySQL container, drops the database, and creates it fresh.
 
 set -euo pipefail
 
@@ -21,25 +21,8 @@ if ! docker ps --format '{{.Names}}' | grep -Fxq "${MYSQL_CONTAINER}"; then
   exit 1
 fi
 
-tables="$(docker exec "${MYSQL_CONTAINER}" \
-  mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" \
-  -N -B -e "SELECT table_name FROM information_schema.tables WHERE table_schema = '${MYSQL_DATABASE}' AND table_type = 'BASE TABLE';")"
-
-if [[ -z "${tables}" ]]; then
-  echo "[INFO] No tables found in database '${MYSQL_DATABASE}'. Nothing to clear."
-  exit 0
-fi
-
-truncate_sql="SET FOREIGN_KEY_CHECKS = 0; "
-while IFS= read -r table; do
-  [[ -z "${table}" ]] && continue
-  truncate_sql+="TRUNCATE TABLE \`${table}\`; "
-done <<< "${tables}"
-truncate_sql+="SET FOREIGN_KEY_CHECKS = 1;"
-
 docker exec "${MYSQL_CONTAINER}" \
   mysql -u"${MYSQL_USER}" -p"${MYSQL_PASSWORD}" \
-  --database "${MYSQL_DATABASE}" \
-  -e "${truncate_sql}"
+  -e "DROP DATABASE IF EXISTS \`${MYSQL_DATABASE}\`; CREATE DATABASE \`${MYSQL_DATABASE}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-echo "[SUCCESS] Cleared all tables in '${MYSQL_DATABASE}' on container '${MYSQL_CONTAINER}'."
+echo "[SUCCESS] Dropped and re-created '${MYSQL_DATABASE}' on container '${MYSQL_CONTAINER}'."

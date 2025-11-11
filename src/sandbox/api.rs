@@ -19,8 +19,6 @@ pub struct Sandbox {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
-    pub context_cutoff_at: Option<String>,
-    pub last_context_length: i64,
 }
 
 pub struct TaskSandboxClient {
@@ -42,6 +40,46 @@ impl TaskSandboxClient {
             client,
             config,
             sandbox_id,
+        }
+    }
+
+    pub async fn update_task_context_length(&self, id: &str, context_length: i64) -> Result<()> {
+        let clamped = context_length.max(0);
+        let url = format!(
+            "{}/api/v0/sandboxes/{}/tasks/{}",
+            self.config.api_url, self.sandbox_id, id
+        );
+        let req = UpdateTaskRequest {
+            status: None,
+            input: None,
+            output: None,
+            steps: None,
+            timeout_seconds: None,
+            context_length: Some(clamped),
+        };
+        let response = self
+            .client
+            .put(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&req)
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK => Ok(()),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api("Task not found".to_string())),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to update task context length ({}): {}",
+                    status, error_text
+                )))
+            }
         }
     }
 
@@ -162,6 +200,7 @@ impl TaskSandboxClient {
         status: Option<String>,
         output_text: Option<String>,
         steps: Option<Vec<serde_json::Value>>,
+        context_length: Option<i64>,
     ) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sandboxes/{}/tasks/{}",
@@ -182,6 +221,7 @@ impl TaskSandboxClient {
             output: output_value,
             steps,
             timeout_seconds: None,
+            context_length,
         };
         let response = self
             .client
@@ -379,6 +419,7 @@ pub struct TaskSummary {
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<serde_json::Value>,
+    pub context_length: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -401,6 +442,7 @@ pub struct TaskView {
     pub steps: Vec<serde_json::Value>,
     #[serde(default)]
     pub output: serde_json::Value,
+    pub context_length: i64,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
     #[serde(default)]
@@ -430,4 +472,6 @@ pub struct UpdateTaskRequest {
     pub steps: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_length: Option<i64>,
 }

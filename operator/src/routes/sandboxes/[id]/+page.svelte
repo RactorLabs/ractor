@@ -499,10 +499,26 @@
   function countDirs() { try { return (fmEntries || []).filter(e => { const k = String(e?.kind || '').toLowerCase(); return k === 'dir' || k === 'directory'; }).length; } catch (_) { return 0; } }
   function countSymlinks() { return countKind('symlink'); }
   const CONTEXT_SOFT_LIMIT_TOKENS = 128000; // Keep aligned with backend default
-  $: contextTokensUsed = Number(sandbox?.last_context_length ?? 0);
+  $: context_length = (() => {
+    const detail = displayTask;
+    if (detail && detail.context_length != null) {
+      const value = Number(detail.context_length);
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (selectedTaskSummary && selectedTaskSummary.context_length != null) {
+      const value = Number(selectedTaskSummary.context_length);
+      return Number.isFinite(value) ? value : 0;
+    }
+    const latest = tasks && tasks.length ? tasks[tasks.length - 1] : null;
+    if (latest && latest.context_length != null) {
+      const value = Number(latest.context_length);
+      return Number.isFinite(value) ? value : 0;
+    }
+    return 0;
+  })();
   $: contextSoftLimit = CONTEXT_SOFT_LIMIT_TOKENS;
   $: contextUsedPercent = contextSoftLimit > 0
-    ? Math.min(100, (contextTokensUsed / contextSoftLimit) * 100)
+    ? Math.min(100, (context_length / contextSoftLimit) * 100)
     : 0;
   let _runtimeFetchedAt = 0;
   let inputEl = null; // task textarea element
@@ -1356,7 +1372,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               <div class="mt-2">
                 <div class="d-flex align-items-center justify-content-between">
-                  <div class="me-2">Context: {fmtInt(contextTokensUsed)} / {fmtInt(contextSoftLimit)} ({fmtPct(contextUsedPercent)})</div>
+                  <div class="me-2">Context: {fmtInt(context_length)} / {fmtInt(contextSoftLimit)} ({fmtPct(contextUsedPercent)})</div>
                 </div>
                 <div class="progress mt-1" role="progressbar" aria-valuenow={Number(contextUsedPercent)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
                   <div class={`progress-bar ${Number(contextUsedPercent) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${Number(contextUsedPercent).toFixed(1)}%;`}></div>
@@ -1575,6 +1591,10 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             {#if error}
               <div class="alert alert-danger small mb-3">{error}</div>
             {/if}
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2 small text-body-secondary">
+              <div>Context length: {fmtInt(context_length)} tokens</div>
+              <div>Limit: {fmtInt(contextSoftLimit)} tokens ({fmtPct(contextUsedPercent)} used)</div>
+            </div>
             <form class="task-form" on:submit|preventDefault={createTask}>
               <div class="input-group task-input-group rounded-0 shadow-none">
                 <textarea

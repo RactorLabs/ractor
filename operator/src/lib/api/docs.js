@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"context_cutoff_at":null,"last_context_length":2048}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -262,7 +262,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"]}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null}` }
           ]
         },
         {
@@ -276,7 +276,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"context_cutoff_at":null,"last_context_length":1024}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }
           ]
         },
         {
@@ -294,7 +294,7 @@ export function getApiDocs(base) {
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Updated","tags":["prod","team"]}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Updated","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":["prod","team"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:20:00Z","busy_from":null,"context_cutoff_at":null,"last_context_length":1024}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Updated","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:20:00Z","metadata":{},"tags":["prod","team"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:20:00Z","busy_from":null}` }
           ]
         },
         {
@@ -381,7 +381,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
@@ -398,7 +398,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"segments":[{"type":"final","channel":"final","text":"hi there"}],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"segments":[{"type":"final","channel":"final","text":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
@@ -414,7 +414,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[],"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -428,12 +428,13 @@ export function getApiDocs(base) {
             { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
             { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update (replaces existing input JSON).' },
             { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges text/items into existing output.' },
-            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' }
+            { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' },
+            { in: 'body', name: 'context_length', type: 'int|null', required: false, desc: 'Update latest context length (tokens).' }
           ],
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -526,7 +527,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/snapshots/<id>/create -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Restored"}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"new_sandbox","created_by":"admin","state":"initializing","description":"Restored","snapshot_id":"<id>","created_at":"2025-01-01T16:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"context_cutoff_at":null,"last_context_length":0}` }
+            { status: 200, body: `{"id":"new_sandbox","created_by":"admin","state":"initializing","description":"Restored","snapshot_id":"<id>","created_at":"2025-01-01T16:00:00Z","last_activity_at":null,"metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null}` }
           ]
         },
         {

@@ -1,6 +1,7 @@
 use super::error::{HostError, Result};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::cmp::max;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -66,6 +67,7 @@ pub struct ModelResponse {
     pub total_tokens: Option<i64>,
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
+    pub context_length: Option<i64>,
 }
 
 impl InferenceClient {
@@ -147,6 +149,7 @@ impl InferenceClient {
                 messages: attempt_messages,
                 stream: false,
             };
+            let estimated_context_length = Self::estimate_context_length(&req.messages);
 
             let log_id = self.log_seq.fetch_add(1, Ordering::SeqCst) + 1;
             self.log_inference_request(&req, log_id).await;
@@ -191,12 +194,17 @@ impl InferenceClient {
 
                     let raw_content = choice.message.content.unwrap_or_default();
                     let usage = parsed.usage.unwrap_or_default();
+                    let context_length = usage
+                        .prompt_tokens
+                        .or(usage.total_tokens)
+                        .unwrap_or(estimated_context_length);
 
                     return Ok(ModelResponse {
                         content: raw_content.trim().to_string(),
                         total_tokens: usage.total_tokens,
                         prompt_tokens: usage.prompt_tokens,
                         completion_tokens: usage.completion_tokens,
+                        context_length: Some(context_length.max(0)),
                     });
                 }
                 Err(e) => {
@@ -213,6 +221,20 @@ impl InferenceClient {
         Err(HostError::Model(
             "Inference response parsing failed after retries".to_string(),
         ))
+    }
+
+    fn estimate_context_length(messages: &[ChatRequestMessage]) -> i64 {
+        messages.iter().fold(0i64, |acc, msg| {
+            let content = msg.content.trim();
+            if content.is_empty() {
+                return acc;
+            }
+            let char_count = content.chars().count() as i64;
+            let word_count = content.split_whitespace().filter(|w| !w.is_empty()).count() as i64;
+            let approx_content_tokens = max((char_count + 3) / 4, max(word_count, 1));
+            let per_message_overhead = 4; // rough allowance for role/name metadata
+            acc.saturating_add(approx_content_tokens + per_message_overhead)
+        })
     }
 
     async fn log_inference_request(&self, req: &ChatRequest, id: u64) {

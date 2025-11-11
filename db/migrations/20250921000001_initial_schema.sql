@@ -50,10 +50,6 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
 
-    -- Context cutoff marker for conversation trimming
-    context_cutoff_at TIMESTAMP NULL,
-    last_context_length BIGINT NOT NULL DEFAULT 0,
-
     -- Constraints
     CONSTRAINT sandboxes_state_check CHECK (state IN ('initializing', 'idle', 'busy', 'terminating', 'terminated')),
     CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
@@ -65,8 +61,7 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     INDEX idx_sandboxes_created_by (created_by),
     INDEX idx_sandboxes_state (state),
     INDEX idx_sandboxes_idle_from (idle_from, state),
-    INDEX idx_sandboxes_busy_from (busy_from, state),
-    INDEX idx_sandboxes_context_cutoff (context_cutoff_at)
+    INDEX idx_sandboxes_busy_from (busy_from, state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sandbox Tasks (user conversations)
@@ -78,6 +73,7 @@ CREATE TABLE IF NOT EXISTS sandbox_tasks (
     input JSON NOT NULL,
     output JSON NOT NULL,
     steps JSON NOT NULL DEFAULT ('[]'),
+    context_length BIGINT NOT NULL DEFAULT 0,
     timeout_seconds INT NULL,
     timeout_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

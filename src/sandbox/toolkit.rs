@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Error as AnyError, Result};
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -17,6 +17,20 @@ pub trait Tool: Send + Sync {
 pub struct ExecutionResult {
     pub args: Value,
     pub output: Value,
+}
+
+pub struct ExecutionError {
+    pub args: Value,
+    pub message: String,
+}
+
+impl ExecutionError {
+    fn from_error(args: Value, err: AnyError) -> Self {
+        Self {
+            args,
+            message: err.to_string(),
+        }
+    }
 }
 
 pub struct ToolCatalog;
@@ -54,11 +68,17 @@ impl ToolCatalog {
         );
         guide.push_str("    - Use simple, portable bash lines (no aliases/prompts).\n");
         guide.push_str("    - Echo the action before running it (e.g., `echo 'Listing data'; ls -lah data`).\n");
-        guide.push_str("    - Run one command at a time so you can verify each result before continuing.\n");
+        guide.push_str(
+            "    - Run one command at a time so you can verify each result before continuing.\n",
+        );
         guide.push_str("    - Prefer portable flags (e.g., `mkdir -p \"data/raw\"`, `ls -lah \"data\"`, `grep -R \"TODO\" -n \"src\" || true`).\n");
         guide.push_str("    - If a command fails, note the exit code, surface the last 20 stderr lines, suggest a fix, and retry once with a safer variant.\n");
-        guide.push_str("    - If a path is missing, mention how to create it and ask whether to proceed.\n");
-        guide.push_str("    - For large output, redirect to a file, then show the head and the saved path.\n");
+        guide.push_str(
+            "    - If a path is missing, mention how to create it and ask whether to proceed.\n",
+        );
+        guide.push_str(
+            "    - For large output, redirect to a file, then show the head and the saved path.\n",
+        );
         guide.push_str(
             r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );
@@ -96,8 +116,14 @@ impl ToolCatalog {
         guide
     }
 
-    pub async fn execute_invocation(&self, cmd: &CommandInvocation) -> Result<ExecutionResult> {
-        let args = self.build_args(cmd)?;
+    pub async fn execute_invocation(
+        &self,
+        cmd: &CommandInvocation,
+    ) -> std::result::Result<ExecutionResult, ExecutionError> {
+        let args = match self.build_args(cmd) {
+            Ok(value) => value,
+            Err(err) => return Err(ExecutionError::from_error(Value::Null, err)),
+        };
         let output = match cmd.name.as_str() {
             "run_bash" => builtin_tools::ShellTool::new().execute(&args).await,
             "open_file" => builtin_tools::OpenFileTool.execute(&args).await,
@@ -109,8 +135,11 @@ impl ToolCatalog {
             "find_filename" => builtin_tools::FindFilenameTool.execute(&args).await,
             "output" => builtin_tools::OutputTool.execute(&args).await,
             other => Err(anyhow::anyhow!("unknown tool '{}'", other)),
-        }?;
-        Ok(ExecutionResult { args, output })
+        };
+        match output {
+            Ok(output) => Ok(ExecutionResult { args, output }),
+            Err(err) => Err(ExecutionError::from_error(args, err)),
+        }
     }
 
     fn build_args(&self, cmd: &CommandInvocation) -> Result<Value> {

@@ -12,6 +12,7 @@ pub struct SandboxTask {
     pub input: serde_json::Value,
     pub output: serde_json::Value,
     pub steps: serde_json::Value,
+    pub context_length: i64,
     pub timeout_seconds: Option<i32>,
     pub timeout_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -34,6 +35,7 @@ pub struct TaskSummary {
     pub status: String,
     #[serde(default)]
     pub input_content: Vec<Value>,
+    pub context_length: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -54,6 +56,8 @@ pub struct UpdateTaskRequest {
     pub steps: Option<Vec<Value>>,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
+    #[serde(default)]
+    pub context_length: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,6 +75,7 @@ pub struct TaskView {
     pub steps: Vec<Value>,
     #[serde(default)]
     pub output: Value,
+    pub context_length: i64,
     pub timeout_seconds: Option<i32>,
     pub timeout_at: Option<String>,
     pub created_at: String,
@@ -98,8 +103,8 @@ impl SandboxTask {
 
         sqlx::query(
             r#"
-            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, steps, context_length, timeout_seconds, timeout_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
@@ -109,6 +114,7 @@ impl SandboxTask {
         .bind(&req.input)
         .bind(&initial_output)
         .bind(&initial_steps)
+        .bind(0_i64)
         .bind(timeout_seconds)
         .bind(timeout_at)
         .bind(&now)
@@ -124,6 +130,7 @@ impl SandboxTask {
             input: req.input,
             output: initial_output,
             steps: initial_steps,
+            context_length: 0,
             timeout_seconds,
             timeout_at,
             created_at: now,
@@ -141,7 +148,7 @@ impl SandboxTask {
         let offset = offset.unwrap_or(0);
         sqlx::query_as::<_, SandboxTask>(
             r#"
-            SELECT id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at
+            SELECT id, sandbox_id, created_by, status, input, output, steps, context_length, timeout_seconds, timeout_at, created_at, updated_at
             FROM sandbox_tasks
             WHERE sandbox_id = ?
             ORDER BY created_at ASC, id ASC
@@ -167,12 +174,32 @@ impl SandboxTask {
         Ok(result)
     }
 
+    pub async fn latest_context_length(
+        pool: &sqlx::MySqlPool,
+        sandbox_id: &str,
+    ) -> Result<i64, sqlx::Error> {
+        let result = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT context_length
+            FROM sandbox_tasks
+            WHERE sandbox_id = ?
+            ORDER BY updated_at DESC, created_at DESC, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(sandbox_id)
+        .fetch_optional(pool)
+        .await?;
+
+        Ok(result.unwrap_or(0))
+    }
+
     pub async fn find_by_id(
         pool: &sqlx::MySqlPool,
         id: &str,
     ) -> Result<Option<SandboxTask>, sqlx::Error> {
         sqlx::query_as::<_, SandboxTask>(
-            r#"SELECT id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at FROM sandbox_tasks WHERE id = ?"#
+            r#"SELECT id, sandbox_id, created_by, status, input, output, steps, context_length, timeout_seconds, timeout_at, created_at, updated_at FROM sandbox_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -219,6 +246,13 @@ impl SandboxTask {
             existing.extend(new_steps);
             task.steps = serde_json::Value::Array(existing);
         }
+        if let Some(context_length) = req.context_length {
+            task.context_length = if context_length < 0 {
+                0
+            } else {
+                context_length
+            };
+        }
 
         {
             let content_items = compute_output_content(&task.output, &task.steps);
@@ -253,12 +287,13 @@ impl SandboxTask {
             }
         }
         sqlx::query(
-            r#"UPDATE sandbox_tasks SET status=?, input=?, output=?, steps=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE sandbox_tasks SET status=?, input=?, output=?, steps=?, context_length=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&task.status)
         .bind(&task.input)
         .bind(&task.output)
         .bind(&task.steps)
+        .bind(task.context_length)
         .bind(task.timeout_seconds)
         .bind(task.timeout_at)
         .bind(&now)

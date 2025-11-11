@@ -61,8 +61,6 @@ pub struct SandboxResponse {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
-    pub context_cutoff_at: Option<String>,
-    pub last_context_length: i64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -165,8 +163,6 @@ impl SandboxResponse {
             idle_timeout_seconds: sandbox.idle_timeout_seconds,
             idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
-            context_cutoff_at: sandbox.context_cutoff_at.map(|dt| dt.to_rfc3339()),
-            last_context_length: sandbox.last_context_length,
         })
     }
 }
@@ -749,8 +745,7 @@ pub async fn list_sandboxes(
         r#"
         SELECT id, created_by, state, description, snapshot_id,
                created_at, last_activity_at, metadata, tags,
-               idle_timeout_seconds, idle_from, busy_from, context_cutoff_at,
-               last_context_length
+               idle_timeout_seconds, idle_from, busy_from
         FROM sandboxes
         {}
         ORDER BY created_at DESC
@@ -871,6 +866,7 @@ pub async fn cancel_task(
                 })),
                 steps: Some(vec![cancelled_item.clone()]),
                 timeout_seconds: None,
+                context_length: None,
             };
             SandboxTask::update_by_id(&state.db, &task_id, req)
                 .await
@@ -1178,6 +1174,7 @@ pub async fn terminate_sandbox(
             })),
             steps: Some(vec![cancelled_item.clone()]),
             timeout_seconds: None,
+            context_length: None,
         };
         SandboxTask::update_by_id(&state.db, &task_id, req)
             .await
@@ -1422,6 +1419,7 @@ pub async fn list_tasks(
             sandbox_id: task.sandbox_id,
             status: task.status,
             input_content: extract_input_content(&task.input),
+            context_length: task.context_length,
             timeout_seconds: task.timeout_seconds,
             timeout_at: task.timeout_at.map(|dt| dt.to_rfc3339()),
             created_at: task.created_at.to_rfc3339(),
@@ -1448,7 +1446,11 @@ pub async fn create_task(
     check_not_terminated(&sandbox)?;
 
     let limit_tokens = soft_limit_tokens();
-    let used_tokens = sandbox.last_context_length;
+    let used_tokens = SandboxTask::latest_context_length(&state.db, &sandbox.id)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!("Failed to fetch context length: {}", e))
+        })?;
     if used_tokens >= limit_tokens {
         return Err(ApiError::Conflict(format!(
             "Context is full ({} / {} tokens). Terminate and relaunch sandbox {} to continue.",
@@ -1533,6 +1535,7 @@ pub async fn create_task(
                             segments: extract_segments(&cur.steps),
                             steps: extract_steps(&cur.steps),
                             output: cur.output.clone(),
+                            context_length: cur.context_length,
                             timeout_seconds: cur.timeout_seconds,
                             timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
                             created_at: cur.created_at.to_rfc3339(),
@@ -1572,6 +1575,7 @@ pub async fn create_task(
             "text": "",
             "content": []
         }),
+        context_length: 0,
         timeout_seconds: timeout_seconds_value,
         timeout_at,
         created_at: now.to_rfc3339(),
@@ -1603,6 +1607,7 @@ pub async fn get_task_by_id(
         segments: extract_segments(&cur.steps),
         steps: extract_steps(&cur.steps),
         output: cur.output.clone(),
+        context_length: cur.context_length,
         timeout_seconds: cur.timeout_seconds,
         timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: cur.created_at.to_rfc3339(),
@@ -1666,6 +1671,7 @@ pub async fn update_task(
         segments: extract_segments(&updated.steps),
         steps: extract_steps(&updated.steps),
         output: updated.output.clone(),
+        context_length: updated.context_length,
         timeout_seconds: updated.timeout_seconds,
         timeout_at: updated.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: updated.created_at.to_rfc3339(),
