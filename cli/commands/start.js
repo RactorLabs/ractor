@@ -102,7 +102,7 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--default-model <model>', 'Default inference model name', 'llama-3.2-3b-instruct-fast-tp2')
+    .option('--inference-model <model>', 'Inference model name', 'llama-3.2-3b-instruct-fast-tp2')
     .option('--inference-url <url>', 'Inference API base URL', 'https://api.positron.ai/v1')
     .option('--inference-api-key <key>', 'Inference API key (Bearer token)')
     // MySQL options
@@ -122,7 +122,6 @@ module.exports = (program) => {
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
-    .option('--controller-default-model <model>', 'Override controller default model (falls back to global default)')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
@@ -297,12 +296,17 @@ module.exports = (program) => {
 
         const INFERENCE_URL = options.inferenceUrl || process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1';
         const INFERENCE_API_KEY = options.inferenceApiKey || process.env.TSBX_INFERENCE_API_KEY || '6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM';
-        const DEFAULT_MODEL = (() => {
-          const src = getOptionSource('defaultModel');
-          if (src === 'cli') return options.defaultModel;
-          return process.env.TSBX_DEFAULT_MODEL || options.defaultModel || 'llama-3.2-3b-instruct-fast-tp2';
+        const INFERENCE_MODEL = (() => {
+          const src = getOptionSource('inferenceModel');
+          if (src === 'cli') {
+            return options.inferenceModel;
+          }
+          const envModel = process.env.TSBX_INFERENCE_MODEL;
+          if (envModel && envModel.trim() !== '') {
+            return envModel;
+          }
+          return options.inferenceModel || 'llama-3.2-3b-instruct-fast-tp2';
         })();
-        const INFERENCE_MODEL = process.env.TSBX_INFERENCE_MODEL || DEFAULT_MODEL;
 
         for (const comp of components) {
           switch (comp) {
@@ -388,7 +392,6 @@ module.exports = (program) => {
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
-                '-e',`TSBX_DEFAULT_MODEL=${DEFAULT_MODEL}`,
                 '-e',`TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`,
                 ...(options.apiTaskSandboxHost ? ['-e', `TSBX_HOST=${options.apiTaskSandboxHost}`] : []),
                 ...(options.apiTaskSandboxPort ? ['-e', `TSBX_PORT=${options.apiTaskSandboxPort}`] : []),
@@ -404,11 +407,7 @@ module.exports = (program) => {
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
               const desiredInferenceUrl = INFERENCE_URL;
-              const desiredModel = (() => {
-                const srcCtrl = getOptionSource('controllerDefaultModel');
-                if (srcCtrl === 'cli') return options.controllerDefaultModel;
-                return DEFAULT_MODEL;
-              })();
+              const desiredModel = INFERENCE_MODEL;
 
               // If container exists, verify env matches; recreate if not
               if (await containerExists('tsbx_controller')) {
@@ -420,7 +419,7 @@ module.exports = (program) => {
                     return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
                   }));
                   const currentUrl = envMap['TSBX_INFERENCE_URL'];
-                  const currentModel = envMap['TSBX_DEFAULT_MODEL'];
+                  const currentModel = envMap['TSBX_INFERENCE_MODEL'];
                   const currentKey = envMap['TSBX_INFERENCE_API_KEY'];
                   const needsRecreate =
                     currentUrl !== desiredInferenceUrl ||
@@ -457,7 +456,6 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
-                '-e',`TSBX_DEFAULT_MODEL=${desiredModel}`,
                 '-e',`TSBX_INFERENCE_MODEL=${desiredModel}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,

@@ -22,7 +22,7 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 - Built-in agent tooling — The sandbox runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
 - Observability & lifecycle control — Controller and sandbox services emit structured tracing logs, while the Operator UI surfaces status, timers, and lifecycle actions (stop, restart, remix, publish) for operators.
 - API coverage — The Rust API service exposes REST endpoints for sandboxes, tasks, operators, files, and auth, enabling external orchestration or integration.
-- LLM integration — Sessions call the configured inference service via `TSBX_INFERENCE_URL`, `TSBX_INFERENCE_API_KEY`, and `TSBX_INFERENCE_MODEL` (fallback to `TSBX_DEFAULT_MODEL`).
+- LLM integration — Sessions call the configured inference service via `TSBX_INFERENCE_URL`, `TSBX_INFERENCE_API_KEY`, and `TSBX_INFERENCE_MODEL`.
 - Unified CLI workflow — The Node.js `tsbx` CLI manages MySQL, API, Controller, Operator, Content, and Gateway containers with consistent branding and environment defaults.
 - Portable dev→prod — Docker images built via `./scripts/build.sh` are the same ones the CLI pulls or runs in CI/CD, keeping local and production stacks aligned.
 - Rust-first core — API, controller, sandbox, and content services are Rust 2021 binaries with structured logging and consistent error handling.
@@ -67,12 +67,12 @@ export TSBX_INFERENCE_URL=${TSBX_INFERENCE_URL:-https://api.positron.ai/v1}
 export TSBX_INFERENCE_API_KEY=${TSBX_INFERENCE_API_KEY:-6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM}
 export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.2-3b-instruct-fast-tp2}
 
-# Start core services with the default model
-tsbx start --default-model llama-3.2-3b-instruct-fast-tp2 mysql api controller operator gateway
+# Start core services (uses TSBX_INFERENCE_MODEL above)
+tsbx start mysql api controller operator gateway
 # Shortcuts are supported (e.g., tsbx start a c for API + controller)
 ```
 
-> Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--default-model`) before `tsbx start` to override the default used by sandboxes. The CLI also exports `TSBX_DEFAULT_MODEL` for compatibility with downstream services.
+> Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--inference-model`) before `tsbx start` to override the value used by sandboxes.
 > Replace the sample `TSBX_INFERENCE_API_KEY` with your own key for any non-demo environment.
 
 4) Configure host branding (optional; defaults to `TaskSandbox` + `http://localhost` if unset) and any host overrides
@@ -118,13 +118,10 @@ export TSBX_INFERENCE_API_KEY="sk-your-real-key"
 # Select the model identifier exposed by your provider
 export TSBX_INFERENCE_MODEL="my-model-name"
 
-# Optional: keep CLI defaults in sync
-export TSBX_DEFAULT_MODEL="$TSBX_INFERENCE_MODEL"
-
 # Start only the API + controller with those overrides using shortcuts
 tsbx start a c --inference-url "$TSBX_INFERENCE_URL" \
   --inference-api-key "$TSBX_INFERENCE_API_KEY" \
-  --default-model "$TSBX_DEFAULT_MODEL"
+  --inference-model "$TSBX_INFERENCE_MODEL"
 ```
 
-You can also pass the flags inline (`--inference-url`, `--inference-api-key`, `--default-model`) without exporting environment variables. Restart the controller and any running sandboxes after changing inference values; new sandboxes inherit the updated model and credentials automatically.
+You can also pass the flags inline (`--inference-url`, `--inference-api-key`, `--inference-model`) without exporting environment variables. Restart the controller and any running sandboxes after changing inference values; new sandboxes inherit the updated model and credentials automatically.

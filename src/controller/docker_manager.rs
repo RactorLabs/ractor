@@ -861,11 +861,8 @@ echo 'Session directories created (.env, logs)'
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
-        let default_model = std::env::var("TSBX_DEFAULT_MODEL")
+        let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
-        let inference_model =
-            std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| default_model.clone());
-        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
         env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
@@ -903,6 +900,7 @@ echo 'Session directories created (.env, logs)'
                         | "TSBX_INFERENCE_URL"
                         | "TSBX_INFERENCE_API_KEY"
                         | "TSBX_INFERENCE_TIMEOUT_SECS"
+                        | "TSBX_INFERENCE_MODEL"
                 ) {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead for sandbox {}",
@@ -1053,9 +1051,9 @@ echo 'Session directories created (.env, logs)'
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
-        let default_model = std::env::var("TSBX_DEFAULT_MODEL")
+        let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
-        env_vars.push(format!("TSBX_DEFAULT_MODEL={}", default_model));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1083,6 +1081,7 @@ echo 'Session directories created (.env, logs)'
                         | "TSBX_INFERENCE_URL"
                         | "TSBX_INFERENCE_API_KEY"
                         | "TSBX_INFERENCE_TIMEOUT_SECS"
+                        | "TSBX_INFERENCE_MODEL"
                 ) {
                     info!(
                         "Skipping user-provided {} - using system-managed value instead",

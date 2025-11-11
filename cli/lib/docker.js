@@ -186,8 +186,7 @@ class DockerManager {
           '-e', 'RUST_LOG=info',
           '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
           ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
-          '-e', `TSBX_DEFAULT_MODEL=${process.env.TSBX_DEFAULT_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
-          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || process.env.TSBX_DEFAULT_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
+          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
           this.images.api
         ]);
         break;
@@ -203,8 +202,7 @@ class DockerManager {
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
           ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
-          '-e', `TSBX_DEFAULT_MODEL=${process.env.TSBX_DEFAULT_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
-          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || process.env.TSBX_DEFAULT_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
+          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,
