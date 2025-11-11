@@ -48,9 +48,9 @@ impl ToolCatalog {
         let mut guide = String::from("Tool Reference:\n");
         guide.push_str("You have the following tools at your disposal to achieve the task at hand. At each turn, you must output your next tool call. The tool will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent tools are possible, you may emit them sequentially across turns, but never output more than one XML tool call in a single response. Prefer dedicated tools over shell fallbacks when available.\n\n");
         guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
-        guide.push_str(r#"<run_bash commentary="..." exec_dir="/sandbox/..." commands="..."/>"#);
+        guide.push_str(r#"<run_bash commentary="..." exec_dir="/sandbox" commands="..."/>"#);
         guide.push_str(
-            "\n  • Execute shell commands. Use `exec_dir=\"/sandbox/...\"` for the working directory.\n",
+            "\n  • Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
         );
         guide.push_str(
             r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
@@ -114,23 +114,21 @@ impl ToolCatalog {
 
         match cmd.name.as_str() {
             "run_bash" => {
-                map.insert(
-                    "commentary".into(),
-                    Value::String(require_attr(attrs, "commentary")?),
-                );
-                map.insert(
-                    "exec_dir".into(),
-                    Value::String(
-                        attrs
-                            .get("exec_dir")
-                            .cloned()
-                            .unwrap_or_else(|| "/sandbox".to_string()),
-                    ),
-                );
-                map.insert(
-                    "commands".into(),
-                    Value::String(require_attr(attrs, "commands")?),
-                );
+                let commentary = require_attr(attrs, "commentary")?;
+                let exec_dir = attrs
+                    .get("exec_dir")
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| "/sandbox".to_string());
+                if !exec_dir.starts_with("/sandbox") {
+                    return Err(anyhow::anyhow!(
+                        "run_bash exec_dir must start with /sandbox"
+                    ));
+                }
+                let commands = require_attr(attrs, "commands")?;
+                map.insert("commentary".into(), Value::String(commentary));
+                map.insert("exec_dir".into(), Value::String(exec_dir));
+                map.insert("commands".into(), Value::String(commands));
             }
             "open_file" => {
                 map.insert(
