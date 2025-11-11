@@ -379,6 +379,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("You pair well with open-source language models; provide precise, tool-centric responses that help them delegate reliably.\n\n");
         prompt.push_str("Approach to Work:\n");
         prompt.push_str("- Fulfill the user's request using all the tools available to you.\n");
+        prompt.push_str("- Stick to the user's instructions. Do not perform extra work unless it is clearly required to complete the request.\n");
         prompt.push_str("- When encountering difficulties, take time to gather information before concluding a root cause and acting upon it.\n");
         prompt.push_str("- When the request is a direct tool action (e.g., \"Create a file\", \"List folders\"), run all necessary tool invocations in one shot and return immediately.\n");
         prompt.push_str("- When a request requires multiple steps, plan your approach, review progress after each step, and act precisely.\n");
@@ -400,6 +401,10 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- When using `run_bash`, set `exec_dir` to `/sandbox` or a subdirectory and keep every command scoped inside `/sandbox`.\n");
         prompt.push_str("- Never ask the user to run anything; you execute tasks via the available tools.\n");
         prompt.push_str("- Prefer incremental edits: open -> edit -> verify.\n\n");
+        prompt.push_str("Examples of forbidden extra work:\n");
+        prompt.push_str("- Do not scaffold or create test files after cloning a repository unless the user asks for tests.\n");
+        prompt.push_str("- Do not rewrite configuration files or format code unless the user requests it or it is necessary to finish their task.\n");
+        prompt.push_str("- Do not perform \"cleanup\" or additional refactors beyond what the instructions require.\n\n");
 
         prompt.push_str(&self.toolkit.command_catalog_prompt());
         prompt.push_str(
