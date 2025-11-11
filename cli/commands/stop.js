@@ -1,6 +1,20 @@
 const chalk = require('chalk');
 const { spawn } = require('child_process');
 
+const COMPONENT_ALIASES = {
+  a: 'api',
+  c: 'controller',
+  o: 'operator',
+  s: 'sandboxes',
+};
+
+function resolveComponentAliases(list = []) {
+  return list.map((name) => {
+    const lower = (name || '').toLowerCase();
+    return COMPONENT_ALIASES[lower] || lower;
+  });
+}
+
 function execCmd(cmd, args = [], opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: opts.silent ? 'pipe' : 'inherit', shell: false });
@@ -26,20 +40,24 @@ module.exports = (program) => {
   program
     .command('stop')
     .description('Stop and remove TaskSandbox component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sandboxes (all sandbox containers). If omitted, stops core TaskSandbox components; stop app components explicitly.')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sandboxes (all sandbox containers). Shortcuts: a=api, c=controller, o=operator, s=sandboxes. If omitted, stops core TaskSandbox components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Stops and removes only TaskSandbox component containers.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
       '  • Use component "sandboxes" to stop/remove all sandbox containers.\n' +
+      '  • Component shortcuts: a=api, c=controller, o=operator, s=sandboxes.\n' +
       '\nExamples:\n' +
       '  $ tsbx stop                     # stop all TaskSandbox components\n' +
       '  $ tsbx stop api controller      # stop specific components\n' +
       '  $ tsbx stop operator            # stop UI component\n' +
       '  $ tsbx stop sandboxes           # stop all sandbox containers\n')
-    .action(async (components, _opts, cmd) => {
+    .action(async (inputComponents, _opts, cmd) => {
       try {
         // Default to stopping all TaskSandbox components when none specified
+        let components = Array.isArray(inputComponents) && inputComponents.length
+          ? resolveComponentAliases(inputComponents)
+          : [];
         if (!components || components.length === 0) {
           components = ['gateway','controller','operator','api'];
         }

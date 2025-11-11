@@ -3,6 +3,19 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+const COMPONENT_ALIASES = {
+  a: 'api',
+  c: 'controller',
+  o: 'operator',
+};
+
+function resolveComponentAliases(list = []) {
+  return list.map((name) => {
+    const lower = (name || '').toLowerCase();
+    return COMPONENT_ALIASES[lower] || lower;
+  });
+}
+
 function execCmd(cmd, args = [], opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: opts.silent ? 'pipe' : 'inherit', shell: false });
@@ -85,7 +98,7 @@ module.exports = (program) => {
   program
     .command('start')
     .description('Start services: create if missing or start if stopped (never removes)')
-    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, api, controller, operator, gateway (apps start only when listed)', [])
+    .argument('[components...]', 'Components to start. Default: core stack. Allowed: mysql, api, controller, operator, gateway (apps start only when listed). Shortcuts: a=api, c=controller, o=operator.', [])
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
@@ -115,6 +128,7 @@ module.exports = (program) => {
       '  • Starts each component if stopped, or creates it if missing.\n' +
       '  • Does not stop or remove any containers.\n' +
       '  • MySQL container name is "mysql".\n' +
+      '  • Component shortcuts: a=api, c=controller, o=operator.\n' +
       '\nExamples:\n' +
       '  $ tsbx start                                # Start full stack\n' +
       '  $ tsbx start api controller                 # Start API + controller\n' +
@@ -123,8 +137,10 @@ module.exports = (program) => {
     .option('--controller-sandbox-cpu-limit <n>', 'Controller SANDBOX_CPU_LIMIT', '0.5')
     .option('--controller-sandbox-memory-limit <bytes>', 'Controller SANDBOX_MEMORY_LIMIT', '536870912')
     .option('--controller-sandbox-disk-limit <bytes>', 'Controller SANDBOX_DISK_LIMIT', '1073741824')
-    .action(async (components, options) => {
+    .action(async (inputComponents, options) => {
       try {
+        let components = resolveComponentAliases(inputComponents);
+
         const detached = options.foreground ? false : (options.detached !== false);
         const tag = readProjectVersionOrLatest();
 
