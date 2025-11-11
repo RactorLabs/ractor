@@ -103,3 +103,28 @@ tsbx start
 
 - Operator UI: <http://localhost>
 - API:  <http://localhost/api>
+
+## Use a Custom Inference Endpoint
+
+TaskSandbox speaks to any OpenAI-compatible `/v1/chat/completions` service. Override the defaults before starting services:
+
+```bash
+# Point to your own inference host
+export TSBX_INFERENCE_URL="https://inference.company.dev/v1"
+
+# Provide the API key or bearer token that endpoint expects
+export TSBX_INFERENCE_API_KEY="sk-your-real-key"
+
+# Select the model identifier exposed by your provider
+export TSBX_INFERENCE_MODEL="my-model-name"
+
+# Optional: keep CLI defaults in sync
+export TSBX_DEFAULT_MODEL="$TSBX_INFERENCE_MODEL"
+
+# Start only the API + controller with those overrides using shortcuts
+tsbx start a c --inference-url "$TSBX_INFERENCE_URL" \
+  --inference-api-key "$TSBX_INFERENCE_API_KEY" \
+  --default-model "$TSBX_DEFAULT_MODEL"
+```
+
+You can also pass the flags inline (`--inference-url`, `--inference-api-key`, `--default-model`) without exporting environment variables. Restart the controller and any running sandboxes after changing inference values; new sandboxes inherit the updated model and credentials automatically.
