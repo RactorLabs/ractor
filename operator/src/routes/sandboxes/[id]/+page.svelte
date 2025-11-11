@@ -87,6 +87,14 @@
   }
   let displayTask = null;
   $: displayTask = selectedTaskDetail || selectedTaskSummary;
+  let currentStepGroups = [];
+  $: currentStepGroups = selectedTaskDetail ? groupedTaskSteps(selectedTaskDetail) : [];
+  let taskOutputItemsList = [];
+  let hasTaskOutputText = false;
+  let hasAnyTaskOutput = false;
+  $: taskOutputItemsList = selectedTaskDetail ? taskOutputItems(selectedTaskDetail) : [];
+  $: hasTaskOutputText = selectedTaskDetail ? hasOutputText(selectedTaskDetail) : false;
+  $: hasAnyTaskOutput = hasTaskOutputText || taskOutputItemsList.length > 0;
   const FM_AUTO_REFRESH_COOKIE = 'tsbx_filesAutoRefresh';
   function getCookie(name) {
     try {
@@ -775,8 +783,18 @@
   function segArgs(s) {
     try {
       if (!s || typeof s !== 'object') return null;
-      if (s.arguments && typeof s.arguments === 'object') return s.arguments;
-      if (s.args && typeof s.args === 'object') return s.args;
+      const raw = s.arguments !== undefined ? s.arguments : s.args;
+      if (!raw) return null;
+      if (typeof raw === 'object') return raw;
+      if (typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (!trimmed) return null;
+        try {
+          return JSON.parse(trimmed);
+        } catch (_) {
+          return { value: trimmed };
+        }
+      }
       return null;
     } catch (_) { return null; }
   }
@@ -954,28 +972,42 @@
       if (current) {
         groups.push(current);
       }
-      return groups.map((group, groupIdx) => {
-        const commentary = computeGroupCommentary(group);
+      const mapped = groups.map((group, groupIdx) => {
         const input = group.call ? segArgs(group.call) : null;
+        const inputCommentary = commentaryFromArgs(input);
+        const fallbackCommentary = computeGroupCommentary(group);
+        const commentary = inputCommentary || fallbackCommentary;
         const output = group.result ? segOutput(group.result) : null;
         const title = computeGroupTitle(group);
+        const toolName = group.call ? segTool(group.call) : '';
         return {
           ...group,
           id: `${task?.id || 'task'}-${group.index ?? groupIdx}-${groupIdx}`,
           title,
           commentary,
           input,
-          output
+          output,
+          toolName,
+          inputCommentary,
+          fallbackCommentary
         };
+      });
+      return mapped.filter((group) => {
+        const toolName = group.toolName || '';
+        if (toolName && isOutputToolName(toolName)) return false;
+        const hasTitle = typeof group.title === 'string' && group.title.trim().length > 0;
+        const hasTool = typeof toolName === 'string' && toolName.trim().length > 0;
+        const hasCommentary = typeof group.commentary === 'string' && group.commentary.trim().length > 0;
+        const hasInput = hasValue(group.input);
+        const hasOutput = hasValue(group.output);
+        const hasExtras = Array.isArray(group.extras) && group.extras.length > 0;
+        return hasTitle || hasTool || hasCommentary || hasInput || hasOutput || hasExtras;
       });
     } catch (_) { return []; }
   }
 
   function computeGroupTitle(group) {
-    if (group.call) {
-      const tool = segTool(group.call);
-      return tool ? `Tool: ${tool}` : 'Tool Call';
-    }
+    if (group.call) return '';
     if (group.extras && group.extras.length) {
       return stepLabel(group.extras[0]) || 'Step';
     }
@@ -1000,11 +1032,38 @@
     return '';
   }
 
+  function commentaryFromArgs(args) {
+    try {
+      if (!args) return '';
+      const candidates = [
+        args?.commentary,
+        args?.input_commentary,
+        args?.input?.commentary
+      ];
+      for (const candidate of candidates) {
+        if (typeof candidate === 'string') {
+          const trimmed = candidate.trim();
+          if (trimmed) return trimmed;
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
   function toggleStepDetails(id) {
     expandedSteps = {
       ...expandedSteps,
       [id]: !expandedSteps[id]
     };
+  }
+
+  function handleToggleKey(event, id) {
+    if (!event || !id) return;
+    const key = event.key;
+    if (key === 'Enter' || key === ' ') {
+      event.preventDefault();
+      toggleStepDetails(id);
+    }
   }
 
   function hasValue(val) {
@@ -1386,37 +1445,40 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                       {/each}
                     </section>
                   {/if}
-                <section class="mb-3">
-                  <h6 class="fw-semibold fs-6 mb-2">Steps</h6>
-                  {#if groupedTaskSteps(selectedTaskDetail).length}
+                {#if currentStepGroups.length}
+                  <section class="mb-3">
+                    <h6 class="fw-semibold fs-6 mb-2">Steps</h6>
                     <div class="list-group list-group-flush">
-                      {#each groupedTaskSteps(selectedTaskDetail) as group}
+                      {#each currentStepGroups as group}
                         <div class="list-group-item">
-                          <div class="d-flex align-items-start justify-content-between gap-3">
+                          <div class="d-flex align-items-start gap-3">
                             <div class="flex-grow-1">
-                              <div class="fw-semibold">{group.title}</div>
-                              {#if group.commentary}
-                                <div class="small text-body-secondary text-truncate" style="max-width: 28rem;">{group.commentary}</div>
-                              {:else}
-                                <div class="small text-body-secondary fst-italic">No commentary</div>
+                              {#if group.title}
+                                <div class="fw-semibold mb-1">{group.title}</div>
                               {/if}
+                              <div
+                                class="d-flex align-items-center gap-2 flex-wrap step-toggle"
+                                role="button"
+                                tabindex="0"
+                                aria-expanded={!!expandedSteps[group.id]}
+                                aria-controls={`step-detail-${group.id}`}
+                                on:click={() => toggleStepDetails(group.id)}
+                                on:keydown={(event) => handleToggleKey(event, group.id)}
+                                style="cursor: pointer;"
+                              >
+                                {#if group.toolName}
+                                  <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill">{group.toolName}</span>
+                                {/if}
+                                {#if group.commentary}
+                                  <span class="small text-body-secondary text-truncate" style="max-width: 28rem;">{group.commentary}</span>
+                                {:else}
+                                  <span class="small text-body-secondary fst-italic">No commentary</span>
+                                {/if}
+                              </div>
                             </div>
-                            <button
-                              type="button"
-                              class="btn btn-sm btn-outline-secondary"
-                              on:click={() => toggleStepDetails(group.id)}
-                            >
-                              {expandedSteps[group.id] ? 'Hide' : 'Show'} Commentary
-                            </button>
                           </div>
                           {#if expandedSteps[group.id]}
-                            <div class="mt-3 border-top pt-3 small">
-                              {#if group.commentary}
-                                <div class="mb-3">
-                                  <div class="fw-semibold text-uppercase mb-1">Commentary</div>
-                                  <div class="text-body" style="white-space: pre-wrap;">{group.commentary}</div>
-                                </div>
-                              {/if}
+                            <div class="mt-3 border-top pt-3 small" id={`step-detail-${group.id}`}>
                               <div class="mb-3">
                                 <div class="fw-semibold text-uppercase mb-1">Input</div>
                                 {#if hasValue(group.input)}
@@ -1442,20 +1504,19 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                         </div>
                       {/each}
                     </div>
-                  {:else}
-                    <div class="small text-body-secondary">No steps recorded.</div>
-                  {/if}
-                </section>
+                  </section>
+                {/if}
+                {#if hasAnyTaskOutput}
                   <section>
                     <h6 class="fw-semibold fs-6 mb-2">Output</h6>
-                  {#if hasOutputText(selectedTaskDetail)}
-                    <div class="markdown-body mb-3">
-                      {@html renderMarkdown(selectedTaskDetail.output.text.trim())}
-                    </div>
-                  {/if}
-                  {#if taskOutputItems(selectedTaskDetail).length}
-                    {#each taskOutputItems(selectedTaskDetail) as item}
-                      {#if String(item?.type || '').toLowerCase() === 'markdown'}
+                    {#if hasTaskOutputText}
+                      <div class="markdown-body mb-3">
+                        {@html renderMarkdown(selectedTaskDetail.output.text.trim())}
+                      </div>
+                    {/if}
+                    {#if taskOutputItemsList.length}
+                      {#each taskOutputItemsList as item}
+                        {#if String(item?.type || '').toLowerCase() === 'markdown'}
                           <div class="markdown-body mb-3">{@html renderMarkdown(item.content || '')}</div>
                         {:else if String(item?.type || '').toLowerCase() === 'json'}
                           <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item.content, null, 2)}</code></pre>
@@ -1465,12 +1526,11 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                           </a>
                         {:else}
                           <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item, null, 2)}</code></pre>
-                      {/if}
-                    {/each}
-                  {:else if !hasOutputText(selectedTaskDetail)}
-                    <div class="small text-body-secondary">No output available yet.</div>
-                  {/if}
-                </section>
+                        {/if}
+                      {/each}
+                    {/if}
+                  </section>
+                {/if}
                 {:else if !detailLoading && !detailError}
                   <div class="small text-body-secondary">Task details will load shortly.</div>
                 {/if}
