@@ -466,11 +466,11 @@
           <button type="button" class="btn-close" aria-label="Close" on:click={closeTerminateModal}></button>
         </div>
         <div class="modal-body">
-          <p class="small text-body text-opacity-75 mb-3">
-            This will immediately stop sandbox <span class="font-monospace">{terminateSandboxTarget?.id}</span>. Type the full sandbox ID to confirm. This action cannot be undone.
+          <p class="small text-body text-opacity-75 mb-2">
+            Sandbox <span class="font-monospace">{terminateSandboxTarget?.id}</span> will shut down immediately. Any running tasks will be cancelled and the runtime will be destroyed.
           </p>
           <div class="alert alert-warning small mb-0">
-            This will immediately stop the sandbox. Tasks in progress will be cancelled and the runtime shut down.
+            This action cannot be undone.
           </div>
         </div>
         <div class="modal-footer">
