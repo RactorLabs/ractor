@@ -55,6 +55,9 @@ impl ToolCatalog {
         guide.push_str("    - Use simple, portable bash lines (no aliases/prompts).\n");
         guide.push_str("    - Echo the action before running it (e.g., `echo 'Listing data'; ls -lah data`).\n");
         guide.push_str("    - Prefer portable flags (e.g., `mkdir -p \"data/raw\"`, `ls -lah \"data\"`, `grep -R \"TODO\" -n \"src\" || true`).\n");
+        guide.push_str("    - If a command fails, note the exit code, surface the last 20 stderr lines, suggest a fix, and retry once with a safer variant.\n");
+        guide.push_str("    - If a path is missing, mention how to create it and ask whether to proceed.\n");
+        guide.push_str("    - For large output, redirect to a file, then show the head and the saved path.\n");
         guide.push_str(
             r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );

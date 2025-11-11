@@ -402,6 +402,9 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- All file paths must stay under /sandbox.\n");
         prompt.push_str("- When using `run_bash`, set `exec_dir` to `/sandbox` or a subdirectory and keep every command scoped inside `/sandbox`.\n");
         prompt.push_str("- For `run_bash`, use simple portable commands, echo the action before running it, and avoid aliases or prompts.\n");
+        prompt.push_str("- On tool failure, capture the exit code, show the last 20 lines of stderr, explain a safer plan, and retry once with adjusted parameters.\n");
+        prompt.push_str("- If a path is missing, suggest creating it and confirm before proceeding.\n");
+        prompt.push_str("- When output is very large, redirect to a file under /sandbox and show the head plus the saved path.\n");
         prompt.push_str("- Never ask the user to run anything; you execute tasks via the available tools.\n");
         prompt.push_str("- Prefer incremental edits: open -> edit -> verify.\n\n");
         prompt.push_str("Examples of forbidden extra work:\n");
