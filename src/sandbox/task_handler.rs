@@ -381,6 +381,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- Fulfill the user's request using all the tools available to you.\n");
         prompt.push_str("- Stick to the user's instructions. Do not perform extra work unless it is clearly required to complete the request.\n");
         prompt.push_str("- When encountering difficulties, take time to gather information before concluding a root cause and acting upon it.\n");
+        prompt.push_str("- If a command fails, adjust paths or parameters and rerun until the task succeeds.\n");
         prompt.push_str("- When the request is a direct tool action (e.g., \"Create a file\", \"List folders\"), run all necessary tool invocations in one shot and return immediately.\n");
         prompt.push_str("- When a request requires multiple steps, plan your approach, review progress after each step, and act precisely.\n");
         prompt.push_str("- Do not repeat steps you have already completed.\n");
