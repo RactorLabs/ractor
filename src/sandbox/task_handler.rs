@@ -171,10 +171,7 @@ impl TaskHandler {
 
             let raw = response.content.trim();
             if raw.is_empty() {
-                Self::push_system_note(
-                    &mut conversation,
-                    "Developer note: Response must be a single XML tool call. Try again.",
-                );
+                warn!("Empty response from model; retrying");
                 continue;
             }
 
@@ -182,10 +179,6 @@ impl TaskHandler {
                 Ok(cmd) => cmd,
                 Err(err) => {
                     warn!("Invalid XML from model: {}", err);
-                    Self::push_system_note(
-                        &mut conversation,
-                        "Developer note: The reply was not valid XML. Respond with exactly one tool call such as <run_bash .../>.",
-                    );
                     continue;
                 }
             };
@@ -229,13 +222,11 @@ impl TaskHandler {
 
             if !self.toolkit.has(&command_name) {
                 let allowed = self.toolkit.known_tools().join(", ");
-                Self::push_system_note(
-                    &mut conversation,
-                    format!(
-                        "Developer note: Unknown tool '{}'. Use one of: {} or <output>.",
-                        command_name, allowed
-                    ),
+                warn!(
+                    "Unknown tool '{}' requested; allowed tools: {}",
+                    command_name, allowed
                 );
+                conversation.pop();
                 continue;
             }
 
@@ -244,10 +235,7 @@ impl TaskHandler {
                     Ok(result) => result,
                     Err(err) => {
                         warn!("Tool execution error: {}", err);
-                        Self::push_system_note(
-                            &mut conversation,
-                            format!("Developer note: Tool error – {}.", err),
-                        );
+                        conversation.pop();
                         continue;
                     }
                 };
@@ -298,16 +286,6 @@ impl TaskHandler {
                 tool_call_id: None,
             });
 
-            if truncated_output {
-                Self::push_system_note(
-                    &mut conversation,
-                    format!(
-                        "Developer note: Tool output truncated to {} characters. Rerun the tool with reduced scope for complete results.",
-                        MAX_TOOL_OUTPUT_CHARS
-                    ),
-                );
-            }
-
             if command_name == "output" {
                 let fallback = command.body.as_deref().unwrap_or("No content provided.");
                 let summary_raw = render_output_summary(&output, fallback);
@@ -337,10 +315,6 @@ impl TaskHandler {
                 return Ok(());
             }
 
-            Self::push_system_note(
-                &mut conversation,
-                "Developer note: Tool execution finished. Respond with a proper XML tool call.",
-            );
         }
     }
 
@@ -421,14 +395,6 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt
     }
 
-    fn push_system_note(conversation: &mut Vec<ChatMessage>, text: impl Into<String>) {
-        conversation.push(ChatMessage {
-            role: "system".to_string(),
-            content: text.into(),
-            name: None,
-            tool_call_id: None,
-        });
-    }
 }
 
 fn extract_first_text(items: &[Value]) -> String {
