@@ -9,7 +9,7 @@ pub mod task;
 
 pub use sandbox::{CreateSandboxRequest, Sandbox, UpdateSandboxRequest, UpdateSandboxStateRequest};
 pub use snapshot::{CreateSnapshotRequest, Snapshot};
-pub use task::{CreateTaskRequest, SandboxTask, TaskView, UpdateTaskRequest};
+pub use task::{CreateTaskRequest, SandboxTask, TaskSummary, TaskView, UpdateTaskRequest};
 
 #[derive(Error, Debug)]
 pub enum DatabaseError {

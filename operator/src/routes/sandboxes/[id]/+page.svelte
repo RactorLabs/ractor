@@ -72,10 +72,21 @@
   // Task tracking state
   let tasks = [];
   let selectedTaskId = '';
-  let selectedTask = null;
+  let selectedTaskSummary = null;
+  let selectedTaskDetail = null;
   let showTaskDetail = false;
-  $: selectedTask = tasks.find((t) => t.id === selectedTaskId) || (tasks.length ? tasks[0] : null);
-  $: if (showTaskDetail && !selectedTask) { showTaskDetail = false; }
+  let detailLoading = false;
+  let detailError = '';
+  const taskDetailCache = new Map();
+  let expandedSteps = {};
+  $: selectedTaskSummary = tasks.find((t) => t.id === selectedTaskId) || null;
+  $: {
+    if (showTaskDetail && selectedTaskId && !selectedTaskSummary && !selectedTaskDetail) {
+      showTaskDetail = false;
+    }
+  }
+  let displayTask = null;
+  $: displayTask = selectedTaskDetail || selectedTaskSummary;
   const FM_AUTO_REFRESH_COOKIE = 'tsbx_filesAutoRefresh';
   function getCookie(name) {
     try {
@@ -665,17 +676,84 @@
     } catch (_) {}
   }
 
+  async function loadTaskDetail(taskId, { force = false, showSpinner = true } = {}) {
+    if (!taskId) {
+      if (showSpinner) {
+        detailLoading = false;
+      }
+      detailError = '';
+      selectedTaskDetail = null;
+      return;
+    }
+    if (!force && taskDetailCache.has(taskId)) {
+      if (selectedTaskId === taskId) {
+        selectedTaskDetail = taskDetailCache.get(taskId);
+        detailError = '';
+      }
+      return;
+    }
+    if (showSpinner && selectedTaskId === taskId) {
+      detailLoading = true;
+      detailError = '';
+    }
+    try {
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks/${encodeURIComponent(taskId)}`);
+      if (!res.ok) {
+        throw new Error(res?.data?.message || res?.data?.error || `Failed to fetch task ${res.status}`);
+      }
+      taskDetailCache.set(taskId, res.data);
+      if (selectedTaskId === taskId) {
+        selectedTaskDetail = res.data;
+        detailError = '';
+      }
+    } catch (e) {
+      if (selectedTaskId === taskId) {
+        detailError = e?.message || String(e);
+        selectedTaskDetail = null;
+      }
+    } finally {
+      if (showSpinner && selectedTaskId === taskId) {
+        detailLoading = false;
+      }
+    }
+  }
+
   async function fetchTasks() {
     const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks?limit=200`);
-    if (res.ok) {
-      const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
-      tasks = list;
-      if (!tasks.some((t) => t.id === selectedTaskId)) {
-        selectedTaskId = tasks.length ? tasks[0].id : '';
-      }
-      if (!tasks.length) {
-        showTaskDetail = false;
-      }
+    if (!res.ok) return;
+    const list = Array.isArray(res.data) ? res.data : (res.data?.tasks || []);
+    tasks = list;
+
+    if (selectedTaskId && !tasks.some((t) => t.id === selectedTaskId)) {
+      selectedTaskId = '';
+      selectedTaskDetail = null;
+      detailError = '';
+    }
+
+    if (!selectedTaskId && tasks.length) {
+      selectedTaskId = tasks[0].id;
+    }
+
+    if (!tasks.length) {
+      showTaskDetail = false;
+      selectedTaskDetail = null;
+      detailError = '';
+      return;
+    }
+
+    const summary = tasks.find((t) => t.id === selectedTaskId);
+    if (!summary) {
+      return;
+    }
+
+    const cached = taskDetailCache.get(summary.id);
+    const needsRefresh = !cached || cached.updated_at !== summary.updated_at;
+    if (showTaskDetail && selectedTaskId === summary.id) {
+      await loadTaskDetail(summary.id, { force: needsRefresh, showSpinner: !cached });
+    } else if (needsRefresh) {
+      await loadTaskDetail(summary.id, { force: true, showSpinner: false });
+    } else if (cached && selectedTaskId === summary.id) {
+      selectedTaskDetail = cached;
     }
   }
 
@@ -766,8 +844,12 @@
       return [];
     } catch (_) { return []; }
   }
-  function segmentsOfTask(task) {
-    try { return Array.isArray(task?.segments) ? task.segments : []; } catch (_) { return []; }
+  function taskSteps(task) {
+    try {
+      if (Array.isArray(task?.steps)) return task.steps;
+      if (Array.isArray(task?.segments)) return task.segments;
+      return [];
+    } catch (_) { return []; }
   }
   function isAnalysisSegment(seg) {
     const type = segType(seg);
@@ -776,32 +858,8 @@
   }
 
   function taskAnalysisSegments(task) {
-    const segs = segmentsOfTask(task);
+    const segs = taskSteps(task);
     return segs.filter((s) => isAnalysisSegment(s));
-  }
-  function taskToolPairs(task) {
-    const segs = segmentsOfTask(task);
-    const pairs = [];
-    for (let i = 0; i < segs.length; i++) {
-      const seg = segs[i];
-      if (segType(seg) === 'tool_call') {
-        let result = null;
-        if (i + 1 < segs.length && segType(segs[i + 1]) === 'tool_result' && segTool(segs[i + 1]) === segTool(seg)) {
-          result = segs[i + 1];
-        }
-        const commentary = [];
-        for (let j = i - 1; j >= 0; j--) {
-          const prev = segs[j];
-          if (isAnalysisSegment(prev)) {
-            commentary.unshift(prev);
-            continue;
-          }
-          break;
-        }
-        pairs.push({ call: seg, result, commentary });
-      }
-    }
-    return pairs;
   }
   function formatToolSummary(callSeg) {
     if (!callSeg) return '';
@@ -820,23 +878,42 @@
     }
   }
   function taskOutputItems(task) {
-    const direct = Array.isArray(task?.output_content) ? task.output_content : [];
-    if (direct.length) return direct;
-    const segs = segmentsOfTask(task);
-    for (const seg of segs) {
-      if (isOutputSeg(seg)) {
-        const items = outputItemsOfSeg(seg);
-        if (items.length) return items;
-        const markdown = outputMarkdownOfSeg(seg);
-        if (markdown) return [{ type: 'markdown', content: markdown }];
-        const raw = segOutput(seg);
-        if (raw != null) {
-          if (typeof raw === 'string') return [{ type: 'markdown', content: raw }];
-          return [{ type: 'json', content: raw }];
-        }
-      }
+    const direct = Array.isArray(task?.output?.content) ? task.output.content : [];
+    return direct;
+  }
+  function hasOutputText(task) {
+    try {
+      const text = task?.output?.text;
+      if (typeof text !== 'string') return false;
+      return text.trim().length > 0;
+    } catch (_) {
+      return false;
     }
-    return [];
+  }
+  function stepType(step) {
+    const t = String(step?.type || '').toLowerCase();
+    if (t) return t;
+    const channel = String(step?.channel || '').toLowerCase();
+    if (channel === 'analysis' || channel === 'commentary') return 'analysis';
+    return t || 'step';
+  }
+  function stepLabel(step) {
+    const t = stepType(step);
+    if (t === 'tool_call' || t === 'tool_result') {
+      return `${t.replace('_', ' ')} (${segTool(step) || 'unknown'})`;
+    }
+    if (t === 'analysis') return 'Analysis';
+    if (t === 'final') return 'Final';
+    if (t === 'cancelled') return 'Cancelled';
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  function stepBadgeClass(step) {
+    const t = stepType(step);
+    if (t === 'tool_call' || t === 'tool_result') return 'bg-info-subtle text-info-emphasis border';
+    if (t === 'analysis') return 'bg-secondary-subtle text-secondary-emphasis border';
+    if (t === 'final') return 'bg-success-subtle text-success-emphasis border';
+    if (t === 'cancelled') return 'bg-danger-subtle text-danger-emphasis border';
+    return 'bg-secondary-subtle text-secondary-emphasis border';
   }
 
   function taskPreview(task) {
@@ -852,13 +929,113 @@
     }
   }
 
+  function groupedTaskSteps(task) {
+    try {
+      const steps = taskSteps(task);
+      const groups = [];
+      let current = null;
+      steps.forEach((step, idx) => {
+        const type = stepType(step);
+        if (type === 'tool_call') {
+          if (current) {
+            groups.push(current);
+          }
+          current = { index: idx, call: step, result: null, extras: [] };
+        } else if (type === 'tool_result' && current && !current.result) {
+          current.result = step;
+        } else {
+          if (current) {
+            current.extras.push(step);
+          } else {
+            groups.push({ index: idx, call: null, result: null, extras: [step] });
+          }
+        }
+      });
+      if (current) {
+        groups.push(current);
+      }
+      return groups.map((group, groupIdx) => {
+        const commentary = computeGroupCommentary(group);
+        const input = group.call ? segArgs(group.call) : null;
+        const output = group.result ? segOutput(group.result) : null;
+        const title = computeGroupTitle(group);
+        return {
+          ...group,
+          id: `${task?.id || 'task'}-${group.index ?? groupIdx}-${groupIdx}`,
+          title,
+          commentary,
+          input,
+          output
+        };
+      });
+    } catch (_) { return []; }
+  }
+
+  function computeGroupTitle(group) {
+    if (group.call) {
+      const tool = segTool(group.call);
+      return tool ? `Tool: ${tool}` : 'Tool Call';
+    }
+    if (group.extras && group.extras.length) {
+      return stepLabel(group.extras[0]) || 'Step';
+    }
+    return 'Step';
+  }
+
+  function computeGroupCommentary(group) {
+    try {
+      if (group.result) {
+        const preview = group.result?.preview;
+        if (typeof preview === 'string' && preview.trim()) {
+          return preview.trim();
+        }
+      }
+      if (group.extras && group.extras.length) {
+        const analysis = group.extras.find((s) => stepType(s) === 'analysis');
+        if (analysis) {
+          return (segText(analysis) || '').trim();
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  function toggleStepDetails(id) {
+    expandedSteps = {
+      ...expandedSteps,
+      [id]: !expandedSteps[id]
+    };
+  }
+
+  function hasValue(val) {
+    if (val === null || val === undefined) return false;
+    if (typeof val === 'string') return val.trim().length > 0;
+    if (Array.isArray(val)) return val.length > 0;
+    if (typeof val === 'object') return Object.keys(val).length > 0;
+    return true;
+  }
+
+  function formatJson(val) {
+    try {
+      return JSON.stringify(val, null, 2);
+    } catch (_) {
+      return String(val);
+    }
+  }
+
   function openTaskDetail(taskId) {
+    if (!taskId) return;
     selectedTaskId = taskId;
+    selectedTaskDetail = taskDetailCache.get(taskId) || null;
+    detailError = '';
     showTaskDetail = true;
+    loadTaskDetail(taskId, { force: false, showSpinner: true }).catch(() => {});
   }
 
   function closeTaskDetail() {
     showTaskDetail = false;
+    detailLoading = false;
+    detailError = '';
   }
 
   async function createTask(e) {
@@ -892,6 +1069,7 @@
           if (rid) {
             selectedTaskId = rid;
             showTaskDetail = true;
+            await loadTaskDetail(rid, { force: true, showSpinner: true });
           }
           break;
         }
@@ -1163,23 +1341,23 @@ onDestroy(() => { fmRevokePreviewUrl(); });
       <Card class="flex-fill d-flex flex-column task-pane" style="min-height: 0;">
         <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
           <div class="flex-fill d-flex flex-column task-tracking" style="min-height: 0;">
-            {#if showTaskDetail && selectedTask}
+            {#if showTaskDetail}
               <div class="task-detail flex-fill px-3 py-3 border-top" style="overflow-y: auto; min-height: 0;">
                 <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
                   <div class="d-flex align-items-start gap-3 flex-wrap">
                     <button class="btn btn-sm btn-outline-secondary" type="button" on:click={closeTaskDetail} aria-label="Back to task list">
                       <i class="bi bi-arrow-left-short me-1"></i>Back to task list
                     </button>
-                    <div class="fw-semibold font-monospace">{selectedTask.id}</div>
+                    <div class="fw-semibold font-monospace">{displayTask?.id || selectedTaskId || '-'}</div>
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
-                    <span class={`badge ${taskStatusBadgeClass(selectedTask)}`}>{taskStatusLabel(selectedTask)}</span>
+                    <span class={`badge ${taskStatusBadgeClass(displayTask)}`}>{taskStatusLabel(displayTask)}</span>
                   </div>
                 </div>
                 <section class="mb-3">
                   <h6 class="fw-semibold fs-6 mb-2">Input Prompt</h6>
-                  {#if taskInputItems(selectedTask).length}
-                    {#each taskInputItems(selectedTask) as item}
+                  {#if taskInputItems(displayTask).length}
+                    {#each taskInputItems(displayTask) as item}
                       {#if String(item?.type || '').toLowerCase() === 'text'}
                         <div class="markdown-body mb-2">{@html renderMarkdown(item.content || '')}</div>
                       {:else}
@@ -1190,71 +1368,112 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <div class="small text-body-secondary">No input recorded.</div>
                   {/if}
                 </section>
-                {#if taskAnalysisSegments(selectedTask).length}
-                  <section class="mb-3">
-                    <h6 class="fw-semibold fs-6 mb-2">Analysis</h6>
-                    {#each taskAnalysisSegments(selectedTask) as seg}
-                      <div class="small fst-italic text-body text-opacity-75 mb-2" style="white-space: pre-wrap;">{segText(seg)}</div>
-                    {/each}
-                  </section>
+                {#if detailLoading}
+                  <div class="d-flex align-items-center gap-2 small text-body-secondary mb-3">
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    Loading task details…
+                  </div>
                 {/if}
+                {#if detailError}
+                  <div class="alert alert-warning small">{detailError}</div>
+                {/if}
+                {#if selectedTaskDetail}
+                  {#if taskAnalysisSegments(selectedTaskDetail).length}
+                    <section class="mb-3">
+                      <h6 class="fw-semibold fs-6 mb-2">Analysis</h6>
+                      {#each taskAnalysisSegments(selectedTaskDetail) as seg}
+                        <div class="small fst-italic text-body text-opacity-75 mb-2" style="white-space: pre-wrap;">{segText(seg)}</div>
+                      {/each}
+                    </section>
+                  {/if}
                 <section class="mb-3">
-                  <h6 class="fw-semibold fs-6 mb-2">Tool Calls</h6>
-                  {#if taskToolPairs(selectedTask).length}
-                    {#each taskToolPairs(selectedTask) as pair}
-                      <details class="tool-call mb-2">
-                        <summary class="d-flex align-items-center gap-2">
-                          <span class="badge bg-secondary-subtle text-secondary-emphasis border text-uppercase">{pair.call ? segTool(pair.call) : ''}</span>
-                          <span class="small text-body-secondary flex-grow-1">{formatToolSummary(pair.call)}</span>
-                        </summary>
-                        <div class="ps-4 mt-2">
-                          {#if pair.commentary && pair.commentary.length}
-                            <div class="small text-body text-opacity-75 mb-2">
-                              {#each pair.commentary as seg}
-                                <div class="mb-1" style="white-space: pre-wrap;">{segText(seg)}</div>
-                              {/each}
+                  <h6 class="fw-semibold fs-6 mb-2">Steps</h6>
+                  {#if groupedTaskSteps(selectedTaskDetail).length}
+                    <div class="list-group list-group-flush">
+                      {#each groupedTaskSteps(selectedTaskDetail) as group}
+                        <div class="list-group-item">
+                          <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div class="flex-grow-1">
+                              <div class="fw-semibold">{group.title}</div>
+                              {#if group.commentary}
+                                <div class="small text-body-secondary text-truncate" style="max-width: 28rem;">{group.commentary}</div>
+                              {:else}
+                                <div class="small text-body-secondary fst-italic">No commentary</div>
+                              {/if}
+                            </div>
+                            <button
+                              type="button"
+                              class="btn btn-sm btn-outline-secondary"
+                              on:click={() => toggleStepDetails(group.id)}
+                            >
+                              {expandedSteps[group.id] ? 'Hide' : 'Show'} Commentary
+                            </button>
+                          </div>
+                          {#if expandedSteps[group.id]}
+                            <div class="mt-3 border-top pt-3 small">
+                              {#if group.commentary}
+                                <div class="mb-3">
+                                  <div class="fw-semibold text-uppercase mb-1">Commentary</div>
+                                  <div class="text-body" style="white-space: pre-wrap;">{group.commentary}</div>
+                                </div>
+                              {/if}
+                              <div class="mb-3">
+                                <div class="fw-semibold text-uppercase mb-1">Input</div>
+                                {#if hasValue(group.input)}
+                                  <pre class="bg-dark text-white p-2 rounded code-wrap mb-0"><code>{formatJson(group.input)}</code></pre>
+                                {:else}
+                                  <div class="text-body-secondary">No input recorded.</div>
+                                {/if}
+                              </div>
+                              <div>
+                                <div class="fw-semibold text-uppercase mb-1">Output</div>
+                                {#if hasValue(group.output)}
+                                  {#if typeof group.output === 'string'}
+                                    <pre class="bg-dark text-white p-2 rounded code-wrap mb-0"><code>{group.output}</code></pre>
+                                  {:else}
+                                    <pre class="bg-dark text-white p-2 rounded code-wrap mb-0"><code>{formatJson(group.output)}</code></pre>
+                                  {/if}
+                                {:else}
+                                  <div class="text-body-secondary">No output captured.</div>
+                                {/if}
+                              </div>
                             </div>
                           {/if}
-                          {#if pair.call}
-                            <div class="small text-body text-opacity-75 mb-1">Command</div>
-                            <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(segArgs(pair.call) || {}, null, 2)}</code></pre>
-                          {/if}
-                          {#if pair.result}
-                            <div class="small text-body text-opacity-75 mb-1">Result</div>
-                            <pre class="small bg-dark text-white p-2 rounded code-wrap mb-0"><code>{JSON.stringify(segOutput(pair.result), null, 2)}</code></pre>
-                          {/if}
                         </div>
-                      </details>
-                    {/each}
+                      {/each}
+                    </div>
                   {:else}
-                    <div class="small text-body-secondary">No tool calls recorded.</div>
+                    <div class="small text-body-secondary">No steps recorded.</div>
                   {/if}
                 </section>
-                <section>
-                  <h6 class="fw-semibold fs-6 mb-2">Output</h6>
-                  {#if selectedTask?.output?.text && selectedTask.output.text.trim()}
+                  <section>
+                    <h6 class="fw-semibold fs-6 mb-2">Output</h6>
+                  {#if hasOutputText(selectedTaskDetail)}
                     <div class="markdown-body mb-3">
-                      {@html renderMarkdown(selectedTask.output.text.trim())}
+                      {@html renderMarkdown(selectedTaskDetail.output.text.trim())}
                     </div>
                   {/if}
-                  {#if taskOutputItems(selectedTask).length}
-                    {#each taskOutputItems(selectedTask) as item}
+                  {#if taskOutputItems(selectedTaskDetail).length}
+                    {#each taskOutputItems(selectedTaskDetail) as item}
                       {#if String(item?.type || '').toLowerCase() === 'markdown'}
-                        <div class="markdown-body mb-3">{@html renderMarkdown(item.content || '')}</div>
-                      {:else if String(item?.type || '').toLowerCase() === 'json'}
-                        <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item.content, null, 2)}</code></pre>
-                      {:else if String(item?.type || '').toLowerCase() === 'url'}
-                        <a class="d-inline-flex align-items-center gap-2 mb-2" href={item.content} target="_blank" rel="noopener noreferrer">
-                          <i class="bi bi-box-arrow-up-right"></i>{item.content}
-                        </a>
-                      {:else}
-                        <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item, null, 2)}</code></pre>
+                          <div class="markdown-body mb-3">{@html renderMarkdown(item.content || '')}</div>
+                        {:else if String(item?.type || '').toLowerCase() === 'json'}
+                          <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item.content, null, 2)}</code></pre>
+                        {:else if String(item?.type || '').toLowerCase() === 'url'}
+                          <a class="d-inline-flex align-items-center gap-2 mb-2" href={item.content} target="_blank" rel="noopener noreferrer">
+                            <i class="bi bi-box-arrow-up-right"></i>{item.content}
+                          </a>
+                        {:else}
+                          <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item, null, 2)}</code></pre>
                       {/if}
                     {/each}
-                  {:else}
+                  {:else if !hasOutputText(selectedTaskDetail)}
                     <div class="small text-body-secondary">No output available yet.</div>
                   {/if}
                 </section>
+                {:else if !detailLoading && !detailError}
+                  <div class="small text-body-secondary">Task details will load shortly.</div>
+                {/if}
               </div>
             {:else}
               <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
@@ -1272,7 +1491,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     {#each tasks as task}
                       <button
                         type="button"
-                        class={`list-group-item list-group-item-action d-flex align-items-start justify-content-between gap-2 ${selectedTask && selectedTask.id === task.id ? 'active' : ''}`}
+                        class={`list-group-item list-group-item-action d-flex align-items-start justify-content-between gap-2 ${selectedTaskSummary && selectedTaskSummary.id === task.id ? 'active' : ''}`}
                         on:click={() => openTaskDetail(task.id)}
                       >
                         <div class="text-start">

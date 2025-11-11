@@ -15,9 +15,9 @@ use std::sync::Arc;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
-use crate::shared::models::task::compute_output_content;
+use crate::shared::models::task::{compute_output_content, extract_steps};
 use crate::shared::models::{
-    AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskView,
+    AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskSummary, TaskView,
     UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
@@ -854,39 +854,27 @@ pub async fn cancel_task(
     });
 
     let mut cancelled = false;
-    if let Some((status, output)) = sqlx::query_as::<_, (String, Option<serde_json::Value>)>(
-        r#"SELECT status, output FROM sandbox_tasks WHERE sandbox_id = ? AND id = ? LIMIT 1"#,
-    )
-    .bind(&sandbox.id)
-    .bind(&task_id)
-    .fetch_optional(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
+    if let Some(task) = SandboxTask::find_by_id(&state.db, &task_id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?
     {
-        let status_lower = status.to_lowercase();
+        if task.sandbox_id != sandbox.id {
+            return Err(ApiError::NotFound("Task not found".to_string()));
+        }
+        let status_lower = task.status.to_lowercase();
         if status_lower == "processing" || status_lower == "pending" {
-            let mut new_output = output.unwrap_or_else(|| serde_json::json!({"text":""}));
-            if let serde_json::Value::Object(ref mut map) = new_output {
-                let mut items = map
-                    .get("items")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_else(Vec::new);
-                items.push(cancelled_item.clone());
-                map.insert("items".to_string(), serde_json::Value::Array(items));
-            } else {
-                new_output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
-            }
-
-            sqlx::query(
-                r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, updated_at = NOW() WHERE sandbox_id = ? AND id = ?"#
-            )
-            .bind(&new_output)
-            .bind(&sandbox.id)
-            .bind(&task_id)
-            .execute(&*state.db)
-            .await
-            .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+            let req = UpdateTaskRequest {
+                status: Some("cancelled".to_string()),
+                input: None,
+                output: Some(serde_json::json!({
+                    "text": "Task cancelled by user"
+                })),
+                steps: Some(vec![cancelled_item.clone()]),
+                timeout_seconds: None,
+            };
+            SandboxTask::update_by_id(&state.db, &task_id, req)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to cancel task: {}", e)))?;
             cancelled = true;
         } else {
             return Err(ApiError::Conflict(
@@ -896,8 +884,8 @@ pub async fn cancel_task(
     }
 
     if !cancelled {
-        let pending_requests = sqlx::query_as::<_, (String, String, serde_json::Value)>(
-            r#"SELECT id, created_by, payload
+        let pending_requests = sqlx::query_as::<_, (String, serde_json::Value)>(
+            r#"SELECT id, payload
                FROM sandbox_requests
                WHERE sandbox_id = ?
                  AND request_type = 'create_task'
@@ -909,31 +897,13 @@ pub async fn cancel_task(
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
 
-        for (request_id, created_by, payload) in pending_requests {
+        for (request_id, payload) in pending_requests {
             if payload
                 .get("task_id")
                 .and_then(|v| v.as_str())
                 .map(|v| v == task_id)
                 .unwrap_or(false)
             {
-                let input = payload
-                    .get("input")
-                    .cloned()
-                    .unwrap_or_else(|| serde_json::json!({"text":""}));
-                let output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
-                let _ = sqlx::query(
-                    r#"INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, created_at, updated_at)
-                        VALUES (?, ?, ?, 'cancelled', ?, ?, NOW(), NOW())
-                        ON DUPLICATE KEY UPDATE status='cancelled', output=VALUES(output), updated_at=NOW()"#
-                )
-                .bind(&task_id)
-                .bind(&sandbox.id)
-                .bind(&created_by)
-                .bind(&input)
-                .bind(&output)
-                .execute(&*state.db)
-                .await;
-
                 let _ = sqlx::query(
                     r#"UPDATE sandbox_requests
                        SET status='completed', updated_at=NOW(), completed_at=NOW(), error='cancelled'
@@ -1191,41 +1161,29 @@ pub async fn terminate_sandbox(
         "at": chrono::Utc::now().to_rfc3339(),
     });
 
-    let active_tasks = sqlx::query_as::<_, (String, Option<serde_json::Value>)>(
-        r#"SELECT id, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
+    let active_tasks = sqlx::query_as::<_, (String,)>(
+        r#"SELECT id FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
     )
     .bind(&sandbox.id)
     .fetch_all(&*state.db)
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to load tasks: {}", e)))?;
 
-    for (task_id, output) in active_tasks {
-        let mut new_output = output.unwrap_or_else(|| serde_json::json!({"text":""}));
-        if let serde_json::Value::Object(ref mut map) = new_output {
-            let mut items = map
-                .get("items")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_else(Vec::new);
-            items.push(cancelled_item.clone());
-            map.insert("items".to_string(), serde_json::Value::Array(items));
-        } else {
-            new_output = serde_json::json!({"text":"","items":[cancelled_item.clone()]});
-        }
-
-        sqlx::query(
-            r#"UPDATE sandbox_tasks
-               SET status = 'cancelled', output = ?, updated_at = NOW()
-               WHERE sandbox_id = ? AND id = ?"#,
-        )
-        .bind(&new_output)
-        .bind(&sandbox.id)
-        .bind(&task_id)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to cancel task {}: {}", task_id, e))
-        })?;
+    for (task_id,) in active_tasks {
+        let req = UpdateTaskRequest {
+            status: Some("cancelled".to_string()),
+            input: None,
+            output: Some(serde_json::json!({
+                "text": "Task cancelled due to sandbox termination"
+            })),
+            steps: Some(vec![cancelled_item.clone()]),
+            timeout_seconds: None,
+        };
+        SandboxTask::update_by_id(&state.db, &task_id, req)
+            .await
+            .map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!("Failed to cancel task {}: {}", task_id, e))
+            })?;
     }
 
     let pending_requests = sqlx::query_as::<_, (String, serde_json::Value)>(
@@ -1315,7 +1273,7 @@ pub async fn get_sandbox_runtime(
 
     // Fetch all tasks for this sandbox (created_at + output JSON)
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, output FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#
+        r#"SELECT created_at, steps FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#
     )
     .bind(&sandbox.id)
     .fetch_all(&*state.db)
@@ -1327,7 +1285,7 @@ pub async fn get_sandbox_runtime(
     let mut last_restarted: Option<DateTime<Utc>> = None;
     let mut current_sandbox: i64 = 0;
     for (row_created_at, output) in rows.into_iter() {
-        if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
+        if let Some(items) = output.as_array() {
             for it in items {
                 let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 if t == "restarted" {
@@ -1447,7 +1405,7 @@ pub async fn list_tasks(
     Path(id): Path<String>,
     Query(query): Query<ListTasksQuery>,
     Extension(_auth): Extension<AuthContext>,
-) -> ApiResult<Json<Vec<TaskView>>> {
+) -> ApiResult<Json<Vec<TaskSummary>>> {
     let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
@@ -1459,13 +1417,11 @@ pub async fn list_tasks(
 
     let tasks = list
         .into_iter()
-        .map(|task| TaskView {
+        .map(|task| TaskSummary {
             id: task.id,
             sandbox_id: task.sandbox_id,
             status: task.status,
             input_content: extract_input_content(&task.input),
-            output_content: extract_output_content(&task.output),
-            segments: extract_segments(&task.output),
             timeout_seconds: task.timeout_seconds,
             timeout_at: task.timeout_at.map(|dt| dt.to_rfc3339()),
             created_at: task.created_at.to_rfc3339(),
@@ -1573,8 +1529,10 @@ pub async fn create_task(
                             sandbox_id: cur.sandbox_id,
                             status: cur.status,
                             input_content: extract_input_content(&cur.input),
-                            output_content: extract_output_content(&cur.output),
-                            segments: extract_segments(&cur.output),
+                            output_content: extract_output_content(&cur.output, &cur.steps),
+                            segments: extract_segments(&cur.steps),
+                            steps: extract_steps(&cur.steps),
+                            output: cur.output.clone(),
                             timeout_seconds: cur.timeout_seconds,
                             timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
                             created_at: cur.created_at.to_rfc3339(),
@@ -1609,6 +1567,11 @@ pub async fn create_task(
         input_content: extract_input_content(&req.input),
         output_content: vec![],
         segments: vec![],
+        steps: vec![],
+        output: serde_json::json!({
+            "text": "",
+            "content": []
+        }),
         timeout_seconds: timeout_seconds_value,
         timeout_at,
         created_at: now.to_rfc3339(),
@@ -1636,8 +1599,10 @@ pub async fn get_task_by_id(
         sandbox_id: cur.sandbox_id,
         status: cur.status,
         input_content: extract_input_content(&cur.input),
-        output_content: extract_output_content(&cur.output),
-        segments: extract_segments(&cur.output),
+        output_content: extract_output_content(&cur.output, &cur.steps),
+        segments: extract_segments(&cur.steps),
+        steps: extract_steps(&cur.steps),
+        output: cur.output.clone(),
         timeout_seconds: cur.timeout_seconds,
         timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: cur.created_at.to_rfc3339(),
@@ -1697,8 +1662,10 @@ pub async fn update_task(
         sandbox_id: updated.sandbox_id,
         status: updated.status,
         input_content: extract_input_content(&updated.input),
-        output_content: extract_output_content(&updated.output),
-        segments: extract_segments(&updated.output),
+        output_content: extract_output_content(&updated.output, &updated.steps),
+        segments: extract_segments(&updated.steps),
+        steps: extract_steps(&updated.steps),
+        output: updated.output.clone(),
         timeout_seconds: updated.timeout_seconds,
         timeout_at: updated.timeout_at.map(|dt| dt.to_rfc3339()),
         created_at: updated.created_at.to_rfc3339(),
@@ -1733,14 +1700,13 @@ fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
-fn extract_output_content(output: &serde_json::Value) -> Vec<serde_json::Value> {
-    compute_output_content(output)
+fn extract_output_content(
+    output: &serde_json::Value,
+    steps: &serde_json::Value,
+) -> Vec<serde_json::Value> {
+    compute_output_content(output, steps)
 }
 
-fn extract_segments(output: &serde_json::Value) -> Vec<serde_json::Value> {
-    output
-        .get("items")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default()
+fn extract_segments(steps: &serde_json::Value) -> Vec<serde_json::Value> {
+    extract_steps(steps)
 }

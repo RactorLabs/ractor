@@ -11,6 +11,7 @@ pub struct SandboxTask {
     pub status: String,
     pub input: serde_json::Value,
     pub output: serde_json::Value,
+    pub steps: serde_json::Value,
     pub timeout_seconds: Option<i32>,
     pub timeout_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
@@ -27,6 +28,21 @@ pub struct CreateTaskRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub sandbox_id: String,
+    pub status: String,
+    #[serde(default)]
+    pub input_content: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateTaskRequest {
     #[serde(default)]
     pub status: Option<String>,
@@ -34,6 +50,8 @@ pub struct UpdateTaskRequest {
     pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub output: Option<serde_json::Value>,
+    #[serde(default)]
+    pub steps: Option<Vec<Value>>,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
 }
@@ -49,6 +67,10 @@ pub struct TaskView {
     pub output_content: Vec<Value>,
     #[serde(default)]
     pub segments: Vec<Value>,
+    #[serde(default)]
+    pub steps: Vec<Value>,
+    #[serde(default)]
+    pub output: Value,
     pub timeout_seconds: Option<i32>,
     pub timeout_at: Option<String>,
     pub created_at: String,
@@ -70,14 +92,14 @@ impl SandboxTask {
         let timeout_at = timeout_seconds.map(|secs| now + chrono::Duration::seconds(secs as i64));
         let initial_output = serde_json::json!({
             "text": "",
-            "items": [],
             "content": []
         });
+        let initial_steps = serde_json::json!([]);
 
         sqlx::query(
             r#"
-            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#
         )
         .bind(&id)
@@ -86,6 +108,7 @@ impl SandboxTask {
         .bind(&status)
         .bind(&req.input)
         .bind(&initial_output)
+        .bind(&initial_steps)
         .bind(timeout_seconds)
         .bind(timeout_at)
         .bind(&now)
@@ -100,6 +123,7 @@ impl SandboxTask {
             status,
             input: req.input,
             output: initial_output,
+            steps: initial_steps,
             timeout_seconds,
             timeout_at,
             created_at: now,
@@ -117,7 +141,7 @@ impl SandboxTask {
         let offset = offset.unwrap_or(0);
         sqlx::query_as::<_, SandboxTask>(
             r#"
-            SELECT id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at
+            SELECT id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at
             FROM sandbox_tasks
             WHERE sandbox_id = ?
             ORDER BY created_at ASC, id ASC
@@ -148,7 +172,7 @@ impl SandboxTask {
         id: &str,
     ) -> Result<Option<SandboxTask>, sqlx::Error> {
         sqlx::query_as::<_, SandboxTask>(
-            r#"SELECT id, sandbox_id, created_by, status, input, output, timeout_seconds, timeout_at, created_at, updated_at FROM sandbox_tasks WHERE id = ?"#
+            r#"SELECT id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at FROM sandbox_tasks WHERE id = ?"#
         )
         .bind(id)
         .fetch_optional(pool)
@@ -181,27 +205,24 @@ impl SandboxTask {
                 merged.insert("text".to_string(), t.clone());
             }
 
-            if let Some(new_items_val) = o.get("items") {
-                let mut items: Vec<Value> = merged
-                    .get("items")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_else(Vec::new);
-                if let Some(to_append) = new_items_val.as_array() {
-                    items.extend(to_append.iter().cloned());
-                }
-                merged.insert("items".to_string(), Value::Array(items));
-            }
-
             for (k, v) in o.as_object().unwrap_or(&Map::new()) {
-                if k != "text" && k != "items" {
+                if k != "text" {
                     merged.insert(k.clone(), v.clone());
                 }
             }
 
-            let mut merged_value = serde_json::Value::Object(merged);
-            let content_items = compute_output_content(&merged_value);
-            if let serde_json::Value::Object(ref mut obj) = merged_value {
+            task.output = serde_json::Value::Object(merged);
+        }
+
+        if let Some(new_steps) = req.steps {
+            let mut existing = task.steps.as_array().cloned().unwrap_or_else(Vec::new);
+            existing.extend(new_steps);
+            task.steps = serde_json::Value::Array(existing);
+        }
+
+        {
+            let content_items = compute_output_content(&task.output, &task.steps);
+            if let serde_json::Value::Object(ref mut obj) = task.output {
                 if content_items.is_empty() {
                     obj.remove("content");
                 } else {
@@ -211,8 +232,6 @@ impl SandboxTask {
                     );
                 }
             }
-
-            task.output = merged_value;
         }
 
         let mut timeout_updated = false;
@@ -234,11 +253,12 @@ impl SandboxTask {
             }
         }
         sqlx::query(
-            r#"UPDATE sandbox_tasks SET status=?, input=?, output=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
+            r#"UPDATE sandbox_tasks SET status=?, input=?, output=?, steps=?, timeout_seconds=?, timeout_at=?, updated_at=? WHERE id = ?"#,
         )
         .bind(&task.status)
         .bind(&task.input)
         .bind(&task.output)
+        .bind(&task.steps)
         .bind(task.timeout_seconds)
         .bind(task.timeout_at)
         .bind(&now)
@@ -250,9 +270,12 @@ impl SandboxTask {
     }
 }
 
-pub fn compute_output_content(output: &serde_json::Value) -> Vec<serde_json::Value> {
-    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-        for it in items.iter().rev() {
+pub fn compute_output_content(
+    output: &serde_json::Value,
+    steps: &serde_json::Value,
+) -> Vec<serde_json::Value> {
+    if let Some(step_items) = steps.as_array() {
+        for it in step_items.iter().rev() {
             if it.get("type").and_then(|v| v.as_str()) == Some("tool_result")
                 && it.get("tool").and_then(|v| v.as_str()) == Some("output")
             {
@@ -265,7 +288,7 @@ pub fn compute_output_content(output: &serde_json::Value) -> Vec<serde_json::Val
                 }
             }
         }
-        for it in items.iter().rev() {
+        for it in step_items.iter().rev() {
             if it.get("type").and_then(|v| v.as_str()) == Some("tool_call")
                 && it.get("tool").and_then(|v| v.as_str()) == Some("output")
             {
@@ -280,5 +303,12 @@ pub fn compute_output_content(output: &serde_json::Value) -> Vec<serde_json::Val
             }
         }
     }
+    if let Some(items) = output.get("content").and_then(|v| v.as_array()) {
+        return items.clone();
+    }
     Vec::new()
+}
+
+pub fn extract_steps(value: &serde_json::Value) -> Vec<serde_json::Value> {
+    value.as_array().cloned().unwrap_or_default()
 }

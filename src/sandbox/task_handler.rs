@@ -1,4 +1,4 @@
-use super::api::{TaskSandboxClient, TaskView};
+use super::api::{TaskSandboxClient, TaskSummary};
 use super::command::parse_command_xml;
 use super::error::{HostError, Result};
 use super::guardrails::Guardrails;
@@ -89,7 +89,7 @@ impl TaskHandler {
             return Ok(0);
         }
 
-        let mut pending: Vec<TaskView> = Vec::new();
+        let mut pending: Vec<TaskSummary> = Vec::new();
         for task in &recent {
             if task.status.eq_ignore_ascii_case("pending") {
                 if let Ok(created) = DateTime::parse_from_rfc3339(&task.created_at) {
@@ -145,7 +145,7 @@ impl TaskHandler {
         }
     }
 
-    async fn process_task(&self, task: &TaskView) -> Result<()> {
+    async fn process_task(&self, task: &TaskSummary) -> Result<()> {
         let input_text = extract_first_text(&task.input_content);
         self.guardrails.validate_input(&input_text)?;
 
@@ -341,11 +341,7 @@ impl TaskHandler {
                         &task.id,
                         Some("completed".to_string()),
                         Some(sanitized.clone()),
-                        Some(vec![
-                            tool_call_segment.clone(),
-                            tool_result_segment.clone(),
-                            final_segment.clone(),
-                        ]),
+                        Some(vec![final_segment.clone()]),
                     )
                     .await;
 
@@ -441,7 +437,7 @@ fn extract_first_text(items: &[Value]) -> String {
     String::new()
 }
 
-fn render_task_input(task: &TaskView) -> Option<ChatMessage> {
+fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
     let mut parts = Vec::new();
     for item in &task.input_content {
         if item

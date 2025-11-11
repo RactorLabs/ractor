@@ -161,7 +161,7 @@ impl TaskSandboxClient {
         id: &str,
         status: Option<String>,
         output_text: Option<String>,
-        items: Option<Vec<serde_json::Value>>,
+        steps: Option<Vec<serde_json::Value>>,
     ) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sandboxes/{}/tasks/{}",
@@ -171,13 +171,16 @@ impl TaskSandboxClient {
         if let Some(t) = output_text {
             output.insert("text".to_string(), serde_json::json!(t));
         }
-        if let Some(list) = items {
-            output.insert("items".to_string(), serde_json::Value::Array(list));
-        }
+        let output_value = if output.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(output))
+        };
         let req = UpdateTaskRequest {
             status,
             input: None,
-            output: Some(serde_json::Value::Object(output)),
+            output: output_value,
+            steps,
             timeout_seconds: None,
         };
         let response = self
@@ -211,7 +214,7 @@ impl TaskSandboxClient {
         &self,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> Result<Vec<TaskView>> {
+    ) -> Result<Vec<TaskSummary>> {
         let mut url = format!(
             "{}/api/v0/sandboxes/{}/tasks",
             self.config.api_url, self.sandbox_id
@@ -232,7 +235,7 @@ impl TaskSandboxClient {
             .await?;
         match response.status() {
             StatusCode::OK => Ok(response
-                .json::<Vec<TaskView>>()
+                .json::<Vec<TaskSummary>>()
                 .await
                 .map_err(|e| HostError::Api(e.to_string()))?),
             StatusCode::UNAUTHORIZED => {
@@ -368,6 +371,21 @@ impl TaskSandboxClient {
         }
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskSummary {
+    pub id: String,
+    pub sandbox_id: String,
+    pub status: String,
+    #[serde(default)]
+    pub input_content: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskView {
     pub id: String,
@@ -379,6 +397,10 @@ pub struct TaskView {
     pub output_content: Vec<serde_json::Value>,
     #[serde(default)]
     pub segments: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub steps: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub output: serde_json::Value,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
     #[serde(default)]
@@ -404,6 +426,8 @@ pub struct UpdateTaskRequest {
     pub input: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub steps: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
 }

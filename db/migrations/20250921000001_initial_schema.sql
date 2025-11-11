@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS sandbox_tasks (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
     input JSON NOT NULL,
     output JSON NOT NULL,
+    steps JSON NOT NULL DEFAULT ('[]'),
     timeout_seconds INT NULL,
     timeout_at TIMESTAMP NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
