@@ -50,7 +50,7 @@ impl ToolCatalog {
         guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
         guide.push_str(r#"<run_bash commentary="..." exec_dir="/sandbox" commands="..."/>"#);
         guide.push_str(
-            "\n  • Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
+            "\n- Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
         );
         guide.push_str("    - Use simple, portable bash lines (no aliases/prompts).\n");
         guide.push_str("    - Echo the action before running it (e.g., `echo 'Listing data'; ls -lah data`).\n");
@@ -61,36 +61,36 @@ impl ToolCatalog {
         guide.push_str(
             r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );
-        guide.push_str("\n  • View file contents. Omit start/end for full file.\n");
+        guide.push_str("\n- View file contents. Omit start/end for full file.\n");
         guide.push_str(
             r#"<create_file commentary="..." path="/sandbox/...">FILE CONTENT HERE</create_file>"#,
         );
-        guide.push_str("\n  • Create a brand new file with the given body.\n");
+        guide.push_str("\n- Create a brand new file with the given body.\n");
         guide.push_str(
             r#"<str_replace commentary="..." path="/sandbox/..." many="false">
   <old_str><![CDATA[EXISTING TEXT]]></old_str>
   <new_str><![CDATA[UPDATED TEXT]]></new_str>
 </str_replace>"#,
         );
-        guide.push_str("\n  • Replace text. Set many=\"true\" to replace all matches.\n");
+        guide.push_str("\n- Replace text. Set many=\"true\" to replace all matches.\n");
         guide.push_str(
             r#"<insert commentary="..." path="/sandbox/..." line="42"><![CDATA[TEXT TO INSERT]]></insert>"#,
         );
-        guide.push_str("\n  • Insert text at the 1-based line before existing content.\n");
+        guide.push_str("\n- Insert text at the 1-based line before existing content.\n");
         guide.push_str(
             r#"<remove_str commentary="..." path="/sandbox/..." many="false"><![CDATA[TEXT TO REMOVE]]></remove_str>"#,
         );
-        guide.push_str("\n  • Remove text (set many=\"true\" to delete all matches).\n");
+        guide.push_str("\n- Remove text (set many=\"true\" to delete all matches).\n");
         guide.push_str(
             r#"<find_filecontent commentary="..." path="/sandbox/..." regex="pattern"/>"#,
         );
-        guide.push_str("\n  • Regex search for matching lines.\n");
+        guide.push_str("\n- Regex search for matching lines.\n");
         guide
             .push_str(r#"<find_filename commentary="..." path="/sandbox/..." glob="*.rs; *.ts"/>"#);
-        guide.push_str("\n  • Glob search for file names.\n");
+        guide.push_str("\n- Glob search for file names.\n");
         guide.push_str(r#"<output><![CDATA[FINAL RESPONSE TO USER]]></output>"#);
         guide.push_str(
-            "\n  • Send the final user-facing message. Only use markdown/plain text inside the body.\n",
+            "\n- Send the final user-facing message. Only use markdown/plain text inside the body.\n",
         );
         guide
     }
