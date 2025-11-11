@@ -401,6 +401,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- When you receive a `<tool_result>` message, use its information to decide your next tool call.\n");
         prompt.push_str("- All file paths must stay under /sandbox.\n");
         prompt.push_str("- When using `run_bash`, set `exec_dir` to `/sandbox` or a subdirectory and keep every command scoped inside `/sandbox`.\n");
+        prompt.push_str("- For `run_bash`, use simple portable commands, echo the action before running it, and avoid aliases or prompts.\n");
         prompt.push_str("- Never ask the user to run anything; you execute tasks via the available tools.\n");
         prompt.push_str("- Prefer incremental edits: open -> edit -> verify.\n\n");
         prompt.push_str("Examples of forbidden extra work:\n");

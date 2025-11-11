@@ -52,6 +52,9 @@ impl ToolCatalog {
         guide.push_str(
             "\n  • Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
         );
+        guide.push_str("    - Use simple, portable bash lines (no aliases/prompts).\n");
+        guide.push_str("    - Echo the action before running it (e.g., `echo 'Listing data'; ls -lah data`).\n");
+        guide.push_str("    - Prefer portable flags (e.g., `mkdir -p \"data/raw\"`, `ls -lah \"data\"`, `grep -R \"TODO\" -n \"src\" || true`).\n");
         guide.push_str(
             r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );
