@@ -164,14 +164,25 @@ impl TaskHandler {
             let system_prompt = self.build_system_prompt().await;
             let context_overview =
                 self.build_context_overview(&system_prompt, &conversation, &tool_history);
-            let mut model_messages = Vec::with_capacity(conversation.len() + 1);
+            let user_message = conversation
+                .iter()
+                .rev()
+                .find(|m| m.role.eq_ignore_ascii_case("user"))
+                .map(|m| m.content.clone())
+                .unwrap_or_else(|| "(no user request available)".to_string());
+            let mut model_messages = Vec::with_capacity(2);
             model_messages.push(ChatMessage {
                 role: "system".to_string(),
                 content: context_overview,
                 name: None,
                 tool_call_id: None,
             });
-            model_messages.extend(conversation.clone());
+            model_messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: user_message,
+                name: None,
+                tool_call_id: None,
+            });
             let response = match self
                 .inference_client
                 .complete(model_messages, None)
@@ -495,6 +506,7 @@ impl TaskHandler {
                 let _ = writeln!(overview, "{}\n", output_summary.trim());
             }
         }
+        let _ = writeln!(overview, "Use the user request and the tool history above to choose the next single XML tool call.");
 
         overview
     }
