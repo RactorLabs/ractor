@@ -46,6 +46,9 @@ TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agen
 npm install -g ./cli
 # or from npm
 npm install -g @tsbx/cli
+
+# Working from a clone? Link the CLI for dev changes
+./scripts/link.sh
 ```
 
 2) Verify host prerequisites
@@ -66,6 +69,7 @@ export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.2-3b-instruct-fast-t
 
 # Start core services with the default model
 tsbx start --default-model llama-3.2-3b-instruct-fast-tp2 mysql api controller operator gateway
+# Shortcuts are supported (e.g., tsbx start a c for API + controller)
 ```
 
 > Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--default-model`) before `tsbx start` to override the default used by sandboxes. The CLI also exports `TSBX_DEFAULT_MODEL` for compatibility with downstream services.
