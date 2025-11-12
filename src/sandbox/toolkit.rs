@@ -63,57 +63,58 @@ impl ToolCatalog {
         guide.push_str("You have the following tools at your disposal to achieve the task at hand. At each turn, you must output your next tool call. The tool will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent tools are possible, you may emit them sequentially across turns, but never output more than one XML tool call in a single response. Prefer dedicated tools over shell fallbacks when available.\n\n");
         guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
         guide.push_str(
-            r#"<run_bash commentary="Listing" exec_dir="/sandbox" commands="echo 'Listing project'; ls -lah"/>"#,
+            r#"<run_bash commentary="Listing project" exec_dir="/sandbox" commands="echo 'Listing project'; ls -lah"/>"#,
         );
         guide.push_str(
-            "\n- Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
-        );
-        guide.push_str("    - Use simple, portable bash lines (no aliases/prompts).\n");
-        guide.push_str("    - Echo the action before running it (e.g., `echo 'Listing data'; ls -lah data`).\n");
-        guide.push_str(
-            "    - Run one command at a time so you can verify each result before continuing.\n",
-        );
-        guide.push_str("    - Prefer portable flags (e.g., `mkdir -p \"data/raw\"`, `ls -lah \"data\"`, `grep -R \"TODO\" -n \"src\" || true`).\n");
-        guide.push_str("    - If a command fails, note the exit code, surface the last 20 stderr lines, suggest a fix, and retry once with a safer variant.\n");
-        guide.push_str(
-            "    - If a path is missing, mention how to create it and ask whether to proceed.\n",
-        );
-        guide.push_str(
-            "    - For large output, redirect to a file, then show the head and the saved path.\n",
+            "\n- Execute shell commands inside `/sandbox`. Run one command per call, echo the action first, surface failures (exit code + stderr), and never assume paths exist without checking.\n",
         );
         guide.push_str(
             r#"<open_file commentary="Reading file" path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );
-        guide.push_str("\n- View file contents. Omit start/end for full file.\n");
+        guide.push_str(
+            "\n- Read file content. Include `start_line`/`end_line` for slices. Use when you need to inspect existing files before editing.\n",
+        );
         guide.push_str(
             r#"<create_file commentary="Creating file" path="/sandbox/...">FILE CONTENT HERE</create_file>"#,
         );
-        guide.push_str("\n- Create a brand new file with the given body.\n");
+        guide.push_str(
+            "\n- Create a brand new file. Only use when the user explicitly requests a new file and after confirming the target directory exists (create the directory first only if asked).\n",
+        );
         guide.push_str(
             r#"<str_replace commentary="Updating text" path="/sandbox/..." many="false">
   <old_str><![CDATA[EXISTING TEXT]]></old_str>
   <new_str><![CDATA[UPDATED TEXT]]></new_str>
 </str_replace>"#,
         );
-        guide.push_str("\n- Replace text. Set many=\"true\" to replace all matches.\n");
+        guide.push_str(
+            "\n- Replace existing text. Set `many=\"true\"` to replace every occurrence in the file.\n",
+        );
         guide.push_str(
             r#"<insert commentary="Inserting text" path="/sandbox/..." line="42"><![CDATA[TEXT TO INSERT]]></insert>"#,
         );
-        guide.push_str("\n- Insert text at the 1-based line before existing content.\n");
+        guide.push_str(
+            "\n- Insert text before the 1-based `line`. Ideal for adding config blocks or imports at specific locations.\n",
+        );
         guide.push_str(
             r#"<remove_str commentary="Removing text" path="/sandbox/..." many="false"><![CDATA[TEXT TO REMOVE]]></remove_str>"#,
         );
-        guide.push_str("\n- Remove text (set many=\"true\" to delete all matches).\n");
+        guide.push_str(
+            "\n- Remove text snippets. Set `many=\"true\"` to delete all matching occurrences.\n",
+        );
         guide.push_str(
             r#"<find_filecontent commentary="Searching content" path="/sandbox/..." regex="pattern"/>"#,
         );
-        guide.push_str("\n- Regex search for matching lines.\n");
+        guide.push_str(
+            "\n- Search within a file using a Rust-style regex (escaped as needed). Returns matching lines for inspection.\n",
+        );
         guide
             .push_str(r#"<find_filename commentary="Searching filenames" path="/sandbox/..." glob="*.rs; *.ts"/>"#);
-        guide.push_str("\n- Glob search for file names.\n");
+        guide.push_str(
+            "\n- Locate files using a glob pattern (semicolon-separated for multiples). Use before edits to confirm file names.\n",
+        );
         guide.push_str(r#"<output><![CDATA[FINAL RESPONSE TO USER]]></output>"#);
         guide.push_str(
-            "\n- Send the final user-facing message. Only use markdown/plain text inside the body.\n",
+            "\n- Send the final answer to the user. No XML, tool names, or intermediate status inside this block—plain text or markdown only.\n",
         );
         guide
     }
