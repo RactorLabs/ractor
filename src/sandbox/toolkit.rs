@@ -59,63 +59,88 @@ impl ToolCatalog {
     }
 
     pub fn command_catalog_prompt(&self) -> String {
-        let mut guide = String::from("Tool Reference:\n");
-        guide.push_str("You have the following tools at your disposal to achieve the task at hand. At each turn, you must output your next tool call. The tool will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent tools are possible, you may emit them sequentially across turns, but never output more than one XML tool call in a single response. Prefer dedicated tools over shell fallbacks when available.\n\n");
-        guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
-        guide.push_str(
-            r#"<run_bash commentary="Listing project" exec_dir="/sandbox" commands="echo 'Listing project'; ls -lah"/>"#,
-        );
-        guide.push_str(
-            "\n- Execute shell commands inside `/sandbox`. Run one command per call, echo the action first, surface failures (exit code + stderr), and never assume paths exist without checking.\n",
-        );
-        guide.push_str(
-            r#"<open_file commentary="Reading file" path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
-        );
-        guide.push_str(
-            "\n- Read file content. Include `start_line`/`end_line` for slices. Use when you need to inspect existing files before editing.\n",
-        );
-        guide.push_str(
-            r#"<create_file commentary="Creating file" path="/sandbox/...">FILE CONTENT HERE</create_file>"#,
-        );
-        guide.push_str(
-            "\n- Create a brand new file. Only use when the user explicitly requests a new file and after confirming the target directory exists (create the directory first only if asked).\n",
-        );
-        guide.push_str(
-            r#"<str_replace commentary="Updating text" path="/sandbox/..." many="false">
-  <old_str><![CDATA[EXISTING TEXT]]></old_str>
-  <new_str><![CDATA[UPDATED TEXT]]></new_str>
-</str_replace>"#,
-        );
-        guide.push_str(
-            "\n- Replace existing text. Set `many=\"true\"` to replace every occurrence in the file.\n",
-        );
-        guide.push_str(
-            r#"<insert commentary="Inserting text" path="/sandbox/..." line="42"><![CDATA[TEXT TO INSERT]]></insert>"#,
-        );
-        guide.push_str(
-            "\n- Insert text before the 1-based `line`. Ideal for adding config blocks or imports at specific locations.\n",
-        );
-        guide.push_str(
-            r#"<remove_str commentary="Removing text" path="/sandbox/..." many="false"><![CDATA[TEXT TO REMOVE]]></remove_str>"#,
-        );
-        guide.push_str(
-            "\n- Remove text snippets. Set `many=\"true\"` to delete all matching occurrences.\n",
-        );
-        guide.push_str(
-            r#"<find_filecontent commentary="Searching content" path="/sandbox/..." regex="pattern"/>"#,
-        );
-        guide.push_str(
-            "\n- Search within a file using a Rust-style regex (escaped as needed). Returns matching lines for inspection.\n",
-        );
-        guide
-            .push_str(r#"<find_filename commentary="Searching filenames" path="/sandbox/..." glob="*.rs; *.ts"/>"#);
-        guide.push_str(
-            "\n- Locate files using a glob pattern (semicolon-separated for multiples). Use before edits to confirm file names.\n",
-        );
-        guide.push_str(r#"<output><![CDATA[FINAL RESPONSE TO USER]]></output>"#);
-        guide.push_str(
-            "\n- Send the final answer to the user. No XML, tool names, or intermediate status inside this block—plain text or markdown only.\n",
-        );
+        let mut guide = String::from("Tool Reference\n\n");
+        guide.push_str("Use exactly one tool call per response until the task is complete. Prefer the purpose-built tools below over improvising with shell commands. Key details:\n");
+        guide.push_str("- Paths must stay under `/sandbox` unless the user explicitly directs otherwise.\n");
+        guide.push_str("- Always validate file or directory existence before operating on them.\n");
+        guide.push_str("- Surface tool failures back to the user so the orchestrating model can react.\n\n");
+
+        guide.push_str("### Tool: run_bash\n");
+        guide.push_str(r#"Example: <run_bash commentary="Listing project" exec_dir="/sandbox" commands="echo 'Listing project'; ls -lah"/>"#);
+        guide.push_str("\n- Execute a single shell command sequence. Echo the planned action first so the log is self-describing.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Short description of the action (no ellipses).\n");
+        guide.push_str("  - `exec_dir` (required): Directory to run the command in; must be `/sandbox` or a child directory.\n");
+        guide.push_str("  - `commands` (required): The shell command(s). Chain with `&&` only when each step depends on the previous result.\n");
+        guide.push_str("- On failure, capture the exit code and last 20 stderr lines, then suggest a revised plan or retry with corrected parameters.\n\n");
+
+        guide.push_str("### Tool: open_file\n");
+        guide.push_str(r#"Example: <open_file commentary="Reading file" path="/sandbox/src/main.rs" start_line="1" end_line="40"/>"#);
+        guide.push_str("\n- Read file contents for inspection. Use before editing so you never assume state.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Why you’re reading the file.\n");
+        guide.push_str("  - `path` (required): Absolute path to the file (must be under `/sandbox`).\n");
+        guide.push_str("  - `start_line` / `end_line` (optional): Limit output to a specific range (1-based, inclusive).\n\n");
+
+        guide.push_str("### Tool: create_file\n");
+        guide.push_str(r#"Example: <create_file commentary="Creating README" path="/sandbox/docs/readme.md"># Project Notes</create_file>"#);
+        guide.push_str("\n- Create a brand-new file with the supplied body. Only use when the user explicitly requests a new file.\n");
+        guide.push_str("- Before calling, confirm the parent directory exists; create directories only if the user asked you to.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Reason for creating the file.\n");
+        guide.push_str("  - `path` (required): Absolute file path (under `/sandbox`).\n");
+        guide.push_str("  - Body (CDATA): The exact file contents.\n\n");
+
+        guide.push_str("### Tool: str_replace\n");
+        guide.push_str(r#"Example: <str_replace commentary="Updating config" path="/sandbox/app/config.toml" many="false">
+  <old_str><![CDATA[MODE = "dev"]]></old_str>
+  <new_str><![CDATA[MODE = "prod"]]></new_str>
+</str_replace>"#);
+        guide.push_str("\n- Replace existing text with new content.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Why you’re replacing text.\n");
+        guide.push_str("  - `path` (required): File to modify (under `/sandbox`).\n");
+        guide.push_str("  - `many` (optional, defaults to `false`): Set to `true` to replace every occurrence.\n");
+        guide.push_str("  - `<old_str>` / `<new_str>` (required child elements): The original and replacement strings.\n\n");
+
+        guide.push_str("### Tool: insert\n");
+        guide.push_str(r#"Example: <insert commentary="Adding import" path="/sandbox/app/main.rs" line="5"><![CDATA[use anyhow::Result;]]></insert>"#);
+        guide.push_str("\n- Insert text before the specified 1-based line number.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Why you’re inserting text.\n");
+        guide.push_str("  - `path` (required): File path (under `/sandbox`).\n");
+        guide.push_str("  - `line` (required): 1-based line number to insert before.\n");
+        guide.push_str("  - Body (CDATA): The content to insert.\n\n");
+
+        guide.push_str("### Tool: remove_str\n");
+        guide.push_str(r#"Example: <remove_str commentary="Removing debug log" path="/sandbox/app/main.rs" many="false"><![CDATA[println!(\"debug\");]]></remove_str>"#);
+        guide.push_str("\n- Remove matching text snippets.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Why you’re removing text.\n");
+        guide.push_str("  - `path` (required): File path (under `/sandbox`).\n");
+        guide.push_str("  - `many` (optional, defaults to `false`): Set to `true` to remove all occurrences.\n");
+        guide.push_str("  - Body (CDATA): The exact text to remove.\n\n");
+
+        guide.push_str("### Tool: find_filecontent\n");
+        guide.push_str(r#"Example: <find_filecontent commentary="Searching for TODOs" path="/sandbox/src" regex="TODO"/>"#);
+        guide.push_str("\n- Search inside files for a regex pattern and return matching lines (Rust-style regex syntax).\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Purpose of the search.\n");
+        guide.push_str("  - `path` (required): Root directory or file path (under `/sandbox`). Narrow the path when possible.\n");
+        guide.push_str("  - `regex` (required): Pattern to match.\n\n");
+
+        guide.push_str("### Tool: find_filename\n");
+        guide.push_str(r#"Example: <find_filename commentary="Finding tests" path="/sandbox" glob="tests/**/*.rs; **/*_test.rs"/>"#);
+        guide.push_str("\n- Locate files using glob patterns (semicolon-separated for multiple patterns). Searches recursively from `path`.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str("  - `commentary` (required): Why you’re searching.\n");
+        guide.push_str("  - `path` (required): Directory to search (under `/sandbox`).\n");
+        guide.push_str("  - `glob` (required): Glob pattern(s) to match file names.\n\n");
+
+        guide.push_str("### Tool: output\n");
+        guide.push_str(r#"Example: <output><![CDATA[All changes applied. Tests pass.]]></output>"#);
+        guide.push_str("\n- Send the final user-facing message once the task is complete.\n");
+        guide.push_str("- Body (CDATA) should contain plain text or markdown summarizing the outcome and next steps. Do not include additional tool calls or XML.\n");
         guide
     }
 
