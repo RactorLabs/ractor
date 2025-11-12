@@ -66,7 +66,10 @@ impl ToolCatalog {
         );
         guide.push_str("- Always validate file or directory existence before operating on them.\n");
         guide.push_str(
-            "- Surface tool failures back to the user so the orchestrating model can react.\n\n",
+            "- Surface tool failures back to the user so the orchestrating model can react.\n",
+        );
+        guide.push_str(
+            "- Only call tools that directly satisfy the current step; once the user’s request is complete, stop and respond with `<output>`.\n\n",
         );
         guide.push_str("Every XML snippet below is a TEMPLATE. Replace every placeholder (e.g. `<COMMENTARY_GOES_HERE>`, `<PATH_UNDER_/sandbox>`, `<REPLACE_WITH_CONTENT_OR_LEAVE_EMPTY>`) with task-specific values and never send the template verbatim.\n\n");
 
