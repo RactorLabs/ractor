@@ -62,7 +62,9 @@ impl ToolCatalog {
         let mut guide = String::from("Tool Reference:\n");
         guide.push_str("You have the following tools at your disposal to achieve the task at hand. At each turn, you must output your next tool call. The tool will be executed in the sandbox and you will receive the resulting output. Required parameters are explicitly marked as such. If multiple independent tools are possible, you may emit them sequentially across turns, but never output more than one XML tool call in a single response. Prefer dedicated tools over shell fallbacks when available.\n\n");
         guide.push_str("Available tools (always respond with ONE of the XML elements below):\n");
-        guide.push_str(r#"<run_bash commentary="..." exec_dir="/sandbox" commands="..."/>"#);
+        guide.push_str(
+            r#"<run_bash commentary="Listing" exec_dir="/sandbox" commands="echo 'Listing project'; ls -lah"/>"#,
+        );
         guide.push_str(
             "\n- Execute shell commands. `exec_dir` must be `/sandbox` or a subdirectory; never operate outside `/sandbox`.\n",
         );
@@ -80,34 +82,34 @@ impl ToolCatalog {
             "    - For large output, redirect to a file, then show the head and the saved path.\n",
         );
         guide.push_str(
-            r#"<open_file commentary="..." path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
+            r#"<open_file commentary="Reading file" path="/sandbox/..." start_line="optional" end_line="optional"/>"#,
         );
         guide.push_str("\n- View file contents. Omit start/end for full file.\n");
         guide.push_str(
-            r#"<create_file commentary="..." path="/sandbox/...">FILE CONTENT HERE</create_file>"#,
+            r#"<create_file commentary="Creating file" path="/sandbox/...">FILE CONTENT HERE</create_file>"#,
         );
         guide.push_str("\n- Create a brand new file with the given body.\n");
         guide.push_str(
-            r#"<str_replace commentary="..." path="/sandbox/..." many="false">
+            r#"<str_replace commentary="Updating text" path="/sandbox/..." many="false">
   <old_str><![CDATA[EXISTING TEXT]]></old_str>
   <new_str><![CDATA[UPDATED TEXT]]></new_str>
 </str_replace>"#,
         );
         guide.push_str("\n- Replace text. Set many=\"true\" to replace all matches.\n");
         guide.push_str(
-            r#"<insert commentary="..." path="/sandbox/..." line="42"><![CDATA[TEXT TO INSERT]]></insert>"#,
+            r#"<insert commentary="Inserting text" path="/sandbox/..." line="42"><![CDATA[TEXT TO INSERT]]></insert>"#,
         );
         guide.push_str("\n- Insert text at the 1-based line before existing content.\n");
         guide.push_str(
-            r#"<remove_str commentary="..." path="/sandbox/..." many="false"><![CDATA[TEXT TO REMOVE]]></remove_str>"#,
+            r#"<remove_str commentary="Removing text" path="/sandbox/..." many="false"><![CDATA[TEXT TO REMOVE]]></remove_str>"#,
         );
         guide.push_str("\n- Remove text (set many=\"true\" to delete all matches).\n");
         guide.push_str(
-            r#"<find_filecontent commentary="..." path="/sandbox/..." regex="pattern"/>"#,
+            r#"<find_filecontent commentary="Searching content" path="/sandbox/..." regex="pattern"/>"#,
         );
         guide.push_str("\n- Regex search for matching lines.\n");
         guide
-            .push_str(r#"<find_filename commentary="..." path="/sandbox/..." glob="*.rs; *.ts"/>"#);
+            .push_str(r#"<find_filename commentary="Searching filenames" path="/sandbox/..." glob="*.rs; *.ts"/>"#);
         guide.push_str("\n- Glob search for file names.\n");
         guide.push_str(r#"<output><![CDATA[FINAL RESPONSE TO USER]]></output>"#);
         guide.push_str(
