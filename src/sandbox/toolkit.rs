@@ -74,7 +74,7 @@ impl ToolCatalog {
         guide.push_str("Every XML snippet below is a TEMPLATE. Replace every placeholder (e.g. `<COMMENTARY_GOES_HERE>`, `<PATH_UNDER_/sandbox>`, `<REPLACE_WITH_CONTENT_OR_LEAVE_EMPTY>`) with task-specific values and never send the template verbatim.\n\n");
 
         guide.push_str("### Tool: run_bash\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <run_bash commentary="<COMMENTARY_GOES_HERE>" exec_dir="/sandbox/<PATH_UNDER_/sandbox>" commands="echo '<COMMENTARY_GOES_HERE>'; <COMMAND_TO_RUN>"/>"#,
         );
@@ -85,10 +85,11 @@ impl ToolCatalog {
         );
         guide.push_str("  - `exec_dir` (required): Directory to run the command in; must be `/sandbox` or a child directory.\n");
         guide.push_str("  - `commands` (required): The shell command(s). Chain with `&&` only when each step depends on the previous result.\n");
+        guide.push_str("- Only call when the user asks for shell work or you must run a command to complete their request.\n");
         guide.push_str("- On failure, capture the exit code and last 20 stderr lines, then suggest a revised plan or retry with corrected parameters.\n\n");
 
         guide.push_str("### Tool: open_file\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <open_file commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>" start_line="optional" end_line="optional"/>"#,
         );
@@ -98,10 +99,11 @@ impl ToolCatalog {
         guide.push_str(
             "  - `path` (required): Absolute path to the file (must be under `/sandbox`).\n",
         );
-        guide.push_str("  - `start_line` / `end_line` (optional): Limit output to a specific range (1-based, inclusive).\n\n");
+        guide.push_str("  - `start_line` / `end_line` (optional): Limit output to a specific range (1-based, inclusive).\n");
+        guide.push_str("- Call this to inspect files when needed for the user’s request; avoid exploratory reads the user did not ask for.\n\n");
 
         guide.push_str("### Tool: create_file\n");
-        guide.push_str("Template (only use when the user explicitly requests a new file):\n");
+        guide.push_str("Example template (only when the user explicitly requests a new file; never copy verbatim):\n");
         guide.push_str(
             r#"  <create_file commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>"><![CDATA[<REPLACE_WITH_CONTENT_OR_LEAVE_EMPTY>]]></create_file>"#,
         );
@@ -113,7 +115,7 @@ impl ToolCatalog {
         guide.push_str("  - Body (CDATA): The exact file contents.\n\n");
 
         guide.push_str("### Tool: str_replace\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <str_replace commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>" many="false">
   <old_str><![CDATA[<TEXT_TO_REPLACE>]]></old_str>
@@ -126,9 +128,10 @@ impl ToolCatalog {
         guide.push_str("  - `path` (required): File to modify (under `/sandbox`).\n");
         guide.push_str("  - `many` (optional, defaults to `false`): Set to `true` to replace every occurrence.\n");
         guide.push_str("  - `<old_str>` / `<new_str>` (required child elements): The original and replacement strings.\n\n");
+        guide.push_str("- Use only when the user wants existing text changed and you have already inspected the file to confirm the target.\n\n");
 
         guide.push_str("### Tool: insert\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <insert commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>" line="<LINE_NUMBER>"><![CDATA[<TEXT_TO_INSERT>]]></insert>"#,
         );
@@ -137,10 +140,11 @@ impl ToolCatalog {
         guide.push_str("  - `commentary` (required): Why you’re inserting text.\n");
         guide.push_str("  - `path` (required): File path (under `/sandbox`).\n");
         guide.push_str("  - `line` (required): 1-based line number to insert before.\n");
-        guide.push_str("  - Body (CDATA): The content to insert.\n\n");
+        guide.push_str("  - Body (CDATA): The content to insert.\n");
+        guide.push_str("- Call this to insert user-requested snippets at precise locations; avoid speculative edits.\n\n");
 
         guide.push_str("### Tool: remove_str\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <remove_str commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>" many="false"><![CDATA[<TEXT_TO_REMOVE>]]></remove_str>"#,
         );
@@ -150,9 +154,10 @@ impl ToolCatalog {
         guide.push_str("  - `path` (required): File path (under `/sandbox`).\n");
         guide.push_str("  - `many` (optional, defaults to `false`): Set to `true` to remove all occurrences.\n");
         guide.push_str("  - Body (CDATA): The exact text to remove.\n\n");
+        guide.push_str("- Only remove text the user wants gone; verify the snippet exists before attempting removal.\n\n");
 
         guide.push_str("### Tool: find_filecontent\n");
-        guide.push_str("Template (only run when the user requests a search or when verifying a specific pattern):\n");
+        guide.push_str("Example template (only run when the user requests a search or you must verify a specific pattern; never copy verbatim):\n");
         guide.push_str(
             r#"  <find_filecontent commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<PATH_UNDER_/sandbox>" regex="<REGEX_PATTERN>"/>"#,
         );
@@ -164,7 +169,7 @@ impl ToolCatalog {
         guide.push_str("- Only call this when the user explicitly requests a search or you must verify the presence/absence of specific text.\n\n");
 
         guide.push_str("### Tool: find_filename\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(
             r#"  <find_filename commentary="<COMMENTARY_GOES_HERE>" path="/sandbox/<DIRECTORY>" glob="<GLOB_PATTERN_1>; <GLOB_PATTERN_2>"/>"#,
         );
@@ -173,10 +178,11 @@ impl ToolCatalog {
         guide.push_str("  - `commentary` (required): Why you’re searching.\n");
         guide.push_str("  - `path` (required): Directory to search (under `/sandbox`).\n");
         guide.push_str("  - `glob` (required): Glob pattern(s) to match file names.\n");
-        guide.push_str("- Avoid listing directories unless the user needs the filenames; prefer precise globs and minimize extra calls.\n\n");
+        guide.push_str("- Avoid listing directories unless the user needs the filenames; prefer precise globs and minimize extra calls.\n");
+        guide.push_str("- Use to locate files only when the user cannot provide the path and the search directly supports their request.\n\n");
 
         guide.push_str("### Tool: output\n");
-        guide.push_str("Template:\n");
+        guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(r#"  <output><![CDATA[<FINAL_MESSAGE_TO_USER>]]></output>"#);
         guide.push_str("\n- Send the final user-facing message once the task is complete.\n");
         guide.push_str("- Body (CDATA) should contain plain text or markdown summarizing the outcome and next steps. Do not include additional tool calls or XML.\n");
