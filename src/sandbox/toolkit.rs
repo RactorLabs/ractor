@@ -99,8 +99,8 @@ impl ToolCatalog {
         guide.push_str(
             "  - `path` (required): Absolute path to the file (must be under `/sandbox`).\n",
         );
-        guide.push_str("  - `start_line` / `end_line` (optional): Limit output to a specific range (1-based, inclusive).\n");
-        guide.push_str("- Call this to inspect files when needed for the user’s request; avoid exploratory reads the user did not ask for.\n\n");
+        guide.push_str("  - `start_line` / `end_line` (optional): Limit output to a specific range (1-based, inclusive). These must be integers.\n");
+        guide.push_str("- Call this to inspect files when needed for the user’s request; avoid exploratory reads the user did not ask for, and skip it after a successful create/edit unless the user wants proof.\n\n");
 
         guide.push_str("### Tool: create_file\n");
         guide.push_str("Example template (only when the user explicitly requests a new file; never copy verbatim):\n");
@@ -178,7 +178,7 @@ impl ToolCatalog {
         guide.push_str("  - `commentary` (required): Why you’re searching.\n");
         guide.push_str("  - `path` (required): Directory to search (under `/sandbox`).\n");
         guide.push_str("  - `glob` (required): Glob pattern(s) to match file names.\n");
-        guide.push_str("- Avoid listing directories unless the user needs the filenames; prefer precise globs and minimize extra calls.\n");
+        guide.push_str("- Avoid listing directories unless the user needs the filenames; prefer precise globs and minimize extra calls. Do not run this immediately after creating files just to confirm they exist.\n");
         guide.push_str("- Use to locate files only when the user cannot provide the path and the search directly supports their request.\n\n");
 
         guide.push_str("### Tool: output\n");
@@ -258,6 +258,11 @@ impl ToolCatalog {
                     Value::String(require_attr(attrs, "commentary")?),
                 );
                 map.insert("path".into(), Value::String(require_attr(attrs, "path")?));
+                if attrs.contains_key("body") {
+                    return Err(anyhow::anyhow!(
+                        "create_file content must be provided in the element body (<![CDATA[...]]>), not a 'body' attribute"
+                    ));
+                }
                 map.insert("content".into(), Value::String(body));
             }
             "str_replace" => {
