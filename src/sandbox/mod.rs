@@ -6,6 +6,7 @@ mod config;
 mod error;
 mod guardrails;
 mod inference;
+mod inference_templates;
 mod task_handler;
 mod toolkit;
 mod tools;

@@ -1,6 +1,6 @@
 use super::error::{HostError, Result};
+use super::inference_templates::get_template;
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -11,16 +11,7 @@ pub struct InferenceClient {
     base_url: String,
     auth_header: Option<String>,
     log_seq: Arc<AtomicU64>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-struct ChatRequestMessage {
-    role: String,
-    content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_call_id: Option<String>,
+    template: String,
 }
 
 #[derive(Debug, Clone)]
@@ -29,36 +20,6 @@ pub struct ChatMessage {
     pub content: String,
     pub name: Option<String>,
     pub tool_call_id: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ChatRequest {
-    model: String,
-    messages: Vec<ChatRequestMessage>,
-    stream: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChatResponse {
-    choices: Vec<Choice>,
-    usage: Option<Usage>,
-}
-
-#[derive(Debug, Deserialize)]
-struct Choice {
-    message: ChoiceMessage,
-}
-
-#[derive(Debug, Deserialize)]
-struct ChoiceMessage {
-    content: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct Usage {
-    prompt_tokens: Option<i64>,
-    completion_tokens: Option<i64>,
-    total_tokens: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,11 +47,18 @@ impl InferenceClient {
             .ok()
             .map(|key| format!("Bearer {}", key.trim()));
 
+        let template = std::env::var("TSBX_INFERENCE_TEMPLATE")
+            .unwrap_or_else(|_| "positron".to_string());
+
+        // Validate template name
+        let _ = get_template(&template)?;
+
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_header,
             log_seq: Arc::new(AtomicU64::new(0)),
+            template,
         })
     }
 
@@ -103,40 +71,18 @@ impl InferenceClient {
         let model_name = std::env::var("TSBX_INFERENCE_MODEL")
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         let url = format!("{}/chat/completions", self.base_url);
-        let format_hint =
-            "Format notice: Respond with a single XML element (e.g. <run_bash .../> or <output>...</output>).";
 
-        let mut base_messages: Vec<ChatRequestMessage> = Vec::new();
-        if let Some(sp) = system_prompt {
-            base_messages.push(ChatRequestMessage {
-                role: "system".to_string(),
-                content: sp,
-                name: None,
-                tool_call_id: None,
-            });
-        }
+        let template = get_template(&self.template)?;
+        let format_hint = template.format_hint();
 
-        for msg in messages.iter() {
-            let trimmed = msg.content.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            base_messages.push(ChatRequestMessage {
-                role: msg.role.clone(),
-                content: trimmed.to_string(),
-                name: msg.name.clone(),
-                tool_call_id: msg.tool_call_id.clone(),
-            });
-        }
-
-        if base_messages.is_empty() {
-            return Err(HostError::Model("No messages provided".to_string()));
-        }
+        let base_messages = messages.clone();
 
         for attempt in 0..PARSE_RETRIES {
             let mut attempt_messages = base_messages.clone();
+
+            // Add format hint on retries
             if attempt > 0 {
-                attempt_messages.push(ChatRequestMessage {
+                attempt_messages.push(ChatMessage {
                     role: "system".to_string(),
                     content: format_hint.to_string(),
                     name: None,
@@ -144,17 +90,18 @@ impl InferenceClient {
                 });
             }
 
-            let req = ChatRequest {
-                model: model_name.clone(),
-                messages: attempt_messages,
-                stream: false,
-            };
-            let estimated_context_length = Self::estimate_context_length(&req.messages);
+            let req_value = template.build_request(
+                attempt_messages.clone(),
+                system_prompt.clone(),
+                &model_name,
+            ).await?;
+
+            let estimated_context_length = Self::estimate_context_length(&attempt_messages);
 
             let log_id = self.log_seq.fetch_add(1, Ordering::SeqCst) + 1;
-            self.log_inference_request(&req, log_id).await;
+            self.log_inference_request(&req_value, log_id).await;
 
-            let mut request_builder = self.client.post(&url).json(&req);
+            let mut request_builder = self.client.post(&url).json(&req_value);
             if let Some(header) = &self.auth_header {
                 request_builder = request_builder.header("Authorization", header);
             }
@@ -186,30 +133,11 @@ impl InferenceClient {
 
             self.log_inference_response(&response_text, log_id).await;
 
-            match serde_json::from_str::<ChatResponse>(&response_text) {
-                Ok(parsed) => {
-                    let choice = parsed.choices.into_iter().next().ok_or_else(|| {
-                        HostError::Model("Inference response missing choices".into())
-                    })?;
-
-                    let raw_content = choice.message.content.unwrap_or_default();
-                    let usage = parsed.usage.unwrap_or_default();
-                    let context_length = usage
-                        .prompt_tokens
-                        .or(usage.total_tokens)
-                        .unwrap_or(estimated_context_length);
-
-                    return Ok(ModelResponse {
-                        content: raw_content.trim().to_string(),
-                        total_tokens: usage.total_tokens,
-                        prompt_tokens: usage.prompt_tokens,
-                        completion_tokens: usage.completion_tokens,
-                        context_length: Some(context_length.max(0)),
-                    });
-                }
+            match template.parse_response(&response_text, estimated_context_length).await {
+                Ok(response) => return Ok(response),
                 Err(e) => {
                     tracing::warn!(
-                        "Failed to parse inference response JSON (attempt {}/{}): {}",
+                        "Failed to parse inference response (attempt {}/{}): {}",
                         attempt + 1,
                         PARSE_RETRIES,
                         e
@@ -223,7 +151,7 @@ impl InferenceClient {
         ))
     }
 
-    fn estimate_context_length(messages: &[ChatRequestMessage]) -> i64 {
+    fn estimate_context_length(messages: &[ChatMessage]) -> i64 {
         messages.iter().fold(0i64, |acc, msg| {
             let content = msg.content.trim();
             if content.is_empty() {
@@ -237,7 +165,7 @@ impl InferenceClient {
         })
     }
 
-    async fn log_inference_request(&self, req: &ChatRequest, id: u64) {
+    async fn log_inference_request(&self, req: &serde_json::Value, id: u64) {
         if let Ok(json) = serde_json::to_string_pretty(req) {
             let filename = format!("/sandbox/logs/inference_{}_request.json", id);
             if let Err(e) = tokio::fs::write(&filename, json).await {
