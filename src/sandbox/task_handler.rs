@@ -198,34 +198,77 @@ impl TaskHandler {
                 warn!("Failed to update context length: {}", err);
             }
 
-            let raw = response.content.trim();
-            if raw.is_empty() {
-                warn!("Empty response from model; retrying");
-                continue;
-            }
+            // Handle both XML (positron) and JSON tool calls (default)
+            let (command, command_text) = if let Some(tool_calls) = response.tool_calls {
+                // Default template: JSON tool calls
+                if tool_calls.is_empty() {
+                    warn!("Empty tool_calls array from model; retrying");
+                    continue;
+                }
+                let tool_call = &tool_calls[0];
 
-            let parsed_command = parse_command_xml(raw);
-            let command_text = raw.to_string();
+                // Convert tool call to CommandInvocation
+                let mut attributes = std::collections::HashMap::new();
+                if let Some(obj) = tool_call.arguments.as_object() {
+                    for (key, value) in obj {
+                        if let Some(s) = value.as_str() {
+                            attributes.insert(key.clone(), s.to_string());
+                        } else if let Some(n) = value.as_i64() {
+                            attributes.insert(key.clone(), n.to_string());
+                        }
+                    }
+                }
+
+                let body = tool_call.arguments.get("content")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let cmd = super::command::CommandInvocation {
+                    name: tool_call.name.clone(),
+                    attributes,
+                    body,
+                    children: Vec::new(),
+                };
+
+                let cmd_text = serde_json::to_string(&tool_call).unwrap_or_default();
+                (cmd, cmd_text)
+            } else if let Some(content) = response.content {
+                // Positron template: XML in content
+                let raw = content.trim();
+                if raw.is_empty() {
+                    warn!("Empty response from model; retrying");
+                    continue;
+                }
+
+                let parsed_command = parse_command_xml(raw);
+                let command_text = raw.to_string();
+
+                let cmd = match parsed_command {
+                    Ok(cmd) => cmd,
+                    Err(err) => {
+                        warn!("Invalid XML from model: {}", err);
+                        conversation.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: "Your last reply was not valid XML. Respond with exactly one well-formed tool call element (e.g. `<open_file .../>` or `<output>...`). Do not include markdown fences, HTML, or extra text."
+                                .to_string(),
+                            name: None,
+                            tool_call_id: None,
+                        });
+                        continue;
+                    }
+                };
+                (cmd, command_text)
+            } else {
+                warn!("Empty response from model (no content or tool_calls); retrying");
+                continue;
+            };
+
             conversation.push(ChatMessage {
                 role: "assistant".to_string(),
                 content: command_text.clone(),
                 name: None,
                 tool_call_id: None,
             });
-            let command = match parsed_command {
-                Ok(cmd) => cmd,
-                Err(err) => {
-                    warn!("Invalid XML from model: {}", err);
-                    conversation.push(ChatMessage {
-                        role: "user".to_string(),
-                        content: "Your last reply was not valid XML. Respond with exactly one well-formed tool call element (e.g. `<open_file .../>` or `<output>...`). Do not include markdown fences, HTML, or extra text."
-                            .to_string(),
-                        name: None,
-                        tool_call_id: None,
-                    });
-                    continue;
-                }
-            };
 
             let command_name = command.name.to_lowercase();
 

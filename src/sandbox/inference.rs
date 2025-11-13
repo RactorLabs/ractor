@@ -22,9 +22,17 @@ pub struct ChatMessage {
     pub tool_call_id: Option<String>,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolCall {
+    pub id: Option<String>,
+    pub name: String,
+    pub arguments: serde_json::Value,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModelResponse {
-    pub content: String,
+    pub content: Option<String>,
+    pub tool_calls: Option<Vec<ToolCall>>,
     pub total_tokens: Option<i64>,
     pub prompt_tokens: Option<i64>,
     pub completion_tokens: Option<i64>,
@@ -48,7 +56,7 @@ impl InferenceClient {
             .map(|key| format!("Bearer {}", key.trim()));
 
         let template = std::env::var("TSBX_INFERENCE_TEMPLATE")
-            .unwrap_or_else(|_| "positron".to_string());
+            .unwrap_or_else(|_| "default".to_string());
 
         // Validate template name
         let _ = get_template(&template)?;

@@ -120,7 +120,8 @@ impl InferenceTemplate for PositronTemplate {
             .unwrap_or(estimated_context_length);
 
         Ok(ModelResponse {
-            content: raw_content.trim().to_string(),
+            content: Some(raw_content.trim().to_string()),
+            tool_calls: None,
             total_tokens: usage.total_tokens,
             prompt_tokens: usage.prompt_tokens,
             completion_tokens: usage.completion_tokens,

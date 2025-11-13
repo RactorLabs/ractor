@@ -327,16 +327,39 @@ impl InferenceTemplate for DefaultTemplate {
             .next()
             .ok_or_else(|| HostError::Model("Inference response missing choices".into()))?;
 
-        // For default template, we need to convert tool calls to XML format
-        let content = if let Some(tool_calls) = &choice.message.tool_calls {
-            if let Some(tool_call) = tool_calls.first() {
-                self.convert_tool_call_to_xml(tool_call)?
-            } else {
-                choice.message.content.unwrap_or_default()
+        // Parse tool calls from OpenAI format
+        let tool_calls = if let Some(raw_tool_calls) = &choice.message.tool_calls {
+            let mut calls = Vec::new();
+            for tool_call in raw_tool_calls {
+                if let Some(function) = tool_call.get("function") {
+                    let name = function
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| HostError::Model("Tool call missing function name".to_string()))?;
+
+                    let arguments_str = function
+                        .get("arguments")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("{}");
+
+                    let arguments: Value = serde_json::from_str(arguments_str)
+                        .map_err(|e| HostError::Model(format!("Failed to parse tool arguments: {}", e)))?;
+
+                    let id = tool_call.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+                    calls.push(super::super::inference::ToolCall {
+                        id,
+                        name: name.to_string(),
+                        arguments,
+                    });
+                }
             }
+            Some(calls)
         } else {
-            choice.message.content.unwrap_or_default()
+            None
         };
+
+        let content = choice.message.content.map(|c| c.trim().to_string());
 
         let usage = parsed.usage.unwrap_or_default();
         let context_length = usage
@@ -345,7 +368,8 @@ impl InferenceTemplate for DefaultTemplate {
             .unwrap_or(estimated_context_length);
 
         Ok(ModelResponse {
-            content: content.trim().to_string(),
+            content,
+            tool_calls,
             total_tokens: usage.total_tokens,
             prompt_tokens: usage.prompt_tokens,
             completion_tokens: usage.completion_tokens,
@@ -355,80 +379,5 @@ impl InferenceTemplate for DefaultTemplate {
 
     fn format_hint(&self) -> &str {
         "Please use one of the available function calls to respond."
-    }
-}
-
-impl DefaultTemplate {
-    fn convert_tool_call_to_xml(&self, tool_call: &Value) -> Result<String> {
-        let function = tool_call
-            .get("function")
-            .ok_or_else(|| HostError::Model("Tool call missing function".to_string()))?;
-
-        let name = function
-            .get("name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| HostError::Model("Tool call missing function name".to_string()))?;
-
-        let arguments_str = function
-            .get("arguments")
-            .and_then(|v| v.as_str())
-            .unwrap_or("{}");
-
-        let args: Value = serde_json::from_str(arguments_str)
-            .map_err(|e| HostError::Model(format!("Failed to parse tool arguments: {}", e)))?;
-
-        // Convert function call to XML format expected by the sandbox
-        match name {
-            "output" => {
-                let content = args
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                Ok(format!("<output>{}</output>", Self::escape_xml(content)))
-            }
-            _ => {
-                // For other tools, create XML with attributes
-                let commentary = args
-                    .get("commentary")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let mut xml = format!("<{} commentary=\"{}\"", name, Self::escape_xml_attr(commentary));
-
-                // Add other attributes
-                if let Some(obj) = args.as_object() {
-                    for (key, value) in obj {
-                        if key == "commentary" || key == "content" {
-                            continue;
-                        }
-                        if let Some(s) = value.as_str() {
-                            xml.push_str(&format!(" {}=\"{}\"", key, Self::escape_xml_attr(s)));
-                        } else if let Some(n) = value.as_i64() {
-                            xml.push_str(&format!(" {}=\"{}\"", key, n));
-                        }
-                    }
-                }
-
-                // Check if there's content that should go in the body
-                if let Some(content) = args.get("content").and_then(|v| v.as_str()) {
-                    xml.push('>');
-                    xml.push_str(&Self::escape_xml(content));
-                    xml.push_str(&format!("</{}>", name));
-                } else {
-                    xml.push_str("/>");
-                }
-
-                Ok(xml)
-            }
-        }
-    }
-
-    fn escape_xml(s: &str) -> String {
-        s.replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-    }
-
-    fn escape_xml_attr(s: &str) -> String {
-        Self::escape_xml(s).replace('"', "&quot;")
     }
 }

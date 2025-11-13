@@ -307,7 +307,7 @@ module.exports = (program) => {
           }
           return options.inferenceModel || 'llama-3.2-3b-instruct-fast-tp2';
         })();
-        const INFERENCE_TEMPLATE = options.inferenceTemplate || process.env.TSBX_INFERENCE_TEMPLATE || 'positron';
+        const INFERENCE_TEMPLATE = options.inferenceTemplate || process.env.TSBX_INFERENCE_TEMPLATE || 'default';
 
         for (const comp of components) {
           switch (comp) {
