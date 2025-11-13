@@ -7,10 +7,16 @@ use axum::{
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{DateTime, Utc};
+use futures_util::StreamExt;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use tracing::warn;
+
+use bollard::container::{InspectContainerOptions, MemoryStatsStats, Stats, StatsOptions};
+use bollard::errors::Error as BollardError;
+use bollard::Docker;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -138,6 +144,26 @@ pub struct PaginatedSandboxes {
     pub offset: i64,
     pub page: i64,
     pub pages: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SandboxTopResponse {
+    pub sandbox_id: String,
+    pub container_state: String,
+    pub tasks_completed: i64,
+    pub cpu_usage_percent: f64,
+    pub cpu_limit_cores: f64,
+    pub memory_usage_bytes: u64,
+    pub memory_limit_bytes: u64,
+    pub captured_at: String,
+}
+
+struct ContainerMetrics {
+    state: String,
+    cpu_percent: f64,
+    cpu_limit_cores: f64,
+    memory_usage: u64,
+    memory_limit: u64,
 }
 
 impl SandboxResponse {
@@ -1333,6 +1359,209 @@ pub async fn get_sandbox_runtime(
         "total_runtime_seconds": total,
         "current_sandbox_seconds": current_sandbox
     })))
+}
+
+// GET /sandboxes/{id}/top — realtime CPU/memory snapshot and task counts
+pub async fn get_sandbox_top(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<SandboxTopResponse>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to inspect sandbox".to_string())
+            })?;
+    }
+
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+
+    let tasks_completed: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND LOWER(status) = 'completed'"#,
+    )
+    .bind(&sandbox.id)
+    .fetch_one(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to count completed tasks for sandbox {}: {}",
+            sandbox.id,
+            e
+        ))
+    })?;
+
+    let container_name = format!("tsbx_sandbox_{}", sandbox.id);
+    let mut container_state = sandbox.state.clone();
+    let mut cpu_usage_percent = 0.0_f64;
+    let mut cpu_limit_cores = 0.0_f64;
+    let mut memory_usage_bytes = 0_u64;
+    let mut memory_limit_bytes = 0_u64;
+
+    match fetch_container_metrics(&container_name).await {
+        Ok(Some(metrics)) => {
+            container_state = metrics.state;
+            cpu_usage_percent = metrics.cpu_percent;
+            cpu_limit_cores = metrics.cpu_limit_cores;
+            memory_usage_bytes = metrics.memory_usage;
+            memory_limit_bytes = metrics.memory_limit;
+        }
+        Ok(None) => {
+            container_state = "not_found".to_string();
+        }
+        Err(e) => {
+            warn!(
+                "Failed to read container metrics for {}: {}",
+                container_name, e
+            );
+            container_state = format!("{} (metrics unavailable)", container_state);
+        }
+    }
+
+    let response = SandboxTopResponse {
+        sandbox_id: sandbox.id,
+        container_state,
+        tasks_completed,
+        cpu_usage_percent,
+        cpu_limit_cores,
+        memory_usage_bytes,
+        memory_limit_bytes,
+        captured_at: Utc::now().to_rfc3339(),
+    };
+
+    Ok(Json(response))
+}
+
+async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<ContainerMetrics>> {
+    let docker = Docker::connect_with_socket_defaults()
+        .map_err(|e| anyhow::anyhow!("Docker connection failed: {}", e))?;
+
+    let inspect = match docker
+        .inspect_container(container_name, None::<InspectContainerOptions>)
+        .await
+    {
+        Ok(resp) => resp,
+        Err(BollardError::DockerResponseServerError { status_code, .. }) if status_code == 404 => {
+            return Ok(None);
+        }
+        Err(err) => {
+            return Err(anyhow::anyhow!(
+                "Inspect failed for {}: {}",
+                container_name,
+                err
+            ));
+        }
+    };
+
+    let container_state = inspect
+        .state
+        .as_ref()
+        .and_then(|s| s.status.as_ref().map(|status| status.to_string()))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let host_config = inspect.host_config.unwrap_or_default();
+    let mut memory_limit_bytes = host_config
+        .memory
+        .map(|v| if v < 0 { 0 } else { v as u64 })
+        .unwrap_or(0);
+
+    let mut cpu_limit_cores = if let Some(nano_cpus) = host_config.nano_cpus {
+        if nano_cpus > 0 {
+            nano_cpus as f64 / 1_000_000_000.0
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    if cpu_limit_cores <= 0.0 {
+        if let (Some(quota), Some(period)) = (host_config.cpu_quota, host_config.cpu_period) {
+            if quota > 0 && period > 0 {
+                cpu_limit_cores = quota as f64 / period as f64;
+            }
+        }
+    }
+
+    let mut stats_stream = docker.stats(
+        container_name,
+        Some(StatsOptions {
+            stream: false,
+            one_shot: true,
+        }),
+    );
+
+    let mut cpu_percent = 0.0;
+    let mut memory_usage_bytes = 0_u64;
+
+    if let Some(stats_result) = stats_stream.next().await {
+        match stats_result {
+            Ok(stats) => {
+                cpu_percent = compute_cpu_percent(&stats);
+                let (usage, limit_from_stats) = compute_memory_usage(&stats);
+                memory_usage_bytes = usage;
+                if memory_limit_bytes == 0 && limit_from_stats > 0 {
+                    memory_limit_bytes = limit_from_stats;
+                } else if limit_from_stats > 0 {
+                    memory_limit_bytes = memory_limit_bytes.max(limit_from_stats);
+                }
+            }
+            Err(BollardError::DockerResponseServerError { status_code, .. })
+                if status_code == 404 =>
+            {
+                return Ok(None);
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!(
+                    "Failed to collect stats for {}: {}",
+                    container_name,
+                    err
+                ));
+            }
+        }
+    }
+
+    Ok(Some(ContainerMetrics {
+        state: container_state,
+        cpu_percent,
+        cpu_limit_cores,
+        memory_usage: memory_usage_bytes,
+        memory_limit: memory_limit_bytes,
+    }))
+}
+
+fn compute_cpu_percent(stats: &Stats) -> f64 {
+    let cpu_delta = stats
+        .cpu_stats
+        .cpu_usage
+        .total_usage
+        .saturating_sub(stats.precpu_stats.cpu_usage.total_usage);
+    let system_delta = stats
+        .cpu_stats
+        .system_cpu_usage
+        .unwrap_or(0)
+        .saturating_sub(stats.precpu_stats.system_cpu_usage.unwrap_or(0));
+    let online_cpus = stats.cpu_stats.online_cpus.unwrap_or(1) as f64;
+
+    if cpu_delta > 0 && system_delta > 0 && online_cpus > 0.0 {
+        (cpu_delta as f64 / system_delta as f64) * online_cpus * 100.0
+    } else {
+        0.0
+    }
+}
+
+fn compute_memory_usage(stats: &Stats) -> (u64, u64) {
+    let mut usage = stats.memory_stats.usage.unwrap_or(0);
+    if let Some(MemoryStatsStats::V1(v1)) = stats.memory_stats.stats {
+        usage = usage.saturating_sub(v1.cache);
+    }
+    let limit = stats.memory_stats.limit.unwrap_or(0);
+    (usage, limit)
 }
 
 pub async fn update_sandbox_to_busy(

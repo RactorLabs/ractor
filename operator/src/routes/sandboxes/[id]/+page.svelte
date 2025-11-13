@@ -135,18 +135,7 @@
     } catch (_) {}
   }
   let fmPendingOpenFile = '';
-  onMount(async () => {
-    try {
-      // Initialize folder/file path from URL before first fetch
-      const init = _getPathFromUrl();
-      if (init && init.length) {
-        fmSegments = init.slice(0, -1);
-        fmPendingOpenFile = init[init.length - 1] || '';
-      }
-    } catch (_) {}
-    try { await fetchFiles(true); } catch (_) {}
-    // layout handles equal heights; no JS equalizer
-  });
+  // First onMount merged into second onMount below (line ~1175)
   let loading = true;
   let error = null;
   let input = '';
@@ -154,6 +143,7 @@
   let pollHandle = null;
   let runtimeSeconds = 0;
   let currentSandboxSeconds = 0;
+  let topData = null;
   // Equalize top card heights (left Sandbox card and right Info card)
   // No JS equal-height logic; use layout-based alignment
 
@@ -488,6 +478,33 @@
   function fmtInt(n) {
     try { const v = Number(n); return Number.isFinite(v) ? v.toLocaleString() : String(n); } catch (_) { return String(n); }
   }
+  function fmtDuration(seconds) {
+    try {
+      const s = Number(seconds);
+      if (!Number.isFinite(s) || s < 0) return '-';
+      if (s < 60) return `${Math.floor(s)}s`;
+      if (s < 3600) return `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return `${h}h ${m}m`;
+    } catch (_) { return '-'; }
+  }
+  function fmtBytes(bytes) {
+    try {
+      const b = Number(bytes);
+      if (!Number.isFinite(b) || b < 0) return '-';
+      if (b < 1024) return `${b} B`;
+      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+      if (b < 1024 * 1024 * 1024) return `${(b / (1024 * 1024)).toFixed(1)} MB`;
+      return `${(b / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    } catch (_) { return '-'; }
+  }
+  function fmtPercent(value) {
+    try {
+      const v = Number(value);
+      return Number.isFinite(v) ? `${v.toFixed(1)}%` : '-';
+    } catch (_) { return '-'; }
+  }
   // File list kind counters for folder details
   function countKind(kind) {
     try { const k = String(kind || '').toLowerCase(); return (fmEntries || []).filter(e => String(e?.kind || '').toLowerCase() === k).length; } catch (_) { return 0; }
@@ -692,6 +709,15 @@
     } catch (_) {}
   }
 
+  async function fetchTop() {
+    try {
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/top`);
+      if (res.ok && res.data) {
+        topData = res.data;
+      }
+    } catch (_) {}
+  }
+
   async function loadTaskDetail(taskId, { force = false, showSpinner = true } = {}) {
     if (!taskId) {
       if (showSpinner) {
@@ -779,6 +805,7 @@
       await fetchTasks();
       await fetchSandbox();
       await fetchRuntime();
+      await fetchTop();
     }, 2000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
@@ -1177,10 +1204,22 @@
     $appOptions.appContentClass = 'p-3';
     // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
+
+    // Initialize folder/file path from URL before first fetch
+    try {
+      const init = _getPathFromUrl();
+      if (init && init.length) {
+        fmSegments = init.slice(0, -1);
+        fmPendingOpenFile = init[init.length - 1] || '';
+      }
+    } catch (_) {}
+
     try {
       await fetchSandbox();
       await fetchRuntime(true);
+      await fetchTop();
       await fetchTasks();
+      try { await fetchFiles(true); } catch (_) {}
       loading = false;
       await tick();
       try { updateTopCardsHeight(); } catch (_) {}
@@ -1351,10 +1390,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
         </Card>
       </div>
       <div class="col-12 col-lg-6 d-none d-lg-block">
-        {#if sandbox}
-          <Card class="h-100">
-            <div class="card-body small">
-              <!-- Last Activity removed per design -->
+        <Card class="h-100">
+          <div class="card-body small">
+            {#if sandbox}
               {#if sandbox.snapshot_id}
                 <div class="mt-1">
                   Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id}</a>
@@ -1362,17 +1400,39 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               {/if}
               <div class="mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
-              <div class="mt-2">
-                <div class="d-flex align-items-center justify-content-between">
-                  <div class="me-2">Context tokens: {fmtInt(context_length)}</div>
+              {#if topData}
+                <div class="mt-1">Tasks Completed: {fmtInt(topData.tasks_completed)}</div>
+                <div class="mt-2">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div class="me-2">CPU: {fmtPercent(topData.cpu_usage_percent)}</div>
+                    <div class="text-body-secondary">{topData.cpu_limit_cores} cores</div>
+                  </div>
+                  <div class="progress mt-1" role="progressbar" aria-valuenow={Number(topData.cpu_usage_percent)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
+                    <div class={`progress-bar ${Number(topData.cpu_usage_percent) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${Math.min(100, Number(topData.cpu_usage_percent)).toFixed(1)}%;`}></div>
+                  </div>
                 </div>
-                <div class="progress mt-1" role="progressbar" aria-valuenow={Number(contextUsedPercent)} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
-                  <div class={`progress-bar ${Number(contextUsedPercent) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${Number(contextUsedPercent).toFixed(1)}%;`}></div>
+                <div class="mt-2">
+                  <div class="d-flex align-items-center justify-content-between">
+                    <div class="me-2">Memory: {fmtBytes(topData.memory_usage_bytes)}</div>
+                    <div class="text-body-secondary">{fmtBytes(topData.memory_limit_bytes)} limit</div>
+                  </div>
+                  <div class="progress mt-1" role="progressbar" aria-valuenow={topData.memory_limit_bytes > 0 ? (topData.memory_usage_bytes / topData.memory_limit_bytes * 100) : 0} aria-valuemin="0" aria-valuemax="100" style="height: 6px;">
+                    <div class={`progress-bar ${topData.memory_limit_bytes > 0 && (topData.memory_usage_bytes / topData.memory_limit_bytes * 100) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${topData.memory_limit_bytes > 0 ? Math.min(100, (topData.memory_usage_bytes / topData.memory_limit_bytes * 100)).toFixed(1) : 0}%;`}></div>
+                  </div>
                 </div>
+              {/if}
+            {:else if loading}
+              <div class="d-flex align-items-center gap-2 text-body text-opacity-75">
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                Loading sandbox info…
               </div>
-            </div>
-          </Card>
-        {/if}
+            {:else if error}
+              <div class="alert alert-danger small mb-0">Failed to load sandbox info</div>
+            {:else}
+              <div class="text-body text-opacity-75">No sandbox data available</div>
+            {/if}
+          </div>
+        </Card>
       </div>
     </div>
   </div>

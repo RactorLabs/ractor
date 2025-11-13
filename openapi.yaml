@@ -658,6 +658,42 @@ paths:
                     type: integer
                   current_sandbox_seconds:
                     type: integer
+  /sandboxes/{id}/top:
+    get:
+      tags:
+      - Sandboxes
+      summary: Sandbox usage snapshot
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      responses:
+        '200':
+          description: Usage metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sandbox_id:
+                    type: string
+                  container_state:
+                    type: string
+                  tasks_completed:
+                    type: integer
+                  cpu_usage_percent:
+                    type: number
+                  cpu_limit_cores:
+                    type: number
+                  memory_usage_bytes:
+                    type: integer
+                  memory_limit_bytes:
+                    type: integer
+                  captured_at:
+                    type: string
   /sandboxes/{id}/tasks:
     get:
       tags:

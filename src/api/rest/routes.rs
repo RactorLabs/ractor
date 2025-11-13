@@ -76,6 +76,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::sandboxes::get_sandbox_runtime),
         )
         .route(
+            "/sandboxes/{id}/top",
+            get(handlers::sandboxes::get_sandbox_top),
+        )
+        .route(
             "/sandboxes/{id}",
             delete(handlers::sandboxes::terminate_sandbox),
         )
