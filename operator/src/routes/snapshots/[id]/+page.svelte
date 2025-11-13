@@ -16,9 +16,14 @@
 
   // File browser state
   let currentPath = '';
+  const PAGE_SIZE = 100;
   let files = [];
   let filesLoading = false;
+  let filesLoadingMore = false;
   let filesError = null;
+  let filesTotal = 0;
+  let filesOffset = 0;
+  let filesHasMore = false;
   let breadcrumbs = [];
   let previewFile = null;
   let previewContent = '';
@@ -53,24 +58,51 @@
     }
   }
 
-  async function fetchFiles(path = '') {
-    filesLoading = true;
-    filesError = null;
-    resetPreview();
+  async function loadFiles(path = '', offset = 0, append = false) {
+    if (append) {
+      filesLoadingMore = true;
+    } else {
+      filesLoading = true;
+      filesError = null;
+      filesOffset = 0;
+      filesTotal = 0;
+      filesHasMore = false;
+      resetPreview();
+    }
     try {
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(offset)
+      });
       const encodedPath = path ? `/list/${encodeURIComponent(path)}` : '/list';
-      const res = await apiFetch(`/snapshots/${encodeURIComponent(snapshotId)}/files${encodedPath}`);
+      const res = await apiFetch(`/snapshots/${encodeURIComponent(snapshotId)}/files${encodedPath}?${params.toString()}`);
       if (!res.ok) {
-        filesError = res?.data?.message || `Failed to load files (HTTP ${res.status})`;
+        const message = res?.data?.message || `Failed to load files (HTTP ${res.status})`;
+        filesError = message;
         filesLoading = false;
+        filesLoadingMore = false;
         return;
       }
-      files = res.data?.items || [];
+      const items = Array.isArray(res.data?.items) ? res.data.items : [];
+      files = append ? [...files, ...items] : items;
+      filesTotal = Number(res.data?.total ?? files.length);
+      filesOffset = offset + items.length;
+      filesHasMore = filesOffset < filesTotal;
+      filesError = null;
       filesLoading = false;
+      filesLoadingMore = false;
     } catch (e) {
       filesError = e.message || String(e);
       filesLoading = false;
+      filesLoadingMore = false;
     }
+  }
+
+  const fetchFiles = (path = '') => loadFiles(path, 0, false);
+
+  async function loadMoreFiles() {
+    if (filesLoadingMore || !filesHasMore) return;
+    await loadFiles(currentPath, filesOffset, true);
   }
 
   function navigateToPath(path) {
@@ -253,12 +285,12 @@
               </ol>
             </nav>
 
-            {#if filesLoading}
+            {#if filesLoading && files.length === 0}
               <div class="text-center text-body text-opacity-75 py-4">
                 <div class="spinner-border spinner-border-sm text-theme mb-2"></div>
                 <div class="small">Loading files…</div>
               </div>
-            {:else if filesError}
+            {:else if filesError && files.length === 0}
               <div class="alert alert-danger small mb-0">{filesError}</div>
             {:else if files.length === 0}
               <div class="text-body text-opacity-75 py-4 text-center">
@@ -293,6 +325,24 @@
                   </tbody>
                 </table>
               </div>
+              {#if filesHasMore}
+                <div class="text-center mt-3">
+                  <button
+                    class="btn btn-outline-secondary btn-sm"
+                    on:click={loadMoreFiles}
+                    disabled={filesLoadingMore}
+                  >
+                    {#if filesLoadingMore}
+                      Loading…
+                    {:else}
+                      Show more files
+                    {/if}
+                  </button>
+                </div>
+              {/if}
+              {#if filesError}
+                <div class="alert alert-danger small mt-3">{filesError}</div>
+              {/if}
               {#if previewFile}
                 <div class="mt-3 border rounded">
                   <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
