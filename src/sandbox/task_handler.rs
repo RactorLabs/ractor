@@ -544,6 +544,23 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- Do not ignore tool failures; diagnose and rerun the failing call until it succeeds before issuing other tool calls.\n");
         prompt.push_str("- Do not perform \"cleanup\" or additional refactors beyond what the instructions require.\n\n");
 
+        match std::fs::read_to_string("/sandbox/instructions.md") {
+            Ok(contents) => {
+                let trimmed = contents.trim();
+                if !trimmed.is_empty() {
+                    prompt.push_str("Additional Instructions:\n");
+                    prompt.push_str(trimmed);
+                    prompt.push('\n');
+                }
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to read /sandbox/instructions.md for system prompt: {}",
+                    err
+                );
+            }
+        }
+
         prompt.push_str(&self.toolkit.command_catalog_prompt());
 
         prompt

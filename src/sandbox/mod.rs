@@ -87,6 +87,23 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
         }
     }
 
+    // Ensure sandbox instructions file exists so agents can supply custom guidance.
+    let instructions_path = std::path::Path::new("/sandbox/instructions.md");
+    if !instructions_path.exists() {
+        if let Err(e) = std::fs::write(instructions_path, "") {
+            warn!(
+                "Failed to initialize instructions file at {}: {}",
+                instructions_path.display(),
+                e
+            );
+        } else {
+            info!(
+                "Initialized instructions file at {}",
+                instructions_path.display()
+            );
+        }
+    }
+
     // Ensure /sandbox/bin exists and install command wrappers
     if let Err(e) = std::fs::create_dir_all("/sandbox/bin") {
         warn!("Failed to create /sandbox/bin: {}", e);
