@@ -9,8 +9,9 @@ use std::sync::Arc;
 pub struct InferenceClient {
     client: Client,
     base_url: String,
-    auth_header: Option<String>,
+    auth_header: String,
     log_seq: Arc<AtomicU64>,
+    model: String,
 }
 
 #[derive(Debug, Clone)]
@@ -93,15 +94,32 @@ impl InferenceClient {
             .build()
             .map_err(|e| HostError::Model(format!("Failed to create inference client: {}", e)))?;
 
-        let auth_header = std::env::var("TSBX_INFERENCE_API_KEY")
-            .ok()
-            .map(|key| format!("Bearer {}", key.trim()));
+        let raw_key = std::env::var("TSBX_INFERENCE_API_KEY")
+            .map_err(|_| HostError::Model("TSBX_INFERENCE_API_KEY must be set".to_string()))?;
+        let trimmed_key = raw_key.trim();
+        if trimmed_key.is_empty() {
+            return Err(HostError::Model(
+                "TSBX_INFERENCE_API_KEY must not be empty".to_string(),
+            ));
+        }
+        let auth_header = format!("Bearer {}", trimmed_key);
+
+        let raw_model = std::env::var("TSBX_INFERENCE_MODEL")
+            .map_err(|_| HostError::Model("TSBX_INFERENCE_MODEL must be set".to_string()))?;
+        let trimmed_model = raw_model.trim();
+        if trimmed_model.is_empty() {
+            return Err(HostError::Model(
+                "TSBX_INFERENCE_MODEL must not be empty".to_string(),
+            ));
+        }
+        let model = trimmed_model.to_string();
 
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_header,
             log_seq: Arc::new(AtomicU64::new(0)),
+            model,
         })
     }
 
@@ -111,8 +129,6 @@ impl InferenceClient {
         system_prompt: Option<String>,
     ) -> Result<ModelResponse> {
         const PARSE_RETRIES: usize = 5;
-        let model_name = std::env::var("TSBX_INFERENCE_MODEL")
-            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         let url = format!("{}/chat/completions", self.base_url);
 
         let base_messages = messages.clone();
@@ -130,7 +146,7 @@ impl InferenceClient {
             }
 
             let req_value =
-                build_request(attempt_messages.clone(), system_prompt.clone(), &model_name)?;
+                build_request(attempt_messages.clone(), system_prompt.clone(), &self.model)?;
 
             let estimated_context_length = Self::estimate_context_length(&attempt_messages);
 
@@ -138,9 +154,7 @@ impl InferenceClient {
             self.log_inference_request(&req_value, log_id).await;
 
             let mut request_builder = self.client.post(&url).json(&req_value);
-            if let Some(header) = &self.auth_header {
-                request_builder = request_builder.header("Authorization", header);
-            }
+            request_builder = request_builder.header("Authorization", &self.auth_header);
 
             let resp = request_builder.send().await.map_err(HostError::Request)?;
 

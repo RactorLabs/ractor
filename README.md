@@ -59,21 +59,20 @@ tsbx doctor
 
 - If any checks fail, run `tsbx fix` (with `--pull` or other flags as needed) and re-run `tsbx doctor`.
 
-3) (Optional) Configure the inference endpoint
+3) Configure the inference endpoint (required)
 
 ```bash
-# Configure inference endpoint (defaults shown below)
-export TSBX_INFERENCE_URL=${TSBX_INFERENCE_URL:-https://api.positron.ai/v1}
-export TSBX_INFERENCE_API_KEY=${TSBX_INFERENCE_API_KEY:-6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM}
-export TSBX_INFERENCE_MODEL=${TSBX_INFERENCE_MODEL:-llama-3.2-3b-instruct-fast-tp2}
+# Configure inference endpoint (replace sample values with your own)
+export TSBX_INFERENCE_URL="https://api.positron.ai/v1"
+export TSBX_INFERENCE_API_KEY="replace-with-your-api-key"
+export TSBX_INFERENCE_MODEL="llama-3.2-3b-instruct-fast-tp2"
 
 # Start core services (uses TSBX_INFERENCE_MODEL above)
 tsbx start mysql api controller operator gateway
 # Shortcuts are supported (e.g., tsbx start a c for API + controller)
 ```
 
-> Need a different model? Set `TSBX_INFERENCE_MODEL=<model>` (or pass `--inference-model`) before `tsbx start` to override the value used by sandboxes.
-> Replace the sample `TSBX_INFERENCE_API_KEY` with your own key for any non-demo environment.
+> `tsbx start` fails if any of `TSBX_INFERENCE_URL`, `TSBX_INFERENCE_API_KEY`, or `TSBX_INFERENCE_MODEL` are unset or blank. Use flags (`--inference-url`, `--inference-api-key`, `--inference-model`) instead of environment variables if you prefer.
 
 4) Configure host branding (optional; defaults to `TaskSandbox` + `http://localhost` if unset) and any host overrides
 

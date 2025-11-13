@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bollard::{
     container::{
         Config, CreateContainerOptions, DownloadFromContainerOptions, LogsOptions,
@@ -850,20 +850,32 @@ echo 'Session directories created (.env, logs)'
 
         // Configure inference endpoint for model access
         let inference_url = std::env::var("TSBX_INFERENCE_URL")
-            .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
-        env_vars.push(format!("TSBX_INFERENCE_URL={}", inference_url));
-
-        if let Ok(api_key) = std::env::var("TSBX_INFERENCE_API_KEY") {
-            env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", api_key));
+            .map_err(|_| anyhow!("TSBX_INFERENCE_URL must be set before starting services"))?;
+        let trimmed_url = inference_url.trim();
+        if trimmed_url.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_URL must not be empty"));
         }
+        env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
+
+        let api_key = std::env::var("TSBX_INFERENCE_API_KEY")
+            .map_err(|_| anyhow!("TSBX_INFERENCE_API_KEY must be set before starting services"))?;
+        let trimmed_key = api_key.trim();
+        if trimmed_key.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_API_KEY must not be empty"));
+        }
+        env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
 
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
         let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
-            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
+            .map_err(|_| anyhow!("TSBX_INFERENCE_MODEL must be set before starting services"))?;
+        let trimmed_model = inference_model.trim();
+        if trimmed_model.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_MODEL must not be empty"));
+        }
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", trimmed_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1040,20 +1052,32 @@ echo 'Session directories created (.env, logs)'
 
         // Configure inference endpoint for model access
         let inference_url = std::env::var("TSBX_INFERENCE_URL")
-            .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
-        env_vars.push(format!("TSBX_INFERENCE_URL={}", inference_url));
-
-        if let Ok(api_key) = std::env::var("TSBX_INFERENCE_API_KEY") {
-            env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", api_key));
+            .map_err(|_| anyhow!("TSBX_INFERENCE_URL must be set before starting services"))?;
+        let trimmed_url = inference_url.trim();
+        if trimmed_url.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_URL must not be empty"));
         }
+        env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
+
+        let api_key = std::env::var("TSBX_INFERENCE_API_KEY")
+            .map_err(|_| anyhow!("TSBX_INFERENCE_API_KEY must be set before starting services"))?;
+        let trimmed_key = api_key.trim();
+        if trimmed_key.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_API_KEY must not be empty"));
+        }
+        env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
 
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
         let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
-            .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
+            .map_err(|_| anyhow!("TSBX_INFERENCE_MODEL must be set before starting services"))?;
+        let trimmed_model = inference_model.trim();
+        if trimmed_model.is_empty() {
+            return Err(anyhow!("TSBX_INFERENCE_MODEL must not be empty"));
+        }
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", trimmed_model));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 

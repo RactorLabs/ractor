@@ -43,8 +43,12 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     tracing::info!("Using TSBX_TOKEN: {}", masked_token);
 
     // Resolve inference service endpoint from environment
-    let inference_url = std::env::var("TSBX_INFERENCE_URL")
-        .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+    let inference_url =
+        std::env::var("TSBX_INFERENCE_URL").expect("TSBX_INFERENCE_URL must be set");
+    if inference_url.trim().is_empty() {
+        panic!("TSBX_INFERENCE_URL must not be empty");
+    }
+    let inference_url = inference_url.trim().to_string();
     tracing::info!("Using TSBX_INFERENCE_URL: {}", inference_url);
 
     // Initialize configuration

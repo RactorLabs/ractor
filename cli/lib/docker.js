@@ -1,6 +1,14 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    throw new Error(`Environment variable ${name} must be set`);
+  }
+  return value.trim();
+}
+
 class DockerManager {
   constructor() {
     // Use published Docker images from DigitalOcean Container Registry
@@ -175,7 +183,11 @@ class DockerManager {
         console.log('🚀 tsbx_gateway started (port 80)');
         break;
 
-      case 'api':
+      case 'api': {
+        const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
+        const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
+        const inferenceModel = requireEnv('TSBX_INFERENCE_MODEL');
+
         await this.execDocker([
           'run', '-d',
           '--name', 'tsbx_api',
@@ -184,14 +196,19 @@ class DockerManager {
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
-          '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
-          ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
-          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
+          '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
+          '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
+          '-e', `TSBX_INFERENCE_MODEL=${inferenceModel}`,
           this.images.api
         ]);
         break;
+      }
 
-      case 'controller':
+      case 'controller': {
+        const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
+        const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
+        const inferenceModel = requireEnv('TSBX_INFERENCE_MODEL');
+
         await this.execDocker([
           'run', '-d',
           '--name', 'tsbx_controller',
@@ -200,9 +217,9 @@ class DockerManager {
           '-v', 'tsbx_snapshots_data:/data/snapshots',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
-          '-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1'}`,
-          ...(process.env.TSBX_INFERENCE_API_KEY ? ['-e', `TSBX_INFERENCE_API_KEY=${process.env.TSBX_INFERENCE_API_KEY}`] : []),
-          '-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL || 'llama-3.2-3b-instruct-fast-tp2'}`,
+          '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
+          '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
+          '-e', `TSBX_INFERENCE_MODEL=${inferenceModel}`,
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,
@@ -213,6 +230,7 @@ class DockerManager {
           this.images.controller
         ]);
         break;
+      }
 
       default:
         throw new Error(`Unknown component: ${component}`);

@@ -13,7 +13,7 @@
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
 - Start services (Docker via CLI): `tsbx start [components...]`
-  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference traffic is proxied to `TSBX_INFERENCE_URL` (default `https://api.positron.ai/v1`).
+  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference traffic is proxied to `TSBX_INFERENCE_URL` (must be provided; typically points to `https://api.positron.ai/v1`).
   - In dev, use `./scripts/build.sh` to build images when needed.
 - Stop: `tsbx stop [components...]` (supports `sandboxes` to stop all sandbox containers).
 - Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.

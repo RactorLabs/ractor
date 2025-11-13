@@ -10,8 +10,11 @@ pub async fn run() -> Result<()> {
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let inference_url = std::env::var("TSBX_INFERENCE_URL")
-        .unwrap_or_else(|_| "https://api.positron.ai/v1".to_string());
+    let inference_url =
+        std::env::var("TSBX_INFERENCE_URL").expect("TSBX_INFERENCE_URL must be set");
+    if inference_url.trim().is_empty() {
+        panic!("TSBX_INFERENCE_URL must not be empty");
+    }
     tracing::info!("Using TSBX_INFERENCE_URL: {}", inference_url);
 
     // Initialize sandbox manager and run

@@ -102,9 +102,9 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--inference-model <model>', 'Inference model name', 'llama-3.2-3b-instruct-fast-tp2')
-    .option('--inference-url <url>', 'Inference API base URL', 'https://api.positron.ai/v1')
-    .option('--inference-api-key <key>', 'Inference API key (Bearer token)')
+    .option('--inference-model <model>', 'Inference model name (required)')
+    .option('--inference-url <url>', 'Inference API base URL (required)')
+    .option('--inference-api-key <key>', 'Inference API key (Bearer token, required)')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -294,29 +294,23 @@ module.exports = (program) => {
           } catch (_) { return ''; }
         }
 
-        const INFERENCE_URL = (() => {
-          const src = getOptionSource('inferenceUrl');
-          if (src === 'cli') {
-            return options.inferenceUrl;
+        const resolveRequired = (cliValue, envName, flagName) => {
+          if (cliValue !== undefined && cliValue !== null) {
+            const trimmedCli = String(cliValue).trim();
+            if (trimmedCli !== '') {
+              return trimmedCli;
+            }
           }
-          const envUrl = process.env.TSBX_INFERENCE_URL;
-          if (envUrl && envUrl.trim() !== '') {
-            return envUrl;
+          const envValue = process.env[envName];
+          if (envValue && envValue.trim() !== '') {
+            return envValue.trim();
           }
-          return options.inferenceUrl || 'https://api.positron.ai/v1';
-        })();
-        const INFERENCE_API_KEY = options.inferenceApiKey || process.env.TSBX_INFERENCE_API_KEY || '6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM';
-        const INFERENCE_MODEL = (() => {
-          const src = getOptionSource('inferenceModel');
-          if (src === 'cli') {
-            return options.inferenceModel;
-          }
-          const envModel = process.env.TSBX_INFERENCE_MODEL;
-          if (envModel && envModel.trim() !== '') {
-            return envModel;
-          }
-          return options.inferenceModel || 'llama-3.2-3b-instruct-fast-tp2';
-        })();
+          throw new Error(`Missing ${flagName}. Provide ${flagName} or set ${envName}.`);
+        };
+
+        const INFERENCE_URL = resolveRequired(options.inferenceUrl, 'TSBX_INFERENCE_URL', '--inference-url');
+        const INFERENCE_API_KEY = resolveRequired(options.inferenceApiKey, 'TSBX_INFERENCE_API_KEY', '--inference-api-key');
+        const INFERENCE_MODEL = resolveRequired(options.inferenceModel, 'TSBX_INFERENCE_MODEL', '--inference-model');
         for (const comp of components) {
           switch (comp) {
             case 'mysql': {
