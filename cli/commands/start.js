@@ -317,15 +317,6 @@ module.exports = (program) => {
           }
           return options.inferenceModel || 'llama-3.2-3b-instruct-fast-tp2';
         })();
-        const normalizeTemplate = (raw) => {
-          const value = (raw || '').trim().toLowerCase();
-          if (!value) return 'openai';
-          if (value === 'positron') return 'positron';
-          if (value === 'openai') return 'openai';
-          return value;
-        };
-        const INFERENCE_TEMPLATE = normalizeTemplate(options.inferenceTemplate || process.env.TSBX_INFERENCE_TEMPLATE || 'openai');
-
         for (const comp of components) {
           switch (comp) {
             case 'mysql': {
@@ -412,7 +403,6 @@ module.exports = (program) => {
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`,
-                '-e',`TSBX_INFERENCE_TEMPLATE=${INFERENCE_TEMPLATE}`,
                 ...(options.apiTaskSandboxHost ? ['-e', `TSBX_HOST=${options.apiTaskSandboxHost}`] : []),
                 ...(options.apiTaskSandboxPort ? ['-e', `TSBX_PORT=${options.apiTaskSandboxPort}`] : []),
                 API_IMAGE
@@ -477,7 +467,6 @@ module.exports = (program) => {
                 '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODEL=${desiredModel}`,
-                '-e',`TSBX_INFERENCE_TEMPLATE=${INFERENCE_TEMPLATE}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`SANDBOX_IMAGE=${sandboxImage}`,

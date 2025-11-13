@@ -1,6 +1,6 @@
 use super::error::{HostError, Result};
-use super::inference_templates::get_template;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::cmp::max;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -11,7 +11,6 @@ pub struct InferenceClient {
     base_url: String,
     auth_header: Option<String>,
     log_seq: Arc<AtomicU64>,
-    template: String,
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +38,49 @@ pub struct ModelResponse {
     pub context_length: Option<i64>,
 }
 
+const FORMAT_HINT: &str =
+    "Format notice: Respond with a single XML element (e.g. <run_bash .../> or <output>...</output>).";
+
+#[derive(Debug, Serialize, Clone)]
+struct ChatRequestMessage {
+    role: String,
+    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ChatRequest {
+    model: String,
+    messages: Vec<ChatRequestMessage>,
+    stream: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChatResponse {
+    choices: Vec<Choice>,
+    usage: Option<Usage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Choice {
+    message: ChoiceMessage,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChoiceMessage {
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct Usage {
+    prompt_tokens: Option<i64>,
+    completion_tokens: Option<i64>,
+    total_tokens: Option<i64>,
+}
+
 impl InferenceClient {
     pub fn new(base_url: &str) -> Result<Self> {
         let timeout_secs = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS")
@@ -55,23 +97,11 @@ impl InferenceClient {
             .ok()
             .map(|key| format!("Bearer {}", key.trim()));
 
-        let template_raw =
-            std::env::var("TSBX_INFERENCE_TEMPLATE").unwrap_or_else(|_| "openai".to_string());
-        let template = match template_raw.trim().to_ascii_lowercase().as_str() {
-            "positron" => "positron".to_string(),
-            "openai" | "" => "openai".to_string(),
-            other => other.to_string(),
-        };
-
-        // Validate template name
-        let _ = get_template(&template)?;
-
         Ok(Self {
             client,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_header,
             log_seq: Arc::new(AtomicU64::new(0)),
-            template,
         })
     }
 
@@ -85,27 +115,22 @@ impl InferenceClient {
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         let url = format!("{}/chat/completions", self.base_url);
 
-        let template = get_template(&self.template)?;
-        let format_hint = template.format_hint();
-
         let base_messages = messages.clone();
 
         for attempt in 0..PARSE_RETRIES {
             let mut attempt_messages = base_messages.clone();
 
-            // Add format hint on retries
             if attempt > 0 {
                 attempt_messages.push(ChatMessage {
                     role: "system".to_string(),
-                    content: format_hint.to_string(),
+                    content: FORMAT_HINT.to_string(),
                     name: None,
                     tool_call_id: None,
                 });
             }
 
-            let req_value = template
-                .build_request(attempt_messages.clone(), system_prompt.clone(), &model_name)
-                .await?;
+            let req_value =
+                build_request(attempt_messages.clone(), system_prompt.clone(), &model_name)?;
 
             let estimated_context_length = Self::estimate_context_length(&attempt_messages);
 
@@ -144,10 +169,7 @@ impl InferenceClient {
 
             self.log_inference_response(&response_text, log_id).await;
 
-            match template
-                .parse_response(&response_text, estimated_context_length)
-                .await
-            {
+            match parse_response(&response_text, estimated_context_length) {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     tracing::warn!(
@@ -174,7 +196,7 @@ impl InferenceClient {
             let char_count = content.chars().count() as i64;
             let word_count = content.split_whitespace().filter(|w| !w.is_empty()).count() as i64;
             let approx_content_tokens = max((char_count + 3) / 4, max(word_count, 1));
-            let per_message_overhead = 4; // rough allowance for role/name metadata
+            let per_message_overhead = 4;
             acc.saturating_add(approx_content_tokens + per_message_overhead)
         })
     }
@@ -194,6 +216,76 @@ impl InferenceClient {
             tracing::warn!("Failed to write inference response log: {}", e);
         }
     }
+}
+
+fn build_request(
+    messages: Vec<ChatMessage>,
+    system_prompt: Option<String>,
+    model_name: &str,
+) -> Result<serde_json::Value> {
+    let mut request_messages: Vec<ChatRequestMessage> = Vec::new();
+
+    if let Some(sp) = system_prompt {
+        request_messages.push(ChatRequestMessage {
+            role: "system".to_string(),
+            content: sp,
+            name: None,
+            tool_call_id: None,
+        });
+    }
+
+    for msg in messages.iter() {
+        let trimmed = msg.content.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        request_messages.push(ChatRequestMessage {
+            role: msg.role.clone(),
+            content: trimmed.to_string(),
+            name: msg.name.clone(),
+            tool_call_id: msg.tool_call_id.clone(),
+        });
+    }
+
+    if request_messages.is_empty() {
+        return Err(HostError::Model("No messages provided".to_string()));
+    }
+
+    let req = ChatRequest {
+        model: model_name.to_string(),
+        messages: request_messages,
+        stream: false,
+    };
+
+    serde_json::to_value(&req)
+        .map_err(|e| HostError::Model(format!("Failed to serialize request: {}", e)))
+}
+
+fn parse_response(response_text: &str, estimated_context_length: i64) -> Result<ModelResponse> {
+    let parsed: ChatResponse = serde_json::from_str(response_text)
+        .map_err(|e| HostError::Model(format!("Failed to parse response: {}", e)))?;
+
+    let choice = parsed
+        .choices
+        .into_iter()
+        .next()
+        .ok_or_else(|| HostError::Model("Inference response missing choices".into()))?;
+
+    let raw_content = choice.message.content.unwrap_or_default();
+    let usage = parsed.usage.unwrap_or_default();
+    let context_length = usage
+        .prompt_tokens
+        .or(usage.total_tokens)
+        .unwrap_or(estimated_context_length);
+
+    Ok(ModelResponse {
+        content: Some(raw_content.trim().to_string()),
+        tool_calls: None,
+        total_tokens: usage.total_tokens,
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        context_length: Some(context_length.max(0)),
+    })
 }
 
 fn warn_missing_tool(status: reqwest::StatusCode, body: &str, attempt: usize) {
