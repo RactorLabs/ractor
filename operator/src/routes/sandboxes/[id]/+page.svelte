@@ -1401,16 +1401,8 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id}</a>
                 </div>
               {/if}
-              <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               {#if topData}
-                <div class="mt-1">Tasks Completed: {fmtInt(topData.tasks_completed)}</div>
-                {#if topData.inference_model}
-                  <div class="mt-1">Model: <span class="font-monospace">{topData.inference_model}</span></div>
-                {/if}
-                {#if topData.inference_url}
-                  <div class="mt-1 text-truncate" title={topData.inference_url}>Inference: <span class="font-monospace small">{topData.inference_url}</span></div>
-                {/if}
-                <div class="mt-2">
+                <div class="mt-1">
                   <div class="d-flex align-items-center justify-content-between">
                     <div class="me-2">CPU: {fmtPercent(topData.cpu_usage_percent)}</div>
                     <div class="text-body-secondary">{topData.cpu_limit_cores} cores</div>
@@ -1428,6 +1420,16 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <div class={`progress-bar ${topData.memory_limit_bytes > 0 && (topData.memory_usage_bytes / topData.memory_limit_bytes * 100) >= 90 ? 'bg-danger' : 'bg-theme'}`} style={`width: ${topData.memory_limit_bytes > 0 ? Math.min(100, (topData.memory_usage_bytes / topData.memory_limit_bytes * 100)).toFixed(1) : 0}%;`}></div>
                   </div>
                 </div>
+              {/if}
+              <div class="mt-2">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
+              {#if topData}
+                <div class="mt-2">Tasks Completed: {fmtInt(topData.tasks_completed)}</div>
+                {#if topData.inference_model}
+                  <div class="mt-1">Model: <span class="font-monospace">{topData.inference_model}</span></div>
+                {/if}
+                {#if topData.inference_url}
+                  <div class="mt-1 text-truncate" title={topData.inference_url}>Inference: <span class="font-monospace small">{topData.inference_url}</span></div>
+                {/if}
               {/if}
             {:else if loading}
               <div class="d-flex align-items-center gap-2 text-body text-opacity-75">
