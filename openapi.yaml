@@ -692,6 +692,12 @@ paths:
                     type: integer
                   memory_limit_bytes:
                     type: integer
+                  inference_url:
+                    type: string
+                    nullable: true
+                  inference_model:
+                    type: string
+                    nullable: true
                   captured_at:
                     type: string
   /sandboxes/{id}/tasks:

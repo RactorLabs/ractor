@@ -354,18 +354,18 @@ module.exports = (program) => {
               console.log(chalk.blue('[INFO] ') + 'Ensuring API is running...');
               let apiExists = await containerExists('tsbx_api');
               if (apiExists) {
-                let hasSnapshotsMount = false;
+                let hasRequiredMounts = false;
                 try {
                   const inspect = await execCmd('docker', ['inspect','tsbx_api','--format','{{range .Mounts}}{{println .Destination}}{{end}}'], { silent: true });
                   const mounts = (inspect.stdout || '').split('\n').map(line => line.trim()).filter(Boolean);
-                  hasSnapshotsMount = mounts.includes('/data/snapshots');
+                  hasRequiredMounts = mounts.includes('/data/snapshots') && mounts.includes('/var/run/docker.sock');
                 } catch (_) {
                   // If inspection fails, assume mounts are correct to avoid unnecessary recreation
-                  hasSnapshotsMount = true;
+                  hasRequiredMounts = true;
                 }
 
-                if (!hasSnapshotsMount) {
-                  console.log(chalk.blue('[INFO] ') + 'Recreating API container to attach snapshots volume...');
+                if (!hasRequiredMounts) {
+                  console.log(chalk.blue('[INFO] ') + 'Recreating API container to attach required volumes...');
                   try { await docker(['rm','-f','tsbx_api']); } catch (_) {}
                   apiExists = false;
                 } else if (await containerRunning('tsbx_api')) {
@@ -385,6 +385,7 @@ module.exports = (program) => {
                 '--name','tsbx_api',
                 '--network','tsbx_network',
                 '-v','tsbx_snapshots_data:/data/snapshots:ro',
+                '-v','/var/run/docker.sock:/var/run/docker.sock:ro',
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,

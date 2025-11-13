@@ -155,6 +155,8 @@ pub struct SandboxTopResponse {
     pub cpu_limit_cores: f64,
     pub memory_usage_bytes: u64,
     pub memory_limit_bytes: u64,
+    pub inference_url: Option<String>,
+    pub inference_model: Option<String>,
     pub captured_at: String,
 }
 
@@ -164,6 +166,8 @@ struct ContainerMetrics {
     cpu_limit_cores: f64,
     memory_usage: u64,
     memory_limit: u64,
+    inference_url: Option<String>,
+    inference_model: Option<String>,
 }
 
 impl SandboxResponse {
@@ -1403,6 +1407,8 @@ pub async fn get_sandbox_top(
     let mut cpu_limit_cores = 0.0_f64;
     let mut memory_usage_bytes = 0_u64;
     let mut memory_limit_bytes = 0_u64;
+    let mut inference_url: Option<String> = None;
+    let mut inference_model: Option<String> = None;
 
     match fetch_container_metrics(&container_name).await {
         Ok(Some(metrics)) => {
@@ -1411,6 +1417,8 @@ pub async fn get_sandbox_top(
             cpu_limit_cores = metrics.cpu_limit_cores;
             memory_usage_bytes = metrics.memory_usage;
             memory_limit_bytes = metrics.memory_limit;
+            inference_url = metrics.inference_url;
+            inference_model = metrics.inference_model;
         }
         Ok(None) => {
             container_state = "not_found".to_string();
@@ -1432,6 +1440,8 @@ pub async fn get_sandbox_top(
         cpu_limit_cores,
         memory_usage_bytes,
         memory_limit_bytes,
+        inference_url,
+        inference_model,
         captured_at: Utc::now().to_rfc3339(),
     };
 
@@ -1464,6 +1474,21 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
         .as_ref()
         .and_then(|s| s.status.as_ref().map(|status| status.to_string()))
         .unwrap_or_else(|| "unknown".to_string());
+
+    // Extract inference URL and model from environment variables
+    let mut inference_url: Option<String> = None;
+    let mut inference_model: Option<String> = None;
+    if let Some(config) = inspect.config.as_ref() {
+        if let Some(env_vars) = config.env.as_ref() {
+            for env_var in env_vars {
+                if let Some(value) = env_var.strip_prefix("TSBX_INFERENCE_URL=") {
+                    inference_url = Some(value.to_string());
+                } else if let Some(value) = env_var.strip_prefix("TSBX_INFERENCE_MODEL=") {
+                    inference_model = Some(value.to_string());
+                }
+            }
+        }
+    }
 
     let host_config = inspect.host_config.unwrap_or_default();
     let mut memory_limit_bytes = host_config
@@ -1532,6 +1557,8 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
         cpu_limit_cores,
         memory_usage: memory_usage_bytes,
         memory_limit: memory_limit_bytes,
+        inference_url,
+        inference_model,
     }))
 }
 
