@@ -55,8 +55,13 @@ impl InferenceClient {
             .ok()
             .map(|key| format!("Bearer {}", key.trim()));
 
-        let template = std::env::var("TSBX_INFERENCE_TEMPLATE")
-            .unwrap_or_else(|_| "default".to_string());
+        let template_raw =
+            std::env::var("TSBX_INFERENCE_TEMPLATE").unwrap_or_else(|_| "openai".to_string());
+        let template = match template_raw.trim().to_ascii_lowercase().as_str() {
+            "positron" => "positron".to_string(),
+            "openai" | "" => "openai".to_string(),
+            other => other.to_string(),
+        };
 
         // Validate template name
         let _ = get_template(&template)?;
@@ -98,11 +103,9 @@ impl InferenceClient {
                 });
             }
 
-            let req_value = template.build_request(
-                attempt_messages.clone(),
-                system_prompt.clone(),
-                &model_name,
-            ).await?;
+            let req_value = template
+                .build_request(attempt_messages.clone(), system_prompt.clone(), &model_name)
+                .await?;
 
             let estimated_context_length = Self::estimate_context_length(&attempt_messages);
 
@@ -141,7 +144,10 @@ impl InferenceClient {
 
             self.log_inference_response(&response_text, log_id).await;
 
-            match template.parse_response(&response_text, estimated_context_length).await {
+            match template
+                .parse_response(&response_text, estimated_context_length)
+                .await
+            {
                 Ok(response) => return Ok(response),
                 Err(e) => {
                     tracing::warn!(

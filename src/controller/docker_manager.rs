@@ -865,8 +865,14 @@ echo 'Session directories created (.env, logs)'
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
 
-        let inference_template = std::env::var("TSBX_INFERENCE_TEMPLATE")
-            .unwrap_or_else(|_| "default".to_string());
+        let inference_template_raw =
+            std::env::var("TSBX_INFERENCE_TEMPLATE").unwrap_or_else(|_| "openai".to_string());
+        let normalized_template = inference_template_raw.trim().to_ascii_lowercase();
+        let inference_template = match normalized_template.as_str() {
+            "positron" => "positron",
+            "openai" | "" => "openai",
+            other => other,
+        };
         env_vars.push(format!("TSBX_INFERENCE_TEMPLATE={}", inference_template));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
@@ -1060,8 +1066,14 @@ echo 'Session directories created (.env, logs)'
             .unwrap_or_else(|_| "llama-3.2-3b-instruct-fast-tp2".to_string());
         env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_model));
 
-        let inference_template = std::env::var("TSBX_INFERENCE_TEMPLATE")
-            .unwrap_or_else(|_| "default".to_string());
+        let inference_template_raw =
+            std::env::var("TSBX_INFERENCE_TEMPLATE").unwrap_or_else(|_| "openai".to_string());
+        let normalized_template = inference_template_raw.trim().to_ascii_lowercase();
+        let inference_template = match normalized_template.as_str() {
+            "positron" => "positron",
+            "openai" | "" => "openai",
+            other => other,
+        };
         env_vars.push(format!("TSBX_INFERENCE_TEMPLATE={}", inference_template));
 
         // No web_search tool; do not propagate BRAVE_API_KEY

@@ -132,4 +132,14 @@ impl InferenceTemplate for PositronTemplate {
     fn format_hint(&self) -> &str {
         "Format notice: Respond with a single XML element (e.g. <run_bash .../> or <output>...</output>)."
     }
+
+    fn system_prompt_guidance(&self) -> String {
+        let mut guidance = String::new();
+        guidance.push_str("- Always respond with exactly one XML element representing the tool call. Plain text responses are forbidden.\n");
+        guidance.push_str("- Do not wrap the XML in markdown fences or add commentary before or after it; the message must begin with `<` and contain only that single element.\n");
+        guidance.push_str("- Keep attribute values short (for example, `commentary` should be a brief gerund like \"Inspecting\") and avoid ellipses (`...`).\n");
+        guidance.push_str("- Do not batch multiple tool invocations inside one message. If you need another action after receiving a tool result, wait for the following turn and send a new XML element.\n");
+        guidance.push_str("- Communicate final answers via a single `<output>` element once the task is complete. Do not use `<output>` for intermediate updates.\n");
+        guidance
+    }
 }

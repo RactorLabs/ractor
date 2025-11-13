@@ -294,7 +294,17 @@ module.exports = (program) => {
           } catch (_) { return ''; }
         }
 
-        const INFERENCE_URL = options.inferenceUrl || process.env.TSBX_INFERENCE_URL || 'https://api.positron.ai/v1';
+        const INFERENCE_URL = (() => {
+          const src = getOptionSource('inferenceUrl');
+          if (src === 'cli') {
+            return options.inferenceUrl;
+          }
+          const envUrl = process.env.TSBX_INFERENCE_URL;
+          if (envUrl && envUrl.trim() !== '') {
+            return envUrl;
+          }
+          return options.inferenceUrl || 'https://api.positron.ai/v1';
+        })();
         const INFERENCE_API_KEY = options.inferenceApiKey || process.env.TSBX_INFERENCE_API_KEY || '6V-E5ROIlFIgSVgmL8hcluSAistpSEbi-UcbIHwHuoM';
         const INFERENCE_MODEL = (() => {
           const src = getOptionSource('inferenceModel');
@@ -307,7 +317,14 @@ module.exports = (program) => {
           }
           return options.inferenceModel || 'llama-3.2-3b-instruct-fast-tp2';
         })();
-        const INFERENCE_TEMPLATE = options.inferenceTemplate || process.env.TSBX_INFERENCE_TEMPLATE || 'default';
+        const normalizeTemplate = (raw) => {
+          const value = (raw || '').trim().toLowerCase();
+          if (!value) return 'openai';
+          if (value === 'positron') return 'positron';
+          if (value === 'openai') return 'openai';
+          return value;
+        };
+        const INFERENCE_TEMPLATE = normalizeTemplate(options.inferenceTemplate || process.env.TSBX_INFERENCE_TEMPLATE || 'openai');
 
         for (const comp of components) {
           switch (comp) {

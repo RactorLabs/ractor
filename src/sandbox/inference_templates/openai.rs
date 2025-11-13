@@ -43,9 +43,9 @@ struct Usage {
     total_tokens: Option<i64>,
 }
 
-pub struct DefaultTemplate {}
+pub struct OpenAiTemplate {}
 
-impl DefaultTemplate {
+impl OpenAiTemplate {
     pub fn new() -> Self {
         Self {}
     }
@@ -265,7 +265,7 @@ impl DefaultTemplate {
 }
 
 #[async_trait]
-impl InferenceTemplate for DefaultTemplate {
+impl InferenceTemplate for OpenAiTemplate {
     async fn build_request(
         &self,
         messages: Vec<ChatMessage>,
@@ -327,25 +327,35 @@ impl InferenceTemplate for DefaultTemplate {
             .next()
             .ok_or_else(|| HostError::Model("Inference response missing choices".into()))?;
 
-        // Parse tool calls from OpenAI format
-        let tool_calls = if let Some(raw_tool_calls) = &choice.message.tool_calls {
-            let mut calls = Vec::new();
-            for tool_call in raw_tool_calls {
-                if let Some(function) = tool_call.get("function") {
+        // Helper to convert raw tool call Value list into ToolCall structs
+        let parse_tool_calls =
+            |raw_tool_calls: &[Value]| -> Result<Vec<super::super::inference::ToolCall>> {
+                let mut calls = Vec::new();
+                for tool_call in raw_tool_calls {
+                    let function = tool_call.get("function").ok_or_else(|| {
+                        HostError::Model("Tool call missing function definition".to_string())
+                    })?;
+
                     let name = function
                         .get("name")
                         .and_then(|v| v.as_str())
-                        .ok_or_else(|| HostError::Model("Tool call missing function name".to_string()))?;
+                        .ok_or_else(|| {
+                            HostError::Model("Tool call missing function name".to_string())
+                        })?;
 
                     let arguments_str = function
                         .get("arguments")
                         .and_then(|v| v.as_str())
                         .unwrap_or("{}");
 
-                    let arguments: Value = serde_json::from_str(arguments_str)
-                        .map_err(|e| HostError::Model(format!("Failed to parse tool arguments: {}", e)))?;
+                    let arguments: Value = serde_json::from_str(arguments_str).map_err(|e| {
+                        HostError::Model(format!("Failed to parse tool arguments: {}", e))
+                    })?;
 
-                    let id = tool_call.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let id = tool_call
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
 
                     calls.push(super::super::inference::ToolCall {
                         id,
@@ -353,13 +363,36 @@ impl InferenceTemplate for DefaultTemplate {
                         arguments,
                     });
                 }
+                Ok(calls)
+            };
+
+        // Parse tool calls from OpenAI format or JSON-wrapped content
+        let mut content = choice.message.content.clone().map(|c| c.trim().to_string());
+        let tool_calls = if let Some(raw_tool_calls) = &choice.message.tool_calls {
+            Some(parse_tool_calls(raw_tool_calls)?)
+        } else if let Some(raw_content) = &choice.message.content {
+            if let Ok(value) = serde_json::from_str::<Value>(raw_content) {
+                if let Some(raw_tool_calls) = value.get("tool_calls").and_then(|v| v.as_array()) {
+                    let calls = parse_tool_calls(raw_tool_calls)?;
+                    // If JSON wrapper included a content field, surface it; otherwise remove content to avoid echoing the wrapper.
+                    content = value
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string());
+                    if content.is_none() {
+                        // Prevent leaking the entire wrapper back to the model.
+                        content = None;
+                    }
+                    Some(calls)
+                } else {
+                    None
+                }
+            } else {
+                None
             }
-            Some(calls)
         } else {
             None
         };
-
-        let content = choice.message.content.map(|c| c.trim().to_string());
 
         let usage = parsed.usage.unwrap_or_default();
         let context_length = usage
@@ -379,5 +412,16 @@ impl InferenceTemplate for DefaultTemplate {
 
     fn format_hint(&self) -> &str {
         "Please use one of the available function calls to respond."
+    }
+
+    fn system_prompt_guidance(&self) -> String {
+        let mut guidance = String::new();
+        guidance.push_str("- Always respond with exactly one function call using the JSON `tool_calls` schema supported by OpenAI-compatible chat completions.\n");
+        guidance.push_str("- Populate the function arguments object with only the required fields for the chosen tool (for example `commentary`, `exec_dir`, `commands`) and keep the values concise.\n");
+        guidance.push_str("- Do not include narrative text, markdown fences, or XML; the assistant message must consist solely of the JSON function call.\n");
+        guidance.push_str("- Send only one tool call per assistant message and wait for the next tool result before issuing another action.\n");
+        guidance.push_str("- Use the `output` tool call to deliver the final answer once the task is complete; do not use it for intermediate updates.\n");
+        guidance.push_str("- Tool results echo back from the runtime as role \"tool\" messages containing JSON payloads; read them before planning the next step.\n");
+        guidance
     }
 }

@@ -1,5 +1,5 @@
+pub mod openai;
 pub mod positron;
-pub mod default;
 
 use super::error::Result;
 use super::inference::{ChatMessage, ModelResponse};
@@ -24,14 +24,18 @@ pub trait InferenceTemplate: Send + Sync {
 
     /// Get the format hint message for retry attempts
     fn format_hint(&self) -> &str;
+
+    /// Guidance snippet for system prompt about how the model should format tool calls
+    fn system_prompt_guidance(&self) -> String;
 }
 
 pub fn get_template(template_name: &str) -> Result<Box<dyn InferenceTemplate>> {
     match template_name {
         "positron" => Ok(Box::new(positron::PositronTemplate::new())),
-        "default" => Ok(Box::new(default::DefaultTemplate::new())),
+        "openai" => Ok(Box::new(openai::OpenAiTemplate::new())),
+        "" => Ok(Box::new(openai::OpenAiTemplate::new())),
         _ => Err(super::error::HostError::Model(format!(
-            "Unknown inference template: {}. Supported: 'positron', 'default'",
+            "Unknown inference template: {}. Supported: 'openai', 'positron'",
             template_name
         ))),
     }
