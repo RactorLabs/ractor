@@ -204,15 +204,7 @@ impl TaskHandler {
                 continue;
             }
 
-            let command = match parse_command_xml(raw) {
-                Ok(cmd) => cmd,
-                Err(err) => {
-                    warn!("Invalid XML from model: {}", err);
-                    continue;
-                }
-            };
-
-            let command_name = command.name.to_lowercase();
+            let parsed_command = parse_command_xml(raw);
             let command_text = raw.to_string();
             conversation.push(ChatMessage {
                 role: "assistant".to_string(),
@@ -220,6 +212,22 @@ impl TaskHandler {
                 name: None,
                 tool_call_id: None,
             });
+            let command = match parsed_command {
+                Ok(cmd) => cmd,
+                Err(err) => {
+                    warn!("Invalid XML from model: {}", err);
+                    conversation.push(ChatMessage {
+                        role: "user".to_string(),
+                        content: "Your last reply was not valid XML. Respond with exactly one well-formed tool call element (e.g. `<open_file .../>` or `<output>...`). Do not include markdown fences, HTML, or extra text."
+                            .to_string(),
+                        name: None,
+                        tool_call_id: None,
+                    });
+                    continue;
+                }
+            };
+
+            let command_name = command.name.to_lowercase();
 
             if command_name == "output" {
                 let final_text = command.body.unwrap_or_default();
