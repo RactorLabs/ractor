@@ -1346,8 +1346,11 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               {/if}
             </div>
             <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
-            {#if isAdmin && sandbox}
-              <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
+            {#if sandbox}
+              <div class="small text-body-secondary mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
+              {#if isAdmin}
+                <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
+              {/if}
             {/if}
             <!-- Public URL in main card -->
             
@@ -1398,7 +1401,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id}</a>
                 </div>
               {/if}
-              <div class="mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
               <div class="mt-1">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               {#if topData}
                 <div class="mt-1">Tasks Completed: {fmtInt(topData.tasks_completed)}</div>
