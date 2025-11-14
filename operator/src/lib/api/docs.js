@@ -108,8 +108,8 @@ export function getApiDocs(base) {
     },
     {
       id: 'operators',
-      title: 'Operators',
-      description: 'Operator management endpoints (protected).',
+      title: 'Auth',
+      description: 'Operator authentication and management endpoints.',
       endpoints: [
         {
           method: 'POST',
