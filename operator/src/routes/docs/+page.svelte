@@ -239,5 +239,11 @@
     :global(details.api-details summary::-webkit-details-marker) {
       display: none;
     }
+    :global(.summary-row .badge) {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      min-width: 75px;
+    }
   </style>
 </div>

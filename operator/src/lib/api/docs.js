@@ -631,7 +631,7 @@ export function getApiDocs(base) {
 export function methodClass(method) {
   switch ((method || '').toUpperCase()) {
     case 'GET': return 'badge bg-success';
-    case 'POST': return 'badge bg-theme';
+    case 'POST': return 'badge bg-primary';
     case 'PUT': return 'badge bg-warning text-dark';
     case 'DELETE': return 'badge bg-danger';
     case 'PATCH': return 'badge bg-info text-dark';

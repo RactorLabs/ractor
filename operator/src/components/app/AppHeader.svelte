@@ -65,15 +65,15 @@
             <!-- Top row -->
             <div class="row row-grid gx-0">
               <div class="col-4">
-                <a href="/sandboxes/start" aria-label="Start Sandbox" class="dropdown-item text-decoration-none p-3 bg-none">
-                  <div><i class="bi bi-plus-circle h2 opacity-5 d-block my-1"></i></div>
-                  <div class="fw-500 fs-10px text-inverse">START</div>
+                <a href="/sandboxes" aria-label="Sandboxes" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-diamond h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">SANDBOXES</div>
                 </a>
               </div>
               <div class="col-4">
-                <a href="/sandboxes" aria-label="Sandboxes" class="dropdown-item text-decoration-none p-3 bg-none">
-                  <div><i class="bi bi-robot h2 opacity-5 d-block my-1"></i></div>
-                  <div class="fw-500 fs-10px text-inverse">SANDBOXES</div>
+                <a href="/snapshots" aria-label="Snapshots" class="dropdown-item text-decoration-none p-3 bg-none">
+                  <div><i class="bi bi-camera h2 opacity-5 d-block my-1"></i></div>
+                  <div class="fw-500 fs-10px text-inverse">SNAPSHOTS</div>
                 </a>
               </div>
               <div class="col-4">
