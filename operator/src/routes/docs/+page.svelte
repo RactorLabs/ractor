@@ -131,85 +131,83 @@
             <div class="row g-3">
               {#each section.endpoints as ep}
                 <div class="col-12">
-                  <div class="api-endpoint p-3 p-sm-4">
-                    <details class="api-details">
-                      <summary class="summary-row d-flex align-items-center gap-2 text-break" aria-label="Toggle endpoint details">
-                        <span class={methodClass(ep.method)}>{ep.method}</span>
-                        <span class="font-monospace flex-grow-1 text-break">{ep.path}</span>
-                      </summary>
-                      <div class="mt-3">
-                        {#if ep.desc}
-                          <div class="mb-3">{ep.desc}</div>
-                        {/if}
+                  <details class="api-details">
+                    <summary class="summary-row d-flex align-items-center gap-2 text-break" aria-label="Toggle endpoint details">
+                      <span class={methodClass(ep.method)}>{ep.method}</span>
+                      <span class="font-monospace flex-grow-1 text-break">{ep.path}</span>
+                    </summary>
+                    <div class="mt-3">
+                      {#if ep.desc}
+                        <div class="mb-3">{ep.desc}</div>
+                      {/if}
 
-                        {#if ep.params && ep.params.length}
-                          <div class="mb-3">
-                            {#if ep.params.filter(p => p.in === 'path').length}
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Path parameters</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-2">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each ep.params.filter(p => p.in === 'path') as p}
-                                      <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
-                                    {/each}
-                                  </tbody>
-                                </table>
-                              </div>
+                      {#if ep.params && ep.params.length}
+                        <div class="mb-3">
+                          {#if ep.params.filter(p => p.in === 'path').length}
+                            <div class="fw-500 small text-body text-opacity-75 mb-1">Path parameters</div>
+                            <div class="table-responsive">
+                              <table class="table table-sm table-bordered small mb-2">
+                                <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                                <tbody>
+                                  {#each ep.params.filter(p => p.in === 'path') as p}
+                                    <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                  {/each}
+                                </tbody>
+                              </table>
+                            </div>
+                          {/if}
+                          {#if ep.params.filter(p => p.in === 'query').length}
+                            <div class="fw-500 small text-body text-opacity-75 mb-1">Query parameters</div>
+                            <div class="table-responsive">
+                              <table class="table table-sm table-bordered small mb-2">
+                                <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                                <tbody>
+                                  {#each ep.params.filter(p => p.in === 'query') as p}
+                                    <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                  {/each}
+                                </tbody>
+                              </table>
+                            </div>
+                          {/if}
+                          {#if ep.params.filter(p => p.in === 'body').length}
+                            <div class="fw-500 small text-body text-opacity-75 mb-1">Body fields</div>
+                            <div class="table-responsive">
+                              <table class="table table-sm table-bordered small mb-0">
+                                <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
+                                <tbody>
+                                  {#each ep.params.filter(p => p.in === 'body') as p}
+                                    <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
+                                  {/each}
+                                </tbody>
+                              </table>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+
+                      {#if ep.example}
+                        <div class="mb-3">
+                          <div class="fw-500 small text-body text-opacity-75 mb-1">Example</div>
+                          <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{formatCurl(ep.example)}</code></pre>
+                        </div>
+                      {/if}
+
+                      {#if ep.responses && ep.responses.length}
+                        <div class="mb-3">
+                          <div class="fw-500 small text-body text-opacity-75 mb-1">Response</div>
+                          {#each ep.responses as r}
+                            <div class="mb-2">
+                              <span class="badge bg-primary">HTTP {r.status}</span>
+                            </div>
+                            {#if r.body}
+                              <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{formatJsonSample(r.body)}</code></pre>
                             {/if}
-                            {#if ep.params.filter(p => p.in === 'query').length}
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Query parameters</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-2">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each ep.params.filter(p => p.in === 'query') as p}
-                                      <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
-                                    {/each}
-                                  </tbody>
-                                </table>
-                              </div>
-                            {/if}
-                            {#if ep.params.filter(p => p.in === 'body').length}
-                              <div class="fw-500 small text-body text-opacity-75 mb-1">Body fields</div>
-                              <div class="table-responsive">
-                                <table class="table table-sm table-bordered small mb-0">
-                                  <thead><tr><th>Name</th><th>Type</th><th>Req</th><th>Description</th></tr></thead>
-                                  <tbody>
-                                    {#each ep.params.filter(p => p.in === 'body') as p}
-                                      <tr><td class="font-monospace">{p.name}</td><td>{p.type}</td><td>{p.required ? 'yes' : 'no'}</td><td>{p.desc}</td></tr>
-                                    {/each}
-                                  </tbody>
-                                </table>
-                              </div>
-                            {/if}
-                          </div>
-                        {/if}
+                          {/each}
+                        </div>
+                      {/if}
 
-                        {#if ep.example}
-                          <div class="mb-3">
-                            <div class="fw-500 small text-body text-opacity-75 mb-1">Example</div>
-                            <pre class="small bg-dark text-white p-2 rounded mb-0 code-wrap"><code>{formatCurl(ep.example)}</code></pre>
-                          </div>
-                        {/if}
-
-                        {#if ep.responses && ep.responses.length}
-                          <div class="mb-3">
-                            <div class="fw-500 small text-body text-opacity-75 mb-1">Response</div>
-                            {#each ep.responses as r}
-                              <div class="mb-2">
-                                <span class="badge bg-primary">HTTP {r.status}</span>
-                              </div>
-                              {#if r.body}
-                                <pre class="small bg-light p-2 rounded mb-0 code-wrap"><code>{formatJsonSample(r.body)}</code></pre>
-                              {/if}
-                            {/each}
-                          </div>
-                        {/if}
-
-                      </div>
-                    </details>
-                  </div>
+                    </div>
+                  </details>
                 </div>
               {/each}
             </div>
@@ -227,14 +225,6 @@
     }
     :global(pre.code-wrap code) {
       white-space: inherit;
-    }
-    .api-endpoint {
-      border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.12));
-      border-radius: 0.75rem;
-      background-color: var(--bs-body-bg);
-    }
-    .api-endpoint + .api-endpoint {
-      margin-top: 1rem;
     }
     /* Ensure anchor targets are not hidden beneath the fixed header */
     :global([id]) {
