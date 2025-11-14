@@ -129,8 +129,6 @@ impl InferenceClient {
         system_prompt: Option<String>,
     ) -> Result<ModelResponse> {
         const PARSE_RETRIES: usize = 5;
-        let url = format!("{}/chat/completions", self.base_url);
-
         let base_messages = messages.clone();
 
         for attempt in 0..PARSE_RETRIES {
@@ -153,7 +151,7 @@ impl InferenceClient {
             let log_id = self.log_seq.fetch_add(1, Ordering::SeqCst) + 1;
             self.log_inference_request(&req_value, log_id).await;
 
-            let mut request_builder = self.client.post(&url).json(&req_value);
+            let mut request_builder = self.client.post(self.base_url.as_str()).json(&req_value);
             request_builder = request_builder.header("Authorization", &self.auth_header);
 
             let resp = request_builder.send().await.map_err(HostError::Request)?;

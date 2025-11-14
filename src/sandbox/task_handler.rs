@@ -321,6 +321,11 @@ impl TaskHandler {
                     let mut truncated_output = false;
                     let output_text =
                         truncate_output_text(&output, MAX_TOOL_OUTPUT_CHARS, &mut truncated_output);
+                    let display_output = if output_text.is_empty() {
+                        "tool executed successfully".to_string()
+                    } else {
+                        output_text.clone()
+                    };
 
                     let tool_call_segment = json!({
                         "type": "tool_call",
@@ -331,7 +336,7 @@ impl TaskHandler {
                     let tool_result_segment = json!({
                         "type": "tool_result",
                         "tool": command_name,
-                        "output": output_text.clone(),
+                        "output": display_output.clone(),
                         "truncated": truncated_output,
                     });
 
@@ -346,14 +351,10 @@ impl TaskHandler {
                         )
                         .await;
 
-                    let output_xml = if output_text.is_empty() {
-                        String::new()
-                    } else {
-                        format!("<output>{}</output>", escape_xml(&output_text))
-                    };
+                    let result_body = escape_xml(&display_output);
                     let result_message = format!(
                         "<tool_result tool=\"{}\">{}</tool_result>",
-                        command_name, output_xml
+                        command_name, result_body
                     );
 
                     conversation.push(ChatMessage {
