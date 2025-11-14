@@ -110,6 +110,17 @@
         </div>
       </Card>
 
+      {#if docs && docs.length}
+        <div class="mb-4">
+          <div class="fw-500 text-body text-opacity-75 small mb-2">Jump to section</div>
+          <div class="d-flex flex-wrap gap-2">
+            {#each docs as section}
+              <a class="btn btn-outline-secondary btn-sm" href={`#${section.id}`}>{section.title}</a>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       {#each docs as section}
         <div id={section.id} class="mb-3">
           <div class="mb-2">
