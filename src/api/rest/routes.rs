@@ -72,12 +72,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             post(handlers::sandboxes::update_sandbox_to_idle),
         )
         .route(
-            "/sandboxes/{id}/runtime",
-            get(handlers::sandboxes::get_sandbox_runtime),
-        )
-        .route(
-            "/sandboxes/{id}/top",
-            get(handlers::sandboxes::get_sandbox_top),
+            "/sandboxes/{id}/stats",
+            get(handlers::sandboxes::get_sandbox_stats),
         )
         .route(
             "/sandboxes/{id}",
@@ -134,10 +130,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route(
             "/sandboxes/{id}/tasks/{task_id}/cancel",
             post(handlers::sandboxes::cancel_task),
-        )
-        .route(
-            "/sandboxes/{id}/tasks/count",
-            get(handlers::sandboxes::get_task_count),
         )
         // Sandbox files (read-only)
         .route(

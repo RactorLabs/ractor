@@ -144,6 +144,19 @@
   let runtimeSeconds = 0;
   let currentSandboxSeconds = 0;
   let topData = null;
+  $: toolUsageEntries = (() => {
+    try {
+      if (!topData || !topData.tool_usage) return [];
+      const obj = topData.tool_usage;
+      if (typeof obj !== 'object' || obj === null) return [];
+      return Object.entries(obj)
+        .map(([name, value]) => [name, Number(value) || 0])
+        .filter(([, count]) => count > 0)
+        .sort((a, b) => b[1] - a[1]);
+    } catch (_) {
+      return [];
+    }
+  })();
   // Equalize top card heights (left Sandbox card and right Info card)
   // No JS equal-height logic; use layout-based alignment
 
@@ -529,7 +542,7 @@
     }
     return 0;
   })();
-  let _runtimeFetchedAt = 0;
+  let _statsFetchedAt = 0;
   let inputEl = null; // task textarea element
   // Content preview via sandbox ports has been removed.
 
@@ -695,25 +708,17 @@
     // No content frame to compute; panel shows status only.
   }
 
-  async function fetchRuntime(force = false) {
+  async function fetchStats(force = false) {
     try {
-      if (!force && Date.now() - _runtimeFetchedAt < 10000) return; // throttle to 10s
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/runtime`);
-      if (res.ok) {
-        const v = Number(res?.data?.total_runtime_seconds ?? 0);
-        if (Number.isFinite(v) && v >= 0) runtimeSeconds = v;
-        const cs = Number(res?.data?.current_sandbox_seconds ?? 0);
-        currentSandboxSeconds = Number.isFinite(cs) && cs >= 0 ? cs : 0;
-        _runtimeFetchedAt = Date.now();
-      }
-    } catch (_) {}
-  }
-
-  async function fetchTop() {
-    try {
-      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/top`);
+      if (!force && Date.now() - _statsFetchedAt < 10000) return;
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/stats`);
       if (res.ok && res.data) {
         topData = res.data;
+        const total = Number(res.data?.total_runtime_seconds ?? 0);
+        if (Number.isFinite(total) && total >= 0) runtimeSeconds = total;
+        const current = Number(res.data?.current_runtime_seconds ?? 0);
+        currentSandboxSeconds = Number.isFinite(current) && current >= 0 ? current : 0;
+        _statsFetchedAt = Date.now();
       }
     } catch (_) {}
   }
@@ -804,8 +809,7 @@
     pollHandle = setInterval(async () => {
       await fetchTasks();
       await fetchSandbox();
-      await fetchRuntime();
-      await fetchTop();
+      await fetchStats();
     }, 2000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
@@ -835,10 +839,10 @@
   }
   function segOutput(s) {
     try {
-      const o = s?.output;
-      if (typeof o === 'string') return o;
-      return o;
-    } catch (_) { return s?.output; }
+      const payload = s && Object.prototype.hasOwnProperty.call(s, 'result') ? s.result : s?.output;
+      if (typeof payload === 'string') return payload;
+      return payload;
+    } catch (_) { return s?.result ?? s?.output; }
   }
   function isOutputToolName(t) {
     try { const n = String(t || '').toLowerCase(); return n === 'output' || n === 'output_markdown' || n === 'ouput_json' || n === 'output_json'; } catch (_) { return false; }
@@ -1216,8 +1220,7 @@
 
     try {
       await fetchSandbox();
-      await fetchRuntime(true);
-      await fetchTop();
+      await fetchStats(true);
       await fetchTasks();
       try { await fetchFiles(true); } catch (_) {}
       loading = false;
@@ -1423,7 +1426,10 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               {/if}
               <div class="mt-2">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
               {#if topData}
-                <div class="mt-2">Tasks Completed: {fmtInt(topData.tasks_completed)}</div>
+                <div class="mt-2">
+                  Tasks Completed: {fmtInt(topData.tasks_completed_total ?? topData.tasks_completed ?? 0)}
+                  {#if topData.total_tasks !== undefined} / {fmtInt(topData.total_tasks)} total{/if}
+                </div>
                 {#if topData.inference_model}
                   <div class="mt-1">Model: <span class="font-monospace">{topData.inference_model}</span></div>
                 {/if}
@@ -1436,7 +1442,14 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   ·
                   <span class="font-monospace">{fmtInt(topData.inference_completion_tokens ?? 0)} completion</span>
                 </div>
-                <div class="text-body-secondary small">Total: {fmtInt(topData.inference_total_tokens ?? 0)}</div>
+                {#if toolUsageEntries.length}
+                  <div class="mt-1">
+                    Tool Calls:
+                    {#each toolUsageEntries as [tool, count], idx (tool)}
+                      <span class="font-monospace">{tool}</span> × {fmtInt(count)}{#if idx < toolUsageEntries.length - 1} · {/if}
+                    {/each}
+                  </div>
+                {/if}
               {/if}
             {:else if loading}
               <div class="d-flex align-items-center gap-2 text-body text-opacity-75">

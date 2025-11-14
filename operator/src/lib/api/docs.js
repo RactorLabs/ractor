@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{"run_bash":3,"read_file":1},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -262,7 +262,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"]}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}` }
           ]
         },
         {
@@ -276,7 +276,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{"run_bash":3,"read_file":1},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}` }
           ]
         },
         {
@@ -342,30 +342,16 @@ export function getApiDocs(base) {
         },
         {
           method: 'GET',
-          path: '/api/v0/sandboxes/{id}/runtime',
+          path: '/api/v0/sandboxes/{id}/stats',
           auth: 'bearer',
-          desc: 'Get cumulative runtime across sandbox lifetimes and current session runtime.',
+          desc: 'Fetch sandbox statistics including runtime, usage, and tool counts.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
           ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/runtime -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'RuntimeTotal' },
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/stats -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'SandboxStats' },
           responses: [
-            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","total_runtime_seconds":1234,"current_sandbox_seconds":321}` }
-          ]
-        },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/top',
-          auth: 'bearer',
-          desc: 'Fetch live CPU, memory, and inference token usage metrics for a sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/top -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'SandboxTopResponse' },
-          responses: [
-            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed":12,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","inference_prompt_tokens":4821,"inference_completion_tokens":1734,"inference_total_tokens":6555,"captured_at":"2025-01-01T15:04:32Z"}` }
+            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed_total":12,"total_tasks":18,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","inference_prompt_tokens":4821,"inference_completion_tokens":1734,"inference_total_tokens":6555,"tool_usage":{"run_bash":27,"read_file":9,"search_files":2},"total_runtime_seconds":12840,"current_runtime_seconds":840,"captured_at":"2025-01-01T15:04:32Z"}` }
           ]
         },
         {
@@ -493,20 +479,6 @@ export function getApiDocs(base) {
           responses: [
             { status: 200, body: `{"status":"ok","sandbox":"<id>","task":"<task_id>","cancelled":true}` },
             { status: 409, body: `{"message":"Task is not in a cancellable state"}` }
-          ]
-        },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/tasks/count',
-          auth: 'bearer',
-          desc: 'Count tasks for a sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/count -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'Count' },
-          responses: [
-            { status: 200, body: `{"count":42,"sandbox_id":"<id>"}` }
           ]
         },
       ]
@@ -645,7 +617,7 @@ export function getApiDocs(base) {
 export function methodClass(method) {
   switch ((method || '').toUpperCase()) {
     case 'GET': return 'badge bg-success';
-    case 'POST': return 'badge bg-primary';
+    case 'POST': return 'badge bg-theme text-white';
     case 'PUT': return 'badge bg-warning text-dark';
     case 'DELETE': return 'badge bg-danger';
     case 'PATCH': return 'badge bg-info text-dark';

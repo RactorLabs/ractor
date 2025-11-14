@@ -2,7 +2,7 @@ use super::api::{TSBXClient, TaskSummary};
 use super::command::{parse_command_xml, CommandInvocation};
 use super::error::{HostError, Result};
 use super::guardrails::Guardrails;
-use super::inference::{ChatMessage, InferenceClient};
+use super::inference::{ChatMessage, InferenceClient, ModelResponse};
 use super::toolkit::{ExecutionResult, ToolCatalog};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -52,7 +52,12 @@ impl TaskHandler {
             "Initializing task tracking; request created at {}",
             self.request_created_at
         );
-        let total = self.api_client.get_task_count().await.unwrap_or(0);
+        let total = self
+            .api_client
+            .get_stats()
+            .await
+            .map(|s| s.total_tasks.max(0) as u64)
+            .unwrap_or(0);
         let limit: u32 = 500;
         let offset = if total > limit as u64 {
             (total - limit as u64) as u32
@@ -74,7 +79,12 @@ impl TaskHandler {
     }
 
     pub async fn poll_and_process(&self) -> Result<usize> {
-        let total = self.api_client.get_task_count().await.unwrap_or(0);
+        let total = self
+            .api_client
+            .get_stats()
+            .await
+            .map(|s| s.total_tasks.max(0) as u64)
+            .unwrap_or(0);
         let window: u32 = 50;
         let offset = if total > window as u64 {
             (total - window as u64) as u32
@@ -310,6 +320,7 @@ impl TaskHandler {
                         Some(sanitized.clone()),
                         Some(vec![segment]),
                         Some(context_length),
+                        None,
                     )
                     .await;
                 conversation.push(ChatMessage {
@@ -351,9 +362,15 @@ impl TaskHandler {
                     let tool_result_segment = json!({
                         "type": "tool_result",
                         "tool": command_name,
-                        "output": display_output.clone(),
+                        "result": display_output.clone(),
                         "truncated": truncated_output,
                     });
+
+                    let tracked_tool = if command_name != "output" {
+                        Some(command_name.clone())
+                    } else {
+                        None
+                    };
 
                     let _ = self
                         .api_client
@@ -363,18 +380,13 @@ impl TaskHandler {
                             None,
                             Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
                             Some(context_length),
+                            tracked_tool.clone(),
                         )
                         .await;
 
-                    let result_body = escape_xml(&display_output);
-                    let result_message = format!(
-                        "<tool_result tool=\"{}\">{}</tool_result>",
-                        command_name, result_body
-                    );
-
                     conversation.push(ChatMessage {
                         role: "tool".to_string(),
-                        content: result_message,
+                        content: display_output,
                         name: None,
                         tool_call_id: None,
                     });
@@ -404,6 +416,7 @@ impl TaskHandler {
                                 Some(sanitized.clone()),
                                 Some(vec![final_segment.clone()]),
                                 Some(context_length),
+                                None,
                             )
                             .await;
 
@@ -440,11 +453,16 @@ impl TaskHandler {
                     let tool_result_segment = json!({
                         "type": "tool_result",
                         "tool": command_name,
-                        "error": {
-                            "message": error_display.clone()
-                        },
+                        "result": error_display.clone(),
+                        "error": error_display.clone(),
                         "truncated": truncated_error,
                     });
+
+                    let tracked_tool = if command_name != "output" {
+                        Some(command_name.clone())
+                    } else {
+                        None
+                    };
 
                     let _ = self
                         .api_client
@@ -454,17 +472,13 @@ impl TaskHandler {
                             None,
                             Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
                             Some(context_length),
+                            tracked_tool,
                         )
                         .await;
 
-                    let result_message = format!(
-                        "<tool_result tool=\"{}\" error=\"true\"><![CDATA[{}]]></tool_result>",
-                        command_name, error_display
-                    );
-
                     conversation.push(ChatMessage {
                         role: "tool".to_string(),
-                        content: result_message,
+                        content: format!("{} (failed): {}", command_name, error_display),
                         name: None,
                         tool_call_id: None,
                     });
@@ -489,8 +503,7 @@ impl TaskHandler {
     }
 
     async fn build_system_prompt(&self) -> String {
-        let host_name =
-            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
+        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
         let sandbox_id = match self.api_client.get_sandbox().await {
             Ok(sandbox) => sandbox.id,
             Err(_) => "unknown".to_string(),
@@ -540,7 +553,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- Use only the tools listed below; do not invent new tool names.\n");
         prompt.push_str("- Continue issuing tool calls until the task is complete, then send the final result as described above.\n");
         prompt.push_str(
-            "- When you receive a tool result message (formatted as `<tool_result ...>`), use its information to decide your next tool call.\n",
+            "- Tool responses arrive as plain text messages from the tool role; use their content to decide your next tool call.\n",
         );
         prompt.push_str("- All file paths must stay under /sandbox.\n");
         prompt.push_str("- When using `run_bash`, set `exec_dir` to `/sandbox` or a subdirectory and keep every command scoped inside `/sandbox`.\n");
@@ -714,12 +727,4 @@ fn truncate_output_text(value: &Value, max_chars: usize, truncated: &mut bool) -
         *truncated = false;
         text
     }
-}
-
-fn escape_xml(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }

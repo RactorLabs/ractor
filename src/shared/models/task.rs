@@ -62,6 +62,8 @@ pub struct UpdateTaskRequest {
     pub prompt_tokens_delta: Option<i64>,
     #[serde(default)]
     pub completion_tokens_delta: Option<i64>,
+    #[serde(default)]
+    pub tool_used: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,7 +321,8 @@ pub fn compute_output_content(
                 && it.get("tool").and_then(|v| v.as_str()) == Some("output")
             {
                 if let Some(arr) = it
-                    .get("output")
+                    .get("result")
+                    .or_else(|| it.get("output"))
                     .and_then(|v| v.get("items"))
                     .and_then(|v| v.as_array())
                 {

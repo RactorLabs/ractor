@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use sqlx::Row;
 use std::sync::Arc;
 use tracing::warn;
@@ -69,6 +70,10 @@ pub struct SandboxResponse {
     pub busy_from: Option<String>,
     pub inference_prompt_tokens: i64,
     pub inference_completion_tokens: i64,
+    pub tool_usage: serde_json::Value,
+    pub total_runtime_seconds: i64,
+    pub current_runtime_seconds: i64,
+    pub tasks_completed_total: i64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -149,10 +154,11 @@ pub struct PaginatedSandboxes {
 }
 
 #[derive(Debug, Serialize)]
-pub struct SandboxTopResponse {
+pub struct SandboxStatsResponse {
     pub sandbox_id: String,
     pub container_state: String,
-    pub tasks_completed: i64,
+    pub tasks_completed_total: i64,
+    pub total_tasks: i64,
     pub cpu_usage_percent: f64,
     pub cpu_limit_cores: f64,
     pub memory_usage_bytes: u64,
@@ -162,6 +168,9 @@ pub struct SandboxTopResponse {
     pub inference_prompt_tokens: i64,
     pub inference_completion_tokens: i64,
     pub inference_total_tokens: i64,
+    pub tool_usage: serde_json::Value,
+    pub total_runtime_seconds: i64,
+    pub current_runtime_seconds: i64,
     pub captured_at: String,
 }
 
@@ -200,6 +209,10 @@ impl SandboxResponse {
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
             inference_prompt_tokens: sandbox.inference_prompt_tokens,
             inference_completion_tokens: sandbox.inference_completion_tokens,
+            tool_usage: sandbox.tool_usage,
+            total_runtime_seconds: sandbox.total_runtime_seconds,
+            current_runtime_seconds: sandbox.current_runtime_seconds,
+            tasks_completed_total: sandbox.tasks_completed_total,
         })
     }
 }
@@ -786,7 +799,10 @@ pub async fn list_sandboxes(
         r#"
         SELECT id, created_by, state, description, snapshot_id,
                created_at, last_activity_at, metadata, tags,
-               idle_timeout_seconds, idle_from, busy_from
+               idle_timeout_seconds, idle_from, busy_from,
+               inference_prompt_tokens, inference_completion_tokens,
+               tool_usage, total_runtime_seconds, current_runtime_seconds,
+               tasks_completed_total
         FROM sandboxes
         {}
         ORDER BY created_at DESC
@@ -908,6 +924,9 @@ pub async fn cancel_task(
                 steps: Some(vec![cancelled_item.clone()]),
                 timeout_seconds: None,
                 context_length: None,
+                prompt_tokens_delta: None,
+                completion_tokens_delta: None,
+                tool_used: None,
             };
             SandboxTask::update_by_id(&state.db, &task_id, req)
                 .await
@@ -1216,6 +1235,9 @@ pub async fn terminate_sandbox(
             steps: Some(vec![cancelled_item.clone()]),
             timeout_seconds: None,
             context_length: None,
+            prompt_tokens_delta: None,
+            completion_tokens_delta: None,
+            tool_used: None,
         };
         SandboxTask::update_by_id(&state.db, &task_id, req)
             .await
@@ -1284,104 +1306,12 @@ pub async fn terminate_sandbox(
     Ok(())
 }
 
-// GET /sandboxes/{id}/runtime — total runtime across sandboxes
-pub async fn get_sandbox_runtime(
+// GET /sandboxes/{id}/stats — aggregated sandbox statistics
+pub async fn get_sandbox_stats(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<serde_json::Value>> {
-    // Permission: owner or admin
-    let is_admin = is_admin_principal(&auth, &state).await;
-    if is_admin {
-        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
-            .await
-            .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to get sandbox runtime".to_string())
-            })?;
-    }
-
-    // Get username for ownership check
-    let username = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    // Find sandbox (admin can access any sandbox)
-    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-
-    // Fetch all tasks for this sandbox (created_at + output JSON)
-    let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
-        r#"SELECT created_at, steps FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#
-    )
-    .bind(&sandbox.id)
-    .fetch_all(&*state.db)
-    .await
-    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
-
-    // Sum runtime for completed sandboxes; track last restart marker for current sandbox inclusion
-    let mut total: i64 = 0;
-    let mut last_restarted: Option<DateTime<Utc>> = None;
-    let mut current_sandbox: i64 = 0;
-    for (row_created_at, output) in rows.into_iter() {
-        if let Some(items) = output.as_array() {
-            for it in items {
-                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
-                if t == "restarted" {
-                    let at = it
-                        .get("at")
-                        .and_then(|v| v.as_str())
-                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or(row_created_at);
-                    last_restarted = Some(at);
-                } else if t == "terminated" || t == "deleted" {
-                    // Prefer embedded runtime_seconds, else compute delta
-                    if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
-                        if rs > 0 {
-                            total += rs;
-                        }
-                    } else {
-                        let end_at = it
-                            .get("at")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or(row_created_at);
-                        let start_at = last_restarted.unwrap_or(sandbox.created_at);
-                        let delta = (end_at - start_at).num_seconds();
-                        if delta > 0 {
-                            total += delta;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Include current sandbox up to now when sandbox is not terminated
-    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
-        let start_at = last_restarted.unwrap_or(sandbox.created_at);
-        let now = Utc::now();
-        let delta = (now - start_at).num_seconds();
-        if delta > 0 {
-            total += delta;
-            current_sandbox = delta;
-        }
-    }
-
-    Ok(Json(serde_json::json!({
-        "sandbox_id": sandbox.id,
-        "total_runtime_seconds": total,
-        "current_sandbox_seconds": current_sandbox
-    })))
-}
-
-// GET /sandboxes/{id}/top — realtime CPU/memory snapshot and task counts
-pub async fn get_sandbox_top(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-) -> ApiResult<Json<SandboxTopResponse>> {
+) -> ApiResult<Json<SandboxStatsResponse>> {
     let is_admin = is_admin_principal(&auth, &state).await;
     if is_admin {
         check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
@@ -1396,9 +1326,9 @@ pub async fn get_sandbox_top(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
-    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    let mut sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
-    let tasks_completed: i64 = sqlx::query_scalar(
+    let tasks_completed_total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND LOWER(status) = 'completed'"#,
     )
     .bind(&sandbox.id)
@@ -1411,6 +1341,22 @@ pub async fn get_sandbox_top(
             e
         ))
     })?;
+
+    let total_tasks: i64 =
+        sqlx::query_scalar(r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ?"#)
+            .bind(&sandbox.id)
+            .fetch_one(&*state.db)
+            .await
+            .map_err(|e| {
+                ApiError::Internal(anyhow::anyhow!(
+                    "Failed to count tasks for sandbox {}: {}",
+                    sandbox.id,
+                    e
+                ))
+            })?;
+
+    let (total_runtime_seconds, current_runtime_seconds) =
+        compute_runtime_metrics(&state, &sandbox).await?;
 
     let container_name = format!("tsbx_sandbox_{}", sandbox.id);
     let mut container_state = sandbox.state.clone();
@@ -1443,14 +1389,40 @@ pub async fn get_sandbox_top(
         }
     }
 
+    sqlx::query(
+        r#"
+        UPDATE sandboxes
+        SET total_runtime_seconds = ?, current_runtime_seconds = ?, tasks_completed_total = ?
+        WHERE id = ?
+        "#,
+    )
+    .bind(total_runtime_seconds)
+    .bind(current_runtime_seconds)
+    .bind(tasks_completed_total)
+    .bind(&sandbox.id)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to persist sandbox stats for {}: {}",
+            sandbox.id,
+            e
+        ))
+    })?;
+
+    sandbox.total_runtime_seconds = total_runtime_seconds;
+    sandbox.current_runtime_seconds = current_runtime_seconds;
+    sandbox.tasks_completed_total = tasks_completed_total;
+
     let inference_total_tokens = sandbox
         .inference_prompt_tokens
         .saturating_add(sandbox.inference_completion_tokens);
 
-    let response = SandboxTopResponse {
-        sandbox_id: sandbox.id,
+    let response = SandboxStatsResponse {
+        sandbox_id: sandbox.id.clone(),
         container_state,
-        tasks_completed,
+        tasks_completed_total,
+        total_tasks,
         cpu_usage_percent,
         cpu_limit_cores,
         memory_usage_bytes,
@@ -1460,6 +1432,9 @@ pub async fn get_sandbox_top(
         inference_prompt_tokens: sandbox.inference_prompt_tokens,
         inference_completion_tokens: sandbox.inference_completion_tokens,
         inference_total_tokens,
+        tool_usage: sandbox.tool_usage.clone(),
+        total_runtime_seconds,
+        current_runtime_seconds,
         captured_at: Utc::now().to_rfc3339(),
     };
 
@@ -1578,6 +1553,70 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
         inference_url,
         inference_model,
     }))
+}
+
+async fn compute_runtime_metrics(
+    state: &AppState,
+    sandbox: &Sandbox,
+) -> Result<(i64, i64), ApiError> {
+    let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
+        r#"SELECT created_at, steps FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#,
+    )
+    .bind(&sandbox.id)
+    .fetch_all(&*state.db)
+    .await
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
+
+    let mut total: i64 = 0;
+    let mut last_restarted: Option<DateTime<Utc>> = None;
+    let mut current_sandbox: i64 = 0;
+
+    for (row_created_at, output) in rows.into_iter() {
+        if let Some(items) = output.as_array() {
+            for it in items {
+                let t = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if t == "restarted" {
+                    let at = it
+                        .get("at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or(row_created_at);
+                    last_restarted = Some(at);
+                } else if t == "terminated" || t == "deleted" {
+                    if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
+                        if rs > 0 {
+                            total += rs;
+                        }
+                    } else {
+                        let end_at = it
+                            .get("at")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .unwrap_or(row_created_at);
+                        let start_at = last_restarted.unwrap_or(sandbox.created_at);
+                        let delta = (end_at - start_at).num_seconds();
+                        if delta > 0 {
+                            total += delta;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
+        let start_at = last_restarted.unwrap_or(sandbox.created_at);
+        let now = Utc::now();
+        let delta = (now - start_at).num_seconds();
+        if delta > 0 {
+            total += delta;
+            current_sandbox = delta;
+        }
+    }
+
+    Ok((total, current_sandbox))
 }
 
 fn compute_cpu_percent(stats: &Stats) -> f64 {
@@ -1895,7 +1934,7 @@ pub async fn update_task(
     Extension(auth): Extension<AuthContext>,
     Json(req): Json<UpdateTaskRequest>,
 ) -> ApiResult<Json<TaskView>> {
-    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
+    let mut sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
@@ -1934,6 +1973,7 @@ pub async fn update_task(
 
     let prompt_delta = req.prompt_tokens_delta.unwrap_or(0).max(0);
     let completion_delta = req.completion_tokens_delta.unwrap_or(0).max(0);
+    let tool_used_req = req.tool_used.clone();
 
     let updated = SandboxTask::update_by_id(&state.db, &task_id, req)
         .await
@@ -1962,6 +2002,44 @@ pub async fn update_task(
         })?;
     }
 
+    if let Some(tool_used) = tool_used_req
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        let mut usage_map = sandbox
+            .tool_usage
+            .as_object()
+            .cloned()
+            .unwrap_or_else(|| serde_json::Map::new());
+        let entry = usage_map
+            .entry(tool_used.to_string())
+            .or_insert_with(|| JsonValue::from(0));
+        let current = entry.as_i64().unwrap_or(0) + 1;
+        *entry = JsonValue::from(current);
+        let new_usage = JsonValue::Object(usage_map);
+
+        sqlx::query(
+            r#"
+            UPDATE sandboxes
+            SET tool_usage = ?, last_activity_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            "#,
+        )
+        .bind(&new_usage)
+        .bind(&sandbox_id)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!(
+                "Failed to update sandbox tool usage: {}",
+                e
+            ))
+        })?;
+
+        sandbox.tool_usage = new_usage;
+    }
+
     Ok(Json(TaskView {
         id: updated.id,
         sandbox_id: updated.sandbox_id,
@@ -1977,25 +2055,6 @@ pub async fn update_task(
         created_at: updated.created_at.to_rfc3339(),
         updated_at: updated.updated_at.to_rfc3339(),
     }))
-}
-
-pub async fn get_task_count(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(_auth): Extension<AuthContext>,
-) -> ApiResult<Json<serde_json::Value>> {
-    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
-
-    let count = SandboxTask::count_by_sandbox(&state.db, &sandbox.id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to count tasks: {}", e)))?;
-
-    Ok(Json(
-        serde_json::json!({ "count": count, "sandbox_id": sandbox.id }),
-    ))
 }
 
 fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {

@@ -841,8 +841,7 @@ echo 'Session directories created (.env, logs)'
         ];
 
         // Propagate host branding and URL to sandboxes (provided by start script)
-        let host_name =
-            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
+        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
         let host_url =
             std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
@@ -1043,8 +1042,7 @@ echo 'Session directories created (.env, logs)'
         ];
 
         // Propagate host branding and URL to sandboxes (provided by start script)
-        let host_name =
-            std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
+        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
         let host_url =
             std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));

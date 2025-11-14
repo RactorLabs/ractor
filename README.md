@@ -40,3 +40,5 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
 
 4. **Visit the Operator UI**  
    Open <http://localhost> (or your configured `TSBX_HOST_URL`) to browse sandboxes, launch tasks, and monitor activity. The REST API is available at `<host>/api`.
+
+> If something misbehaves, run `tsbx doctor` or `tsbx fix` from the CLI for guided troubleshooting.

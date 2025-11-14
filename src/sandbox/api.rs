@@ -23,8 +23,14 @@ pub struct Sandbox {
     pub inference_prompt_tokens: Option<i64>,
     #[serde(default)]
     pub inference_completion_tokens: Option<i64>,
-    pub inference_prompt_tokens: Option<i64>,
-    pub inference_completion_tokens: Option<i64>,
+    #[serde(default)]
+    pub tool_usage: Option<serde_json::Value>,
+    #[serde(default)]
+    pub total_runtime_seconds: Option<i64>,
+    #[serde(default)]
+    pub current_runtime_seconds: Option<i64>,
+    #[serde(default)]
+    pub tasks_completed_total: Option<i64>,
 }
 
 pub struct TSBXClient {
@@ -70,6 +76,7 @@ impl TSBXClient {
             context_length: Some(clamped),
             prompt_tokens_delta: Some(prompt_tokens.max(0)),
             completion_tokens_delta: Some(completion_tokens.max(0)),
+            tool_used: None,
         };
         let response = self
             .client
@@ -170,6 +177,36 @@ impl TSBXClient {
         }
     }
 
+    pub async fn get_stats(&self) -> Result<SandboxStats> {
+        let url = format!(
+            "{}/api/v0/sandboxes/{}/stats",
+            self.config.api_url, self.sandbox_id
+        );
+        let response = self
+            .client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK => Ok(response.json::<SandboxStats>().await?),
+            StatusCode::UNAUTHORIZED => {
+                Err(HostError::Api("Unauthorized - check API token".to_string()))
+            }
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to fetch sandbox stats ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
     /// Create a new task (user input)
     pub async fn create_task(&self, input_text: &str) -> Result<TaskView> {
         let url = format!(
@@ -215,6 +252,7 @@ impl TSBXClient {
         output_text: Option<String>,
         steps: Option<Vec<serde_json::Value>>,
         context_length: Option<i64>,
+        tool_used: Option<String>,
     ) -> Result<TaskView> {
         let url = format!(
             "{}/api/v0/sandboxes/{}/tasks/{}",
@@ -236,6 +274,9 @@ impl TSBXClient {
             steps,
             timeout_seconds: None,
             context_length,
+            prompt_tokens_delta: None,
+            completion_tokens_delta: None,
+            tool_used,
         };
         let response = self
             .client
@@ -303,44 +344,6 @@ impl TSBXClient {
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
                     "Failed to fetch tasks ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
-
-    /// Get task count for current sandbox
-    pub async fn get_task_count(&self) -> Result<u64> {
-        let url = format!(
-            "{}/api/v0/sandboxes/{}/tasks/count",
-            self.config.api_url, self.sandbox_id
-        );
-        let response = self
-            .client
-            .get(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .send()
-            .await?;
-        match response.status() {
-            StatusCode::OK => {
-                let v = response
-                    .json::<serde_json::Value>()
-                    .await
-                    .map_err(|e| HostError::Api(e.to_string()))?;
-                let count = v.get("count").and_then(|c| c.as_i64()).unwrap_or(0) as u64;
-                Ok(count)
-            }
-            StatusCode::UNAUTHORIZED => {
-                Err(HostError::Api("Unauthorized - check API token".to_string()))
-            }
-            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to get task count ({}): {}",
                     status, error_text
                 )))
             }
@@ -492,4 +495,27 @@ pub struct UpdateTaskRequest {
     pub prompt_tokens_delta: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_tokens_delta: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_used: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SandboxStats {
+    pub sandbox_id: String,
+    pub container_state: String,
+    pub tasks_completed_total: i64,
+    pub total_tasks: i64,
+    pub cpu_usage_percent: f64,
+    pub cpu_limit_cores: f64,
+    pub memory_usage_bytes: u64,
+    pub memory_limit_bytes: u64,
+    pub inference_url: Option<String>,
+    pub inference_model: Option<String>,
+    pub inference_prompt_tokens: i64,
+    pub inference_completion_tokens: i64,
+    pub inference_total_tokens: i64,
+    pub tool_usage: serde_json::Value,
+    pub total_runtime_seconds: i64,
+    pub current_runtime_seconds: i64,
+    pub captured_at: String,
 }

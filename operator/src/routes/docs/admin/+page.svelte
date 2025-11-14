@@ -178,14 +178,14 @@
             <div class="card-header fw-bold">Segments Structure</div>
             <div class="card-body p-3 p-sm-4 small">
               <div class="mb-2">The <span class="font-monospace">segments</span> array captures step-by-step progress, tool usage, and final output.</div>
-              <div class="mb-2 small text-body text-opacity-75">For <span class="font-monospace">tool_result</span> items, <span class="font-monospace">output</span> may be a string or JSON. The UI auto-parses JSON-like strings for display.</div>
+              <div class="mb-2 small text-body text-opacity-75">For <span class="font-monospace">tool_result</span> items, <span class="font-monospace">result</span> is a string or JSON. The UI auto-parses JSON-like strings for display.</div>
               <div class="table-responsive mb-2">
                 <table class="table table-sm table-bordered">
                   <thead><tr><th>type</th><th>Shape</th><th>Purpose</th></tr></thead>
                   <tbody>
                     <tr><td class="font-monospace">commentary</td><td class="font-monospace">&#123; type, channel: 'analysis', text &#125;</td><td>Internal analysis</td></tr>
                     <tr><td class="font-monospace">tool_call</td><td class="font-monospace">&#123; type, tool, arguments (JSON), args (legacy) &#125;</td><td>Declares a tool invocation</td></tr>
-                    <tr><td class="font-monospace">tool_result</td><td class="font-monospace">&#123; type, tool, output &#125;</td><td>Result of tool invocation</td></tr>
+                    <tr><td class="font-monospace">tool_result</td><td class="font-monospace">&#123; type, tool, result, truncated? &#125;</td><td>Result of tool invocation</td></tr>
                     <tr><td class="font-monospace">final</td><td class="font-monospace">&#123; type, channel: 'final', text &#125;</td><td>Final answer (also reflected in <span class="font-monospace">output_content</span>)</td></tr>
                   </tbody>
                 </table>

@@ -54,6 +54,12 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     inference_prompt_tokens BIGINT NOT NULL DEFAULT 0,
     inference_completion_tokens BIGINT NOT NULL DEFAULT 0,
 
+    -- Tool usage accounting (JSON map of tool name -> count)
+    tool_usage JSON NOT NULL DEFAULT ('{}'),
+    total_runtime_seconds BIGINT NOT NULL DEFAULT 0,
+    current_runtime_seconds BIGINT NOT NULL DEFAULT 0,
+    tasks_completed_total BIGINT NOT NULL DEFAULT 0,
+
     -- Constraints
     CONSTRAINT sandboxes_state_check CHECK (state IN ('initializing', 'idle', 'busy', 'terminating', 'terminated')),
     CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),
