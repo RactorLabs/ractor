@@ -175,20 +175,6 @@ struct ContainerMetrics {
     inference_model: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct InferenceUsageRequest {
-    pub prompt_tokens: Option<i64>,
-    pub completion_tokens: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct InferenceUsageResponse {
-    pub sandbox_id: String,
-    pub prompt_tokens_total: i64,
-    pub completion_tokens_total: i64,
-    pub total_tokens: i64,
-}
-
 impl SandboxResponse {
     async fn from_sandbox(sandbox: Sandbox, _pool: &sqlx::MySqlPool) -> Result<Self, ApiError> {
         // Convert tags from JSON value to Vec<String>
@@ -1480,73 +1466,6 @@ pub async fn get_sandbox_top(
     Ok(Json(response))
 }
 
-pub async fn record_inference_usage(
-    State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Extension(auth): Extension<AuthContext>,
-    Json(payload): Json<InferenceUsageRequest>,
-) -> ApiResult<Json<InferenceUsageResponse>> {
-    let is_admin = is_admin_principal(&auth, &state).await;
-    if is_admin {
-        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
-            .await
-            .map_err(|_| {
-                ApiError::Forbidden("Insufficient permissions to update sandbox usage".to_string())
-            })?;
-    }
-
-    let username = match &auth.principal {
-        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
-        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
-    };
-
-    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
-    check_not_terminated(&sandbox)?;
-
-    let prompt_inc = payload.prompt_tokens.unwrap_or(0).max(0);
-    let completion_inc = payload.completion_tokens.unwrap_or(0).max(0);
-
-    if prompt_inc > 0 || completion_inc > 0 {
-        sqlx::query(
-            r#"
-            UPDATE sandboxes
-            SET inference_prompt_tokens = inference_prompt_tokens + ?,
-                inference_completion_tokens = inference_completion_tokens + ?,
-                last_activity_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            "#,
-        )
-        .bind(prompt_inc)
-        .bind(completion_inc)
-        .bind(&sandbox.id)
-        .execute(&*state.db)
-        .await
-        .map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!(
-                "Failed to update inference usage for sandbox {}: {}",
-                sandbox.id,
-                e
-            ))
-        })?;
-    }
-
-    let updated = Sandbox::find_by_id(&state.db, &sandbox.id)
-        .await
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to reload sandbox: {}", e)))?
-        .ok_or_else(|| ApiError::NotFound("Sandbox not found after update".to_string()))?;
-
-    let total_tokens = updated
-        .inference_prompt_tokens
-        .saturating_add(updated.inference_completion_tokens);
-
-    Ok(Json(InferenceUsageResponse {
-        sandbox_id: updated.id,
-        prompt_tokens_total: updated.inference_prompt_tokens,
-        completion_tokens_total: updated.inference_completion_tokens,
-        total_tokens,
-    }))
-}
-
 async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<ContainerMetrics>> {
     let docker = Docker::connect_with_socket_defaults()
         .map_err(|e| anyhow::anyhow!("Docker connection failed: {}", e))?;
@@ -2013,9 +1932,35 @@ pub async fn update_task(
         }
     }
 
+    let prompt_delta = req.prompt_tokens_delta.unwrap_or(0).max(0);
+    let completion_delta = req.completion_tokens_delta.unwrap_or(0).max(0);
+
     let updated = SandboxTask::update_by_id(&state.db, &task_id, req)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update task: {}", e)))?;
+
+    if prompt_delta > 0 || completion_delta > 0 {
+        sqlx::query(
+            r#"
+            UPDATE sandboxes
+            SET inference_prompt_tokens = inference_prompt_tokens + ?,
+                inference_completion_tokens = inference_completion_tokens + ?,
+                last_activity_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            "#,
+        )
+        .bind(prompt_delta)
+        .bind(completion_delta)
+        .bind(&sandbox_id)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!(
+                "Failed to update sandbox inference usage: {}",
+                e
+            ))
+        })?;
+    }
 
     Ok(Json(TaskView {
         id: updated.id,

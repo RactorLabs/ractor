@@ -198,24 +198,19 @@ impl TaskHandler {
 
             let context_length = context_length
                 .unwrap_or_else(|| Self::estimate_context_length(&model_conversation));
-            if let Err(err) = self
-                .api_client
-                .update_task_context_length(&task.id, context_length)
-                .await
-            {
-                warn!("Failed to update context length: {}", err);
-            }
-
             let prompt_tokens_value = prompt_tokens.unwrap_or(0).max(0);
             let completion_tokens_value = completion_tokens.unwrap_or(0).max(0);
-            if prompt_tokens_value > 0 || completion_tokens_value > 0 {
-                if let Err(err) = self
-                    .api_client
-                    .record_inference_usage(prompt_tokens_value, completion_tokens_value)
-                    .await
-                {
-                    warn!("Failed to record inference usage: {}", err);
-                }
+            if let Err(err) = self
+                .api_client
+                .update_task_usage(
+                    &task.id,
+                    context_length,
+                    prompt_tokens_value,
+                    completion_tokens_value,
+                )
+                .await
+            {
+                warn!("Failed to update task usage: {}", err);
             }
 
             // Handle both XML (positron) and JSON tool calls (default)

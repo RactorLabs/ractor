@@ -80,10 +80,6 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::sandboxes::get_sandbox_top),
         )
         .route(
-            "/sandboxes/{id}/inference_usage",
-            post(handlers::sandboxes::record_inference_usage),
-        )
-        .route(
             "/sandboxes/{id}",
             delete(handlers::sandboxes::terminate_sandbox),
         )

@@ -369,22 +369,6 @@ export function getApiDocs(base) {
           ]
         },
         {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/inference_usage',
-          auth: 'bearer',
-          desc: 'Accumulate prompt/completion token usage for a sandbox (used by sandbox runtime).',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'prompt_tokens', type: 'int', required: false, desc: 'Prompt tokens produced by the latest inference call.' },
-            { in: 'body', name: 'completion_tokens', type: 'int', required: false, desc: 'Completion tokens produced by the latest inference call.' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/inference_usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt_tokens":320,"completion_tokens":88}'`,
-          resp: { schema: 'InferenceUsageResponse' },
-          responses: [
-            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","prompt_tokens_total":5141,"completion_tokens_total":1822,"total_tokens":6963}` }
-          ]
-        },
-        {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/snapshots',
           auth: 'bearer',

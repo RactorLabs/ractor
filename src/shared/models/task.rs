@@ -58,6 +58,10 @@ pub struct UpdateTaskRequest {
     pub timeout_seconds: Option<i32>,
     #[serde(default)]
     pub context_length: Option<i64>,
+    #[serde(default)]
+    pub prompt_tokens_delta: Option<i64>,
+    #[serde(default)]
+    pub completion_tokens_delta: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

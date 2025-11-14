@@ -49,7 +49,13 @@ impl TSBXClient {
         }
     }
 
-    pub async fn update_task_context_length(&self, id: &str, context_length: i64) -> Result<()> {
+    pub async fn update_task_usage(
+        &self,
+        id: &str,
+        context_length: i64,
+        prompt_tokens: i64,
+        completion_tokens: i64,
+    ) -> Result<()> {
         let clamped = context_length.max(0);
         let url = format!(
             "{}/api/v0/sandboxes/{}/tasks/{}",
@@ -62,6 +68,8 @@ impl TSBXClient {
             steps: None,
             timeout_seconds: None,
             context_length: Some(clamped),
+            prompt_tokens_delta: Some(prompt_tokens.max(0)),
+            completion_tokens_delta: Some(completion_tokens.max(0)),
         };
         let response = self
             .client
@@ -83,48 +91,6 @@ impl TSBXClient {
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
                     "Failed to update task context length ({}): {}",
-                    status, error_text
-                )))
-            }
-        }
-    }
-
-    pub async fn record_inference_usage(
-        &self,
-        prompt_tokens: i64,
-        completion_tokens: i64,
-    ) -> Result<()> {
-        if prompt_tokens <= 0 && completion_tokens <= 0 {
-            return Ok(());
-        }
-        let url = format!(
-            "{}/api/v0/sandboxes/{}/inference_usage",
-            self.config.api_url, self.sandbox_id
-        );
-        let payload = RecordInferenceUsageRequest {
-            prompt_tokens: prompt_tokens.max(0),
-            completion_tokens: completion_tokens.max(0),
-        };
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.config.api_token))
-            .json(&payload)
-            .send()
-            .await?;
-        match response.status() {
-            StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
-            StatusCode::UNAUTHORIZED => Err(HostError::Api(
-                "Unauthorized - check API token".to_string(),
-            )),
-            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
-            status => {
-                let error_text = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| "Unknown error".to_string());
-                Err(HostError::Api(format!(
-                    "Failed to record inference usage ({}): {}",
                     status, error_text
                 )))
             }
@@ -522,10 +488,8 @@ pub struct UpdateTaskRequest {
     pub timeout_seconds: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<i64>,
-}
-
-#[derive(Debug, Serialize)]
-struct RecordInferenceUsageRequest {
-    prompt_tokens: i64,
-    completion_tokens: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_delta: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_tokens_delta: Option<i64>,
 }
