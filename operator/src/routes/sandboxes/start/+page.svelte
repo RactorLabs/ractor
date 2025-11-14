@@ -25,6 +25,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
   // (Samples removed with About section)
   let startupTask = '';
   let description = '';
+  let descriptionInput;
 
   // Environment entries as dynamic rows
   let envEntries = [{ key: '', val: '' }];
@@ -50,6 +51,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
     if (!isAuthenticated()) {
       goto('/login');
     }
+    descriptionInput?.focus();
   });
 
   async function submit(e) {
@@ -114,7 +116,13 @@ let idleTimeoutSeconds = 900; // default 15 minutes
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>
-              <input id="description" class="form-control" bind:value={description} placeholder="Short description of this sandbox" />
+              <input
+                id="description"
+                class="form-control"
+                bind:this={descriptionInput}
+                bind:value={description}
+                placeholder="Short description of this sandbox"
+              />
             </div>
             
 

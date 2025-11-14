@@ -733,8 +733,12 @@ pub async fn list_sandboxes(
 
     if let Some(q) = query.q.as_ref().map(|s| s.trim().to_lowercase()) {
         if !q.is_empty() {
-            where_sql.push_str(" AND (description IS NOT NULL AND LOWER(description) LIKE ?) ");
             let pat = format!("%{}%", q);
+            where_sql.push_str(
+                " AND (LOWER(id) LIKE ? OR (description IS NOT NULL AND LOWER(description) LIKE ?) OR LOWER(created_by) LIKE ?) ",
+            );
+            binds.push(serde_json::Value::String(pat.clone()));
+            binds.push(serde_json::Value::String(pat.clone()));
             binds.push(serde_json::Value::String(pat));
         }
     }

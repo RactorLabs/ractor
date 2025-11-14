@@ -252,7 +252,7 @@
       <div class="col-12 col-md-6">
         <div class="input-group input-group-sm flex-nowrap">
           <span class="input-group-text bg-body-secondary border-0"><i class="bi bi-search"></i></span>
-          <input class="form-control" placeholder="Search by ID or description" bind:value={q} name="q" autocapitalize="none" />
+          <input class="form-control" placeholder="Search by ID, description, or owner" bind:value={q} name="q" autocapitalize="none" />
         </div>
       </div>
       <div class="col-12 col-md-4 col-lg-3">
