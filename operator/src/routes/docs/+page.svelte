@@ -120,8 +120,7 @@
             <div class="row g-3">
               {#each section.endpoints as ep}
                 <div class="col-12">
-                <Card>
-                  <div class="card-body p-3 p-sm-4">
+                  <div class="api-endpoint p-3 p-sm-4">
                     <details class="api-details">
                       <summary class="summary-row d-flex align-items-center gap-2 text-break" aria-label="Toggle endpoint details">
                         <span class={methodClass(ep.method)}>{ep.method}</span>
@@ -200,8 +199,7 @@
                       </div>
                     </details>
                   </div>
-                </Card>
-              </div>
+                </div>
               {/each}
             </div>
           </div>
@@ -218,6 +216,14 @@
     }
     :global(pre.code-wrap code) {
       white-space: inherit;
+    }
+    .api-endpoint {
+      border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.12));
+      border-radius: 0.75rem;
+      background-color: var(--bs-body-bg);
+    }
+    .api-endpoint + .api-endpoint {
+      margin-top: 1rem;
     }
     /* Ensure anchor targets are not hidden beneath the fixed header */
     :global([id]) {
