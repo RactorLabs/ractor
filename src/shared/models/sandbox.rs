@@ -16,6 +16,8 @@ pub struct Sandbox {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
+    pub inference_prompt_tokens: i64,
+    pub inference_completion_tokens: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,7 +258,8 @@ impl Sandbox {
             r#"
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from
+                   idle_timeout_seconds, idle_from, busy_from,
+                   inference_prompt_tokens, inference_completion_tokens
             FROM sandboxes
             ORDER BY created_at DESC
             "#,
@@ -273,7 +276,8 @@ impl Sandbox {
             r#"
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from
+                   idle_timeout_seconds, idle_from, busy_from,
+                   inference_prompt_tokens, inference_completion_tokens
             FROM sandboxes
             WHERE id = ?
             "#,
@@ -295,8 +299,8 @@ impl Sandbox {
 
         sqlx::query(
             r#"
-            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, idle_timeout_seconds, idle_from, busy_from)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, idle_timeout_seconds, idle_from, busy_from, inference_prompt_tokens, inference_completion_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
             "#
         )
         .bind(&sandbox_id)

@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -276,7 +276,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0}` }
           ]
         },
         {
@@ -352,6 +352,36 @@ export function getApiDocs(base) {
           resp: { schema: 'RuntimeTotal' },
           responses: [
             { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","total_runtime_seconds":1234,"current_sandbox_seconds":321}` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/sandboxes/{id}/top',
+          auth: 'bearer',
+          desc: 'Fetch live CPU, memory, and inference token usage metrics for a sandbox.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+          ],
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/top -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'SandboxTopResponse' },
+          responses: [
+            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed":12,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","inference_prompt_tokens":4821,"inference_completion_tokens":1734,"inference_total_tokens":6555,"captured_at":"2025-01-01T15:04:32Z"}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/inference_usage',
+          auth: 'bearer',
+          desc: 'Accumulate prompt/completion token usage for a sandbox (used by sandbox runtime).',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'prompt_tokens', type: 'int', required: false, desc: 'Prompt tokens produced by the latest inference call.' },
+            { in: 'body', name: 'completion_tokens', type: 'int', required: false, desc: 'Completion tokens produced by the latest inference call.' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/inference_usage -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"prompt_tokens":320,"completion_tokens":88}'`,
+          resp: { schema: 'InferenceUsageResponse' },
+          responses: [
+            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","prompt_tokens_total":5141,"completion_tokens_total":1822,"total_tokens":6963}` }
           ]
         },
         {

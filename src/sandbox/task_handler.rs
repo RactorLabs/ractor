@@ -187,8 +187,16 @@ impl TaskHandler {
                 Ok(resp) => resp,
                 Err(e) => return Err(e),
             };
-            let context_length = response
-                .context_length
+            let ModelResponse {
+                content,
+                tool_calls,
+                total_tokens: _,
+                prompt_tokens,
+                completion_tokens,
+                context_length,
+            } = response;
+
+            let context_length = context_length
                 .unwrap_or_else(|| Self::estimate_context_length(&model_conversation));
             if let Err(err) = self
                 .api_client
@@ -198,8 +206,20 @@ impl TaskHandler {
                 warn!("Failed to update context length: {}", err);
             }
 
+            let prompt_tokens_value = prompt_tokens.unwrap_or(0).max(0);
+            let completion_tokens_value = completion_tokens.unwrap_or(0).max(0);
+            if prompt_tokens_value > 0 || completion_tokens_value > 0 {
+                if let Err(err) = self
+                    .api_client
+                    .record_inference_usage(prompt_tokens_value, completion_tokens_value)
+                    .await
+                {
+                    warn!("Failed to record inference usage: {}", err);
+                }
+            }
+
             // Handle both XML (positron) and JSON tool calls (default)
-            let (command, command_text) = if let Some(tool_calls) = response.tool_calls {
+            let (command, command_text) = if let Some(tool_calls) = tool_calls {
                 // Default template: JSON tool calls
                 if tool_calls.is_empty() {
                     warn!("Empty tool_calls array from model; retrying");
@@ -234,8 +254,8 @@ impl TaskHandler {
 
                 let cmd_text = serde_json::to_string(&tool_call).unwrap_or_default();
                 (cmd, cmd_text)
-            } else if let Some(content) = response.content {
-                let raw = content.trim();
+            } else if let Some(content_text) = content {
+                let raw = content_text.trim();
                 if raw.is_empty() {
                     warn!("Empty response from model; retrying");
                     continue;

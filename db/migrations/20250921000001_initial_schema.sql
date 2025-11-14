@@ -50,6 +50,10 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     idle_from TIMESTAMP NULL,
     busy_from TIMESTAMP NULL,
 
+    -- Inference token accounting
+    inference_prompt_tokens BIGINT NOT NULL DEFAULT 0,
+    inference_completion_tokens BIGINT NOT NULL DEFAULT 0,
+
     -- Constraints
     CONSTRAINT sandboxes_state_check CHECK (state IN ('initializing', 'idle', 'busy', 'terminating', 'terminated')),
     CONSTRAINT sandboxes_tags_check CHECK (JSON_TYPE(tags) = 'ARRAY'),

@@ -527,7 +527,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             inference_prompt_tokens, inference_completion_tokens
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -759,7 +760,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             inference_prompt_tokens, inference_completion_tokens
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -977,7 +979,8 @@ impl SandboxManager {
     pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             inference_prompt_tokens, inference_completion_tokens
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -1058,7 +1061,8 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from
+             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             inference_prompt_tokens, inference_completion_tokens
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)

@@ -19,6 +19,12 @@ pub struct Sandbox {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
+    #[serde(default)]
+    pub inference_prompt_tokens: Option<i64>,
+    #[serde(default)]
+    pub inference_completion_tokens: Option<i64>,
+    pub inference_prompt_tokens: Option<i64>,
+    pub inference_completion_tokens: Option<i64>,
 }
 
 pub struct TSBXClient {
@@ -77,6 +83,48 @@ impl TSBXClient {
                     .unwrap_or_else(|_| "Unknown error".to_string());
                 Err(HostError::Api(format!(
                     "Failed to update task context length ({}): {}",
+                    status, error_text
+                )))
+            }
+        }
+    }
+
+    pub async fn record_inference_usage(
+        &self,
+        prompt_tokens: i64,
+        completion_tokens: i64,
+    ) -> Result<()> {
+        if prompt_tokens <= 0 && completion_tokens <= 0 {
+            return Ok(());
+        }
+        let url = format!(
+            "{}/api/v0/sandboxes/{}/inference_usage",
+            self.config.api_url, self.sandbox_id
+        );
+        let payload = RecordInferenceUsageRequest {
+            prompt_tokens: prompt_tokens.max(0),
+            completion_tokens: completion_tokens.max(0),
+        };
+        let response = self
+            .client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.config.api_token))
+            .json(&payload)
+            .send()
+            .await?;
+        match response.status() {
+            StatusCode::OK | StatusCode::NO_CONTENT => Ok(()),
+            StatusCode::UNAUTHORIZED => Err(HostError::Api(
+                "Unauthorized - check API token".to_string(),
+            )),
+            StatusCode::NOT_FOUND => Err(HostError::Api("Sandbox not found".to_string())),
+            status => {
+                let error_text = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| "Unknown error".to_string());
+                Err(HostError::Api(format!(
+                    "Failed to record inference usage ({}): {}",
                     status, error_text
                 )))
             }
@@ -474,4 +522,10 @@ pub struct UpdateTaskRequest {
     pub timeout_seconds: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context_length: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+struct RecordInferenceUsageRequest {
+    prompt_tokens: i64,
+    completion_tokens: i64,
 }

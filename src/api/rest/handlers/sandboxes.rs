@@ -67,6 +67,8 @@ pub struct SandboxResponse {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
+    pub inference_prompt_tokens: i64,
+    pub inference_completion_tokens: i64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -157,6 +159,9 @@ pub struct SandboxTopResponse {
     pub memory_limit_bytes: u64,
     pub inference_url: Option<String>,
     pub inference_model: Option<String>,
+    pub inference_prompt_tokens: i64,
+    pub inference_completion_tokens: i64,
+    pub inference_total_tokens: i64,
     pub captured_at: String,
 }
 
@@ -168,6 +173,20 @@ struct ContainerMetrics {
     memory_limit: u64,
     inference_url: Option<String>,
     inference_model: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InferenceUsageRequest {
+    pub prompt_tokens: Option<i64>,
+    pub completion_tokens: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InferenceUsageResponse {
+    pub sandbox_id: String,
+    pub prompt_tokens_total: i64,
+    pub completion_tokens_total: i64,
+    pub total_tokens: i64,
 }
 
 impl SandboxResponse {
@@ -193,6 +212,8 @@ impl SandboxResponse {
             idle_timeout_seconds: sandbox.idle_timeout_seconds,
             idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
+            inference_prompt_tokens: sandbox.inference_prompt_tokens,
+            inference_completion_tokens: sandbox.inference_completion_tokens,
         })
     }
 }
@@ -1436,6 +1457,10 @@ pub async fn get_sandbox_top(
         }
     }
 
+    let inference_total_tokens = sandbox
+        .inference_prompt_tokens
+        .saturating_add(sandbox.inference_completion_tokens);
+
     let response = SandboxTopResponse {
         sandbox_id: sandbox.id,
         container_state,
@@ -1446,10 +1471,80 @@ pub async fn get_sandbox_top(
         memory_limit_bytes,
         inference_url,
         inference_model,
+        inference_prompt_tokens: sandbox.inference_prompt_tokens,
+        inference_completion_tokens: sandbox.inference_completion_tokens,
+        inference_total_tokens,
         captured_at: Utc::now().to_rfc3339(),
     };
 
     Ok(Json(response))
+}
+
+pub async fn record_inference_usage(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(payload): Json<InferenceUsageRequest>,
+) -> ApiResult<Json<InferenceUsageResponse>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to update sandbox usage".to_string())
+            })?;
+    }
+
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_terminated(&sandbox)?;
+
+    let prompt_inc = payload.prompt_tokens.unwrap_or(0).max(0);
+    let completion_inc = payload.completion_tokens.unwrap_or(0).max(0);
+
+    if prompt_inc > 0 || completion_inc > 0 {
+        sqlx::query(
+            r#"
+            UPDATE sandboxes
+            SET inference_prompt_tokens = inference_prompt_tokens + ?,
+                inference_completion_tokens = inference_completion_tokens + ?,
+                last_activity_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            "#,
+        )
+        .bind(prompt_inc)
+        .bind(completion_inc)
+        .bind(&sandbox.id)
+        .execute(&*state.db)
+        .await
+        .map_err(|e| {
+            ApiError::Internal(anyhow::anyhow!(
+                "Failed to update inference usage for sandbox {}: {}",
+                sandbox.id,
+                e
+            ))
+        })?;
+    }
+
+    let updated = Sandbox::find_by_id(&state.db, &sandbox.id)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to reload sandbox: {}", e)))?
+        .ok_or_else(|| ApiError::NotFound("Sandbox not found after update".to_string()))?;
+
+    let total_tokens = updated
+        .inference_prompt_tokens
+        .saturating_add(updated.inference_completion_tokens);
+
+    Ok(Json(InferenceUsageResponse {
+        sandbox_id: updated.id,
+        prompt_tokens_total: updated.inference_prompt_tokens,
+        completion_tokens_total: updated.inference_completion_tokens,
+        total_tokens,
+    }))
 }
 
 async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<ContainerMetrics>> {

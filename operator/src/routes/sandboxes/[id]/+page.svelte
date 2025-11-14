@@ -1430,6 +1430,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 {#if topData.inference_url}
                   <div class="mt-1 text-truncate" title={topData.inference_url}>Inference: <span class="font-monospace small">{topData.inference_url}</span></div>
                 {/if}
+                <div class="mt-1">
+                  Tokens:
+                  <span class="font-monospace">{fmtInt(topData.inference_prompt_tokens ?? 0)} prompt</span>
+                  ·
+                  <span class="font-monospace">{fmtInt(topData.inference_completion_tokens ?? 0)} completion</span>
+                </div>
+                <div class="text-body-secondary small">Total: {fmtInt(topData.inference_total_tokens ?? 0)}</div>
               {/if}
             {:else if loading}
               <div class="d-flex align-items-center gap-2 text-body text-opacity-75">
