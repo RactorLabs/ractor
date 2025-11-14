@@ -34,7 +34,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Install development dependencies for TaskSandbox"
+    echo "Install development dependencies for TSBX"
     echo ""
     echo "Options:"
     echo "  -v, --verbose           Show detailed output"
@@ -77,7 +77,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "🔧 Installing TaskSandbox development dependencies"
+print_status "🔧 Installing TSBX development dependencies"
 
 # Change to project root
 cd "$PROJECT_ROOT"

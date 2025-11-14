@@ -7,7 +7,7 @@ export function getHostName() {
   if (typeof process !== 'undefined' && process.env && process.env.TSBX_HOST_NAME) {
     return process.env.TSBX_HOST_NAME;
   }
-  return 'TaskSandbox';
+  return 'TSBX';
 }
 
 export function getHostUrl() {

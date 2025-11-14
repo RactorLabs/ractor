@@ -1015,9 +1015,9 @@ paths:
           $ref: '#/components/responses/NotFound'
 openapi: 3.0.3
 info:
-  title: TaskSandbox API
+  title: TSBX API
   version: 0.5.3
-  description: 'TaskSandbox is an infrastructure runtime for long-lived, stateful
+  description: 'TSBX is an infrastructure runtime for long-lived, stateful
     agent sandboxes.
 
     This spec documents the core REST endpoints used by the Operator UI and the

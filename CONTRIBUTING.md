@@ -1,6 +1,6 @@
-# Contributing to TaskSandbox
+# Contributing to TSBX
 
-Welcome to the TaskSandbox developer community. Thanks for taking the time to contribute!
+Welcome to the TSBX developer community. Thanks for taking the time to contribute!
 
 ## Contributor Guidelines
 
@@ -24,7 +24,7 @@ Be sure to include a title and clear description, as much relevant information a
 
 ### Do you intend to add a new feature or change an existing one?
 
-- Say hello and suggest your change on the discussion channels for the [TaskSandbox community](https://discord.gg/jTpP6PgZtt)
+- Say hello and suggest your change on the discussion channels for the [TSBX community](https://discord.gg/jTpP6PgZtt)
 - Assuming you get positive feedback, raise a Pull Request against your fork/branch to track the development of the feature and discuss the implementation.
 
 ### Branch, Commit, and Pull Request Naming

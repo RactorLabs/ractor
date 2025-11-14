@@ -21,13 +21,13 @@ pub struct Sandbox {
     pub busy_from: Option<String>,
 }
 
-pub struct TaskSandboxClient {
+pub struct TSBXClient {
     client: Client,
     config: Arc<Config>,
     sandbox_id: String,
 }
 
-impl TaskSandboxClient {
+impl TSBXClient {
     pub fn new(config: Arc<Config>) -> Self {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(30))

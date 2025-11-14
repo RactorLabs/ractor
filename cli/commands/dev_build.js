@@ -29,7 +29,7 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('build')
-    .description('[development only] Build TaskSandbox images via ./scripts/build.sh')
+    .description('[development only] Build TSBX images via ./scripts/build.sh')
     .argument('[args...]', 'Components: api, controller, sandbox, operator, content, gateway. Shortcuts: a=api, c=controller, o=operator, s=sandbox. Flags are passed through (e.g., -n, --no-cache).')
     .addHelpText('after', '\nAllowed components: api, controller, sandbox, operator, content, gateway\n' +
       'Shortcuts: a=api, c=controller, o=operator, s=sandbox\n' +
@@ -46,7 +46,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         const normalizedArgs = normalizeArgs(args);
-        // Validate non-flag args are TaskSandbox components (or 'all')
+        // Validate non-flag args are TSBX components (or 'all')
         const allowed = new Set(['api','controller','sandbox','operator','content','gateway','all']);
         const invalid = (normalizedArgs || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {

@@ -584,7 +584,7 @@ impl SandboxManager {
             _ => SubjectType::Subject,
         };
 
-        // Generate dynamic token for this sandbox (for TaskSandbox auth)
+        // Generate dynamic token for this sandbox (for TSBX auth)
         info!("Generating dynamic token for sandbox ID {}", &sandbox.id);
         let sandbox_token = self
             .generate_sandbox_token(principal, principal_type, &sandbox.id)

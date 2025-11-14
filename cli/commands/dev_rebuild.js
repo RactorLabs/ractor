@@ -29,7 +29,7 @@ function runScript(script, args = []) {
 module.exports = (program) => {
   program
     .command('rebuild')
-    .description('[development only] Rebuild TaskSandbox components via ./scripts/rebuild.sh')
+    .description('[development only] Rebuild TSBX components via ./scripts/rebuild.sh')
     .argument('[args...]', 'Components: api, controller, sandbox, operator, content, gateway. Shortcuts: a=api, c=controller, o=operator, s=sandbox. Flags are passed through.')
     .addHelpText('after', '\nAllowed components: api, controller, sandbox, operator, content, gateway\n' +
       'Shortcuts: a=api, c=controller, o=operator, s=sandbox\n' +
@@ -45,7 +45,7 @@ module.exports = (program) => {
           process.exit(1);
         }
         const normalizedArgs = normalizeArgs(args);
-        // Validate non-flag args are TaskSandbox components
+        // Validate non-flag args are TSBX components
         const allowed = new Set(['api','controller','sandbox','operator','content','gateway']);
         const invalid = (normalizedArgs || []).filter(a => !a.startsWith('-')).filter(a => !allowed.has(a));
         if (invalid.length) {

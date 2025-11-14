@@ -8,7 +8,7 @@ mod sandbox;
 
 #[derive(Parser)]
 #[command(name = "tsbx-sandbox")]
-#[command(about = "TaskSandbox Sandbox - Computer Use Sandbox inside sandbox containers")]
+#[command(about = "TSBX Sandbox - Computer Use Sandbox inside sandbox containers")]
 struct Args {
     /// API server URL
     #[arg(long, env = "TSBX_API_URL")]

@@ -1,7 +1,7 @@
 {
   "name": "@tsbx/cli",
   "version": "0.11.0",
-  "description": "TaskSandbox CLI - Computer use sandboxes",
+  "description": "TSBX CLI - Computer use sandboxes",
   "main": "index.js",
   "bin": {
     "tsbx": "./index.js"
@@ -16,7 +16,7 @@
     "remote-work",
     "manual-work"
   ],
-  "author": "TaskSandbox Team",
+  "author": "TSBX Team",
   "license": "UNLICENSED",
   "dependencies": {
     "chalk": "^4.1.2",

@@ -46,7 +46,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Push Docker images for TaskSandbox components to registry"
+  echo "Push Docker images for TSBX components to registry"
   echo ""
   echo "Components:"
   echo "  api         Push the api image"
@@ -104,7 +104,7 @@ if [ ${#COMPONENTS[@]} -eq 0 ]; then
   COMPONENTS=("api" "controller" "sandbox" "operator" "gateway")
 fi
 
-print_status "Pushing TaskSandbox Docker images"
+print_status "Pushing TSBX Docker images"
 print_status "Tag: $TAG"
 print_status "Registry: $REGISTRY"
 print_status "Components: ${COMPONENTS[*]}"

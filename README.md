@@ -1,7 +1,7 @@
 <p align="center">
-  <img src="assets/logo.png" alt="TaskSandbox logo" width="140" />
+  <img src="assets/logo.png" alt="TSBX logo" width="140" />
 </p>
-<h1 align="center">TaskSandbox</h1>
+<h1 align="center">TSBX</h1>
 
 <p align="center">
   <a href="https://ractorlabs.com/"><img src="https://img.shields.io/badge/website-ractorlabs.com-0A66C2?logo=google-chrome&logoColor=white" alt="Website" /></a>
@@ -12,11 +12,11 @@
 
 </p>
 
-## What is TaskSandbox
+## What is TSBX
 
-TaskSandbox is a Rust-first platform for orchestrating long-lived, stateful agent sandboxes. It provisions Docker-isolated workspaces with persistent storage, wires them to an OpenAI-compatible inference endpoint, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
+TSBX is a Rust-first platform for orchestrating long-lived, stateful agent sandboxes. It provisions Docker-isolated workspaces with persistent storage, wires them to an OpenAI-compatible inference endpoint, and exposes a CLI, REST API, and Operator UI so teams can automate and supervise computer-use workflows.
 
-## Why TaskSandbox
+## Why TSBX
 
 - Sandbox isolation & persistence — Each sandbox runs inside a managed Docker container with a dedicated `/sandbox` volume and private `.env`, created by the controller and reused across stop/restart cycles.
 - Built-in agent tooling — The sandbox runtime ships a tool registry (bash execution, file editing, plan management, publish/stop helpers, etc.) so agents can automate real workflows safely.
@@ -74,7 +74,7 @@ tsbx start mysql api controller operator gateway
 
 > `tsbx start` fails if any of `TSBX_INFERENCE_URL`, `TSBX_INFERENCE_API_KEY`, or `TSBX_INFERENCE_MODEL` are unset or blank. Use flags (`--inference-url`, `--inference-api-key`, `--inference-model`) instead of environment variables if you prefer.
 
-4) Configure host branding (optional; defaults to `TaskSandbox` + `http://localhost` if unset) and any host overrides
+4) Configure host branding (optional; defaults to `TSBX` + `http://localhost` if unset) and any host overrides
 
 ```bash
 # macOS/Linux
@@ -92,7 +92,7 @@ export TSBX_HOST_URL="http://localhost:8080"
 
 If you previously started the gateway, run `tsbx stop gateway` before `tsbx start ...` so the new port mapping is applied.
 
-5) Start TaskSandbox core services
+5) Start TSBX core services
 
 ```bash
 tsbx start
@@ -105,7 +105,7 @@ tsbx start
 
 ## Use a Custom Inference Endpoint
 
-TaskSandbox speaks to any OpenAI-compatible `/v1/chat/completions` service. Override the defaults before starting services:
+TSBX speaks to any OpenAI-compatible `/v1/chat/completions` service. Override the defaults before starting services:
 
 ```bash
 # Point to your own inference host

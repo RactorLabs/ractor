@@ -35,7 +35,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Link the TaskSandbox CLI for development (npm link)"
+    echo "Link the TSBX CLI for development (npm link)"
     echo "This creates a live development link so changes reflect immediately"
     echo ""
     echo "Options:"
@@ -78,7 +78,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "🔗 Linking TaskSandbox CLI for development"
+print_status "🔗 Linking TSBX CLI for development"
 
 # Check if Node.js is installed
 if ! command -v node >/dev/null 2>&1; then
@@ -168,7 +168,7 @@ echo "  tsbx sandbox start    # Start interactive sandbox"
 # Show installed version
 package_version=$(node -p "require('./package.json').version" 2>/dev/null || echo "unknown")
 echo ""
-print_status "Linked TaskSandbox CLI version: $package_version"
+print_status "Linked TSBX CLI version: $package_version"
 
 # Check if tsbx command is available
 echo ""

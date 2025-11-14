@@ -21,7 +21,7 @@ pub async fn run_rest_server() -> Result<()> {
     // Set up cleanup on exit
     let pid_file_cleanup = pid_file.to_string();
     ctrlc::set_handler(move || {
-        info!("Shutting down TaskSandbox API...");
+        info!("Shutting down TSBX API...");
         let _ = fs::remove_file(&pid_file_cleanup);
         std::process::exit(0);
     })?;
@@ -35,7 +35,7 @@ pub async fn run_rest_server() -> Result<()> {
 |  _ < (_| |\ V  V / (_) | | | (__ 
 |_| \_\__,_| \_/\_/ \___/|_|  \___|
                                   
-Starting TaskSandbox REST API service...
+Starting TSBX REST API service...
 PID: {}
 "#,
         pid

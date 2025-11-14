@@ -23,7 +23,7 @@ module.exports = (program) => {
     .description('Reset Docker: remove ALL containers, images, volumes, networks (destructive)')
     .option('-y, --yes', 'Confirm without prompting (non-interactive)')
     .addHelpText('after', '\n' +
-      'WARNING: This resets your entire Docker environment, not just TaskSandbox.\n' +
+      'WARNING: This resets your entire Docker environment, not just TSBX.\n' +
       '\nExamples:\n' +
       '  $ tsbx reset           # interactive confirmation\n' +
       '  $ tsbx reset -y       # non-interactive\n')

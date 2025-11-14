@@ -144,7 +144,7 @@ module.exports = (program) => {
         const tag = readProjectVersionOrLatest();
 
         // Resolve host branding and URL only here (script-level default allowed)
-        const TSBX_HOST_NAME = process.env.TSBX_HOST_NAME || 'TaskSandbox';
+        const TSBX_HOST_NAME = process.env.TSBX_HOST_NAME || 'TSBX';
         const TSBX_HOST_URL = (process.env.TSBX_HOST_URL || 'http://localhost').replace(/\/$/, '');
 
         function withPort(baseUrl, port) {
@@ -166,7 +166,7 @@ module.exports = (program) => {
           } catch (_) { return false; }
         }
 
-        async function resolveTaskSandboxImage(component, localShortName, remoteRepo, tag) {
+        async function resolveTSBXImage(component, localShortName, remoteRepo, tag) {
           const localName = `${localShortName}:${tag}`;
           if (await imageExistsLocally(localName)) {
             console.log(chalk.blue('[INFO] ') + `${component}: using local image ${localName}`);
@@ -194,7 +194,7 @@ module.exports = (program) => {
 
         // Note: resolve images lazily per requested component to avoid unnecessary pulls
 
-        console.log(chalk.blue('[INFO] ') + 'Starting TaskSandbox services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + 'Starting TSBX services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Image tag: ${tag}`);
         console.log(chalk.blue('[INFO] ') + `Pull base images: ${!!options.pull}`);
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
@@ -230,7 +230,7 @@ module.exports = (program) => {
         if (options.pull) {
           console.log(chalk.blue('[INFO] ') + 'Pulling base images...');
           try { await docker(['pull', 'mysql:8.0']); } catch (e) { console.log(chalk.yellow('[WARNING] ') + 'Failed to pull mysql:8.0; continuing...'); }
-          // TaskSandbox images are resolved lazily when each component starts.
+          // TSBX images are resolved lazily when each component starts.
           console.log();
         }
 
@@ -383,7 +383,7 @@ module.exports = (program) => {
                 }
               }
               if (!apiExists) {
-              const API_IMAGE = await resolveTaskSandboxImage('api','tsbx_api','registry.digitalocean.com/tsbx/tsbx_api', tag);
+              const API_IMAGE = await resolveTSBXImage('api','tsbx_api','registry.digitalocean.com/tsbx/tsbx_api', tag);
               const args = ['run','-d',
                 '--name','tsbx_api',
                 '--network','tsbx_network',
@@ -397,8 +397,8 @@ module.exports = (program) => {
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`,
-                ...(options.apiTaskSandboxHost ? ['-e', `TSBX_HOST=${options.apiTaskSandboxHost}`] : []),
-                ...(options.apiTaskSandboxPort ? ['-e', `TSBX_PORT=${options.apiTaskSandboxPort}`] : []),
+                ...(options.apiTSBXHost ? ['-e', `TSBX_HOST=${options.apiTSBXHost}`] : []),
+                ...(options.apiTSBXPort ? ['-e', `TSBX_PORT=${options.apiTSBXPort}`] : []),
                 API_IMAGE
               ];
               await docker(args);
@@ -447,7 +447,7 @@ module.exports = (program) => {
                 }
               }
 
-              const sandboxImage = options.controllerSandboxImage || await resolveTaskSandboxImage('sandbox','tsbx_sandbox','registry.digitalocean.com/tsbx/tsbx_sandbox', tag);
+              const sandboxImage = options.controllerSandboxImage || await resolveTSBXImage('sandbox','tsbx_sandbox','registry.digitalocean.com/tsbx/tsbx_sandbox', tag);
               const controllerDbUrl = options.controllerDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx';
               const controllerJwt = options.controllerJwtSecret || process.env.JWT_SECRET || 'development-secret-key';
               const controllerRustLog = options.controllerRustLog || 'info';
@@ -470,7 +470,7 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${controllerRustLog}`
               ];
               // append image ref last
-              args.push(await resolveTaskSandboxImage('controller','tsbx_controller','registry.digitalocean.com/tsbx/tsbx_controller', tag));
+              args.push(await resolveTSBXImage('controller','tsbx_controller','registry.digitalocean.com/tsbx/tsbx_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
               console.log();
@@ -489,7 +489,7 @@ module.exports = (program) => {
                 // If container exists, ensure it matches the desired image; recreate if not
                 const running = await containerRunning('tsbx_operator');
                 const currentId = await containerImageId('tsbx_operator');
-              const desiredId = await imageId(await resolveTaskSandboxImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
+              const desiredId = await imageId(await resolveTSBXImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
                 if (currentId && desiredId && currentId !== desiredId) {
                   console.log(chalk.blue('[INFO] ') + 'Operator image changed; recreating container to apply updates...');
                   try { await docker(['rm','-f','tsbx_operator']); } catch (_) {}
@@ -514,7 +514,7 @@ module.exports = (program) => {
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
               );
-              args.push(await resolveTaskSandboxImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
+              args.push(await resolveTSBXImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
               console.log();
@@ -570,7 +570,7 @@ module.exports = (program) => {
               const args = ['run'];
               if (detached) args.push('-d');
               args.push('--name','tsbx_gateway','--network','tsbx_network','-p',`${hostPort}:80`);
-              args.push(await resolveTaskSandboxImage('gateway','tsbx_gateway','registry.digitalocean.com/tsbx/tsbx_gateway', tag));
+              args.push(await resolveTSBXImage('gateway','tsbx_gateway','registry.digitalocean.com/tsbx/tsbx_gateway', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + `Gateway container started (port ${hostPort})`);
               console.log();
@@ -593,7 +593,7 @@ module.exports = (program) => {
         if (status && status.trim()) {
           console.log(status);
           console.log();
-          console.log(chalk.green('[SUCCESS] ') + '🎉 TaskSandbox services are now running!');
+          console.log(chalk.green('[SUCCESS] ') + '🎉 TSBX services are now running!');
           console.log();
           console.log(chalk.blue('[INFO] ') + 'Service URLs:');
           try {
@@ -625,7 +625,7 @@ module.exports = (program) => {
           console.log("  • View logs: docker logs <container_name>");
           console.log("  • Check status: docker ps --filter 'name=tsbx_'");
         } else {
-          console.error(chalk.red('[ERROR] ') + 'No TaskSandbox containers are running');
+          console.error(chalk.red('[ERROR] ') + 'No TSBX containers are running');
           process.exit(1);
         }
       } catch (error) {

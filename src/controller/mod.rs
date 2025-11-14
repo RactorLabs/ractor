@@ -6,7 +6,7 @@ pub use sandbox_manager::SandboxManager;
 use anyhow::Result;
 
 pub async fn run() -> Result<()> {
-    tracing::info!("Starting TaskSandbox Controller...");
+    tracing::info!("Starting TSBX Controller...");
 
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 

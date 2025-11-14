@@ -14,8 +14,24 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
+const DEFAULT_INSTRUCTIONS: &str = r#"# Sandbox Instructions
+
+Use this space to describe the sandbox session and any expectations for the agent or future operators.
+
+- Summarize the current objectives or tasks.
+- List important commands or reminders (avoid copying secrets).
+- Capture follow-up ideas or troubleshooting notes.
+"#;
+
+const DEFAULT_SETUP_SCRIPT: &str = r#"#!/usr/bin/env bash
+# TSBX Sandbox setup script.
+# Add commands here to prepare the environment before tasks run.
+# The script executes inside /sandbox; remove or replace these comments as needed.
+
+"#;
+
 pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
-    tracing::info!("Starting TaskSandbox Sandbox...");
+    tracing::info!("Starting TSBX Sandbox...");
     tracing::info!("Connecting to API: {}", api_url);
     tracing::info!("Sandbox ID: {}", sandbox_id);
 
@@ -60,7 +76,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     });
 
     // Initialize API client
-    let api_client = Arc::new(api::TaskSandboxClient::new(config.clone()));
+    let api_client = Arc::new(api::TSBXClient::new(config.clone()));
 
     // Initialize inference client
     let inference_client = match inference::InferenceClient::new(&inference_url) {
@@ -90,7 +106,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     // Ensure sandbox instructions file exists so agents can supply custom guidance.
     let instructions_path = std::path::Path::new("/sandbox/instructions.md");
     if !instructions_path.exists() {
-        if let Err(e) = std::fs::write(instructions_path, "") {
+        if let Err(e) = std::fs::write(instructions_path, DEFAULT_INSTRUCTIONS) {
             warn!(
                 "Failed to initialize instructions file at {}: {}",
                 instructions_path.display(),
@@ -118,6 +134,21 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
 
     // Check if a setup script is expected based on environment variable
     let has_setup_script = std::env::var("TSBX_HAS_SETUP").is_ok();
+
+    if !has_setup_script && !setup_script.exists() {
+        if let Err(e) = std::fs::write(setup_script, DEFAULT_SETUP_SCRIPT) {
+            warn!(
+                "Failed to initialize setup script at {}: {}",
+                setup_script.display(),
+                e
+            );
+        } else {
+            info!(
+                "Initialized empty setup script at {}",
+                setup_script.display()
+            );
+        }
+    }
 
     if has_setup_script {
         // Setup script is expected, wait up to 2 seconds for it to be written by controller
@@ -192,7 +223,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
         .expect("TSBX_HOST_URL must be set by the start script")
         .trim_end_matches('/')
         .to_string();
-    let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TaskSandbox".to_string());
+    let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
     let operator_url = format!("{}", base_url);
     let api_url = format!("{}/api", base_url);
     info!("{} environment detected", host_name);

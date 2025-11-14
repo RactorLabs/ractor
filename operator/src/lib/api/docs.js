@@ -1,4 +1,4 @@
-// API documentation data source for TaskSandbox UI
+// API documentation data source for TSBX UI
 // Covers endpoints defined in src/api/rest/routes.rs
 import { getHostUrl } from '../branding.js';
 

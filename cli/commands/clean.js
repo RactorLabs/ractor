@@ -5,7 +5,7 @@ const display = require('../lib/display');
 module.exports = (program) => {
   program
     .command('clean')
-    .description('Clean TaskSandbox resources by type(s): containers, images, volumes, networks (scoped)')
+    .description('Clean TSBX resources by type(s): containers, images, volumes, networks (scoped)')
     .argument('<types...>', 'One or more of: containers, images, volumes, networks')
     .addHelpText('after', '\n' +
       'Scope:\n' +
@@ -26,7 +26,7 @@ module.exports = (program) => {
           cmd.help({ error: true });
         }
         // Show command box
-        display.showCommandBox(`${display.icons.clean} Clean TaskSandbox`, { operation: `Remove: ${list.join(', ')}` });
+        display.showCommandBox(`${display.icons.clean} Clean TSBX`, { operation: `Remove: ${list.join(', ')}` });
 
         // Check Docker availability
         const dockerAvailable = await docker.checkDocker();
@@ -36,20 +36,20 @@ module.exports = (program) => {
         }
 
         if (list.includes('containers')) {
-          display.info('Stopping and removing TaskSandbox containers...');
+          display.info('Stopping and removing TSBX containers...');
           const res = await docker.execDocker(['ps', '-a', '--format', '{{.Names}}'], { silent: true });
           const names = (res.stdout || '').trim().split('\n').filter(Boolean).filter(n => /^tsbx_/.test(n));
           if (names.length) {
             try { await docker.execDocker(['stop', ...names], { silent: true }); } catch(_) {}
             try { await docker.execDocker(['rm', '-f', ...names], { silent: true }); } catch(_) {}
-            display.success(`Removed ${names.length} TaskSandbox containers`);
+            display.success(`Removed ${names.length} TSBX containers`);
           } else {
-            display.success('No TaskSandbox containers found');
+            display.success('No TSBX containers found');
           }
         }
 
         if (list.includes('images')) {
-          display.info('Removing TaskSandbox images...');
+          display.info('Removing TSBX images...');
           const res = await docker.execDocker(['images', '--format', '{{.Repository}}:{{.Tag}} {{.ID}}'], { silent: true });
           const lines = (res.stdout || '').trim().split('\n').filter(Boolean);
           const imgs = lines.map(l => ({ ref: l.split(' ')[0], id: l.split(' ')[1] }))
@@ -57,26 +57,26 @@ module.exports = (program) => {
           const ids = imgs.map(o => o.id);
           if (ids.length) {
             try { await docker.execDocker(['rmi', '-f', ...ids], { silent: true }); } catch(_) {}
-            display.success(`Removed ${ids.length} TaskSandbox images`);
+            display.success(`Removed ${ids.length} TSBX images`);
           } else {
-            display.success('No TaskSandbox images found');
+            display.success('No TSBX images found');
           }
         }
 
         if (list.includes('volumes')) {
-          display.info('Removing TaskSandbox volumes...');
+          display.info('Removing TSBX volumes...');
           const res = await docker.execDocker(['volume', 'ls', '--format', '{{.Name}}'], { silent: true });
           const vols = (res.stdout || '').trim().split('\n').filter(Boolean).filter(v => /^tsbx_/.test(v));
           if (vols.length) {
             try { await docker.execDocker(['volume', 'rm', '-f', ...vols], { silent: true }); } catch(_) {}
-            display.success(`Removed ${vols.length} TaskSandbox volumes`);
+            display.success(`Removed ${vols.length} TSBX volumes`);
           } else {
-            display.success('No TaskSandbox volumes found');
+            display.success('No TSBX volumes found');
           }
         }
 
         if (list.includes('networks')) {
-          display.info('Removing TaskSandbox networks...');
+          display.info('Removing TSBX networks...');
           try { await docker.execDocker(['network', 'rm', 'tsbx_network'], { silent: true }); display.success('Removed network tsbx_network'); }
           catch(_) { display.success('Network tsbx_network not present'); }
         }

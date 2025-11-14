@@ -42,7 +42,7 @@ print_error() {
 usage() {
   echo "Usage: $0 [OPTIONS] [COMPONENTS...]"
   echo ""
-  echo "Build Docker images for TaskSandbox components"
+  echo "Build Docker images for TSBX components"
   echo ""
   echo "Components:"
   echo "  api         Build the api image"
@@ -98,7 +98,7 @@ if [[ " ${COMPONENTS[*]} " =~ " all " ]]; then
   COMPONENTS=("api" "sandbox" "controller" "operator" "gateway")
 fi
 
-print_status "Building TaskSandbox Docker images"
+print_status "Building TSBX Docker images"
 if [[ -n "${PROJECT_VERSION:-}" ]]; then
   print_status "Tag: $TAG (from Cargo.toml $PROJECT_VERSION)"
 else

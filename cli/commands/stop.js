@@ -39,29 +39,29 @@ async function docker(args, opts = {}) {
 module.exports = (program) => {
   program
     .command('stop')
-    .description('Stop and remove TaskSandbox component containers (defaults to all if none specified)')
-    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sandboxes (all sandbox containers). Shortcuts: a=api, c=controller, o=operator, s=sandboxes. If omitted, stops core TaskSandbox components; stop app components explicitly.')
+    .description('Stop and remove TSBX component containers (defaults to all if none specified)')
+    .argument('[components...]', 'Components to stop. Allowed: api, controller, operator, gateway, sandboxes (all sandbox containers). Shortcuts: a=api, c=controller, o=operator, s=sandboxes. If omitted, stops core TSBX components; stop app components explicitly.')
     .addHelpText('after', '\n' +
       'Notes:\n' +
-      '  • Stops and removes only TaskSandbox component containers.\n' +
+      '  • Stops and removes only TSBX component containers.\n' +
       '  • Does not remove images, volumes, or networks.\n' +
       '  • Use component "sandboxes" to stop/remove all sandbox containers.\n' +
       '  • Component shortcuts: a=api, c=controller, o=operator, s=sandboxes.\n' +
       '\nExamples:\n' +
-      '  $ tsbx stop                     # stop all TaskSandbox components\n' +
+      '  $ tsbx stop                     # stop all TSBX components\n' +
       '  $ tsbx stop api controller      # stop specific components\n' +
       '  $ tsbx stop operator            # stop UI component\n' +
       '  $ tsbx stop sandboxes           # stop all sandbox containers\n')
     .action(async (inputComponents, _opts, cmd) => {
       try {
-        // Default to stopping all TaskSandbox components when none specified
+        // Default to stopping all TSBX components when none specified
         let components = Array.isArray(inputComponents) && inputComponents.length
           ? resolveComponentAliases(inputComponents)
           : [];
         if (!components || components.length === 0) {
           components = ['gateway','controller','operator','api'];
         }
-        // Validate component names (only TaskSandbox components)
+        // Validate component names (only TSBX components)
         const allowed = new Set(['api','controller','operator','gateway','sandboxes']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
@@ -69,7 +69,7 @@ module.exports = (program) => {
           cmd.help({ error: true });
         }
 
-        console.log(chalk.blue('[INFO] ') + 'Stopping TaskSandbox services with direct Docker management');
+        console.log(chalk.blue('[INFO] ') + 'Stopping TSBX services with direct Docker management');
         console.log(chalk.blue('[INFO] ') + `Components: ${components.join(', ')}`);
 
         console.log();
@@ -148,9 +148,9 @@ module.exports = (program) => {
         if (status && status.trim() && status.trim() !== 'NAMES\tSTATUS\tPORTS') {
           console.log(status);
           console.log();
-          console.log(chalk.yellow('[WARNING] ') + 'Some TaskSandbox containers are still running');
+          console.log(chalk.yellow('[WARNING] ') + 'Some TSBX containers are still running');
         } else {
-          console.log(chalk.green('[SUCCESS] ') + 'No TaskSandbox containers are running');
+          console.log(chalk.green('[SUCCESS] ') + 'No TSBX containers are running');
         }
 
         console.log();

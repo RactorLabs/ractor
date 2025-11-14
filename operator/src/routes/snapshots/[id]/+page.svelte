@@ -345,7 +345,7 @@
               {/if}
               {#if previewFile}
                 <div class="mt-3 border rounded">
-                  <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
+                  <div class="d-flex align-items-center justify-content-between px-3 py-2 border-bottom snapshot-preview-header">
                     <div class="d-flex flex-column">
                       <span class="fw-semibold">Preview: {previewFile.name}</span>
                       <span class="small text-body text-opacity-75">{previewFile.path}</span>
@@ -403,6 +403,9 @@
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
+  }
+  .snapshot-preview-header {
+    background-color: transparent;
   }
   .snapshot-trigger-badge {
     text-transform: uppercase;

@@ -21,8 +21,8 @@ async function exec(cmd, args = [], opts = {}) {
 module.exports = (program) => {
   program
     .command('fix')
-    .description('Attempt to repair common Docker/env issues for TaskSandbox')
-    .option('--pull', 'Pull TaskSandbox Docker images')
+    .description('Attempt to repair common Docker/env issues for TSBX')
+    .option('--pull', 'Pull TSBX Docker images')
     .option('--prune', 'Prune dangling images/cache after cleanup')
     .option('--sandboxes', 'Also force-remove all tsbx sandbox containers')
     .option('--link', 'Run ./scripts/link.sh if present (dev)')
@@ -41,7 +41,7 @@ module.exports = (program) => {
       '  $ tsbx fix --link\n')
     .action(async (options) => {
       try {
-        display.showCommandBox(`${display.icons.reset} TaskSandbox Fix`, { operation: 'Repair Docker/env for TaskSandbox' });
+        display.showCommandBox(`${display.icons.reset} TSBX Fix`, { operation: 'Repair Docker/env for TSBX' });
 
         // 1) Docker availability
         display.info('[1/6] Checking Docker availability...');
@@ -102,7 +102,7 @@ module.exports = (program) => {
 
         // 5) Optional: pull images
         if (options.pull) {
-          display.info('[5/6] Pulling TaskSandbox images (latest)...');
+          display.info('[5/6] Pulling TSBX images (latest)...');
           try { await docker.pull('latest'); display.success('Images pulled'); } catch (e) { display.warning('Image pull warning: ' + e.message); }
         } else {
           display.info('[5/6] Skipping image pull (use --pull to enable)');

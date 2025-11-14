@@ -34,7 +34,7 @@ print_error() {
 usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Publish the TaskSandbox CLI npm package"
+    echo "Publish the TSBX CLI npm package"
     echo ""
     echo "Options:"
     echo "  --dry-run               Show what would be published without actually publishing"
@@ -84,7 +84,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-print_status "Publishing TaskSandbox NPM CLI package"
+print_status "Publishing TSBX NPM CLI package"
 print_status "Tag: $NPM_TAG"
 print_status "Dry run: $DRY_RUN"
 
