@@ -14,18 +14,18 @@ use anyhow::Result;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
-const DEFAULT_INSTRUCTIONS: &str = r#"# Sandbox Instructions
+const DEFAULT_INSTRUCTIONS: &str = r#"# Startup instructions.md
 
-Use this space to describe the sandbox session and any expectations for the agent or future operators.
+Use this file to share the current sandbox goals and any expectations for future operators.
 
-- Summarize the current objectives or tasks.
-- List important commands or reminders (avoid copying secrets).
-- Capture follow-up ideas or troubleshooting notes.
+- Summarize active objectives or experiments.
+- List important commands or environment notes (avoid pasting secrets).
+- Capture follow-up ideas or troubleshooting reminders.
 "#;
 
 const DEFAULT_SETUP_SCRIPT: &str = r#"#!/usr/bin/env bash
-# TSBX Sandbox setup script.
-# Add commands here to prepare the environment before tasks run.
+# Startup setup.sh (bash)
+# Add commands here to prepare the sandbox environment before tasks run.
 # The script executes inside /sandbox; remove or replace these comments as needed.
 
 "#;

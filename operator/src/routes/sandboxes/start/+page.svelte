@@ -39,6 +39,12 @@ let idleTimeoutSeconds = 900; // default 15 minutes
 
   let loading = false;
   let error = null;
+  function handleCtrlEnter(event) {
+    if (event.key === 'Enter' && event.ctrlKey && !loading) {
+      event.preventDefault();
+      submit(event);
+    }
+  }
 
   onMount(() => {
     if (!isAuthenticated()) {
@@ -92,7 +98,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
       <div class="card-header d-flex align-items-center">
         <div class="fw-bold fs-20px">Start Sandbox</div>
         <div class="ms-auto d-flex align-items-center gap-2">
-          <div class="small text-body text-opacity-75 d-none d-sm-block">Defaults prefilled — adjust as needed</div>
+          <div class="small text-body text-opacity-75 d-none d-sm-block">Ctrl+Enter to submit</div>
           <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
             {#if loading}
               <span class="spinner-border spinner-border-sm me-2"></span>Submitting…
@@ -104,7 +110,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
       </div>
       <div class="card-body">
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
-        <form on:submit|preventDefault={submit}>
+        <form on:submit|preventDefault={submit} on:keydown={handleCtrlEnter}>
           <div class="row g-3">
             <div class="col-12">
               <label class="form-label" for="description">Description (optional)</label>
@@ -119,22 +125,17 @@ let idleTimeoutSeconds = 900; // default 15 minutes
                 class="form-control"
                 rows="3"
                 bind:value={startupTask}
-                on:keydown={(event) => {
-                  if (event.key === 'Enter' && event.ctrlKey && !loading) {
-                    submit(event);
-                  }
-                }}
               ></textarea>
-              <div class="form-text">Press Ctrl+Enter to queue the startup task.</div>
+              <div class="form-text">Use Ctrl+Enter anywhere on this page to submit.</div>
             </div>
 
             <div class="col-12 col-md-6">
-              <label class="form-label" for="instructions">Starting System Instruction (Markdown)</label>
+              <label class="form-label" for="instructions">Startup instructions.md (optional)</label>
               <textarea id="instructions" class="form-control font-monospace" rows="6" bind:value={instructions}></textarea>
               <div class="form-text">You can change these later by directly asking the sandbox to update its instructions.</div>
             </div>
             <div class="col-12 col-md-6">
-              <label class="form-label" for="setup">Starting Setup Script (bash)</label>
+              <label class="form-label" for="setup">Startup setup.sh (optional)</label>
               <textarea id="setup" class="form-control font-monospace" rows="6" bind:value={setup}></textarea>
               <div class="form-text">You can modify this later by asking the sandbox to update its setup.sh.</div>
             </div>
