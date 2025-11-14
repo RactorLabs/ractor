@@ -355,6 +355,35 @@ export function getApiDocs(base) {
           ]
         },
         {
+          method: 'GET',
+          path: '/api/v0/sandboxes/{id}/snapshots',
+          auth: 'bearer',
+          desc: 'List snapshots for a specific sandbox.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+          ],
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'PaginatedSnapshots' },
+          responses: [
+            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/snapshots',
+          auth: 'bearer',
+          desc: 'Create a snapshot of a sandbox. Blocks until controller reports completion or timeout.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Optional metadata stored with snapshot.' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"metadata":{"note":"before deploy"}}'`,
+          resp: { schema: 'Snapshot' },
+          responses: [
+            { status: 201, body: `{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{"note":"before deploy"}}` }
+          ]
+        },
+        {
           method: 'DELETE',
           path: '/api/v0/sandboxes/{id}',
           auth: 'bearer',
@@ -593,35 +622,6 @@ export function getApiDocs(base) {
             { status: 200 }
           ]
         },
-        {
-          method: 'GET',
-          path: '/api/v0/sandboxes/{id}/snapshots',
-          auth: 'bearer',
-          desc: 'List snapshots for a specific sandbox.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
-          ],
-          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>"`,
-          resp: { schema: 'PaginatedSnapshots' },
-          responses: [
-            { status: 200, body: `{"items":[{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{}}],"total":1,"limit":100,"offset":0,"page":1,"pages":1}` }
-          ]
-        },
-        {
-          method: 'POST',
-          path: '/api/v0/sandboxes/{id}/snapshots',
-          auth: 'bearer',
-          desc: 'Create a snapshot of a sandbox. Blocks until controller reports completion or timeout.',
-          params: [
-            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Optional metadata stored with snapshot.' }
-          ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/snapshots -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"metadata":{"note":"before deploy"}}'`,
-          resp: { schema: 'Snapshot' },
-          responses: [
-            { status: 201, body: `{"id":"snp_123","sandbox_id":"<id>","trigger_type":"manual","created_at":"2025-01-01T15:00:00Z","metadata":{"note":"before deploy"}}` }
-          ]
-        }
       ]
     },
   ];
