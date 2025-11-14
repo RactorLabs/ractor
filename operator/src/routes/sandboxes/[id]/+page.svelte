@@ -13,7 +13,8 @@
   import { auth } from '$lib/auth.js';
   import Card from '/src/components/bootstrap/Card.svelte';
   import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
-  import { getToken } from '$lib/auth.js';
+import { getToken } from '$lib/auth.js';
+import { setHeaderMeta, clearHeaderMeta } from '/src/stores/headerMeta.js';
 
   let md;
   try {
@@ -142,16 +143,17 @@
   let sending = false;
   let pollHandle = null;
   let runtimeSeconds = 0;
-  let currentSandboxSeconds = 0;
+  let idleDurationLabel = '';
   let topData = null;
+  $: idleDurationLabel = computeIdleDuration(sandbox?.idle_from);
   $: toolUsageEntries = (() => {
     try {
-      if (!topData || !topData.tool_usage) return [];
-      const obj = topData.tool_usage;
+      if (!topData || !topData.tool_count) return [];
+      const obj = topData.tool_count;
       if (typeof obj !== 'object' || obj === null) return [];
       return Object.entries(obj)
         .map(([name, value]) => [name, Number(value) || 0])
-        .filter(([, count]) => count > 0)
+        .filter(([tool, count]) => count > 0 && !isOutputToolName(tool))
         .sort((a, b) => b[1] - a[1]);
     } catch (_) {
       return [];
@@ -518,6 +520,17 @@
       return Number.isFinite(v) ? `${v.toFixed(1)}%` : '-';
     } catch (_) { return '-'; }
   }
+  function computeIdleDuration(idleFrom) {
+    try {
+      if (!idleFrom) return '';
+      const start = new Date(idleFrom);
+      if (Number.isNaN(start.getTime())) return '';
+      const now = new Date();
+      const diff = Math.floor((now.getTime() - start.getTime()) / 1000);
+      if (!Number.isFinite(diff) || diff <= 0) return '';
+      return fmtDuration(diff);
+    } catch (_) { return ''; }
+  }
   // File list kind counters for folder details
   function countKind(kind) {
     try { const k = String(kind || '').toLowerCase(); return (fmEntries || []).filter(e => String(e?.kind || '').toLowerCase() === k).length; } catch (_) { return 0; }
@@ -714,13 +727,19 @@
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/stats`);
       if (res.ok && res.data) {
         topData = res.data;
-        const total = Number(res.data?.total_runtime_seconds ?? 0);
-        if (Number.isFinite(total) && total >= 0) runtimeSeconds = total;
-        const current = Number(res.data?.current_runtime_seconds ?? 0);
-        currentSandboxSeconds = Number.isFinite(current) && current >= 0 ? current : 0;
+        const runtime = Number(res.data?.runtime_seconds ?? 0);
+        if (Number.isFinite(runtime) && runtime >= 0) runtimeSeconds = runtime;
+        setHeaderMeta({
+          model: res.data?.inference_model || '',
+          url: res.data?.inference_url || ''
+        });
         _statsFetchedAt = Date.now();
+      } else {
+        clearHeaderMeta();
       }
-    } catch (_) {}
+    } catch (_) {
+      clearHeaderMeta();
+    }
   }
 
   async function loadTaskDetail(taskId, { force = false, showSpinner = true } = {}) {
@@ -904,7 +923,6 @@
   function taskSteps(task) {
     try {
       if (Array.isArray(task?.steps)) return task.steps;
-      if (Array.isArray(task?.segments)) return task.segments;
       return [];
     } catch (_) { return []; }
   }
@@ -993,6 +1011,9 @@
       let current = null;
       steps.forEach((step, idx) => {
         const type = stepType(step);
+        if (type === 'final') {
+          return;
+        }
         if (type === 'tool_call') {
           if (current) {
             groups.push(current);
@@ -1034,13 +1055,31 @@
       return mapped.filter((group) => {
         const toolName = group.toolName || '';
         if (toolName && isOutputToolName(toolName)) return false;
-        const hasTitle = typeof group.title === 'string' && group.title.trim().length > 0;
+
+        const extras = Array.isArray(group.extras) ? group.extras : [];
+        const hasNonFinalExtras = extras.some((extra) => {
+          const t = stepType(extra);
+          return t !== 'final';
+        });
+
+        const title = typeof group.title === 'string' ? group.title.trim() : '';
+        const hasNonFinalTitle = title && title.toLowerCase() !== 'final';
         const hasTool = typeof toolName === 'string' && toolName.trim().length > 0;
         const hasCommentary = typeof group.commentary === 'string' && group.commentary.trim().length > 0;
         const hasInput = hasValue(group.input);
         const hasOutput = hasValue(group.output);
-        const hasExtras = Array.isArray(group.extras) && group.extras.length > 0;
-        return hasTitle || hasTool || hasCommentary || hasInput || hasOutput || hasExtras;
+
+        const isFinalOnly =
+          !hasTool &&
+          !hasCommentary &&
+          !hasInput &&
+          !hasOutput &&
+          !hasNonFinalExtras &&
+          (!title || title.toLowerCase() === 'final');
+
+        if (isFinalOnly) return false;
+
+        return hasTool || hasCommentary || hasInput || hasOutput || hasNonFinalExtras || hasNonFinalTitle;
       });
     } catch (_) { return []; }
   }
@@ -1208,6 +1247,7 @@
     $appOptions.appContentClass = 'p-3';
     // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
+    clearHeaderMeta();
 
     // Initialize folder/file path from URL before first fetch
     try {
@@ -1230,9 +1270,10 @@
     } catch (e) {
       error = e.message || String(e);
       loading = false;
+      clearHeaderMeta();
     }
   });
-onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
+onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; clearHeaderMeta(); });
 onDestroy(() => { fmRevokePreviewUrl(); });
 </script>
 
@@ -1350,10 +1391,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             </div>
             <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
             {#if sandbox}
-              <div class="small text-body-secondary mt-1">Idle Timeout: {fmtDuration(sandbox.idle_timeout_seconds)}</div>
               {#if isAdmin}
                 <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
               {/if}
+              <div class="small text-body-secondary mt-1">
+                Idle Timeout: {fmtDuration(Number(sandbox.idle_timeout_seconds ?? 0))}
+                {#if idleDurationLabel}&nbsp;(Idle for {idleDurationLabel}){/if}
+              </div>
             {/if}
             <!-- Public URL in main card -->
             
@@ -1424,29 +1468,26 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                 </div>
               {/if}
-              <div class="mt-2">Runtime: {fmtDuration(runtimeSeconds)}{#if currentSandboxSeconds > 0}&nbsp;(Current sandbox: {fmtDuration(currentSandboxSeconds)}){/if}</div>
+              <div class="mt-2">Runtime: {fmtDuration(runtimeSeconds)}</div>
               {#if topData}
                 <div class="mt-2">
-                  Tasks Completed: {fmtInt(topData.tasks_completed_total ?? topData.tasks_completed ?? 0)}
+                  Tasks Completed: {fmtInt(topData.tasks_completed ?? 0)}
                   {#if topData.total_tasks !== undefined} / {fmtInt(topData.total_tasks)} total{/if}
                 </div>
-                {#if topData.inference_model}
-                  <div class="mt-1">Model: <span class="font-monospace">{topData.inference_model}</span></div>
-                {/if}
-                {#if topData.inference_url}
-                  <div class="mt-1 text-truncate" title={topData.inference_url}>Inference: <span class="font-monospace small">{topData.inference_url}</span></div>
-                {/if}
                 <div class="mt-1">
                   Tokens:
-                  <span class="font-monospace">{fmtInt(topData.inference_prompt_tokens ?? 0)} prompt</span>
-                  ·
-                  <span class="font-monospace">{fmtInt(topData.inference_completion_tokens ?? 0)} completion</span>
+                  <span class="font-monospace">{fmtInt(topData.tokens_prompt ?? 0)} prompt</span>
+                  |
+                  <span class="font-monospace">{fmtInt(topData.tokens_completion ?? 0)} completion</span>
                 </div>
                 {#if toolUsageEntries.length}
                   <div class="mt-1">
                     Tool Calls:
                     {#each toolUsageEntries as [tool, count], idx (tool)}
-                      <span class="font-monospace">{tool}</span> × {fmtInt(count)}{#if idx < toolUsageEntries.length - 1} · {/if}
+                      <span class="font-monospace">{tool}</span> × {fmtInt(count)}
+                      {#if idx < toolUsageEntries.length - 1}
+                        <span class="text-body-tertiary mx-2">|</span>
+                      {/if}
                     {/each}
                   </div>
                 {/if}
@@ -1512,7 +1553,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                 </div>
                 <section class="mb-3">
-                  <h6 class="fw-semibold fs-6 mb-2">Input Prompt</h6>
+                  <h6 class="fw-semibold fs-6 mb-2">Input</h6>
                   {#if taskInputItems(displayTask).length}
                     {#each taskInputItems(displayTask) as item}
                       {#if String(item?.type || '').toLowerCase() === 'text'}

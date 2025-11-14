@@ -68,12 +68,11 @@ pub struct SandboxResponse {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
-    pub inference_prompt_tokens: i64,
-    pub inference_completion_tokens: i64,
-    pub tool_usage: serde_json::Value,
-    pub total_runtime_seconds: i64,
-    pub current_runtime_seconds: i64,
-    pub tasks_completed_total: i64,
+    pub tokens_prompt: i64,
+    pub tokens_completion: i64,
+    pub tool_count: serde_json::Value,
+    pub runtime_seconds: i64,
+    pub tasks_completed: i64,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -157,7 +156,7 @@ pub struct PaginatedSandboxes {
 pub struct SandboxStatsResponse {
     pub sandbox_id: String,
     pub container_state: String,
-    pub tasks_completed_total: i64,
+    pub tasks_completed: i64,
     pub total_tasks: i64,
     pub cpu_usage_percent: f64,
     pub cpu_limit_cores: f64,
@@ -165,12 +164,11 @@ pub struct SandboxStatsResponse {
     pub memory_limit_bytes: u64,
     pub inference_url: Option<String>,
     pub inference_model: Option<String>,
-    pub inference_prompt_tokens: i64,
-    pub inference_completion_tokens: i64,
-    pub inference_total_tokens: i64,
-    pub tool_usage: serde_json::Value,
-    pub total_runtime_seconds: i64,
-    pub current_runtime_seconds: i64,
+    pub tokens_prompt: i64,
+    pub tokens_completion: i64,
+    pub tokens_total: i64,
+    pub tool_count: serde_json::Value,
+    pub runtime_seconds: i64,
     pub captured_at: String,
 }
 
@@ -207,12 +205,11 @@ impl SandboxResponse {
             idle_timeout_seconds: sandbox.idle_timeout_seconds,
             idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
-            inference_prompt_tokens: sandbox.inference_prompt_tokens,
-            inference_completion_tokens: sandbox.inference_completion_tokens,
-            tool_usage: sandbox.tool_usage,
-            total_runtime_seconds: sandbox.total_runtime_seconds,
-            current_runtime_seconds: sandbox.current_runtime_seconds,
-            tasks_completed_total: sandbox.tasks_completed_total,
+            tokens_prompt: sandbox.tokens_prompt,
+            tokens_completion: sandbox.tokens_completion,
+            tool_count: sandbox.tool_count,
+            runtime_seconds: sandbox.runtime_seconds,
+            tasks_completed: sandbox.tasks_completed,
         })
     }
 }
@@ -800,9 +797,9 @@ pub async fn list_sandboxes(
         SELECT id, created_by, state, description, snapshot_id,
                created_at, last_activity_at, metadata, tags,
                idle_timeout_seconds, idle_from, busy_from,
-               inference_prompt_tokens, inference_completion_tokens,
-               tool_usage, total_runtime_seconds, current_runtime_seconds,
-               tasks_completed_total
+               tokens_prompt, tokens_completion,
+               tool_count, runtime_seconds,
+               tasks_completed
         FROM sandboxes
         {}
         ORDER BY created_at DESC
@@ -1328,7 +1325,7 @@ pub async fn get_sandbox_stats(
 
     let mut sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
-    let tasks_completed_total: i64 = sqlx::query_scalar(
+    let tasks_completed: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND LOWER(status) = 'completed'"#,
     )
     .bind(&sandbox.id)
@@ -1355,8 +1352,7 @@ pub async fn get_sandbox_stats(
                 ))
             })?;
 
-    let (total_runtime_seconds, current_runtime_seconds) =
-        compute_runtime_metrics(&state, &sandbox).await?;
+    let runtime_seconds = compute_runtime_seconds(&state, &sandbox).await?;
 
     let container_name = format!("tsbx_sandbox_{}", sandbox.id);
     let mut container_state = sandbox.state.clone();
@@ -1392,13 +1388,12 @@ pub async fn get_sandbox_stats(
     sqlx::query(
         r#"
         UPDATE sandboxes
-        SET total_runtime_seconds = ?, current_runtime_seconds = ?, tasks_completed_total = ?
+        SET runtime_seconds = ?, tasks_completed = ?
         WHERE id = ?
         "#,
     )
-    .bind(total_runtime_seconds)
-    .bind(current_runtime_seconds)
-    .bind(tasks_completed_total)
+    .bind(runtime_seconds)
+    .bind(tasks_completed)
     .bind(&sandbox.id)
     .execute(&*state.db)
     .await
@@ -1410,18 +1405,17 @@ pub async fn get_sandbox_stats(
         ))
     })?;
 
-    sandbox.total_runtime_seconds = total_runtime_seconds;
-    sandbox.current_runtime_seconds = current_runtime_seconds;
-    sandbox.tasks_completed_total = tasks_completed_total;
+    sandbox.runtime_seconds = runtime_seconds;
+    sandbox.tasks_completed = tasks_completed;
 
-    let inference_total_tokens = sandbox
-        .inference_prompt_tokens
-        .saturating_add(sandbox.inference_completion_tokens);
+    let tokens_total = sandbox
+        .tokens_prompt
+        .saturating_add(sandbox.tokens_completion);
 
     let response = SandboxStatsResponse {
         sandbox_id: sandbox.id.clone(),
         container_state,
-        tasks_completed_total,
+        tasks_completed,
         total_tasks,
         cpu_usage_percent,
         cpu_limit_cores,
@@ -1429,12 +1423,11 @@ pub async fn get_sandbox_stats(
         memory_limit_bytes,
         inference_url,
         inference_model,
-        inference_prompt_tokens: sandbox.inference_prompt_tokens,
-        inference_completion_tokens: sandbox.inference_completion_tokens,
-        inference_total_tokens,
-        tool_usage: sandbox.tool_usage.clone(),
-        total_runtime_seconds,
-        current_runtime_seconds,
+        tokens_prompt: sandbox.tokens_prompt,
+        tokens_completion: sandbox.tokens_completion,
+        tokens_total,
+        tool_count: sandbox.tool_count.clone(),
+        runtime_seconds,
         captured_at: Utc::now().to_rfc3339(),
     };
 
@@ -1555,10 +1548,7 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
     }))
 }
 
-async fn compute_runtime_metrics(
-    state: &AppState,
-    sandbox: &Sandbox,
-) -> Result<(i64, i64), ApiError> {
+async fn compute_runtime_seconds(state: &AppState, sandbox: &Sandbox) -> Result<i64, ApiError> {
     let rows: Vec<(DateTime<Utc>, serde_json::Value)> = sqlx::query_as(
         r#"SELECT created_at, steps FROM sandbox_tasks WHERE sandbox_id = ? ORDER BY created_at ASC"#,
     )
@@ -1567,9 +1557,8 @@ async fn compute_runtime_metrics(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
 
-    let mut total: i64 = 0;
     let mut last_restarted: Option<DateTime<Utc>> = None;
-    let mut current_sandbox: i64 = 0;
+    let mut last_runtime_snapshot: Option<i64> = None;
 
     for (row_created_at, output) in rows.into_iter() {
         if let Some(items) = output.as_array() {
@@ -1586,19 +1575,7 @@ async fn compute_runtime_metrics(
                 } else if t == "terminated" || t == "deleted" {
                     if let Some(rs) = it.get("runtime_seconds").and_then(|v| v.as_i64()) {
                         if rs > 0 {
-                            total += rs;
-                        }
-                    } else {
-                        let end_at = it
-                            .get("at")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.with_timezone(&Utc))
-                            .unwrap_or(row_created_at);
-                        let start_at = last_restarted.unwrap_or(sandbox.created_at);
-                        let delta = (end_at - start_at).num_seconds();
-                        if delta > 0 {
-                            total += delta;
+                            last_runtime_snapshot = Some(rs);
                         }
                     }
                 }
@@ -1606,17 +1583,18 @@ async fn compute_runtime_metrics(
         }
     }
 
-    if sandbox.state.to_lowercase() != crate::shared::models::constants::SANDBOX_STATE_TERMINATED {
+    if sandbox
+        .state
+        .to_lowercase()
+        .ne(crate::shared::models::constants::SANDBOX_STATE_TERMINATED)
+    {
         let start_at = last_restarted.unwrap_or(sandbox.created_at);
         let now = Utc::now();
         let delta = (now - start_at).num_seconds();
-        if delta > 0 {
-            total += delta;
-            current_sandbox = delta;
-        }
+        return Ok(delta.max(0));
     }
 
-    Ok((total, current_sandbox))
+    Ok(last_runtime_snapshot.unwrap_or(0))
 }
 
 fn compute_cpu_percent(stats: &Stats) -> f64 {
@@ -1633,10 +1611,18 @@ fn compute_cpu_percent(stats: &Stats) -> f64 {
     let online_cpus = stats.cpu_stats.online_cpus.unwrap_or(1) as f64;
 
     if cpu_delta > 0 && system_delta > 0 && online_cpus > 0.0 {
-        (cpu_delta as f64 / system_delta as f64) * online_cpus * 100.0
-    } else {
-        0.0
+        return (cpu_delta as f64 / system_delta as f64) * online_cpus * 100.0;
     }
+
+    // Fallback: when Docker does not provide precpu stats (one-shot call),
+    // approximate using current totals.
+    let total_usage = stats.cpu_stats.cpu_usage.total_usage as f64;
+    let system_usage = stats.cpu_stats.system_cpu_usage.unwrap_or(0) as f64;
+    if total_usage > 0.0 && system_usage > 0.0 && online_cpus > 0.0 {
+        return (total_usage / system_usage) * online_cpus * 100.0;
+    }
+
+    0.0
 }
 
 fn compute_memory_usage(stats: &Stats) -> (u64, u64) {
@@ -1845,7 +1831,6 @@ pub async fn create_task(
                             status: cur.status,
                             input_content: extract_input_content(&cur.input),
                             output_content: extract_output_content(&cur.output, &cur.steps),
-                            segments: extract_segments(&cur.steps),
                             steps: extract_steps(&cur.steps),
                             output: cur.output.clone(),
                             context_length: cur.context_length,
@@ -1882,7 +1867,6 @@ pub async fn create_task(
         status: "pending".to_string(),
         input_content: extract_input_content(&req.input),
         output_content: vec![],
-        segments: vec![],
         steps: vec![],
         output: serde_json::json!({
             "text": "",
@@ -1917,7 +1901,6 @@ pub async fn get_task_by_id(
         status: cur.status,
         input_content: extract_input_content(&cur.input),
         output_content: extract_output_content(&cur.output, &cur.steps),
-        segments: extract_segments(&cur.steps),
         steps: extract_steps(&cur.steps),
         output: cur.output.clone(),
         context_length: cur.context_length,
@@ -1983,8 +1966,8 @@ pub async fn update_task(
         sqlx::query(
             r#"
             UPDATE sandboxes
-            SET inference_prompt_tokens = inference_prompt_tokens + ?,
-                inference_completion_tokens = inference_completion_tokens + ?,
+            SET tokens_prompt = tokens_prompt + ?,
+                tokens_completion = tokens_completion + ?,
                 last_activity_at = CURRENT_TIMESTAMP
             WHERE id = ?
             "#,
@@ -2008,7 +1991,7 @@ pub async fn update_task(
         .filter(|s| !s.is_empty())
     {
         let mut usage_map = sandbox
-            .tool_usage
+            .tool_count
             .as_object()
             .cloned()
             .unwrap_or_else(|| serde_json::Map::new());
@@ -2022,7 +2005,7 @@ pub async fn update_task(
         sqlx::query(
             r#"
             UPDATE sandboxes
-            SET tool_usage = ?, last_activity_at = CURRENT_TIMESTAMP
+            SET tool_count = ?, last_activity_at = CURRENT_TIMESTAMP
             WHERE id = ?
             "#,
         )
@@ -2037,7 +2020,7 @@ pub async fn update_task(
             ))
         })?;
 
-        sandbox.tool_usage = new_usage;
+        sandbox.tool_count = new_usage;
     }
 
     Ok(Json(TaskView {
@@ -2046,7 +2029,6 @@ pub async fn update_task(
         status: updated.status,
         input_content: extract_input_content(&updated.input),
         output_content: extract_output_content(&updated.output, &updated.steps),
-        segments: extract_segments(&updated.steps),
         steps: extract_steps(&updated.steps),
         output: updated.output.clone(),
         context_length: updated.context_length,
@@ -2070,8 +2052,4 @@ fn extract_output_content(
     steps: &serde_json::Value,
 ) -> Vec<serde_json::Value> {
     compute_output_content(output, steps)
-}
-
-fn extract_segments(steps: &serde_json::Value) -> Vec<serde_json::Value> {
-    extract_steps(steps)
 }

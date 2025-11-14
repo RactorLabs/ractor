@@ -528,8 +528,8 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             inference_prompt_tokens, inference_completion_tokens, tool_usage,
-             total_runtime_seconds, current_runtime_seconds, tasks_completed_total
+             tokens_prompt, tokens_completion, tool_count,
+             runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -762,8 +762,8 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             inference_prompt_tokens, inference_completion_tokens, tool_usage,
-             total_runtime_seconds, current_runtime_seconds, tasks_completed_total
+             tokens_prompt, tokens_completion, tool_count,
+             runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -982,8 +982,8 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             inference_prompt_tokens, inference_completion_tokens, tool_usage,
-             total_runtime_seconds, current_runtime_seconds, tasks_completed_total
+             tokens_prompt, tokens_completion, tool_count,
+             runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)
@@ -1065,8 +1065,8 @@ impl SandboxManager {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
              metadata, tags, idle_timeout_seconds, idle_from, busy_from,
-             inference_prompt_tokens, inference_completion_tokens, tool_usage,
-             total_runtime_seconds, current_runtime_seconds, tasks_completed_total
+             tokens_prompt, tokens_completion, tool_count,
+             runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
         )
         .bind(&request.sandbox_id)

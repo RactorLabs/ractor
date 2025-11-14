@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{"run_bash":3,"read_file":1},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -262,7 +262,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"]}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
@@ -276,7 +276,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"inference_prompt_tokens":0,"inference_completion_tokens":0,"tool_usage":{"run_bash":3,"read_file":1},"total_runtime_seconds":0,"current_runtime_seconds":0,"tasks_completed_total":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
@@ -351,7 +351,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/stats -H "Authorization: Bearer <token>"`,
           resp: { schema: 'SandboxStats' },
           responses: [
-            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed_total":12,"total_tasks":18,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","inference_prompt_tokens":4821,"inference_completion_tokens":1734,"inference_total_tokens":6555,"tool_usage":{"run_bash":27,"read_file":9,"search_files":2},"total_runtime_seconds":12840,"current_runtime_seconds":840,"captured_at":"2025-01-01T15:04:32Z"}` }
+            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed":12,"total_tasks":18,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","tokens_prompt":4821,"tokens_completion":1734,"tokens_total":6555,"tool_count":{"run_bash":27,"read_file":9,"search_files":2},"runtime_seconds":840,"captured_at":"2025-01-01T15:04:32Z"}` }
           ]
         },
         {
@@ -410,7 +410,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"segments":[{"type":"final","channel":"final","text":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
@@ -427,7 +427,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"segments":[{"type":"final","channel":"final","text":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
@@ -443,7 +443,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"segments":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"steps":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -463,7 +463,7 @@ export function getApiDocs(base) {
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"segments":[{"type":"final","channel":"final","text":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"steps":[{"type":"final","channel":"final","text":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {

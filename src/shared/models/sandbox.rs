@@ -16,12 +16,11 @@ pub struct Sandbox {
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
-    pub inference_prompt_tokens: i64,
-    pub inference_completion_tokens: i64,
-    pub total_runtime_seconds: i64,
-    pub current_runtime_seconds: i64,
-    pub tasks_completed_total: i64,
-    pub tool_usage: serde_json::Value,
+    pub tokens_prompt: i64,
+    pub tokens_completion: i64,
+    pub runtime_seconds: i64,
+    pub tasks_completed: i64,
+    pub tool_count: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -263,9 +262,9 @@ impl Sandbox {
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
                    idle_timeout_seconds, idle_from, busy_from,
-                   inference_prompt_tokens, inference_completion_tokens,
-                   tool_usage, total_runtime_seconds, current_runtime_seconds,
-                   tasks_completed_total
+                   tokens_prompt, tokens_completion,
+                   tool_count, runtime_seconds,
+                   tasks_completed
             FROM sandboxes
             ORDER BY created_at DESC
             "#,
@@ -283,9 +282,9 @@ impl Sandbox {
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
                    idle_timeout_seconds, idle_from, busy_from,
-                   inference_prompt_tokens, inference_completion_tokens,
-                   tool_usage, total_runtime_seconds, current_runtime_seconds,
-                   tasks_completed_total
+                   tokens_prompt, tokens_completion,
+                   tool_count, runtime_seconds,
+                   tasks_completed
             FROM sandboxes
             WHERE id = ?
             "#,
@@ -307,8 +306,8 @@ impl Sandbox {
 
         sqlx::query(
             r#"
-            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, idle_timeout_seconds, idle_from, busy_from, inference_prompt_tokens, inference_completion_tokens, tool_usage, total_runtime_seconds, current_runtime_seconds, tasks_completed_total)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0, 0)
+            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, idle_timeout_seconds, idle_from, busy_from, tokens_prompt, tokens_completion, tool_count, runtime_seconds, tasks_completed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0)
             "#
         )
         .bind(&sandbox_id)

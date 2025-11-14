@@ -177,7 +177,7 @@
           <Card class="mb-3">
             <div class="card-header fw-bold">Segments Structure</div>
             <div class="card-body p-3 p-sm-4 small">
-              <div class="mb-2">The <span class="font-monospace">segments</span> array captures step-by-step progress, tool usage, and final output.</div>
+              <div class="mb-2">The <span class="font-monospace">steps</span> array captures step-by-step progress, tool usage, and final output.</div>
               <div class="mb-2 small text-body text-opacity-75">For <span class="font-monospace">tool_result</span> items, <span class="font-monospace">result</span> is a string or JSON. The UI auto-parses JSON-like strings for display.</div>
               <div class="table-responsive mb-2">
                 <table class="table table-sm table-bordered">

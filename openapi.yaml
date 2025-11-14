@@ -1158,7 +1158,7 @@ components:
           type: string
         container_state:
           type: string
-        tasks_completed_total:
+        tasks_completed:
           type: integer
         total_tasks:
           type: integer
@@ -1176,19 +1176,17 @@ components:
         inference_model:
           type: string
           nullable: true
-        inference_prompt_tokens:
+        tokens_prompt:
           type: integer
-        inference_completion_tokens:
+        tokens_completion:
           type: integer
-        inference_total_tokens:
+        tokens_total:
           type: integer
-        tool_usage:
+        tool_count:
           type: object
           additionalProperties:
             type: integer
-        total_runtime_seconds:
-          type: integer
-        current_runtime_seconds:
+        runtime_seconds:
           type: integer
         captured_at:
           type: string
@@ -1242,19 +1240,17 @@ components:
         archive_timeout_seconds:
           type: integer
           nullable: true
-        inference_prompt_tokens:
+        tokens_prompt:
           type: integer
-        inference_completion_tokens:
+        tokens_completion:
           type: integer
-        tool_usage:
+        tool_count:
           type: object
           additionalProperties:
             type: integer
-        total_runtime_seconds:
+        runtime_seconds:
           type: integer
-        current_runtime_seconds:
-          type: integer
-        tasks_completed_total:
+        tasks_completed:
           type: integer
     UpdateSessionRequest:
       type: object
@@ -1348,7 +1344,7 @@ components:
         tool_used:
           type: string
           nullable: true
-          description: Tool name invoked when appending tool result segments (excluded for `<output>`)
+          description: Tool name invoked when appending tool result steps (excluded for `<output>`)
     TaskView:
       type: object
       properties:
@@ -1366,7 +1362,7 @@ components:
           type: array
           items:
             type: object
-        segments:
+        steps:
           type: array
           items:
             type: object

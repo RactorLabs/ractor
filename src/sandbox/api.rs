@@ -20,17 +20,15 @@ pub struct Sandbox {
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
     #[serde(default)]
-    pub inference_prompt_tokens: Option<i64>,
+    pub tokens_prompt: Option<i64>,
     #[serde(default)]
-    pub inference_completion_tokens: Option<i64>,
+    pub tokens_completion: Option<i64>,
     #[serde(default)]
-    pub tool_usage: Option<serde_json::Value>,
+    pub tool_count: Option<serde_json::Value>,
     #[serde(default)]
-    pub total_runtime_seconds: Option<i64>,
+    pub runtime_seconds: Option<i64>,
     #[serde(default)]
-    pub current_runtime_seconds: Option<i64>,
-    #[serde(default)]
-    pub tasks_completed_total: Option<i64>,
+    pub tasks_completed: Option<i64>,
 }
 
 pub struct TSBXClient {
@@ -454,8 +452,6 @@ pub struct TaskView {
     #[serde(default)]
     pub output_content: Vec<serde_json::Value>,
     #[serde(default)]
-    pub segments: Vec<serde_json::Value>,
-    #[serde(default)]
     pub steps: Vec<serde_json::Value>,
     #[serde(default)]
     pub output: serde_json::Value,
@@ -503,7 +499,7 @@ pub struct UpdateTaskRequest {
 pub struct SandboxStats {
     pub sandbox_id: String,
     pub container_state: String,
-    pub tasks_completed_total: i64,
+    pub tasks_completed: i64,
     pub total_tasks: i64,
     pub cpu_usage_percent: f64,
     pub cpu_limit_cores: f64,
@@ -511,11 +507,10 @@ pub struct SandboxStats {
     pub memory_limit_bytes: u64,
     pub inference_url: Option<String>,
     pub inference_model: Option<String>,
-    pub inference_prompt_tokens: i64,
-    pub inference_completion_tokens: i64,
-    pub inference_total_tokens: i64,
-    pub tool_usage: serde_json::Value,
-    pub total_runtime_seconds: i64,
-    pub current_runtime_seconds: i64,
+    pub tokens_prompt: i64,
+    pub tokens_completion: i64,
+    pub tokens_total: i64,
+    pub tool_count: serde_json::Value,
+    pub runtime_seconds: i64,
     pub captured_at: String,
 }

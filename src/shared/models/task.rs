@@ -76,8 +76,6 @@ pub struct TaskView {
     #[serde(default)]
     pub output_content: Vec<Value>,
     #[serde(default)]
-    pub segments: Vec<Value>,
-    #[serde(default)]
     pub steps: Vec<Value>,
     #[serde(default)]
     pub output: Value,
