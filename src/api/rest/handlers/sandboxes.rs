@@ -13,11 +13,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use sqlx::Row;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::warn;
 
 use bollard::container::{InspectContainerOptions, MemoryStatsStats, Stats, StatsOptions};
 use bollard::errors::Error as BollardError;
 use bollard::Docker;
+use tokio::time::timeout;
 
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
@@ -1477,24 +1479,36 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
     let mut stats_stream = docker.stats(
         container_name,
         Some(StatsOptions {
-            stream: false,
-            one_shot: true,
+            stream: true,
+            one_shot: false,
         }),
     );
 
-    let mut cpu_percent = 0.0;
-    let mut memory_usage_bytes = 0_u64;
+    let mut stats_sample: Option<Stats> = None;
+    let mut samples_seen = 0_usize;
+    const MAX_SAMPLES: usize = 3;
 
-    if let Some(stats_result) = stats_stream.next().await {
+    while samples_seen < MAX_SAMPLES {
+        let next_result = timeout(Duration::from_secs(2), stats_stream.next()).await;
+        let maybe_item = match next_result {
+            Ok(item) => item,
+            Err(_) => break,
+        };
+        let Some(stats_result) = maybe_item else {
+            break;
+        };
+
         match stats_result {
             Ok(stats) => {
-                cpu_percent = compute_cpu_percent(&stats);
-                let (usage, limit_from_stats) = compute_memory_usage(&stats);
-                memory_usage_bytes = usage;
-                if memory_limit_bytes == 0 && limit_from_stats > 0 {
-                    memory_limit_bytes = limit_from_stats;
-                } else if limit_from_stats > 0 {
-                    memory_limit_bytes = memory_limit_bytes.max(limit_from_stats);
+                samples_seen += 1;
+                if samples_seen < 2 {
+                    continue;
+                }
+
+                let has_precpu = has_precpu_sample(&stats);
+                stats_sample = Some(stats);
+                if has_precpu || samples_seen == MAX_SAMPLES {
+                    break;
                 }
             }
             Err(BollardError::DockerResponseServerError { status_code, .. })
@@ -1509,6 +1523,20 @@ async fn fetch_container_metrics(container_name: &str) -> anyhow::Result<Option<
                     err
                 ));
             }
+        }
+    }
+
+    let mut cpu_percent = 0.0;
+    let mut memory_usage_bytes = 0_u64;
+
+    if let Some(stats) = stats_sample {
+        cpu_percent = compute_cpu_percent(&stats);
+        let (usage, limit_from_stats) = compute_memory_usage(&stats);
+        memory_usage_bytes = usage;
+        if memory_limit_bytes == 0 && limit_from_stats > 0 {
+            memory_limit_bytes = limit_from_stats;
+        } else if limit_from_stats > 0 {
+            memory_limit_bytes = memory_limit_bytes.max(limit_from_stats);
         }
     }
 
@@ -1596,6 +1624,11 @@ fn compute_cpu_percent(stats: &Stats) -> f64 {
     }
 
     0.0
+}
+
+fn has_precpu_sample(stats: &Stats) -> bool {
+    stats.precpu_stats.cpu_usage.total_usage > 0
+        && stats.precpu_stats.system_cpu_usage.unwrap_or(0) > 0
 }
 
 fn compute_memory_usage(stats: &Stats) -> (u64, u64) {
