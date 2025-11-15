@@ -1473,7 +1473,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 <div class="mt-1">
                   Tokens:
                   <span class="font-monospace">{fmtInt(topData.tokens_prompt ?? 0)} prompt</span>
-                  |
+                  <span class="text-body-tertiary mx-2">|</span>
                   <span class="font-monospace">{fmtInt(topData.tokens_completion ?? 0)} completion</span>
                 </div>
                 {#if toolUsageEntries.length}
