@@ -527,7 +527,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -613,6 +613,7 @@ impl SandboxManager {
                 principal.to_string(),
                 principal_type_str.to_string(),
                 request.created_at,
+                sandbox.inference_model.clone(),
             )
             .await?;
 
@@ -761,7 +762,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -981,7 +982,7 @@ impl SandboxManager {
     pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -1064,7 +1065,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",

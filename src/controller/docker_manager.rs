@@ -23,6 +23,8 @@ pub struct DockerManager {
     cpu_limit: f64,
     memory_limit: i64,
     db_pool: MySqlPool,
+    available_models: Vec<String>,
+    default_inference_model: String,
 }
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
@@ -53,6 +55,25 @@ fn parse_env_content(content: &str) -> HashMap<String, String> {
 
 impl DockerManager {
     pub fn new(docker: Docker, db_pool: MySqlPool) -> Self {
+        let models_raw = match std::env::var("TSBX_INFERENCE_MODELS") {
+            Ok(val) => val,
+            Err(_) => {
+                warn!("TSBX_INFERENCE_MODEL is deprecated; please set TSBX_INFERENCE_MODELS. Using legacy value for now.");
+                std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| {
+                    panic!("TSBX_INFERENCE_MODELS must be set (comma-separated list of models)")
+                })
+            }
+        };
+        let available_models: Vec<String> = models_raw
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if available_models.is_empty() {
+            panic!("TSBX_INFERENCE_MODELS must contain at least one model");
+        }
+        let default_inference_model = available_models[0].clone();
+
         Self {
             docker,
             db_pool,
@@ -66,6 +87,8 @@ impl DockerManager {
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),
+            available_models,
+            default_inference_model,
         }
     }
 
@@ -102,6 +125,35 @@ impl DockerManager {
     // Get sandbox container name (derived from sandbox ID)
     fn get_sandbox_container_name(&self, sandbox_id: &str) -> String {
         format!("tsbx_sandbox_{}", sandbox_id)
+    }
+
+    async fn resolve_inference_model(
+        &self,
+        sandbox_id: &str,
+        provided: Option<String>,
+    ) -> Result<String> {
+        if let Some(model) = provided {
+            let trimmed = model.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+
+        if let Ok((stored_model,)) = sqlx::query_as::<_, (Option<String>,)>(
+            "SELECT inference_model FROM sandboxes WHERE id = ?",
+        )
+        .bind(sandbox_id)
+        .fetch_one(&self.db_pool)
+        .await
+        {
+            if let Some(model) = stored_model {
+                if !model.trim().is_empty() {
+                    return Ok(model);
+                }
+            }
+        }
+
+        Ok(self.default_inference_model.clone())
     }
 
     // Check if sandbox volume exists
@@ -472,7 +524,7 @@ echo 'Session directories created (.env, logs)'
 
         // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(sandbox_id, Some(env), instructions, setup)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup, None)
             .await?;
 
         Ok(container_name)
@@ -647,6 +699,7 @@ echo 'Session directories created (.env, logs)'
                 principal,
                 principal_type,
                 Some(request_created_at),
+                None,
             )
             .await?;
 
@@ -764,7 +817,7 @@ echo 'Session directories created (.env, logs)'
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(sandbox_id, Some(env), instructions, setup)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup, None)
             .await?;
         Ok(container_name)
     }
@@ -779,6 +832,7 @@ echo 'Session directories created (.env, logs)'
         principal: String,
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
+        inference_model: Option<String>,
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
@@ -790,6 +844,7 @@ echo 'Session directories created (.env, logs)'
                 principal,
                 principal_type,
                 Some(request_created_at),
+                inference_model,
             )
             .await?;
         Ok(container_name)
@@ -797,7 +852,7 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container(&self, sandbox_id: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(sandbox_id, None, None, None)
+            .create_container_internal(sandbox_id, None, None, None, None)
             .await?;
         Ok(container_name)
     }
@@ -808,6 +863,7 @@ echo 'Session directories created (.env, logs)'
         env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
+        inference_model: Option<String>,
     ) -> Result<String> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
@@ -832,6 +888,10 @@ echo 'Session directories created (.env, logs)'
         let mounts: Vec<bollard::models::Mount> = vec![];
 
         // No port bindings or exposed ports needed.
+
+        let model_to_use = self
+            .resolve_inference_model(sandbox_id, inference_model)
+            .await?;
 
         // Set environment variables for the sandbox structure
         let mut env_vars = vec![
@@ -868,13 +928,7 @@ echo 'Session directories created (.env, logs)'
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
-        let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_MODEL must be set before starting services"))?;
-        let trimmed_model = inference_model.trim();
-        if trimmed_model.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_MODEL must not be empty"));
-        }
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", trimmed_model));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", model_to_use));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1002,6 +1056,7 @@ echo 'Session directories created (.env, logs)'
         principal: String,
         principal_type: String,
         request_created_at: Option<chrono::DateTime<chrono::Utc>>,
+        inference_model: Option<String>,
     ) -> Result<String> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
@@ -1029,6 +1084,10 @@ echo 'Session directories created (.env, logs)'
         let mounts: Vec<bollard::models::Mount> = vec![];
 
         // No port bindings or exposed ports needed.
+
+        let model_to_use = self
+            .resolve_inference_model(sandbox_id, inference_model)
+            .await?;
 
         // Set environment variables for the sandbox structure
         let mut env_vars = vec![
@@ -1069,13 +1128,7 @@ echo 'Session directories created (.env, logs)'
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
 
-        let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_MODEL must be set before starting services"))?;
-        let trimmed_model = inference_model.trim();
-        if trimmed_model.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_MODEL must not be empty"));
-        }
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", trimmed_model));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", model_to_use));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 

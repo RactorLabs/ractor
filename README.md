@@ -29,8 +29,9 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
    ```bash
    export TSBX_INFERENCE_URL="https://api.positron.ai/v1/chat/completions"
    export TSBX_INFERENCE_API_KEY="replace-with-your-api-key"
-   export TSBX_INFERENCE_MODEL="llama-3.2-3b-instruct-fast-tp2"
+   export TSBX_INFERENCE_MODELS="llama-3.2-3b-instruct-fast-tp2,llama-3.2-405b"
    ```
+   The first model in `TSBX_INFERENCE_MODELS` becomes the default selection for new sandboxes.
 
 3. **Start the core services**
    ```bash

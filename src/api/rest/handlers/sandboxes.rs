@@ -67,6 +67,7 @@ pub struct SandboxResponse {
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
     pub tags: Vec<String>,
+    pub inference_model: Option<String>,
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
@@ -200,6 +201,7 @@ impl SandboxResponse {
             last_activity_at: sandbox.last_activity_at.map(|dt| dt.to_rfc3339()),
             metadata: sandbox.metadata,
             tags,
+            inference_model: sandbox.inference_model,
             idle_timeout_seconds: sandbox.idle_timeout_seconds,
             idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
@@ -793,11 +795,11 @@ pub async fn list_sandboxes(
     let select_sql = format!(
         r#"
         SELECT id, created_by, state, description, snapshot_id,
-               created_at, last_activity_at, metadata, tags,
+               created_at, last_activity_at, metadata, tags, inference_model,
                idle_timeout_seconds, idle_from, busy_from,
-               tokens_prompt, tokens_completion,
-               tool_count, runtime_seconds,
-               tasks_completed
+                tokens_prompt, tokens_completion,
+                tool_count, runtime_seconds,
+                tasks_completed
         FROM sandboxes
         {}
         ORDER BY created_at DESC
@@ -1045,6 +1047,30 @@ pub async fn create_sandbox(
         crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
     };
 
+    let mut req = req;
+
+    let requested_model = req
+        .inference_model
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let chosen_model = match requested_model {
+        Some(model) => state
+            .inference_models
+            .iter()
+            .find(|m| m.eq_ignore_ascii_case(model))
+            .cloned()
+            .ok_or_else(|| {
+                ApiError::BadRequest(format!(
+                    "Invalid inference model '{}'. Allowed values: {}",
+                    model,
+                    state.inference_models.join(", ")
+                ))
+            })?,
+        None => state.default_inference_model.clone(),
+    };
+    req.inference_model = Some(chosen_model.clone());
+
     let sandbox = Sandbox::create(&state.db, req.clone(), created_by)
         .await
         .map_err(|e| {
@@ -1064,7 +1090,8 @@ pub async fn create_sandbox(
             crate::shared::rbac::AuthPrincipal::Subject(_) => "User",
             crate::shared::rbac::AuthPrincipal::Operator(_) => "Admin",
         },
-        "user_token": auth.token
+        "user_token": auth.token,
+        "inference_model": chosen_model
     });
 
     sqlx::query(

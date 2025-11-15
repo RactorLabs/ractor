@@ -4,7 +4,6 @@
   import { onMount } from 'svelte';
   import { auth, initAuthFromCookies } from '$lib/auth.js';
   import { getHostName } from '$lib/branding.js';
-  import { headerMeta } from '/src/stores/headerMeta.js';
   
   export let hostName = '';
   $: resolvedHostName = hostName || getHostName();
@@ -57,21 +56,6 @@
 
 	<!-- BEGIN menu -->
 	<div class="menu">
-        {#if $headerMeta.model || $headerMeta.url}
-          <div class="d-none d-md-flex align-items-center text-body-secondary small header-meta me-3">
-            <div class="d-flex align-items-center gap-3 flex-nowrap">
-              {#if $headerMeta.model}
-                <span class="font-monospace">{$headerMeta.model}</span>
-              {/if}
-              {#if $headerMeta.model && $headerMeta.url}
-                <span class="text-body-tertiary px-1">|</span>
-              {/if}
-              {#if $headerMeta.url}
-                <span class="font-monospace text-truncate" style="max-width: 260px;">{$headerMeta.url}</span>
-              {/if}
-            </div>
-          </div>
-        {/if}
         <div class="menu-item dropdown dropdown-mobile-full">
           <!-- App grid with fixed items -->
           <a href="#/" aria-label="Apps" data-bs-toggle="dropdown" data-bs-display="static" class="menu-link">

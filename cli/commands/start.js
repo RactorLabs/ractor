@@ -102,7 +102,7 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--inference-model <model>', 'Inference model name (required)')
+    .option('--inference-models <models>', 'Comma-separated inference model list (first entry is default, required)')
     .option('--inference-url <url>', 'Inference API base URL (required)')
     .option('--inference-api-key <key>', 'Inference API key (Bearer token, required)')
     // MySQL options
@@ -310,7 +310,7 @@ module.exports = (program) => {
 
         const INFERENCE_URL = resolveRequired(options.inferenceUrl, 'TSBX_INFERENCE_URL', '--inference-url');
         const INFERENCE_API_KEY = resolveRequired(options.inferenceApiKey, 'TSBX_INFERENCE_API_KEY', '--inference-api-key');
-        const INFERENCE_MODEL = resolveRequired(options.inferenceModel, 'TSBX_INFERENCE_MODEL', '--inference-model');
+        const INFERENCE_MODELS = resolveRequired(options.inferenceModels, 'TSBX_INFERENCE_MODELS', '--inference-models');
         for (const comp of components) {
           switch (comp) {
             case 'mysql': {
@@ -396,7 +396,7 @@ module.exports = (program) => {
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
-                '-e',`TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`,
+                '-e',`TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`,
                 ...(options.apiTSBXHost ? ['-e', `TSBX_HOST=${options.apiTSBXHost}`] : []),
                 ...(options.apiTSBXPort ? ['-e', `TSBX_PORT=${options.apiTSBXPort}`] : []),
                 API_IMAGE
@@ -411,7 +411,7 @@ module.exports = (program) => {
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
               const desiredInferenceUrl = INFERENCE_URL;
-              const desiredModel = INFERENCE_MODEL;
+              const desiredModels = INFERENCE_MODELS;
 
               // If container exists, verify env matches; recreate if not
               if (await containerExists('tsbx_controller')) {
@@ -423,11 +423,11 @@ module.exports = (program) => {
                     return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
                   }));
                   const currentUrl = envMap['TSBX_INFERENCE_URL'];
-                  const currentModel = envMap['TSBX_INFERENCE_MODEL'];
+                  const currentModels = envMap['TSBX_INFERENCE_MODELS'];
                   const currentKey = envMap['TSBX_INFERENCE_API_KEY'];
                   const needsRecreate =
                     currentUrl !== desiredInferenceUrl ||
-                    currentModel !== desiredModel ||
+                    currentModels !== desiredModels ||
                     currentKey !== INFERENCE_API_KEY;
                   if (needsRecreate) {
                     console.log(chalk.blue('[INFO] ') + 'Recreating controller to apply updated inference configuration');
@@ -460,7 +460,7 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
-                '-e',`TSBX_INFERENCE_MODEL=${desiredModel}`,
+                '-e',`TSBX_INFERENCE_MODELS=${desiredModels}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`SANDBOX_IMAGE=${sandboxImage}`,
@@ -517,8 +517,8 @@ module.exports = (program) => {
               if (INFERENCE_URL) {
                 args.push('-e', `TSBX_INFERENCE_URL=${INFERENCE_URL}`);
               }
-              if (INFERENCE_MODEL) {
-                args.push('-e', `TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`);
+              if (INFERENCE_MODELS) {
+                args.push('-e', `TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`);
               }
               args.push(await resolveTSBXImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);

@@ -618,5 +618,34 @@ pub async fn init_database(
         }
     }
 
-    Ok(AppState { db, jwt_secret })
+    let inference_models_raw = match std::env::var("TSBX_INFERENCE_MODELS") {
+        Ok(value) => value,
+        Err(_) => {
+            let legacy = std::env::var("TSBX_INFERENCE_MODEL").map_err(|_| {
+                "TSBX_INFERENCE_MODELS must be set (comma-separated list of supported models)"
+            })?;
+            warn!(
+                "TSBX_INFERENCE_MODEL is deprecated; please set TSBX_INFERENCE_MODELS. Using legacy value for now."
+            );
+            legacy
+        }
+    };
+
+    let inference_models: Vec<String> = inference_models_raw
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if inference_models.is_empty() {
+        return Err("TSBX_INFERENCE_MODELS must list at least one model".into());
+    }
+    let default_inference_model = inference_models[0].clone();
+
+    Ok(AppState {
+        db,
+        jwt_secret,
+        inference_models,
+        default_inference_model,
+    })
 }

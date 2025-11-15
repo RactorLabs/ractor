@@ -7,6 +7,7 @@
   import { isAuthenticated } from '$lib/auth.js';
 
 setPageTitle('Start Sandbox');
+export let data;
 let idleTimeoutSeconds = 900; // default 15 minutes
   let metadataText = '{}';
   // Tags input (comma-separated, letters/digits and '/', '-', '_' , '.' per tag)
@@ -24,8 +25,19 @@ let idleTimeoutSeconds = 900; // default 15 minutes
   let setup = '';
   // (Samples removed with About section)
   let startupTask = '';
-  let description = '';
-  let descriptionInput;
+let description = '';
+let descriptionInput;
+
+let availableModels = Array.isArray(data?.globalStats?.inference_models)
+  ? data.globalStats.inference_models
+  : [];
+let selectedModel =
+  data?.globalStats?.default_inference_model ||
+  availableModels[0] ||
+  '';
+$: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
+  selectedModel = availableModels[0];
+}
 
   // Environment entries as dynamic rows
   let envEntries = [{ key: '', val: '' }];
@@ -59,6 +71,9 @@ let idleTimeoutSeconds = 900; // default 15 minutes
     error = null;
     loading = true;
     try {
+      if (!selectedModel || !selectedModel.trim()) {
+        throw new Error('Please select an inference model.');
+      }
       // Parse metadata
       let metadata = {};
       try { metadata = metadataText ? JSON.parse(metadataText) : {}; }
@@ -72,6 +87,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         startup_task: startupTask?.trim() ? startupTask : null,
+        inference_model: selectedModel.trim(),
         env: asEnvMap()
       };
 
@@ -101,7 +117,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
         <div class="fw-bold fs-20px">Start Sandbox</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Ctrl+Enter to submit</div>
-          <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading} aria-label="Submit">
+          <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading || !selectedModel} aria-label="Submit">
             {#if loading}
               <span class="spinner-border spinner-border-sm me-2"></span>Submitting…
             {:else}
@@ -112,6 +128,9 @@ let idleTimeoutSeconds = 900; // default 15 minutes
       </div>
       <div class="card-body">
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
+        {#if !availableModels.length}
+          <div class="alert alert-warning small">No inference models are configured for this host. Set TSBX_INFERENCE_MODELS and reload before creating a sandbox.</div>
+        {/if}
         <form on:submit|preventDefault={submit} on:keydown={handleCtrlEnter}>
           <div class="row g-3">
             <div class="col-12">
@@ -123,6 +142,26 @@ let idleTimeoutSeconds = 900; // default 15 minutes
                 bind:value={description}
                 placeholder="Short description of this sandbox"
               />
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="inference-model">Inference Model</label>
+              <select
+                id="inference-model"
+                class="form-select"
+                bind:value={selectedModel}
+                disabled={!availableModels.length || loading}
+              >
+                {#if availableModels.length}
+                  {#each availableModels as model}
+                    <option value={model}>{model}</option>
+                  {/each}
+                {:else}
+                  <option value="">No models configured</option>
+                {/if}
+              </select>
+              <div class="form-text">
+                Pick the model this sandbox should use for inference. This cannot be changed later.
+              </div>
             </div>
             
 
@@ -185,7 +224,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
             </div>
 
             <div class="col-12 d-flex gap-2">
-              <button type="button" class="btn btn-outline-theme" on:click|preventDefault={submit} disabled={loading}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Submitting…{:else}Submit{/if}</button>
+              <button type="button" class="btn btn-outline-theme" on:click|preventDefault={submit} disabled={loading || !selectedModel}>{#if loading}<span class="spinner-border spinner-border-sm me-2"></span>Submitting…{:else}Submit{/if}</button>
               <a class="btn btn-outline-secondary" href="/sandboxes">Cancel</a>
             </div>
           </div>

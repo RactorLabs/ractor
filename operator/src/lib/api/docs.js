@@ -362,7 +362,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/stats -H "Authorization: Bearer <token>"`,
           resp: { schema: 'GlobalStats' },
           responses: [
-            { status: 200, body: `{"sandboxes_total":14,"sandboxes_active":12,"sandboxes_terminated":2,"sandboxes_by_state":{"idle":5,"busy":3,"terminating":1,"terminated":2,"initializing":3},"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","captured_at":"2025-01-01T15:04:32Z"}` }
+            { status: 200, body: `{"sandboxes_total":14,"sandboxes_active":12,"sandboxes_terminated":2,"sandboxes_by_state":{"idle":5,"busy":3,"terminating":1,"terminated":2,"initializing":3},"inference_url":"https://api.positron.ai/v1/chat/completions","inference_models":["llama-3.2-3b-instruct-fast-tp2","llama-3.2-405b"],"default_inference_model":"llama-3.2-3b-instruct-fast-tp2","captured_at":"2025-01-01T15:04:32Z"}` }
           ]
         },
         {

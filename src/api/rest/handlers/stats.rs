@@ -21,7 +21,8 @@ pub struct GlobalStatsResponse {
     pub sandboxes_terminated: i64,
     pub sandboxes_by_state: JsonValue,
     pub inference_url: Option<String>,
-    pub inference_model: Option<String>,
+    pub inference_models: Vec<String>,
+    pub default_inference_model: Option<String>,
     pub captured_at: String,
 }
 
@@ -68,10 +69,6 @@ pub async fn get_global_stats(
         .ok()
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty());
-    let inference_model = std::env::var("TSBX_INFERENCE_MODEL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
 
     Ok(Json(GlobalStatsResponse {
         sandboxes_total: total,
@@ -79,7 +76,8 @@ pub async fn get_global_stats(
         sandboxes_terminated: terminated,
         sandboxes_by_state: JsonValue::Object(state_map),
         inference_url,
-        inference_model,
+        inference_models: state.inference_models.clone(),
+        default_inference_model: Some(state.default_inference_model.clone()),
         captured_at: Utc::now().to_rfc3339(),
     }))
 }

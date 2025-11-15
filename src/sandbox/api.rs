@@ -16,6 +16,8 @@ pub struct Sandbox {
     pub created_at: String,
     pub last_activity_at: Option<String>,
     pub metadata: serde_json::Value,
+    #[serde(default)]
+    pub inference_model: Option<String>,
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,

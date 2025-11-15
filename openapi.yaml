@@ -1144,6 +1144,10 @@ components:
           type: array
           items:
             type: string
+        inference_model:
+          type: string
+          nullable: true
+          description: Inference model assigned to this sandbox
         is_published:
           type: boolean
         published_at:
@@ -1217,7 +1221,11 @@ components:
         inference_url:
           type: string
           nullable: true
-        inference_model:
+        inference_models:
+          type: array
+          items:
+            type: string
+        default_inference_model:
           type: string
           nullable: true
         captured_at:

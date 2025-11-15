@@ -14,7 +14,6 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
 import { getToken } from '$lib/auth.js';
-import { clearHeaderMeta } from '/src/stores/headerMeta.js';
 
   let md;
   try {
@@ -69,6 +68,10 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
   let sandbox = null;
   // Update page title to show sandbox ID
   $: setPageTitle(sandbox?.id ? `Sandbox ${sandbox.id}` : 'Sandbox');
+  $: sandboxInferenceModel =
+    sandbox?.inference_model ||
+    $page?.data?.globalStats?.default_inference_model ||
+    '';
   let stateStr = '';
   // Task tracking state
   let tasks = [];
@@ -145,6 +148,8 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
   let runtimeSeconds = 0;
   let idleDurationLabel = '';
   let topData = null;
+  let statsInitialized = false;
+  let statsLoading = true;
   $: idleDurationLabel = computeIdleDuration(sandbox?.idle_from);
   $: toolUsageEntries = (() => {
     try {
@@ -723,18 +728,21 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
 
   async function fetchStats(force = false) {
     try {
-      if (!force && Date.now() - _statsFetchedAt < 10000) return;
+      if (!force && Date.now() - _statsFetchedAt < 1000) return;
+      if (!statsInitialized) statsLoading = true;
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/stats`);
       if (res.ok && res.data) {
         topData = res.data;
         const runtime = Number(res.data?.runtime_seconds ?? 0);
         if (Number.isFinite(runtime) && runtime >= 0) runtimeSeconds = runtime;
         _statsFetchedAt = Date.now();
+        statsInitialized = true;
+        statsLoading = false;
       } else {
-        clearHeaderMeta();
+        if (!statsInitialized) statsLoading = false;
       }
     } catch (_) {
-      clearHeaderMeta();
+      if (!statsInitialized) statsLoading = false;
     }
   }
 
@@ -825,7 +833,7 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
       await fetchTasks();
       await fetchSandbox();
       await fetchStats();
-    }, 2000);
+    }, 1000);
   }
   function stopPolling() { if (pollHandle) { clearInterval(pollHandle); pollHandle = null; } }
 
@@ -1243,7 +1251,6 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
     $appOptions.appContentClass = 'p-3';
     // Use full-height content so the bottom row can flex to fill remaining space
     $appOptions.appContentFullHeight = true;
-    clearHeaderMeta();
 
     // Initialize folder/file path from URL before first fetch
     try {
@@ -1256,8 +1263,8 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
 
     try {
       await fetchSandbox();
-      await fetchStats(true);
       await fetchTasks();
+      await fetchStats(true);
       try { await fetchFiles(true); } catch (_) {}
       loading = false;
       await tick();
@@ -1266,10 +1273,9 @@ import { clearHeaderMeta } from '/src/stores/headerMeta.js';
     } catch (e) {
       error = e.message || String(e);
       loading = false;
-      clearHeaderMeta();
     }
   });
-onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; clearHeaderMeta(); });
+onDestroy(() => { stopPolling(); $appOptions.appContentClass = ''; $appOptions.appContentFullHeight = false; });
 onDestroy(() => { fmRevokePreviewUrl(); });
 </script>
 
@@ -1386,13 +1392,17 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               {/if}
             </div>
             <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
+            {#if sandboxInferenceModel}
+              <div class="small text-body-secondary mt-1">
+                Model: <span class="font-monospace">{sandboxInferenceModel}</span>
+              </div>
+            {/if}
             {#if sandbox}
               {#if isAdmin}
                 <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
               {/if}
               <div class="small text-body-secondary mt-1">
                 Idle Timeout: {fmtDuration(Number(sandbox.idle_timeout_seconds ?? 0))}
-                {#if idleDurationLabel}&nbsp;(Idle for {idleDurationLabel}){/if}
               </div>
             {/if}
             <!-- Public URL in main card -->
@@ -1405,6 +1415,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 {#if sandbox}
                   <i class={`${stateIconClass(sandbox.state || sandbox.status)} me-1`}></i>
                   <span class="text-uppercase small fw-bold text-body">{sandbox.state || sandbox.status || 'unknown'}</span>
+                  {#if stateStr === 'idle' && idleDurationLabel}
+                    <span class="text-body-secondary small">for {idleDurationLabel}</span>
+                  {/if}
                 {/if}
               </div>
               <!-- Actions on the right (tight group) -->
@@ -1464,7 +1477,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                 </div>
               {/if}
-              <div class="mt-2">Runtime: {fmtDuration(runtimeSeconds)}</div>
               {#if topData}
                 <div class="mt-2">
                   Tasks Completed: {fmtInt(topData.tasks_completed ?? 0)}
@@ -1476,17 +1488,29 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   <span class="text-body-tertiary mx-2">|</span>
                   <span class="font-monospace">{fmtInt(topData.tokens_completion ?? 0)} completion</span>
                 </div>
-                {#if toolUsageEntries.length}
-                  <div class="mt-1">
-                    Tool Calls:
+                <div class="mt-1">
+                  Tool Calls:
+                  {#if toolUsageEntries.length}
                     {#each toolUsageEntries as [tool, count], idx (tool)}
                       <span class="font-monospace">{tool}</span> × {fmtInt(count)}
                       {#if idx < toolUsageEntries.length - 1}
                         <span class="text-body-tertiary mx-2">|</span>
                       {/if}
                     {/each}
-                  </div>
-                {/if}
+                  {:else}
+                    <span class="text-body-secondary">None yet</span>
+                  {/if}
+                </div>
+                <div class="mt-1">
+                  Runtime: {fmtDuration(runtimeSeconds)}
+                </div>
+              {:else if statsLoading}
+                <div class="mt-2 d-flex align-items-center gap-2 text-body text-opacity-75 small">
+                  <span class="spinner-border spinner-border-sm text-body text-opacity-75" role="status" aria-label="Loading statistics"></span>
+                  Loading statistics…
+                </div>
+              {:else}
+                <div class="mt-2 text-body-secondary small">Statistics unavailable.</div>
               {/if}
             {:else if loading}
               <div class="d-flex align-items-center gap-2 text-body text-opacity-75">
@@ -1540,9 +1564,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
                   <div class="d-flex align-items-start gap-3 flex-wrap">
                     <button class="btn btn-sm btn-outline-secondary" type="button" on:click={closeTaskDetail} aria-label="Back to task list">
-                      <i class="bi bi-arrow-left-short me-1"></i>Back to task list
+                      <i class="bi bi-arrow-left-short"></i>
                     </button>
-                    <div class="fw-semibold font-monospace">{displayTask?.id || selectedTaskId || '-'}</div>
+                    <div class="fw-semibold font-monospace">Task: {displayTask?.id || selectedTaskId || '-'}</div>
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
                     <span class={`badge ${taskStatusBadgeClass(displayTask)}`}>{taskStatusLabel(displayTask)}</span>

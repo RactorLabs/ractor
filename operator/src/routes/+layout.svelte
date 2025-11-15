@@ -15,15 +15,7 @@
   import { setPageTitle } from '$lib/utils';
   import { page } from '$app/stores';
   import { getHostName, getHostUrl } from '$lib/branding.js';
-  import { setHeaderMetaDefaults } from '/src/stores/headerMeta.js';
   export let data;
-  $: headerModel = data && data.globalStats && data.globalStats.inference_model
-    ? data.globalStats.inference_model
-    : ((data && data.inferenceModel) ? data.inferenceModel : '');
-  $: headerUrl = data && data.globalStats && data.globalStats.inference_url
-    ? data.globalStats.inference_url
-    : ((data && data.inferenceUrl) ? data.inferenceUrl : '');
-  $: setHeaderMetaDefaults({ model: headerModel, url: headerUrl });
 
   onMount(async () => {
     import('bootstrap');
@@ -32,8 +24,6 @@
     if (typeof window !== 'undefined') {
       window.__TSBX_HOST_NAME__ = (data && data.hostName) ? data.hostName : getHostName();
       window.__TSBX_HOST_URL__ = (data && data.hostUrl) ? data.hostUrl : getHostUrl();
-      window.__TSBX_INFERENCE_MODEL__ = headerModel || '';
-      window.__TSBX_INFERENCE_URL__ = headerUrl || '';
       window.__TSBX_GLOBAL_STATS__ = (data && data.globalStats) ? data.globalStats : null;
     }
 

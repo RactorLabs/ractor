@@ -168,7 +168,7 @@ class DockerManager {
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           ...(process.env.TSBX_INFERENCE_URL ? ['-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL}`] : []),
-          ...(process.env.TSBX_INFERENCE_MODEL ? ['-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL}`] : []),
+          ...(process.env.TSBX_INFERENCE_MODELS ? ['-e', `TSBX_INFERENCE_MODELS=${process.env.TSBX_INFERENCE_MODELS}`] : []),
           this.images.operator
         ]);
         console.log('🚀 tsbx_operator started');
@@ -188,7 +188,7 @@ class DockerManager {
       case 'api': {
         const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
         const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
-        const inferenceModel = requireEnv('TSBX_INFERENCE_MODEL');
+        const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
 
         await this.execDocker([
           'run', '-d',
@@ -200,7 +200,7 @@ class DockerManager {
           '-e', 'RUST_LOG=info',
           '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
           '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
-          '-e', `TSBX_INFERENCE_MODEL=${inferenceModel}`,
+          '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,
           this.images.api
         ]);
         break;
@@ -209,7 +209,7 @@ class DockerManager {
       case 'controller': {
         const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
         const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
-        const inferenceModel = requireEnv('TSBX_INFERENCE_MODEL');
+        const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
 
         await this.execDocker([
           'run', '-d',
@@ -221,7 +221,7 @@ class DockerManager {
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
           '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
-          '-e', `TSBX_INFERENCE_MODEL=${inferenceModel}`,
+          '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,

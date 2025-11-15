@@ -13,6 +13,7 @@ pub struct Sandbox {
     pub last_activity_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
     pub tags: serde_json::Value,
+    pub inference_model: Option<String>,
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<DateTime<Utc>>,
     pub busy_from: Option<DateTime<Utc>>,
@@ -46,6 +47,8 @@ pub struct CreateSandboxRequest {
     pub idle_timeout_seconds: Option<i32>,
     #[serde(default)]
     pub snapshot_id: Option<String>,
+    #[serde(default)]
+    pub inference_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,7 +264,7 @@ impl Sandbox {
             r#"
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from,
+                   inference_model, idle_timeout_seconds, idle_from, busy_from,
                    tokens_prompt, tokens_completion,
                    tool_count, runtime_seconds,
                    tasks_completed
@@ -281,7 +284,7 @@ impl Sandbox {
             r#"
             SELECT id, created_by, state, description, snapshot_id,
                    created_at, last_activity_at, metadata, tags,
-                   idle_timeout_seconds, idle_from, busy_from,
+                   inference_model, idle_timeout_seconds, idle_from, busy_from,
                    tokens_prompt, tokens_completion,
                    tool_count, runtime_seconds,
                    tasks_completed
@@ -306,8 +309,8 @@ impl Sandbox {
 
         sqlx::query(
             r#"
-            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, idle_timeout_seconds, idle_from, busy_from, tokens_prompt, tokens_completion, tool_count, runtime_seconds, tasks_completed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0)
+            INSERT INTO sandboxes (id, created_by, description, snapshot_id, metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from, tokens_prompt, tokens_completion, tool_count, runtime_seconds, tasks_completed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, 0, 0)
             "#
         )
         .bind(&sandbox_id)
@@ -316,6 +319,7 @@ impl Sandbox {
         .bind(&req.snapshot_id)
         .bind(&req.metadata)
         .bind(serde_json::json!(req.tags.into_iter().map(|t| t.to_lowercase()).collect::<Vec<_>>()))
+        .bind(&req.inference_model)
         .bind(idle_timeout)
         .bind(idle_from)
         .bind(busy_from)
