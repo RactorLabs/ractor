@@ -167,6 +167,8 @@ class DockerManager {
           '--network', 'tsbx_network',
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
+          ...(process.env.TSBX_INFERENCE_URL ? ['-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL}`] : []),
+          ...(process.env.TSBX_INFERENCE_MODEL ? ['-e', `TSBX_INFERENCE_MODEL=${process.env.TSBX_INFERENCE_MODEL}`] : []),
           this.images.operator
         ]);
         console.log('🚀 tsbx_operator started');

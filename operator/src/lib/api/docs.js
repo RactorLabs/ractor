@@ -351,7 +351,18 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/stats -H "Authorization: Bearer <token>"`,
           resp: { schema: 'SandboxStats' },
           responses: [
-            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed":12,"total_tasks":18,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","tokens_prompt":4821,"tokens_completion":1734,"tokens_total":6555,"tool_count":{"run_bash":27,"read_file":9,"search_files":2},"runtime_seconds":840,"captured_at":"2025-01-01T15:04:32Z"}` }
+            { status: 200, body: `{"sandbox_id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","container_state":"running","tasks_completed":12,"total_tasks":18,"cpu_usage_percent":18.4,"cpu_limit_cores":4,"memory_usage_bytes":536870912,"memory_limit_bytes":2147483648,"tokens_prompt":4821,"tokens_completion":1734,"tokens_total":6555,"tool_count":{"run_bash":27,"read_file":9,"search_files":2},"runtime_seconds":840,"captured_at":"2025-01-01T15:04:32Z"}` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/stats',
+          auth: 'bearer',
+          desc: 'Global stats across sandboxes including inference configuration.',
+          example: `curl -s ${BASE}/api/v0/stats -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'GlobalStats' },
+          responses: [
+            { status: 200, body: `{"sandboxes_total":14,"sandboxes_active":12,"sandboxes_terminated":2,"sandboxes_by_state":{"idle":5,"busy":3,"terminating":1,"terminated":2,"initializing":3},"inference_url":"https://api.positron.ai/v1/chat/completions","inference_model":"llama-3.2-3b-instruct-fast-tp2","captured_at":"2025-01-01T15:04:32Z"}` }
           ]
         },
         {

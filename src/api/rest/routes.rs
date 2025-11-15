@@ -54,6 +54,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/auth/operators/{name}/password",
             put(handlers::operators::update_operator_password),
         )
+        // Global stats
+        .route("/stats", get(handlers::stats::get_global_stats))
         // Sandbox endpoints
         .route("/sandboxes", get(handlers::sandboxes::list_sandboxes))
         .route("/sandboxes", post(handlers::sandboxes::create_sandbox))

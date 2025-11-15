@@ -14,7 +14,7 @@
   import Card from '/src/components/bootstrap/Card.svelte';
   import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
 import { getToken } from '$lib/auth.js';
-import { setHeaderMeta, clearHeaderMeta } from '/src/stores/headerMeta.js';
+import { clearHeaderMeta } from '/src/stores/headerMeta.js';
 
   let md;
   try {
@@ -729,10 +729,6 @@ import { setHeaderMeta, clearHeaderMeta } from '/src/stores/headerMeta.js';
         topData = res.data;
         const runtime = Number(res.data?.runtime_seconds ?? 0);
         if (Number.isFinite(runtime) && runtime >= 0) runtimeSeconds = runtime;
-        setHeaderMeta({
-          model: res.data?.inference_model || '',
-          url: res.data?.inference_url || ''
-        });
         _statsFetchedAt = Date.now();
       } else {
         clearHeaderMeta();

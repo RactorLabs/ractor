@@ -514,6 +514,12 @@ module.exports = (program) => {
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
               );
+              if (INFERENCE_URL) {
+                args.push('-e', `TSBX_INFERENCE_URL=${INFERENCE_URL}`);
+              }
+              if (INFERENCE_MODEL) {
+                args.push('-e', `TSBX_INFERENCE_MODEL=${INFERENCE_MODEL}`);
+              }
               args.push(await resolveTSBXImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');

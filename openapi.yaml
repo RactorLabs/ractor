@@ -657,6 +657,22 @@ paths:
           $ref: '#/components/responses/NotFound'
         '403':
           $ref: '#/components/responses/Forbidden'
+  /stats:
+    get:
+      tags:
+      - Stats
+      summary: Global sandbox statistics and inference configuration
+      responses:
+        '200':
+          description: Global stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlobalStats'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /sandboxes/{id}/tasks:
     get:
       tags:
@@ -1170,12 +1186,6 @@ components:
           type: integer
         memory_limit_bytes:
           type: integer
-        inference_url:
-          type: string
-          nullable: true
-        inference_model:
-          type: string
-          nullable: true
         tokens_prompt:
           type: integer
         tokens_completion:
@@ -1188,6 +1198,28 @@ components:
             type: integer
         runtime_seconds:
           type: integer
+        captured_at:
+          type: string
+          format: date-time
+    GlobalStats:
+      type: object
+      properties:
+        sandboxes_total:
+          type: integer
+        sandboxes_active:
+          type: integer
+        sandboxes_terminated:
+          type: integer
+        sandboxes_by_state:
+          type: object
+          additionalProperties:
+            type: integer
+        inference_url:
+          type: string
+          nullable: true
+        inference_model:
+          type: string
+          nullable: true
         captured_at:
           type: string
           format: date-time
