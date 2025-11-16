@@ -1567,7 +1567,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               <div class="task-detail flex-fill px-3 py-3 border-top" style="overflow-y: auto; min-height: 0;">
                 <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
                   <div class="d-flex align-items-start gap-3 flex-wrap">
-                    <button class="btn btn-sm btn-outline-secondary" type="button" on:click={closeTaskDetail} aria-label="Back to task list">&lt;</button>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" on:click={closeTaskDetail} aria-label="Back to task list">
+                      <i class="bi bi-chevron-left"></i>
+                    </button>
                     <div class="fw-semibold font-monospace">Task: {displayTask?.id || selectedTaskId || '-'}</div>
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
