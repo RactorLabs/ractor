@@ -2235,18 +2235,18 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     background: rgb(25, 135, 84);
   }
 
-  /* PY - Python (Yellow/Amber) */
+  /* PY - Python (Blue) */
   :global(.task-type-chip.task-type-py) {
-    border-color: rgb(218, 165, 32);
-    color: white;
-    background: rgb(218, 165, 32);
-  }
-
-  /* JS - JavaScript (Blue) */
-  :global(.task-type-chip.task-type-js) {
     border-color: rgb(13, 110, 253);
     color: white;
     background: rgb(13, 110, 253);
+  }
+
+  /* JS - JavaScript (Yellow/Amber) */
+  :global(.task-type-chip.task-type-js) {
+    border-color: rgb(218, 165, 32);
+    color: white;
+    background: rgb(218, 165, 32);
   }
 
   :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
@@ -2289,25 +2289,25 @@ onDestroy(() => { fmRevokePreviewUrl(); });
 
   /* PY button inactive */
   :global(.task-type-btn.task-type-py) {
-    border-color: rgb(218, 165, 32);
-    color: rgb(218, 165, 32);
+    border-color: rgb(13, 110, 253);
+    color: rgb(13, 110, 253);
   }
   /* PY button selected */
   :global(.task-type-btn.task-type-py.selected) {
-    border-color: rgb(218, 165, 32);
-    background: rgb(218, 165, 32);
+    border-color: rgb(13, 110, 253);
+    background: rgb(13, 110, 253);
     color: white;
   }
 
   /* JS button inactive */
   :global(.task-type-btn.task-type-js) {
-    border-color: rgb(13, 110, 253);
-    color: rgb(13, 110, 253);
+    border-color: rgb(218, 165, 32);
+    color: rgb(218, 165, 32);
   }
   /* JS button selected */
   :global(.task-type-btn.task-type-js.selected) {
-    border-color: rgb(13, 110, 253);
-    background: rgb(13, 110, 253);
+    border-color: rgb(218, 165, 32);
+    background: rgb(218, 165, 32);
     color: white;
   }
 
