@@ -1790,7 +1790,14 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             {:else}
               <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
                 <h6 class="mb-0 small text-uppercase text-body-secondary">Task List</h6>
-                <div class="small text-body-secondary">Total: {tasks.length}</div>
+                <div class="d-flex align-items-center gap-2">
+                  {#if tasks.find((t) => String(t?.status || '').toLowerCase() === 'processing')}
+                    <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Cancel active task" on:click={cancelActive}>
+                      <i class="bi bi-x-circle me-1"></i>Cancel Task
+                    </button>
+                  {/if}
+                  <div class="small text-body-secondary">Total: {tasks.length}</div>
+                </div>
               </div>
               <div class="task-list px-3 py-2 flex-grow-1" style="overflow-y: auto;">
                 {#if loading}
@@ -1872,19 +1879,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   }}
                   on:input={(e)=>{ try { if (!e.target.value || !e.target.value.trim()) { e.target.style.height=''; return; } e.target.style.height='auto'; e.target.style.height = Math.min(e.target.scrollHeight, 200) + 'px'; } catch(_){} }}
                 ></textarea>
-                {#if stateStr === 'busy'}
-                  <button type="button" class="btn btn-outline-danger task-action-btn" aria-label="Cancel active task" on:click={cancelActive}>
-                    <i class="bi bi-stop-circle"></i>
-                  </button>
-                {:else}
-                  <button class="btn btn-theme task-action-btn" aria-label="Create task" disabled={taskInputDisabled || !input.trim()}>
-                    {#if sending}
-                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                    {:else}
-                      <i class="bi bi-plus-circle"></i>
-                    {/if}
-                  </button>
-                {/if}
+                <button class="btn btn-theme task-action-btn" aria-label="Create task" disabled={taskInputDisabled || !input.trim()}>
+                  {#if sending}
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  {:else}
+                    <i class="bi bi-plus-circle"></i>
+                  {/if}
+                </button>
               </div>
             </form>
           </div>
