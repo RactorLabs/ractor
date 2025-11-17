@@ -601,7 +601,7 @@ fn split_stdout_stderr(out: &str) -> (String, String) {
 
 /// Unified Output tool: output
 /// Accepts an array of content items; each item must include a type and content.
-/// Supported types: "markdown" (content:string), "json" (content:any JSON value)
+/// Supported types: "md" (markdown string), "text" (plain string), "json" (any JSON value)
 pub struct OutputTool;
 
 #[async_trait]
@@ -611,7 +611,7 @@ impl Tool for OutputTool {
     }
 
     fn description(&self) -> &str {
-        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'markdown'|'json'|'url'|'text', content }. This concludes the current task run."
+        "Send final user-facing outputs. Accepts an array of items where each item has { type: 'md'|'text'|'json', content }. This concludes the current task run."
     }
 
     fn parameters(&self) -> serde_json::Value {
@@ -625,9 +625,9 @@ impl Tool for OutputTool {
                     "items": {
                         "type":"object",
                         "properties":{
-                            "type": {"type":"string","enum":["markdown","json","url","text"],"description":"Output type"},
+                            "type": {"type":"string","enum":["md","text","json"],"description":"Output type"},
                             "title": {"type":"string","description":"Title heading for this item (required)"},
-                            "content": {"description":"For markdown: string; for json: any JSON value; for url: string (http/https)"}
+                            "content": {"description":"For md/text: string; for json: any JSON value"}
                         },
                         "required":["type","title","content"]
                     }
@@ -674,14 +674,14 @@ impl Tool for OutputTool {
                 ))
             })?;
             match typ.as_str() {
-                "markdown" => {
+                "markdown" | "md" => {
                     let content = it.get("content").and_then(|v| v.as_str()).ok_or_else(|| {
                         anyhow!(format!(
                             "content[{}].content must be string for markdown",
                             idx
                         ))
                     })?;
-                    items_out.push(json!({"type":"markdown","title": title, "content": content}));
+                    items_out.push(json!({"type":"md","title": title, "content": content}));
                 }
                 "text" => {
                     let content = it.get("content").and_then(|v| v.as_str()).ok_or_else(|| {
@@ -693,25 +693,12 @@ impl Tool for OutputTool {
                     let content = it.get("content").cloned().unwrap_or(Value::Null);
                     items_out.push(json!({"type":"json","title": title, "content": content}));
                 }
-                "url" => {
-                    let url = it.get("content").and_then(|v| v.as_str()).ok_or_else(|| {
-                        anyhow!(format!("content[{}].content must be string for url", idx))
-                    })?;
-                    let url_trim = url.trim();
-                    if !(url_trim.starts_with("http://") || url_trim.starts_with("https://")) {
-                        return Ok(json!({
-                            "status":"error","tool":"output",
-                            "error": format!("invalid url scheme at index {}: must start with http:// or https://", idx)
-                        }));
-                    }
-                    items_out.push(json!({"type":"url","title": title, "content": url_trim}));
-                }
                 _ => {
                     return Ok(json!({
                         "status":"error",
                         "tool":"output",
                         "error": format!("unsupported type '{}' at index {}", typ, idx),
-                        "supported_types": ["markdown","json","url","text"]
+                        "supported_types": ["md","text","json"]
                     }));
                 }
             }
@@ -720,7 +707,7 @@ impl Tool for OutputTool {
             "status":"ok",
             "tool":"output",
             "items": items_out,
-            "supported_types": ["markdown","json","url","text"]
+            "supported_types": ["md","text","json"]
         }))
     }
 }

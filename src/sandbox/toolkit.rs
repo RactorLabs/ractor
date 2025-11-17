@@ -185,7 +185,11 @@ impl ToolCatalog {
         guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
         guide.push_str(r#"  <output><![CDATA[<FINAL_MESSAGE_TO_USER>]]></output>"#);
         guide.push_str("\n- Send the final user-facing message once the task is complete.\n");
-        guide.push_str("- Body (CDATA) should contain plain text or markdown summarizing the outcome and next steps. Do not include additional tool calls or XML.\n");
+        guide.push_str(
+            "- Body (CDATA) must be JSON with a `commentary` string and a `content` array.\n",
+        );
+        guide.push_str("- Each entry in `content` must include `type` (`md`, `text`, or `json`) plus a matching `content` payload.\n");
+        guide.push_str("- Use `md` for markdown summaries, `text` for short plaintext snippets, and `json` when returning structured data verbatim.\n");
         guide
     }
 

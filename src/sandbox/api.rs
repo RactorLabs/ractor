@@ -1,5 +1,6 @@
 use super::config::Config;
 use super::error::{HostError, Result};
+use super::shared_task::{TaskOutput, TaskType};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -217,6 +218,7 @@ impl TSBXClient {
             input: serde_json::json!({ "content": [{"type":"text","content": input_text}] }),
             background: None,
             timeout_seconds: None,
+            task_type: None,
         };
         let response = self
             .client
@@ -249,7 +251,7 @@ impl TSBXClient {
         &self,
         id: &str,
         status: Option<String>,
-        output_text: Option<String>,
+        output: Option<Vec<serde_json::Value>>,
         steps: Option<Vec<serde_json::Value>>,
         context_length: Option<i64>,
         tool_used: Option<String>,
@@ -258,19 +260,10 @@ impl TSBXClient {
             "{}/api/v0/sandboxes/{}/tasks/{}",
             self.config.api_url, self.sandbox_id, id
         );
-        let mut output = serde_json::Map::new();
-        if let Some(t) = output_text {
-            output.insert("text".to_string(), serde_json::json!(t));
-        }
-        let output_value = if output.is_empty() {
-            None
-        } else {
-            Some(serde_json::Value::Object(output))
-        };
         let req = UpdateTaskRequest {
             status,
             input: None,
-            output: output_value,
+            output,
             steps,
             timeout_seconds: None,
             context_length,
@@ -434,8 +427,11 @@ pub struct TaskSummary {
     pub id: String,
     pub sandbox_id: String,
     pub status: String,
+    pub task_type: TaskType,
     #[serde(default)]
-    pub input_content: Vec<serde_json::Value>,
+    pub input: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub output: TaskOutput,
     pub context_length: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
@@ -449,14 +445,13 @@ pub struct TaskView {
     pub id: String,
     pub sandbox_id: String,
     pub status: String,
+    pub task_type: TaskType,
     #[serde(default)]
-    pub input_content: Vec<serde_json::Value>,
-    #[serde(default)]
-    pub output_content: Vec<serde_json::Value>,
+    pub input: Vec<serde_json::Value>,
     #[serde(default)]
     pub steps: Vec<serde_json::Value>,
     #[serde(default)]
-    pub output: serde_json::Value,
+    pub output: TaskOutput,
     pub context_length: i64,
     #[serde(default)]
     pub timeout_seconds: Option<i32>,
@@ -473,6 +468,8 @@ pub struct CreateTaskRequest {
     pub background: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task_type: Option<TaskType>,
 }
 
 #[derive(Debug, Serialize)]
@@ -482,7 +479,7 @@ pub struct UpdateTaskRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output: Option<serde_json::Value>,
+    pub output: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub steps: Option<Vec<serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]

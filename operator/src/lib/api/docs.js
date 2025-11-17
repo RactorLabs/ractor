@@ -421,7 +421,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hi"}],"output_content":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hi"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
@@ -438,7 +438,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"hi there"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
@@ -454,7 +454,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input_content":[{"type":"text","content":"hi"}],"output_content":[],"steps":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input":[{"type":"text","content":"hi"}],"steps":[],"output":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -474,7 +474,7 @@ export function getApiDocs(base) {
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input_content":[{"type":"text","content":"hello"}],"output_content":[{"type":"text","content":"done"}],"steps":[{"type":"final","channel":"final","text":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"done"}],"output":[{"type":"md","content":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {

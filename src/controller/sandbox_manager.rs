@@ -23,6 +23,7 @@ pub mod rbac;
 use rbac::{RbacClaims, SubjectType};
 
 use super::docker_manager::DockerManager;
+use super::shared_task::{extract_output_items, TaskType};
 
 #[path = "../shared/models/sandbox.rs"]
 pub mod sandbox_model;
@@ -339,17 +340,12 @@ impl SandboxManager {
             steps_vec.push(marker_step);
             let updated_steps = serde_json::Value::Array(steps_vec);
 
-            let mut updated_output = output_json.clone();
-            if let serde_json::Value::Object(ref mut map) = updated_output {
-                map.insert(
-                    "text".to_string(),
-                    serde_json::Value::String("Task timed out".to_string()),
-                );
-            } else {
-                updated_output = serde_json::json!({
-                    "text": "Task timed out"
-                });
-            }
+            let mut output_items = extract_output_items(&output_json);
+            output_items.push(serde_json::json!({
+                "type": "text",
+                "content": "Task timed out"
+            }));
+            let updated_output = serde_json::Value::Array(output_items);
 
             let update = sqlx::query(
                 r#"
@@ -659,12 +655,12 @@ impl SandboxManager {
             let task_id = uuid::Uuid::new_v4().to_string();
             let input_json =
                 serde_json::json!({ "content": [ { "type": "text", "content": startup_task } ] });
-            let output_json = serde_json::json!({ "text": "", "content": [] });
+            let output_json = serde_json::json!([]);
             let steps_json = serde_json::json!([]);
             sqlx::query(
                 r#"
-                INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
-                VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, NOW(), NOW())
+                INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, task_type, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
+                VALUES (?, ?, ?, 'pending', 'NL', ?, ?, ?, ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&task_id)
@@ -914,17 +910,12 @@ impl SandboxManager {
             }));
 
             let updated_steps = serde_json::Value::Array(steps_array);
-            let mut updated_output = output_json.clone();
-            if let serde_json::Value::Object(ref mut map) = updated_output {
-                map.insert(
-                    "text".to_string(),
-                    serde_json::Value::String(format!("Task cancelled ({})", reason)),
-                );
-            } else {
-                updated_output = serde_json::json!({
-                    "text": format!("Task cancelled ({})", reason)
-                });
-            }
+            let mut output_items = extract_output_items(&output_json);
+            output_items.push(serde_json::json!({
+                "type": "text",
+                "content": format!("Task cancelled ({})", reason)
+            }));
+            let updated_output = serde_json::Value::Array(output_items);
             // Update task status to 'cancelled'
             let _ = sqlx::query(
                 r#"UPDATE sandbox_tasks SET status = 'cancelled', output = ?, steps = ?, updated_at = NOW() WHERE id = ?"#,
@@ -1089,6 +1080,12 @@ impl SandboxManager {
             .get("input")
             .cloned()
             .unwrap_or_else(|| serde_json::json!({"text":""}));
+        let task_type = request
+            .payload
+            .get("task_type")
+            .and_then(|v| v.as_str())
+            .map(TaskType::from_db_value)
+            .unwrap_or(TaskType::NL);
 
         let timeout_seconds = request
             .payload
@@ -1115,7 +1112,7 @@ impl SandboxManager {
         // Insert task row
         // To avoid identical timestamps with the implicit open marker (second-level precision
         // in MySQL DATETIME), create the task entry one second after the request's created_at.
-        let output_json = serde_json::json!({ "text": "", "content": [] });
+        let output_json = serde_json::json!([]);
         let steps_json = serde_json::json!([]);
         let task_created_at = request
             .created_at
@@ -1127,13 +1124,14 @@ impl SandboxManager {
 
         sqlx::query(
             r#"
-            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, task_type, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task_id)
         .bind(&sandbox.id)
         .bind(&principal)
+        .bind(task_type.as_str())
         .bind(&input)
         .bind(&output_json)
         .bind(&steps_json)

@@ -1352,6 +1352,15 @@ components:
           default: 300
           description: Per-task timeout in seconds (defaults to 300/5 minutes; set to
             0 to disable auto-cancel)
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+          nullable: true
+          description: |
+            Optional task execution type:
+              * `NL` - Natural language (default, inference-backed)
+              * `SH` - Shell (run commands via /bin/sh)
+              * `PY` - Python (execute snippet via python3)
+              * `JS` - JavaScript (execute snippet via node)
     UpdateTaskRequest:
       type: object
       properties:
@@ -1362,9 +1371,14 @@ components:
           type: object
           nullable: true
         output:
-          type: object
+          type: array
           nullable: true
-          description: Merged; items appended
+          description: |
+            Structured output items to set on the task. Each entry must include:
+              * `type`: `md`, `text`, or `json`
+              * `content`: markdown/text string or JSON payload matching the type
+          items:
+            type: object
         timeout_seconds:
           type: integer
           nullable: true
@@ -1394,16 +1408,20 @@ components:
           type: string
         status:
           type: string
-        input_content:
-          type: array
-          items:
-            type: object
-        output_content:
+        task_type:
+          $ref: '#/components/schemas/TaskType'
+        input:
           type: array
           items:
             type: object
         steps:
           type: array
+          items:
+            type: object
+        output:
+          type: array
+          description: |
+            Structured output items with `{ type: 'md'|'text'|'json', content: ... }`.
           items:
             type: object
         timeout_seconds:
@@ -1422,6 +1440,14 @@ components:
         context_length:
           type: integer
           description: Total context length in tokens for the latest inference cycle
+    TaskType:
+      type: string
+      description: Task execution mode
+      enum:
+      - NL
+      - SH
+      - PY
+      - JS
     BlockRequest:
       type: object
       required:

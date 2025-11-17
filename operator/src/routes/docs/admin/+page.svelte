@@ -186,7 +186,7 @@
                     <tr><td class="font-monospace">commentary</td><td class="font-monospace">&#123; type, channel: 'analysis', text &#125;</td><td>Internal analysis</td></tr>
                     <tr><td class="font-monospace">tool_call</td><td class="font-monospace">&#123; type, tool, arguments (JSON), args (legacy) &#125;</td><td>Declares a tool invocation</td></tr>
                     <tr><td class="font-monospace">tool_result</td><td class="font-monospace">&#123; type, tool, result, truncated? &#125;</td><td>Result of tool invocation</td></tr>
-                    <tr><td class="font-monospace">final</td><td class="font-monospace">&#123; type, channel: 'final', text &#125;</td><td>Final answer (also reflected in <span class="font-monospace">output_content</span>)</td></tr>
+                    <tr><td class="font-monospace">final</td><td class="font-monospace">&#123; type, channel: 'final', text &#125;</td><td>Final answer (persisted in the task <span class="font-monospace">output</span> field)</td></tr>
                   </tbody>
                 </table>
               </div>

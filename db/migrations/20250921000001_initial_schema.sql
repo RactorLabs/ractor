@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS sandbox_tasks (
     sandbox_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
+    task_type CHAR(2) NOT NULL DEFAULT 'NL' CHECK (task_type IN ('NL','SH','PY','JS')),
     input JSON NOT NULL,
     output JSON NOT NULL,
     steps JSON NOT NULL DEFAULT ('[]'),
@@ -93,7 +94,8 @@ CREATE TABLE IF NOT EXISTS sandbox_tasks (
     INDEX idx_sandbox_tasks_created_by (created_by),
     INDEX idx_sandbox_tasks_created_at (created_at),
     INDEX idx_sandbox_tasks_timeout_at (timeout_at),
-    INDEX idx_sandbox_tasks_sandbox_created_at_id (sandbox_id, created_at, id)
+    INDEX idx_sandbox_tasks_sandbox_created_at_id (sandbox_id, created_at, id),
+    INDEX idx_sandbox_tasks_type (sandbox_id, task_type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Sandbox Requests

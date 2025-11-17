@@ -4,8 +4,11 @@ mod builtin_tools;
 mod command;
 mod config;
 mod error;
+mod executors;
 mod guardrails;
 mod inference;
+#[path = "../shared/models/task.rs"]
+pub mod shared_task;
 mod task_handler;
 mod toolkit;
 mod tools;

@@ -1,6 +1,7 @@
 use super::api::{TSBXClient, TaskSummary};
 use super::command::{parse_command_xml, CommandInvocation};
 use super::error::{HostError, Result};
+use super::executors::{run_javascript_task, run_python_task, run_shell_task, TaskExecutorContext};
 use super::guardrails::Guardrails;
 use super::inference::{ChatMessage, InferenceClient, ModelResponse};
 use super::toolkit::{ExecutionResult, ToolCatalog};
@@ -10,6 +11,8 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+
+use super::shared_task::{normalize_output_items, TaskType};
 
 const MAX_TOOL_OUTPUT_CHARS: usize = 1_000;
 
@@ -156,9 +159,27 @@ impl TaskHandler {
     }
 
     async fn process_task(&self, task: &TaskSummary) -> Result<()> {
-        let input_text = extract_first_text(&task.input_content);
+        let input_text = extract_first_text(&task.input);
         self.guardrails.validate_input(&input_text)?;
 
+        match task.task_type {
+            TaskType::NL => self.process_nl_task(task).await,
+            TaskType::SH => {
+                let ctx = TaskExecutorContext::new(&self.api_client);
+                run_shell_task(&ctx, task).await
+            }
+            TaskType::PY => {
+                let ctx = TaskExecutorContext::new(&self.api_client);
+                run_python_task(&ctx, task).await
+            }
+            TaskType::JS => {
+                let ctx = TaskExecutorContext::new(&self.api_client);
+                run_javascript_task(&ctx, task).await
+            }
+        }
+    }
+
+    async fn process_nl_task(&self, task: &TaskSummary) -> Result<()> {
         let mut conversation = Vec::new();
         if let Some(msg) = render_task_input(task) {
             conversation.push(msg);
@@ -307,6 +328,20 @@ impl TaskHandler {
                     continue;
                 }
                 let sanitized = self.guardrails.validate_output(&final_text)?;
+
+                // Try to parse as JSON first to extract items
+                let output_items = if let Ok(parsed) = serde_json::from_str::<Value>(&sanitized) {
+                    let raw_items = build_output_items_from_tool(&parsed, &sanitized);
+                    let normalized = normalize_output_items(raw_items);
+                    self.sanitize_output_items(normalized)?
+                } else {
+                    // Fallback to treating as markdown
+                    vec![json!({
+                        "type": "md",
+                        "content": sanitized.clone()
+                    })]
+                };
+
                 let segment = json!({
                     "type": "final",
                     "tool": "output",
@@ -317,7 +352,7 @@ impl TaskHandler {
                     .update_task(
                         &task.id,
                         Some("completed".to_string()),
-                        Some(sanitized.clone()),
+                        Some(output_items),
                         Some(vec![segment]),
                         Some(context_length),
                         None,
@@ -400,12 +435,14 @@ impl TaskHandler {
 
                     if command_name == "output" {
                         let fallback = command.body.as_deref().unwrap_or("No content provided.");
-                        let summary_raw = render_output_summary(&output, fallback);
-                        let sanitized = self.guardrails.validate_output(&summary_raw)?;
+                        let raw_items = build_output_items_from_tool(&output, fallback);
+                        let normalized = normalize_output_items(raw_items);
+                        let sanitized_items = self.sanitize_output_items(normalized)?;
+                        let summary_md = summarize_output_items(&sanitized_items);
                         let final_segment = json!({
                             "type": "final",
                             "tool": "output",
-                            "content": sanitized,
+                            "content": summary_md.clone(),
                         });
 
                         let _ = self
@@ -413,7 +450,7 @@ impl TaskHandler {
                             .update_task(
                                 &task.id,
                                 Some("completed".to_string()),
-                                Some(sanitized.clone()),
+                                Some(sanitized_items),
                                 Some(vec![final_segment.clone()]),
                                 Some(context_length),
                                 None,
@@ -422,7 +459,7 @@ impl TaskHandler {
 
                         conversation.push(ChatMessage {
                             role: "assistant".to_string(),
-                            content: sanitized.clone(),
+                            content: summary_md,
                             name: None,
                             tool_call_id: None,
                         });
@@ -487,6 +524,44 @@ impl TaskHandler {
                 }
             }
         }
+    }
+
+    fn sanitize_output_items(&self, items: Vec<Value>) -> Result<Vec<Value>> {
+        let mut sanitized = Vec::new();
+        for item in items {
+            if let Value::Object(mut map) = item {
+                let raw_type = map
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_lowercase())
+                    .unwrap_or_else(|| "text".to_string());
+                let canonical = match raw_type.as_str() {
+                    "md" | "markdown" => "md",
+                    "json" => "json",
+                    _ => "text",
+                };
+                map.insert("type".into(), Value::String(canonical.to_string()));
+                if canonical == "json" {
+                    if let Some(content) = map.get("content") {
+                        let preview = content.to_string();
+                        let _ = self.guardrails.validate_output(&preview)?;
+                    }
+                    sanitized.push(Value::Object(map));
+                } else {
+                    let content_value = map
+                        .remove("content")
+                        .and_then(|v| v.as_str().map(|s| s.to_string()))
+                        .unwrap_or_default();
+                    let clean = self.guardrails.validate_output(&content_value)?;
+                    map.insert("content".into(), Value::String(clean));
+                    sanitized.push(Value::Object(map));
+                }
+            }
+        }
+        if sanitized.is_empty() {
+            sanitized.push(json!({ "type": "text", "content": "Task completed." }));
+        }
+        Ok(sanitized)
     }
 
     async fn is_task_active(&self, task_id: &str) -> Result<bool> {
@@ -630,7 +705,7 @@ fn extract_first_text(items: &[Value]) -> String {
 
 fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
     let mut parts = Vec::new();
-    for item in &task.input_content {
+    for item in &task.input {
         if item
             .get("type")
             .and_then(|t| t.as_str())
@@ -654,59 +729,60 @@ fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
     }
 }
 
-fn render_output_summary(output: &Value, fallback: &str) -> String {
+fn build_output_items_from_tool(output: &Value, fallback: &str) -> Vec<Value> {
+    // Try "items" first (new format)
     if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-        if items.is_empty() {
-            return fallback.to_string();
+        if !items.is_empty() {
+            return items.clone();
         }
-        let mut sections = Vec::new();
-        for item in items {
-            let typ = item
+    }
+    // Try "content" (model sometimes uses this)
+    if let Some(content) = output.get("content").and_then(|v| v.as_array()) {
+        if !content.is_empty() {
+            return content.clone();
+        }
+    }
+    // Fallback to markdown
+    vec![json!({ "type": "md", "content": fallback })]
+}
+
+fn summarize_output_items(items: &[Value]) -> String {
+    if items.is_empty() {
+        return "Task completed.".to_string();
+    }
+    let mut sections = Vec::new();
+    for item in items {
+        if let Some(obj) = item.as_object() {
+            let typ = obj
                 .get("type")
                 .and_then(|v| v.as_str())
-                .unwrap_or("")
+                .unwrap_or("text")
                 .to_lowercase();
-            let title = item
-                .get("title")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Result");
             match typ.as_str() {
-                "markdown" => {
-                    if let Some(content) = item.get("content").and_then(|v| v.as_str()) {
-                        sections.push(format!("## {}\n\n{}", title, content.trim()));
-                    }
-                }
-                "text" => {
-                    if let Some(content) = item.get("content").and_then(|v| v.as_str()) {
-                        sections.push(format!("**{}**\n\n{}", title, content.trim()));
+                "md" => {
+                    if let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
+                        sections.push(content.trim().to_string());
                     }
                 }
                 "json" => {
-                    let pretty = item
-                        .get("content")
-                        .map(|v| serde_json::to_string_pretty(v).unwrap_or_else(|_| v.to_string()))
-                        .unwrap_or_else(|| "null".to_string());
-                    sections.push(format!("## {}\n\n```json\n{}\n```", title, pretty));
-                }
-                "url" => {
-                    if let Some(url) = item.get("content").and_then(|v| v.as_str()) {
-                        sections.push(format!("- [{}]({})", title, url.trim()));
+                    if let Some(content) = obj.get("content") {
+                        let pretty = serde_json::to_string_pretty(content)
+                            .unwrap_or_else(|_| content.to_string());
+                        sections.push(format!("```json\n{}\n```", pretty));
                     }
                 }
                 _ => {
-                    if let Some(content) = item.get("content").and_then(|v| v.as_str()) {
-                        sections.push(format!("{}: {}", title, content.trim()));
+                    if let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
+                        sections.push(content.trim().to_string());
                     }
                 }
             }
         }
-        if sections.is_empty() {
-            fallback.to_string()
-        } else {
-            sections.join("\n\n")
-        }
+    }
+    if sections.is_empty() {
+        "Task completed.".to_string()
     } else {
-        fallback.to_string()
+        sections.join("\n\n")
     }
 }
 

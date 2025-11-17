@@ -1,6 +1,9 @@
 pub mod docker_manager;
 mod sandbox_manager;
 
+#[path = "../shared/models/task.rs"]
+pub mod shared_task;
+
 pub use sandbox_manager::SandboxManager;
 
 use anyhow::Result;

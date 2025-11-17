@@ -24,10 +24,10 @@ use tokio::time::timeout;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
-use crate::shared::models::task::{compute_output_content, extract_steps};
+use crate::shared::models::task::{extract_output_items, extract_steps, TaskOutput};
 use crate::shared::models::{
-    AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskSummary, TaskView,
-    UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
+    AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskSummary, TaskType,
+    TaskView, UpdateSandboxRequest, UpdateSandboxStateRequest, UpdateTaskRequest,
 };
 use crate::shared::rbac::PermissionContext;
 
@@ -915,9 +915,10 @@ pub async fn cancel_task(
             let req = UpdateTaskRequest {
                 status: Some("cancelled".to_string()),
                 input: None,
-                output: Some(serde_json::json!({
-                    "text": "Task cancelled by user"
-                })),
+                output: Some(vec![serde_json::json!({
+                    "type": "text",
+                    "content": "Task cancelled by user"
+                })]),
                 steps: Some(vec![cancelled_item.clone()]),
                 timeout_seconds: None,
                 context_length: None,
@@ -1251,9 +1252,10 @@ pub async fn terminate_sandbox(
         let req = UpdateTaskRequest {
             status: Some("cancelled".to_string()),
             input: None,
-            output: Some(serde_json::json!({
-                "text": "Task cancelled due to sandbox termination"
-            })),
+            output: Some(vec![serde_json::json!({
+                "type": "text",
+                "content": "Task cancelled due to sandbox termination"
+            })]),
             steps: Some(vec![cancelled_item.clone()]),
             timeout_seconds: None,
             context_length: None,
@@ -1750,7 +1752,9 @@ pub async fn list_tasks(
             id: task.id,
             sandbox_id: task.sandbox_id,
             status: task.status,
-            input_content: extract_input_content(&task.input),
+            task_type: TaskType::from_db_value(&task.task_type),
+            input: extract_input(&task.input),
+            output: build_task_output(&task.output),
             context_length: task.context_length,
             timeout_seconds: task.timeout_seconds,
             timeout_at: task.timeout_at.map(|dt| dt.to_rfc3339()),
@@ -1801,6 +1805,7 @@ pub async fn create_task(
             ));
         }
     }
+    let task_type = req.task_type.unwrap_or(TaskType::NL);
 
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
@@ -1824,9 +1829,10 @@ pub async fn create_task(
 
     let payload = serde_json::json!({
         "task_id": task_id,
-        "input": req.input,
+        "input": req.input.clone(),
         "background": req.background.unwrap_or(true),
-        "timeout_seconds": timeout_seconds
+        "timeout_seconds": timeout_seconds,
+        "task_type": task_type.as_str(),
     });
     sqlx::query(
         r#"
@@ -1862,10 +1868,10 @@ pub async fn create_task(
                             id: cur.id,
                             sandbox_id: cur.sandbox_id,
                             status: cur.status,
-                            input_content: extract_input_content(&cur.input),
-                            output_content: extract_output_content(&cur.output, &cur.steps),
+                            task_type: TaskType::from_db_value(&cur.task_type),
+                            input: extract_input(&cur.input),
                             steps: extract_steps(&cur.steps),
-                            output: cur.output.clone(),
+                            output: build_task_output(&cur.output),
                             context_length: cur.context_length,
                             timeout_seconds: cur.timeout_seconds,
                             timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
@@ -1898,13 +1904,13 @@ pub async fn create_task(
         id: task_id,
         sandbox_id: sandbox.id.clone(),
         status: "pending".to_string(),
-        input_content: extract_input_content(&req.input),
-        output_content: vec![],
+        task_type,
+        input: extract_input(&req.input),
         steps: vec![],
-        output: serde_json::json!({
-            "text": "",
-            "content": []
-        }),
+        output: TaskOutput {
+            commentary: None,
+            items: vec![],
+        },
         context_length: 0,
         timeout_seconds: timeout_seconds_value,
         timeout_at,
@@ -1932,10 +1938,10 @@ pub async fn get_task_by_id(
         id: cur.id,
         sandbox_id: cur.sandbox_id,
         status: cur.status,
-        input_content: extract_input_content(&cur.input),
-        output_content: extract_output_content(&cur.output, &cur.steps),
+        task_type: TaskType::from_db_value(&cur.task_type),
+        input: extract_input(&cur.input),
         steps: extract_steps(&cur.steps),
-        output: cur.output.clone(),
+        output: build_task_output(&cur.output),
         context_length: cur.context_length,
         timeout_seconds: cur.timeout_seconds,
         timeout_at: cur.timeout_at.map(|dt| dt.to_rfc3339()),
@@ -2060,10 +2066,10 @@ pub async fn update_task(
         id: updated.id,
         sandbox_id: updated.sandbox_id,
         status: updated.status,
-        input_content: extract_input_content(&updated.input),
-        output_content: extract_output_content(&updated.output, &updated.steps),
+        task_type: TaskType::from_db_value(&updated.task_type),
+        input: extract_input(&updated.input),
         steps: extract_steps(&updated.steps),
-        output: updated.output.clone(),
+        output: build_task_output(&updated.output),
         context_length: updated.context_length,
         timeout_seconds: updated.timeout_seconds,
         timeout_at: updated.timeout_at.map(|dt| dt.to_rfc3339()),
@@ -2072,7 +2078,7 @@ pub async fn update_task(
     }))
 }
 
-fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {
+fn extract_input(input: &serde_json::Value) -> Vec<serde_json::Value> {
     input
         .get("content")
         .and_then(|v| v.as_array())
@@ -2080,9 +2086,9 @@ fn extract_input_content(input: &serde_json::Value) -> Vec<serde_json::Value> {
         .unwrap_or_default()
 }
 
-fn extract_output_content(
-    output: &serde_json::Value,
-    steps: &serde_json::Value,
-) -> Vec<serde_json::Value> {
-    compute_output_content(output, steps)
+fn build_task_output(output: &serde_json::Value) -> TaskOutput {
+    TaskOutput {
+        commentary: None,
+        items: extract_output_items(output),
+    }
 }

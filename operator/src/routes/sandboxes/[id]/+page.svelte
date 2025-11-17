@@ -144,12 +144,37 @@ import { getToken } from '$lib/auth.js';
   let error = null;
   let input = '';
   let sending = false;
+  const taskTypeOptions = [
+    { value: 'NL', label: 'Natural Language', short: 'NL', description: 'Use inference to complete multi-step instructions.' },
+    { value: 'SH', label: 'Shell', short: 'SH', description: 'Run the prompt as a /bin/sh command.' },
+    { value: 'PY', label: 'Python', short: 'PY', description: 'Execute the prompt with python3 -c.' },
+    { value: 'JS', label: 'JavaScript', short: 'JS', description: 'Execute the prompt via node -e.' }
+  ];
+  let taskType = 'NL';
+  function taskTypeLabel(code) {
+    if (!code || typeof code !== 'string') return 'Natural Language';
+    const upper = code.toUpperCase();
+    const found = taskTypeOptions.find((opt) => opt.value === upper);
+    return found ? found.label : 'Natural Language';
+  }
+  function taskTypeShort(code) {
+    if (!code || typeof code !== 'string') return 'NL';
+    const upper = code.toUpperCase();
+    const found = taskTypeOptions.find((opt) => opt.value === upper);
+    return found?.short || upper;
+  }
   let pollHandle = null;
   let runtimeSeconds = 0;
   let idleDurationLabel = '';
   let topData = null;
   let statsInitialized = false;
   let statsLoading = true;
+  $: taskInputDisabled =
+    sending ||
+    stateStr === 'busy' ||
+    stateStr === 'terminating' ||
+    stateStr === 'terminated' ||
+    stateStr === 'initializing';
   $: idleDurationLabel = computeIdleDuration(sandbox?.idle_from);
   $: toolUsageEntries = (() => {
     try {
@@ -919,7 +944,7 @@ import { getToken } from '$lib/auth.js';
   }
   function taskInputItems(task) {
     try {
-      const items = Array.isArray(task?.input_content) ? task.input_content : [];
+      const items = Array.isArray(task?.input) ? task.input : [];
       if (items.length) return items;
       const text = task?.input?.text || task?.input?.content;
       if (typeof text === 'string' && text.trim()) {
@@ -960,9 +985,67 @@ import { getToken } from '$lib/auth.js';
       return '';
     }
   }
+  function normalizeOutputItem(item) {
+    try {
+      if (!item || typeof item !== 'object') return null;
+      const copy = { ...item };
+      const typ = String(copy.type || '').toLowerCase();
+      if (typ === 'markdown') copy.type = 'md';
+      else if (typ === 'md' || typ === 'json' || typ === 'text' || typ === 'stdout' || typ === 'stderr' || typ === 'exit_code' || typ === 'commentary') copy.type = typ;
+      else copy.type = 'text';
+      if (copy.type === 'json' && copy.content === undefined) {
+        copy.content = null;
+      }
+      if (copy.type !== 'json') {
+        const raw = copy.content;
+        if (typeof raw === 'string') {
+          copy.content = raw;
+        } else if (raw === undefined || raw === null) {
+          copy.content = '';
+        } else {
+          copy.content = String(raw);
+        }
+      }
+      return copy;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function taskOutputItems(task) {
-    const direct = Array.isArray(task?.output?.content) ? task.output.content : [];
-    return direct;
+    const convert = (arr) =>
+      arr
+        .map((item) => normalizeOutputItem(item))
+        .filter((item) => item && item.content !== undefined);
+
+    // New format: { items: [...], commentary: "..." }
+    if (task?.output && typeof task.output === 'object' && Array.isArray(task.output.items)) {
+      return convert(task.output.items);
+    }
+
+    // Direct array (backwards compatibility)
+    if (Array.isArray(task?.output)) {
+      return convert(task.output);
+    }
+
+    // Legacy format
+    const legacy = task?.output;
+    const items = [];
+    if (legacy && typeof legacy === 'object') {
+      if (typeof legacy.text === 'string' && legacy.text.trim()) {
+        items.push({ type: 'md', content: legacy.text.trim() });
+      }
+      if (Array.isArray(legacy.content)) {
+        items.push(...legacy.content);
+      }
+      if (Array.isArray(legacy.items)) {
+        items.push(...legacy.items);
+      }
+    }
+    return convert(items);
+  }
+  function outputItemType(item) {
+    try { return String(item?.type || '').toLowerCase(); } catch (_) { return ''; }
   }
   function hasOutputText(task) {
     try {
@@ -1191,7 +1274,10 @@ import { getToken } from '$lib/auth.js';
     try {
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks`, {
         method: 'POST',
-        body: JSON.stringify({ input: { content: [{ type: 'text', content }] } })
+        body: JSON.stringify({
+          input: { content: [{ type: 'text', content }] },
+          task_type: taskType
+        })
       });
       if (!res.ok) {
         if (res.status === 409) {
@@ -1574,6 +1660,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
                     <span class={`badge ${taskStatusBadgeClass(displayTask)}`}>{taskStatusLabel(displayTask)}</span>
+                    <span class="badge task-type-chip" title={taskTypeLabel(displayTask?.task_type)}>
+                      {taskTypeShort(displayTask?.task_type)}
+                    </span>
                   </div>
                 </div>
                 <section class="mb-3">
@@ -1720,6 +1809,11 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                         <div class="text-start">
                           <div class="fw-semibold font-monospace">{task.id}</div>
                           <div class="small text-body-secondary">{formatTaskTimestamp(task)}</div>
+                          <div class="small mt-1">
+                            <span class="badge task-type-chip" title={taskTypeLabel(task?.task_type)}>
+                              {taskTypeShort(task?.task_type)}
+                            </span>
+                          </div>
                           {#if taskPreview(task)}
                             <div class="small text-body text-opacity-75 task-preview">{taskPreview(task)}</div>
                           {/if}
@@ -1742,11 +1836,29 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               <div>Context length: {fmtInt(context_length)} tokens</div>
             </div>
             <form class="task-form" on:submit|preventDefault={createTask}>
+              <div class="mb-2">
+                <div class="form-label text-uppercase small text-body-secondary fw-semibold">Task Type</div>
+                <div class="d-flex flex-wrap gap-2">
+                  {#each taskTypeOptions as option}
+                    <button
+                      type="button"
+                      class={`btn btn-sm ${taskType === option.value ? 'btn-dark text-white' : 'btn-outline-secondary'}`}
+                      on:click={() => (taskType = option.value)}
+                      disabled={taskInputDisabled}
+                    >
+                      {option.label}
+                    </button>
+                  {/each}
+                </div>
+                <div class="form-text">
+                  {taskTypeOptions.find((opt) => opt.value === taskType)?.description || 'Select how the sandbox should execute this task.'}
+                </div>
+              </div>
               <div class="input-group task-input-group rounded-0 shadow-none">
                 <textarea
                   aria-label="Task instructions"
                   class="form-control shadow-none task-input"
-                  disabled={sending || stateStr === 'busy' || stateStr === 'terminating' || stateStr === 'terminated' || stateStr === 'initializing'}
+                  disabled={taskInputDisabled}
                   placeholder="Post a task to the sandbox…"
                   rows="3"
                   style="resize: none;"
@@ -1765,7 +1877,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <i class="bi bi-stop-circle"></i>
                   </button>
                 {:else}
-                  <button class="btn btn-theme task-action-btn" aria-label="Create task" disabled={sending || !input.trim() || stateStr === 'terminated' || stateStr === 'terminating' || stateStr === 'initializing'}>
+                  <button class="btn btn-theme task-action-btn" aria-label="Create task" disabled={taskInputDisabled || !input.trim()}>
                     {#if sending}
                       <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                     {:else}
@@ -1982,7 +2094,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     border-color: rgba(var(--bs-theme-rgb), .35);
     color: inherit;
   }
-  :global(.task-pane .task-list .list-group-item.active .badge) {
+  :global(.task-pane .task-list .list-group-item.active .badge:not(.task-type-chip)) {
     background-color: var(--bs-theme);
     color: var(--bs-theme-color);
   }
@@ -2073,6 +2185,20 @@ onDestroy(() => { fmRevokePreviewUrl(); });
       color: var(--bs-body-color);
       border: 0;
       padding: 0;
+  }
+
+  :global(.task-type-chip) {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px dashed rgba(var(--bs-secondary-rgb), 0.6);
+    color: var(--bs-secondary-color);
+    background: transparent;
+    padding: 0.1rem 0.55rem;
+  }
+  :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
+    border-color: rgba(var(--bs-theme-rgb), 0.65);
+    color: var(--bs-theme);
   }
 
   @media (max-width: 576px) {
