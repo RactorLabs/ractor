@@ -163,6 +163,11 @@ import { getToken } from '$lib/auth.js';
     const found = taskTypeOptions.find((opt) => opt.value === upper);
     return found?.short || upper;
   }
+  function taskTypeClass(code) {
+    if (!code || typeof code !== 'string') return 'task-type-nl';
+    const upper = code.toUpperCase();
+    return `task-type-${upper.toLowerCase()}`;
+  }
   let pollHandle = null;
   let runtimeSeconds = 0;
   let idleDurationLabel = '';
@@ -584,6 +589,7 @@ import { getToken } from '$lib/auth.js';
   })();
   let _statsFetchedAt = 0;
   let inputEl = null; // task textarea element
+  let taskListEl = null; // task list container element
   // Content preview via sandbox ports has been removed.
 
   function stateClass(state) {
@@ -1300,9 +1306,12 @@ import { getToken } from '$lib/auth.js';
           updated_at: newTask.updated_at || new Date().toISOString()
         }];
 
-        // Open the task detail immediately
-        selectedTaskId = newTask.id;
-        showTaskDetail = true;
+        // Stay on task list and scroll to bottom
+        showTaskDetail = false;
+        await tick();
+        if (taskListEl) {
+          taskListEl.scrollTop = taskListEl.scrollHeight;
+        }
 
         // Refresh tasks in background to ensure consistency
         fetchTasks().catch(() => {});
@@ -1668,9 +1677,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                   <div class="d-flex align-items-center flex-wrap gap-3">
                     <span class={`badge ${taskStatusBadgeClass(displayTask)}`}>{taskStatusLabel(displayTask)}</span>
-                    <span class="badge task-type-chip" title={taskTypeLabel(displayTask?.task_type)}>
-                      {taskTypeShort(displayTask?.task_type)}
-                    </span>
                     {#if displayTask && String(displayTask?.status || '').toLowerCase() === 'processing'}
                       <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Cancel this task" on:click={cancelActive}>
                         <i class="bi bi-x-circle me-1"></i>Cancel
@@ -1679,7 +1685,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   </div>
                 </div>
                 <div class="mb-3">
-                  <span class="badge task-type-chip" title={taskTypeLabel(displayTask?.task_type)}>
+                  <span class="badge task-type-chip {taskTypeClass(displayTask?.task_type)}" title={taskTypeLabel(displayTask?.task_type)}>
                     {taskTypeShort(displayTask?.task_type)}
                   </span>
                 </div>
@@ -1786,7 +1792,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     {/if}
                     {#if taskOutputItemsList.length}
                       {#each taskOutputItemsList as item}
-                        {#if String(item?.type || '').toLowerCase() === 'markdown'}
+                        {#if String(item?.type || '').toLowerCase() === 'commentary'}
+                          <div class="small fst-italic text-body text-opacity-75 mb-3" style="white-space: pre-wrap;">{item.content || ''}</div>
+                        {:else if String(item?.type || '').toLowerCase() === 'markdown'}
                           <div class="markdown-body mb-3">{@html renderMarkdown(item.content || '')}</div>
                         {:else if String(item?.type || '').toLowerCase() === 'json'}
                           <pre class="small bg-dark text-white p-2 rounded code-wrap mb-3"><code>{JSON.stringify(item.content, null, 2)}</code></pre>
@@ -1810,9 +1818,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 <h6 class="mb-0 small text-uppercase text-body-secondary">Task List</h6>
                 <div class="small text-body-secondary">Total: {tasks.length}</div>
               </div>
-              <div class="task-list px-3 py-2 flex-grow-1" style="overflow-y: auto;">
+              <div bind:this={taskListEl} class="task-list flex-grow-1" style="overflow-y: auto;">
                 {#if loading}
-                  <div class="d-flex align-items-center gap-2 text-body text-opacity-75 small">
+                  <div class="d-flex align-items-center gap-2 text-body text-opacity-75 small px-3 py-2">
                     <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
                     Loading tasks…
                   </div>
@@ -1821,12 +1829,12 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     {#each tasks as task}
                       <button
                         type="button"
-                        class={`list-group-item list-group-item-action d-flex align-items-start justify-content-between gap-2 ${selectedTaskSummary && selectedTaskSummary.id === task.id ? 'active' : ''}`}
+                        class="list-group-item list-group-item-action d-flex align-items-start justify-content-between gap-3 py-3"
                         on:click={() => openTaskDetail(task.id)}
                       >
-                        <div class="text-start">
-                          <div class="small">
-                            <span class="badge task-type-chip" title={taskTypeLabel(task?.task_type)}>
+                        <div class="text-start flex-grow-1" style="min-width: 0;">
+                          <div class="mb-1">
+                            <span class="badge task-type-chip {taskTypeClass(task?.task_type)}" title={taskTypeLabel(task?.task_type)}>
                               {taskTypeShort(task?.task_type)}
                             </span>
                           </div>
@@ -1834,15 +1842,15 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                             <div class="small text-body text-opacity-75 task-preview">{taskPreview(task)}</div>
                           {/if}
                         </div>
-                        <div class="text-end">
+                        <div class="text-end flex-shrink-0">
                           <span class={`badge ${taskStatusBadgeClass(task)}`}>{taskStatusLabel(task)}</span>
-                          <div class="small text-body-secondary mt-1">{formatTaskTimestamp(task)}</div>
+                          <div class="small text-body-secondary text-opacity-50 mt-1" style="font-size: 0.7rem;">{formatTaskTimestamp(task)}</div>
                         </div>
                       </button>
                     {/each}
                   </div>
                 {:else}
-                  <div class="text-body text-opacity-75 small">No tasks yet.</div>
+                  <div class="text-body text-opacity-75 small px-3 py-2">No tasks yet.</div>
                 {/if}
               </div>
             {/if}
@@ -1856,7 +1864,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             </div>
             <form class="task-form" on:submit|preventDefault={createTask}>
               <div class="mb-2">
-                <div class="form-label text-uppercase small text-body-secondary fw-semibold">Task Type</div>
                 <div class="d-flex flex-wrap gap-2">
                   {#each taskTypeOptions as option}
                     <button
@@ -1868,9 +1875,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                       {option.label}
                     </button>
                   {/each}
-                </div>
-                <div class="form-text">
-                  {taskTypeOptions.find((opt) => opt.value === taskType)?.description || 'Select how the sandbox should execute this task.'}
                 </div>
               </div>
               <div class="input-group task-input-group rounded-0 shadow-none">
@@ -2201,16 +2205,43 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   }
 
   :global(.task-type-chip) {
-    font-size: 0.625rem;
+    font-size: 0.75rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     font-weight: 500;
-    border: 1px solid rgba(var(--bs-theme-rgb), 0.35);
-    color: rgba(var(--bs-theme-rgb), 1);
-    background: rgba(var(--bs-theme-rgb), 0.08);
-    padding: 0.15rem 0.6rem;
-    border-radius: 0.25rem;
+    border: 1px solid;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.3rem;
   }
+
+  /* NL - Natural Language (Purple/Indigo) */
+  :global(.task-type-chip.task-type-nl) {
+    border-color: rgba(111, 66, 193, 0.4);
+    color: rgb(111, 66, 193);
+    background: rgba(111, 66, 193, 0.1);
+  }
+
+  /* SH - Shell (Green) */
+  :global(.task-type-chip.task-type-sh) {
+    border-color: rgba(25, 135, 84, 0.4);
+    color: rgb(25, 135, 84);
+    background: rgba(25, 135, 84, 0.1);
+  }
+
+  /* PY - Python (Blue) */
+  :global(.task-type-chip.task-type-py) {
+    border-color: rgba(13, 110, 253, 0.4);
+    color: rgb(13, 110, 253);
+    background: rgba(13, 110, 253, 0.1);
+  }
+
+  /* JS - JavaScript (Yellow/Amber) */
+  :global(.task-type-chip.task-type-js) {
+    border-color: rgba(255, 193, 7, 0.5);
+    color: rgb(204, 153, 0);
+    background: rgba(255, 193, 7, 0.15);
+  }
+
   :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
     border-color: rgba(var(--bs-theme-rgb), 0.5);
     color: var(--bs-theme);

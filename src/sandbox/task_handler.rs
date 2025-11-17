@@ -335,28 +335,46 @@ impl TaskHandler {
                 }
                 let sanitized = self.guardrails.validate_output(&final_text)?;
 
-                // Try to parse as JSON first to extract items
+                // Parse output as JSON and build items array
                 let output_items = if let Ok(parsed) = serde_json::from_str::<Value>(&sanitized) {
-                    let raw_items = build_output_items_from_tool(&parsed, &sanitized);
-                    let normalized = normalize_output_items(raw_items);
-                    self.sanitize_output_items(normalized)?
-                } else {
-                    // JSON parsing failed - try to extract content via regex or treat as markdown
-                    warn!("Failed to parse output as JSON, treating as markdown");
+                    let mut items = Vec::new();
 
-                    // Try to extract content array from malformed JSON using pattern matching
-                    let content_extracted = try_extract_content_from_malformed_json(&sanitized);
+                    // Check for commentary field and convert to item
+                    if let Some(commentary) = parsed.get("commentary") {
+                        if let Some(commentary_str) = commentary.as_str() {
+                            if !commentary_str.trim().is_empty() {
+                                items.push(json!({
+                                    "type": "commentary",
+                                    "content": commentary_str
+                                }));
+                            }
+                        }
+                    }
 
-                    if !content_extracted.is_empty() {
-                        let normalized = normalize_output_items(content_extracted);
-                        self.sanitize_output_items(normalized)?
-                    } else {
-                        // Final fallback: treat entire output as markdown
-                        vec![json!({
+                    // Add items from items array or content array
+                    if let Some(items_arr) = parsed.get("items").and_then(|v| v.as_array()) {
+                        items.extend(items_arr.clone());
+                    } else if let Some(content_arr) = parsed.get("content").and_then(|v| v.as_array()) {
+                        items.extend(content_arr.clone());
+                    }
+
+                    // If no items found, treat entire output as markdown
+                    if items.is_empty() {
+                        items.push(json!({
                             "type": "md",
                             "content": sanitized.clone()
-                        })]
+                        }));
                     }
+
+                    let normalized = normalize_output_items(items);
+                    self.sanitize_output_items(normalized)?
+                } else {
+                    // Failed to parse as JSON - treat as markdown
+                    warn!("Failed to parse output as JSON, treating as markdown");
+                    vec![json!({
+                        "type": "md",
+                        "content": sanitized.clone()
+                    })]
                 };
 
                 let segment = json!({
@@ -456,9 +474,37 @@ impl TaskHandler {
                     }
 
                     if command_name == "output" {
-                        let fallback = command.body.as_deref().unwrap_or("No content provided.");
-                        let raw_items = build_output_items_from_tool(&output, fallback);
-                        let normalized = normalize_output_items(raw_items);
+                        let mut items = Vec::new();
+
+                        // Check for commentary field and convert to item
+                        if let Some(commentary) = output.get("commentary") {
+                            if let Some(commentary_str) = commentary.as_str() {
+                                if !commentary_str.trim().is_empty() {
+                                    items.push(json!({
+                                        "type": "commentary",
+                                        "content": commentary_str
+                                    }));
+                                }
+                            }
+                        }
+
+                        // Add items from items array or content array
+                        if let Some(items_arr) = output.get("items").and_then(|v| v.as_array()) {
+                            items.extend(items_arr.clone());
+                        } else if let Some(content_arr) = output.get("content").and_then(|v| v.as_array()) {
+                            items.extend(content_arr.clone());
+                        }
+
+                        // If no items found, treat as markdown
+                        if items.is_empty() {
+                            let fallback = command.body.as_deref().unwrap_or("No content provided.");
+                            items.push(json!({
+                                "type": "md",
+                                "content": fallback
+                            }));
+                        }
+
+                        let normalized = normalize_output_items(items);
                         let sanitized_items = self.sanitize_output_items(normalized)?;
                         let summary_md = summarize_output_items(&sanitized_items);
                         let final_segment = json!({
@@ -749,92 +795,6 @@ fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
             tool_call_id: None,
         })
     }
-}
-
-/// Attempts to extract content array from malformed JSON that may have commentary mixed in
-fn try_extract_content_from_malformed_json(text: &str) -> Vec<Value> {
-    // Try to find a "content":[...] pattern and extract just that array
-    // This handles cases where the model sends {"commentary":"...", "content":[...]}
-    // but the JSON is malformed or has syntax errors elsewhere
-
-    if let Some(content_start) = text.find(r#""content":"#) {
-        // Find the opening bracket after "content":
-        if let Some(bracket_pos) = text[content_start..].find('[') {
-            let array_start = content_start + bracket_pos;
-            // Try to find the matching closing bracket
-            let remaining = &text[array_start..];
-            if let Some(array_text) = extract_json_array(remaining) {
-                // Try to parse just the array
-                if let Ok(Value::Array(items)) = serde_json::from_str::<Value>(&array_text) {
-                    if !items.is_empty() {
-                        return items;
-                    }
-                }
-            }
-        }
-    }
-
-    Vec::new()
-}
-
-/// Extracts a JSON array by counting brackets to find the matching close bracket
-fn extract_json_array(text: &str) -> Option<String> {
-    if !text.starts_with('[') {
-        return None;
-    }
-
-    let mut depth = 0;
-    let mut in_string = false;
-    let mut escape_next = false;
-
-    for (i, ch) in text.char_indices() {
-        if escape_next {
-            escape_next = false;
-            continue;
-        }
-
-        match ch {
-            '\\' if in_string => escape_next = true,
-            '"' => in_string = !in_string,
-            '[' if !in_string => depth += 1,
-            ']' if !in_string => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(text[..=i].to_string());
-                }
-            }
-            _ => {}
-        }
-    }
-
-    None
-}
-
-fn build_output_items_from_tool(output: &Value, fallback: &str) -> Vec<Value> {
-    // Try "items" first (new format)
-    if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
-        if !items.is_empty() {
-            return items.clone();
-        }
-    }
-    // Try "content" (model sometimes uses this)
-    if let Some(content) = output.get("content").and_then(|v| v.as_array()) {
-        if !content.is_empty() {
-            return content.clone();
-        }
-    }
-    // If output has content as string, try to parse it as JSON
-    if let Some(content_str) = output.get("content").and_then(|v| v.as_str()) {
-        if let Ok(parsed) = serde_json::from_str::<Value>(content_str) {
-            if let Some(arr) = parsed.as_array() {
-                if !arr.is_empty() {
-                    return arr.clone();
-                }
-            }
-        }
-    }
-    // Fallback to markdown
-    vec![json!({ "type": "md", "content": fallback })]
 }
 
 fn summarize_output_items(items: &[Value]) -> String {
