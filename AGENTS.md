@@ -45,7 +45,7 @@
 - Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `perf:`, `style:`.
 - PRs must include: summary, test plan, breaking changes (if any), and linked issues.
 - Before pushing: `cargo fmt --check`, `cargo clippy`, `cargo test`, and ensure services still start: `tsbx start api`.
-- Etiquette: no emojis, no AI-assistant references; imperative subject (<50 chars) with details in body when needed.
+- **Etiquette: NEVER use emojis, NEVER reference AI assistants (Claude, Claude Code, etc.), NEVER add "Generated with" footers**; imperative subject (<50 chars) with details in body when needed.
 - Branch naming: `type/short-description` (e.g., `feat/sandbox-timeout`).
 
 Note on commit message formatting:
