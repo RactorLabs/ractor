@@ -911,7 +911,7 @@ pub async fn cancel_task(
             return Err(ApiError::NotFound("Task not found".to_string()));
         }
         let status_lower = task.status.to_lowercase();
-        if status_lower == "processing" || status_lower == "pending" {
+        if status_lower == "processing" || status_lower == "queued" {
             let req = UpdateTaskRequest {
                 status: Some("cancelled".to_string()),
                 input: None,
@@ -980,7 +980,7 @@ pub async fn cancel_task(
     }
 
     let (remaining_tasks,): (i64,) = sqlx::query_as(
-        r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
+        r#"SELECT COUNT(*) FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('queued','processing')"#
     )
     .bind(&sandbox.id)
     .fetch_one(&*state.db)
@@ -1241,7 +1241,7 @@ pub async fn terminate_sandbox(
     });
 
     let active_tasks = sqlx::query_as::<_, (String,)>(
-        r#"SELECT id FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('pending','processing')"#
+        r#"SELECT id FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('queued','processing')"#
     )
     .bind(&sandbox.id)
     .fetch_all(&*state.db)
@@ -1794,9 +1794,7 @@ pub async fn create_task(
         )));
     }
 
-    if sandbox.state == crate::shared::models::constants::SANDBOX_STATE_BUSY {
-        return Err(ApiError::Conflict("Sandbox is busy".to_string()));
-    }
+    // Allow task creation even if sandbox is busy - tasks will be queued
 
     if let Some(timeout) = req.timeout_seconds {
         if timeout < 0 {

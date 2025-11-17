@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS sandbox_tasks (
     id CHAR(36) PRIMARY KEY DEFAULT (UUID()),
     sandbox_id CHAR(36) NOT NULL,
     created_by VARCHAR(255) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed','cancelled')),
+    status VARCHAR(20) NOT NULL DEFAULT 'queued' CHECK (status IN ('queued','processing','completed','failed','cancelled')),
     task_type CHAR(2) NOT NULL DEFAULT 'NL' CHECK (task_type IN ('NL','SH','PY','JS')),
     input JSON NOT NULL,
     output JSON NOT NULL,

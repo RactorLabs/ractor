@@ -104,7 +104,7 @@ impl TaskHandler {
 
         let mut pending: Vec<TaskSummary> = Vec::new();
         for task in &recent {
-            if task.status.eq_ignore_ascii_case("pending") {
+            if task.status.eq_ignore_ascii_case("queued") {
                 if let Ok(created) = DateTime::parse_from_rfc3339(&task.created_at) {
                     if created.with_timezone(&Utc) >= self.request_created_at {
                         if !self.processed_task_ids.lock().await.contains(&task.id) {
@@ -218,6 +218,12 @@ impl TaskHandler {
                 Ok(resp) => resp,
                 Err(e) => return Err(e),
             };
+
+            // Check if task was cancelled during inference
+            if !self.is_task_active(&task.id).await? {
+                return Ok(());
+            }
+
             let ModelResponse {
                 content,
                 tool_calls,
@@ -335,11 +341,22 @@ impl TaskHandler {
                     let normalized = normalize_output_items(raw_items);
                     self.sanitize_output_items(normalized)?
                 } else {
-                    // Fallback to treating as markdown
-                    vec![json!({
-                        "type": "md",
-                        "content": sanitized.clone()
-                    })]
+                    // JSON parsing failed - try to extract content via regex or treat as markdown
+                    warn!("Failed to parse output as JSON, treating as markdown");
+
+                    // Try to extract content array from malformed JSON using pattern matching
+                    let content_extracted = try_extract_content_from_malformed_json(&sanitized);
+
+                    if !content_extracted.is_empty() {
+                        let normalized = normalize_output_items(content_extracted);
+                        self.sanitize_output_items(normalized)?
+                    } else {
+                        // Final fallback: treat entire output as markdown
+                        vec![json!({
+                            "type": "md",
+                            "content": sanitized.clone()
+                        })]
+                    }
                 };
 
                 let segment = json!({
@@ -379,6 +396,11 @@ impl TaskHandler {
 
             match self.toolkit.execute_invocation(&command).await {
                 Ok(ExecutionResult { args, output }) => {
+                    // Check if task was cancelled during tool execution
+                    if !self.is_task_active(&task.id).await? {
+                        return Ok(());
+                    }
+
                     let mut truncated_output = false;
                     let output_text =
                         truncate_output_text(&output, MAX_TOOL_OUTPUT_CHARS, &mut truncated_output);
@@ -568,7 +590,7 @@ impl TaskHandler {
         match self.api_client.get_task_by_id(task_id).await {
             Ok(task) => {
                 let status = task.status.to_lowercase();
-                Ok(status == "pending" || status == "processing")
+                Ok(status == "queued" || status == "processing")
             }
             Err(err) => {
                 warn!("Failed to fetch task {}: {}", task_id, err);
@@ -729,6 +751,65 @@ fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
     }
 }
 
+/// Attempts to extract content array from malformed JSON that may have commentary mixed in
+fn try_extract_content_from_malformed_json(text: &str) -> Vec<Value> {
+    // Try to find a "content":[...] pattern and extract just that array
+    // This handles cases where the model sends {"commentary":"...", "content":[...]}
+    // but the JSON is malformed or has syntax errors elsewhere
+
+    if let Some(content_start) = text.find(r#""content":"#) {
+        // Find the opening bracket after "content":
+        if let Some(bracket_pos) = text[content_start..].find('[') {
+            let array_start = content_start + bracket_pos;
+            // Try to find the matching closing bracket
+            let remaining = &text[array_start..];
+            if let Some(array_text) = extract_json_array(remaining) {
+                // Try to parse just the array
+                if let Ok(Value::Array(items)) = serde_json::from_str::<Value>(&array_text) {
+                    if !items.is_empty() {
+                        return items;
+                    }
+                }
+            }
+        }
+    }
+
+    Vec::new()
+}
+
+/// Extracts a JSON array by counting brackets to find the matching close bracket
+fn extract_json_array(text: &str) -> Option<String> {
+    if !text.starts_with('[') {
+        return None;
+    }
+
+    let mut depth = 0;
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    for (i, ch) in text.char_indices() {
+        if escape_next {
+            escape_next = false;
+            continue;
+        }
+
+        match ch {
+            '\\' if in_string => escape_next = true,
+            '"' => in_string = !in_string,
+            '[' if !in_string => depth += 1,
+            ']' if !in_string => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(text[..=i].to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
 fn build_output_items_from_tool(output: &Value, fallback: &str) -> Vec<Value> {
     // Try "items" first (new format)
     if let Some(items) = output.get("items").and_then(|v| v.as_array()) {
@@ -740,6 +821,16 @@ fn build_output_items_from_tool(output: &Value, fallback: &str) -> Vec<Value> {
     if let Some(content) = output.get("content").and_then(|v| v.as_array()) {
         if !content.is_empty() {
             return content.clone();
+        }
+    }
+    // If output has content as string, try to parse it as JSON
+    if let Some(content_str) = output.get("content").and_then(|v| v.as_str()) {
+        if let Ok(parsed) = serde_json::from_str::<Value>(content_str) {
+            if let Some(arr) = parsed.as_array() {
+                if !arr.is_empty() {
+                    return arr.clone();
+                }
+            }
         }
     }
     // Fallback to markdown

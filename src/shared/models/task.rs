@@ -161,7 +161,7 @@ impl SandboxTask {
         let id = uuid::Uuid::new_v4().to_string();
         let now = Utc::now();
 
-        let status = "pending".to_string();
+        let status = "queued".to_string();
         let task_type = req.task_type.unwrap_or_default();
         let timeout_seconds = req.timeout_seconds.filter(|v| *v > 0);
         let timeout_at = timeout_seconds.map(|secs| now + chrono::Duration::seconds(secs as i64));

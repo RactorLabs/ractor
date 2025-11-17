@@ -306,7 +306,7 @@ impl SandboxManager {
                 FROM sandbox_tasks
                 WHERE timeout_at IS NOT NULL
                   AND timeout_at <= NOW()
-                  AND status IN ('pending', 'processing')
+                  AND status IN ('queued', 'processing')
                 ORDER BY timeout_at ASC
                 LIMIT 50
                 "#,
@@ -356,7 +356,7 @@ impl SandboxManager {
                     timeout_seconds = NULL,
                     timeout_at = NULL,
                     updated_at = NOW()
-                WHERE id = ? AND status IN ('pending','processing')
+                WHERE id = ? AND status IN ('queued','processing')
                 "#,
             )
             .bind(&updated_output)
@@ -660,7 +660,7 @@ impl SandboxManager {
             sqlx::query(
                 r#"
                 INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, task_type, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
-                VALUES (?, ?, ?, 'pending', 'NL', ?, ?, ?, ?, ?, NOW(), NOW())
+                VALUES (?, ?, ?, 'queued', 'NL', ?, ?, ?, ?, ?, NOW(), NOW())
                 "#,
             )
             .bind(&task_id)
@@ -893,7 +893,7 @@ impl SandboxManager {
         // Mark the latest in-progress task as cancelled (processing or pending) (applies to any close reason)
         if let Some((task_id, steps_json, output_json)) =
             sqlx::query_as::<_, (String, serde_json::Value, serde_json::Value)>(
-                r#"SELECT id, steps, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('processing','pending') ORDER BY created_at DESC LIMIT 1"#,
+                r#"SELECT id, steps, output FROM sandbox_tasks WHERE sandbox_id = ? AND status IN ('processing','queued') ORDER BY created_at DESC LIMIT 1"#,
             )
             .bind(&sandbox.id)
             .fetch_optional(&self.pool)
@@ -1125,7 +1125,7 @@ impl SandboxManager {
         sqlx::query(
             r#"
             INSERT INTO sandbox_tasks (id, sandbox_id, created_by, status, task_type, input, output, steps, timeout_seconds, timeout_at, created_at, updated_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&task_id)

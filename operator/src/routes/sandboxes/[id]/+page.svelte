@@ -170,11 +170,8 @@ import { getToken } from '$lib/auth.js';
   let statsInitialized = false;
   let statsLoading = true;
   $: taskInputDisabled =
-    sending ||
-    stateStr === 'busy' ||
     stateStr === 'terminating' ||
-    stateStr === 'terminated' ||
-    stateStr === 'initializing';
+    stateStr === 'terminated';
   $: idleDurationLabel = computeIdleDuration(sandbox?.idle_from);
   $: toolUsageEntries = (() => {
     try {
@@ -920,7 +917,7 @@ import { getToken } from '$lib/auth.js';
   }
   function taskStatusLabel(task) {
     const status = taskStatus(task);
-    if (status === 'pending') return 'Pending';
+    if (status === 'queued') return 'Queued';
     if (status === 'processing') return 'Processing';
     if (status === 'completed') return 'Completed';
     if (status === 'failed') return 'Failed';
@@ -932,7 +929,7 @@ import { getToken } from '$lib/auth.js';
     if (status === 'completed') return 'bg-success-subtle text-success-emphasis border';
     if (status === 'processing') return 'bg-info-subtle text-info-emphasis border';
     if (status === 'failed' || status === 'cancelled') return 'bg-danger-subtle text-danger-emphasis border';
-    if (status === 'pending') return 'bg-warning-subtle text-warning-emphasis border';
+    if (status === 'queued') return 'bg-warning-subtle text-warning-emphasis border';
     return 'bg-secondary-subtle text-secondary-emphasis border';
   }
   function formatTaskTimestamp(task) {
@@ -1269,7 +1266,7 @@ import { getToken } from '$lib/auth.js';
   async function createTask(e) {
     e?.preventDefault?.();
     const content = (input || '').trim();
-    if (!content || sending || stateStr === 'busy') { if (stateStr === 'busy') { error = 'Sandbox is busy'; } return; }
+    if (!content) return;
     sending = true;
     try {
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks`, {
@@ -1286,26 +1283,37 @@ import { getToken } from '$lib/auth.js';
         }
         throw new Error(res?.data?.message || res?.data?.error || `Send failed (HTTP ${res.status})`);
       }
+
+      // Immediately add the task to the list for instant feedback
+      const newTask = res?.data;
+      if (newTask && newTask.id) {
+        // Add to tasks array immediately
+        tasks = [...tasks, {
+          id: newTask.id,
+          sandbox_id: newTask.sandbox_id,
+          status: newTask.status || 'queued',
+          task_type: newTask.task_type,
+          input: newTask.input || [],
+          output: newTask.output || { items: [] },
+          context_length: newTask.context_length || 0,
+          created_at: newTask.created_at || new Date().toISOString(),
+          updated_at: newTask.updated_at || new Date().toISOString()
+        }];
+
+        // Open the task detail immediately
+        selectedTaskId = newTask.id;
+        showTaskDetail = true;
+
+        // Refresh tasks in background to ensure consistency
+        fetchTasks().catch(() => {});
+        fetchSandbox().catch(() => {});
+      }
+
       input = '';
       // Reset textarea height after clearing
       error = null;
       await tick();
       try { if (inputEl) { inputEl.style.height = ''; } } catch (_) {}
-      // Wait until the server-side task row appears, then update UI
-      const rid = res?.data?.id;
-      const deadline = Date.now() + 10000; // up to 10s
-      while (Date.now() < deadline) {
-        await fetchTasks();
-        if (!rid || tasks.some((t) => t.id === rid)) {
-          if (rid) {
-            selectedTaskId = rid;
-            showTaskDetail = true;
-            await loadTaskDetail(rid, { force: true, showSpinner: true });
-          }
-          break;
-        }
-        await new Promise(r => setTimeout(r, 200));
-      }
     } catch (e) {
       error = e.message || String(e);
       sending = false;
@@ -1663,7 +1671,17 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <span class="badge task-type-chip" title={taskTypeLabel(displayTask?.task_type)}>
                       {taskTypeShort(displayTask?.task_type)}
                     </span>
+                    {#if displayTask && String(displayTask?.status || '').toLowerCase() === 'processing'}
+                      <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Cancel this task" on:click={cancelActive}>
+                        <i class="bi bi-x-circle me-1"></i>Cancel
+                      </button>
+                    {/if}
                   </div>
+                </div>
+                <div class="mb-3">
+                  <span class="badge task-type-chip" title={taskTypeLabel(displayTask?.task_type)}>
+                    {taskTypeShort(displayTask?.task_type)}
+                  </span>
                 </div>
                 <section class="mb-3">
                   <h6 class="fw-semibold fs-6 mb-2">Input</h6>
@@ -1790,14 +1808,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             {:else}
               <div class="px-3 py-2 border-bottom d-flex align-items-center justify-content-between">
                 <h6 class="mb-0 small text-uppercase text-body-secondary">Task List</h6>
-                <div class="d-flex align-items-center gap-2">
-                  {#if tasks.find((t) => String(t?.status || '').toLowerCase() === 'processing')}
-                    <button type="button" class="btn btn-sm btn-outline-danger" aria-label="Cancel active task" on:click={cancelActive}>
-                      <i class="bi bi-x-circle me-1"></i>Cancel Task
-                    </button>
-                  {/if}
-                  <div class="small text-body-secondary">Total: {tasks.length}</div>
-                </div>
+                <div class="small text-body-secondary">Total: {tasks.length}</div>
               </div>
               <div class="task-list px-3 py-2 flex-grow-1" style="overflow-y: auto;">
                 {#if loading}
@@ -1814,9 +1825,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                         on:click={() => openTaskDetail(task.id)}
                       >
                         <div class="text-start">
-                          <div class="fw-semibold font-monospace">{task.id}</div>
-                          <div class="small text-body-secondary">{formatTaskTimestamp(task)}</div>
-                          <div class="small mt-1">
+                          <div class="small">
                             <span class="badge task-type-chip" title={taskTypeLabel(task?.task_type)}>
                               {taskTypeShort(task?.task_type)}
                             </span>
@@ -1825,7 +1834,10 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                             <div class="small text-body text-opacity-75 task-preview">{taskPreview(task)}</div>
                           {/if}
                         </div>
-                        <span class={`badge ${taskStatusBadgeClass(task)}`}>{taskStatusLabel(task)}</span>
+                        <div class="text-end">
+                          <span class={`badge ${taskStatusBadgeClass(task)}`}>{taskStatusLabel(task)}</span>
+                          <div class="small text-body-secondary mt-1">{formatTaskTimestamp(task)}</div>
+                        </div>
                       </button>
                     {/each}
                   </div>
@@ -2189,17 +2201,20 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   }
 
   :global(.task-type-chip) {
-    font-size: 0.6rem;
-    letter-spacing: 0.08em;
+    font-size: 0.625rem;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    border: 1px dashed rgba(var(--bs-secondary-rgb), 0.6);
-    color: var(--bs-secondary-color);
-    background: transparent;
-    padding: 0.1rem 0.55rem;
+    font-weight: 500;
+    border: 1px solid rgba(var(--bs-theme-rgb), 0.35);
+    color: rgba(var(--bs-theme-rgb), 1);
+    background: rgba(var(--bs-theme-rgb), 0.08);
+    padding: 0.15rem 0.6rem;
+    border-radius: 0.25rem;
   }
   :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
-    border-color: rgba(var(--bs-theme-rgb), 0.65);
+    border-color: rgba(var(--bs-theme-rgb), 0.5);
     color: var(--bs-theme);
+    background: rgba(var(--bs-theme-rgb), 0.12);
   }
 
   @media (max-width: 576px) {
