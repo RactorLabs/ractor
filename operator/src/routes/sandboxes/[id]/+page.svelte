@@ -168,6 +168,13 @@ import { getToken } from '$lib/auth.js';
     const upper = code.toUpperCase();
     return `task-type-${upper.toLowerCase()}`;
   }
+  function taskTypeButtonClass(code, isSelected) {
+    const typeClass = taskTypeClass(code);
+    if (isSelected) {
+      return `btn btn-sm task-type-btn ${typeClass} selected`;
+    }
+    return `btn btn-sm task-type-btn ${typeClass}`;
+  }
   let pollHandle = null;
   let runtimeSeconds = 0;
   let idleDurationLabel = '';
@@ -1868,7 +1875,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   {#each taskTypeOptions as option}
                     <button
                       type="button"
-                      class={`btn btn-sm ${taskType === option.value ? 'btn-dark text-white' : 'btn-outline-secondary'}`}
+                      class={taskTypeButtonClass(option.value, taskType === option.value)}
                       on:click={() => (taskType = option.value)}
                       disabled={taskInputDisabled}
                     >
@@ -2216,36 +2223,92 @@ onDestroy(() => { fmRevokePreviewUrl(); });
 
   /* NL - Natural Language (Purple/Indigo) */
   :global(.task-type-chip.task-type-nl) {
-    border-color: rgba(111, 66, 193, 0.4);
-    color: rgb(111, 66, 193);
-    background: rgba(111, 66, 193, 0.1);
+    border-color: rgb(111, 66, 193);
+    color: white;
+    background: rgb(111, 66, 193);
   }
 
   /* SH - Shell (Green) */
   :global(.task-type-chip.task-type-sh) {
-    border-color: rgba(25, 135, 84, 0.4);
-    color: rgb(25, 135, 84);
-    background: rgba(25, 135, 84, 0.1);
+    border-color: rgb(25, 135, 84);
+    color: white;
+    background: rgb(25, 135, 84);
   }
 
-  /* PY - Python (Blue) */
+  /* PY - Python (Yellow/Amber) */
   :global(.task-type-chip.task-type-py) {
-    border-color: rgba(13, 110, 253, 0.4);
-    color: rgb(13, 110, 253);
-    background: rgba(13, 110, 253, 0.1);
+    border-color: rgb(218, 165, 32);
+    color: white;
+    background: rgb(218, 165, 32);
   }
 
-  /* JS - JavaScript (Yellow/Amber) */
+  /* JS - JavaScript (Blue) */
   :global(.task-type-chip.task-type-js) {
-    border-color: rgba(255, 193, 7, 0.5);
-    color: rgb(204, 153, 0);
-    background: rgba(255, 193, 7, 0.15);
+    border-color: rgb(13, 110, 253);
+    color: white;
+    background: rgb(13, 110, 253);
   }
 
   :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
     border-color: rgba(var(--bs-theme-rgb), 0.5);
     color: var(--bs-theme);
     background: rgba(var(--bs-theme-rgb), 0.12);
+  }
+
+  /* Task type selector buttons */
+  :global(.task-type-btn) {
+    border-width: 1px;
+    border-style: solid;
+    background: transparent;
+    transition: all 0.15s ease-in-out;
+  }
+
+  /* NL button inactive */
+  :global(.task-type-btn.task-type-nl) {
+    border-color: rgb(111, 66, 193);
+    color: rgb(111, 66, 193);
+  }
+  /* NL button selected */
+  :global(.task-type-btn.task-type-nl.selected) {
+    border-color: rgb(111, 66, 193);
+    background: rgb(111, 66, 193);
+    color: white;
+  }
+
+  /* SH button inactive */
+  :global(.task-type-btn.task-type-sh) {
+    border-color: rgb(25, 135, 84);
+    color: rgb(25, 135, 84);
+  }
+  /* SH button selected */
+  :global(.task-type-btn.task-type-sh.selected) {
+    border-color: rgb(25, 135, 84);
+    background: rgb(25, 135, 84);
+    color: white;
+  }
+
+  /* PY button inactive */
+  :global(.task-type-btn.task-type-py) {
+    border-color: rgb(218, 165, 32);
+    color: rgb(218, 165, 32);
+  }
+  /* PY button selected */
+  :global(.task-type-btn.task-type-py.selected) {
+    border-color: rgb(218, 165, 32);
+    background: rgb(218, 165, 32);
+    color: white;
+  }
+
+  /* JS button inactive */
+  :global(.task-type-btn.task-type-js) {
+    border-color: rgb(13, 110, 253);
+    color: rgb(13, 110, 253);
+  }
+  /* JS button selected */
+  :global(.task-type-btn.task-type-js.selected) {
+    border-color: rgb(13, 110, 253);
+    background: rgb(13, 110, 253);
+    color: white;
   }
 
   @media (max-width: 576px) {
