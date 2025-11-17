@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -252,6 +252,7 @@ export function getApiDocs(base) {
             { in: 'body', name: 'description', type: 'string|null', required: false, desc: 'Optional description.' },
             { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary metadata JSON (default {}).' },
             { in: 'body', name: 'tags', type: 'string[]', required: false, desc: "Tag list (stored lowercase; allowed characters letters, digits, '/', '-', '_', '.')." },
+            { in: 'body', name: 'inference_model', type: 'string|null', required: false, desc: 'Override inference model for this sandbox (uses system default if omitted).' },
             { in: 'body', name: 'env', type: 'object<string,string>', required: false, desc: 'Environment variable map to inject on boot.' },
             { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions passed to the sandbox runtime.' },
             { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script executed on boot.' },
@@ -259,10 +260,10 @@ export function getApiDocs(base) {
             { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Override idle timeout seconds (defaults to 900).' },
             { in: 'body', name: 'snapshot_id', type: 'string|null', required: false, desc: 'Restore from an existing snapshot (files copied by the controller).' }
           ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"]}'`,
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2"}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{},"runtime_seconds":0,"tasks_completed":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
@@ -276,7 +277,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
@@ -421,7 +422,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hi"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hi"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
@@ -432,13 +433,14 @@ export function getApiDocs(base) {
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }." },
+            { in: 'body', name: 'task_type', type: "'NL'|'SH'|'PY'|'JS'", required: false, desc: "Task type: 'NL' (natural language/inference, default), 'SH' (shell), 'PY' (Python), 'JS' (JavaScript)." },
             { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to true (non-blocking). Set false to wait for completion.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 300, 0 to disable).' }
           ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"background":false}'`,
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"task_type":"NL","background":false}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
@@ -454,7 +456,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","input":[{"type":"text","content":"hi"}],"steps":[],"output":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","task_type":"NL","input":[{"type":"text","content":"hi"}],"steps":[],"output":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -465,7 +467,7 @@ export function getApiDocs(base) {
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' },
-            { in: 'body', name: 'status', type: "'pending'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
+            { in: 'body', name: 'status', type: "'queued'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
             { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update (replaces existing input JSON).' },
             { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges text/items into existing output.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' },
@@ -474,14 +476,14 @@ export function getApiDocs(base) {
           example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"done"}],"output":[{"type":"md","content":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"done"}],"output":[{"type":"md","content":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
           method: 'POST',
           path: '/api/v0/sandboxes/{id}/tasks/{task_id}/cancel',
           auth: 'bearer',
-          desc: 'Cancel a specific pending or processing task. If the task is already complete, returns HTTP 409.',
+          desc: 'Cancel a specific queued or processing task. If the task is already complete, returns HTTP 409.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' }
