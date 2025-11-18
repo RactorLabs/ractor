@@ -73,13 +73,14 @@ build_from_source() {
   require cargo
 
   src_archive="${TMP_DIR}/tsbx-source.tar.gz"
+  src_dir="${TMP_DIR}/tsbx-src"
+  mkdir -p "$src_dir"
+
   info "Downloading source (${SOURCE_REF})…"
   curl -fsSL "$source_url" -o "$src_archive"
   info "Extracting source…"
-  tar -xzf "$src_archive" -C "$TMP_DIR"
-  src_dir="$(find "$TMP_DIR" -maxdepth 1 -type d -name "${OWNER}-${REPO}-*" -print -quit)"
-  if [[ -z "$src_dir" ]]; then
-    error "Failed to locate extracted source directory"
+  if ! tar -xzf "$src_archive" -C "$src_dir" --strip-components=1; then
+    error "Failed to extract source archive"
     exit 1
   fi
 
