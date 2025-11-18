@@ -1496,7 +1496,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   <div class="col-12">
     <div class="row g-3 align-items-stretch">
       <div class="col-12 col-lg-6">
-        <Card class="h-100">
+        <Card class="h-100 muted-card">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if sandbox}
@@ -2076,7 +2076,6 @@ onDestroy(() => { fmRevokePreviewUrl(); });
 
   <style>
   .muted-card {
-    border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
     background-color: var(--bs-body-bg);
     opacity: 0.94;
   }
