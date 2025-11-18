@@ -16,6 +16,19 @@ use super::shared_task::{normalize_output_items, TaskType};
 
 const MAX_TOOL_OUTPUT_CHARS: usize = 1_000;
 
+/// Extract content from channel-based model responses.
+/// Some models use format: `<|channel|>final<|message|>actual_xml_content`
+fn extract_final_channel(text: &str) -> &str {
+    // Look for the final channel marker
+    if let Some(pos) = text.rfind("<|channel|>final<|message|>") {
+        let start = pos + "<|channel|>final<|message|>".len();
+        &text[start..].trim()
+    } else {
+        // No channel markers, return original text
+        text
+    }
+}
+
 pub struct TaskHandler {
     api_client: Arc<TSBXClient>,
     inference_client: Arc<InferenceClient>,
@@ -287,7 +300,9 @@ impl TaskHandler {
                 let cmd_text = serde_json::to_string(&tool_call).unwrap_or_default();
                 (cmd, cmd_text)
             } else if let Some(content_text) = content {
-                let raw = content_text.trim();
+                // Extract content from channel markers if present (e.g., <|channel|>final<|message|>)
+                let extracted = extract_final_channel(&content_text);
+                let raw = extracted.trim();
                 if raw.is_empty() {
                     warn!("Empty response from model; retrying");
                     continue;
