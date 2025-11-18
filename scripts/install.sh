@@ -130,5 +130,14 @@ fi
 
 success "Installation complete"
 if [[ $first_install -eq 1 ]]; then
-  echo "Run: tsbx configure"
+  if [[ "${TSBX_AUTO_CONFIGURE:-1}" == "1" ]]; then
+    info "Launching tsbx configure (set TSBX_AUTO_CONFIGURE=0 to skip)…"
+    if "$INSTALL_DIR/tsbx" configure; then
+      success "Configuration saved"
+    else
+      warn "Automatic configuration failed; run 'tsbx configure' manually"
+    fi
+  else
+    echo "Run: tsbx configure"
+  fi
 fi
