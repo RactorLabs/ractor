@@ -226,18 +226,6 @@
   .text-truncate { display: block; }
   :global(.modal) { z-index: 2000; }
   :global(.modal-backdrop) { z-index: 1990; }
-  .muted-card {
-    border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
-    background-color: var(--bs-body-bg);
-    opacity: 0.94;
-  }
-  .muted-card .badge {
-    opacity: 0.85;
-  }
-  .muted-card .state-label {
-    color: var(--bs-secondary-color) !important;
-    font-weight: 600;
-  }
 </style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Sandboxes</div>
@@ -322,7 +310,7 @@
               <div class="row g-3">
                 {#each activeSandboxes as a (a.id)}
                   <div class="col-12 col-md-6">
-                    <Card class="h-100 muted-card">
+                    <Card class="h-100">
                       <div class="card-body d-flex flex-column">
                         <div class="d-flex align-items-center gap-2 mb-1">
                           <a class="fw-bold text-decoration-none fs-18px font-monospace" href={'/sandboxes/' + encodeURIComponent(a.id || '')}>{a.id || '-'}</a>
