@@ -22,7 +22,7 @@ For a fully automated flow (install → configure → link → start `mysql api 
 curl -fsSL https://raw.githubusercontent.com/RactorLabs/tsbx/tsbx-installation/scripts/bootstrap.sh | bash
 ```
 
-The script assumes the repo lives at `~/repos/tsbx` (override with `TSBX_REPO_DIR=/path/to/tsbx`) and launches `./scripts/link.sh` plus `tsbx start mysql api controller`. Customize behavior with:
+The script assumes the repo lives at `~/repos/tsbx` (override with `TSBX_REPO_DIR=/path/to/tsbx`) and launches `./scripts/link.sh` plus `tsbx start mysql api controller`. During `tsbx configure`, you will also be prompted for the sandbox workspace directory so the CLI can run `cargo` from the right place even if you invoke `tsbx start` elsewhere. Customize behavior with:
 
 - `TSBX_SERVICES="mysql api controller"` – set to an empty string to skip `tsbx start`.
 - `TSBX_AUTO_CONFIGURE=1` – set to `0` to skip the interactive `tsbx configure` call inside the installer.
@@ -40,11 +40,11 @@ If you prefer to run each step yourself, follow the manual quick-setup below.
    The script downloads the latest `tsbx` binary to `~/.local/bin/tsbx`, creates `~/.config/tsbx/`, and immediately launches the interactive `tsbx configure` wizard (set `TSBX_AUTO_CONFIGURE=0` to skip).
    If a GitHub release asset is not available, it falls back to building the CLI from source; set `TSBX_SOURCE_REF=<branch>` before running the command if you need it to build from a specific branch.
 
-2. **Capture provider settings**
+2. **Capture provider settings + sandbox workspace**
    ```bash
    tsbx configure
    ```
-   Follow the prompts for provider name, inference URL, default model, and API key. The CLI writes `~/.config/tsbx/config.json` with `0600` permissions.
+   Follow the prompts for provider name, inference URL, default model, API key, and the path to your local sandbox workspace (typically `~/repos/tsbx`). The CLI writes `~/.config/tsbx/config.json` with `0600` permissions, and future `tsbx start` commands will `cd` into that directory automatically.
 
 3. **Start a sandbox**
    ```bash

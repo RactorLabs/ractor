@@ -19,6 +19,8 @@ pub struct Config {
     pub api_key: String,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(default)]
+    pub sandbox_dir: String,
 }
 
 impl Default for Config {
@@ -31,6 +33,7 @@ impl Default for Config {
             api_key: String::new(),
             created_at: now.clone(),
             updated_at: now,
+            sandbox_dir: default_sandbox_dir(),
         }
     }
 }
@@ -49,6 +52,9 @@ pub fn load_or_default() -> Result<Config> {
     }
     if cfg.updated_at.trim().is_empty() {
         cfg.updated_at = timestamp();
+    }
+    if cfg.sandbox_dir.trim().is_empty() {
+        cfg.sandbox_dir = default_sandbox_dir();
     }
     Ok(cfg)
 }
@@ -115,4 +121,13 @@ fn home_dir() -> PathBuf {
     env::var("HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn default_sandbox_dir() -> String {
+    let mut candidate = home_dir();
+    candidate.push("repos/tsbx");
+    if candidate.exists() {
+        return candidate.to_string_lossy().into_owned();
+    }
+    String::new()
 }

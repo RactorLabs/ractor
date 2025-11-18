@@ -108,9 +108,9 @@ chmod 700 "$CONFIG_DIR" "$LOG_DIR"
 install -m 755 "$install_path" "$INSTALL_DIR/tsbx"
 success "Installed tsbx to $INSTALL_DIR/tsbx"
 
-first_install=0
+needs_config=0
 if [[ ! -f "$CONFIG_FILE" ]]; then
-  first_install=1
+  needs_config=1
   cat >"$CONFIG_FILE" <<'JSON'
 {
   "provider_name": "",
@@ -118,10 +118,18 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "default_model": "",
   "api_key": "",
   "created_at": "",
-  "updated_at": ""
+  "updated_at": "",
+  "sandbox_dir": ""
 }
 JSON
   chmod 600 "$CONFIG_FILE"
+else
+  for key in provider_name inference_url api_key; do
+    if grep -Eq "\"${key}\"[[:space:]]*:[[:space:]]*\"[[:space:]]*\"" "$CONFIG_FILE"; then
+      needs_config=1
+      break
+    fi
+  done
 fi
 
 if ! grep -q "${INSTALL_DIR}" <<<"$PATH"; then
@@ -129,7 +137,7 @@ if ! grep -q "${INSTALL_DIR}" <<<"$PATH"; then
 fi
 
 success "Installation complete"
-if [[ $first_install -eq 1 ]]; then
+if [[ $needs_config -eq 1 ]]; then
   if [[ "${TSBX_AUTO_CONFIGURE:-1}" == "1" ]]; then
     info "Launching tsbx configure (set TSBX_AUTO_CONFIGURE=0 to skip)…"
     if [[ -e /dev/tty && -r /dev/tty && -w /dev/tty ]]; then

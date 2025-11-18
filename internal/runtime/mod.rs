@@ -26,7 +26,19 @@ pub fn start(cfg: &Config) -> Result<()> {
     );
 
     let command = env::var("TSBX_SANDBOX_COMMAND")
-        .unwrap_or_else(|_| "cargo run --release --bin tsbx-sandbox".to_string());
+        .ok()
+        .or_else(|| {
+            let dir = cfg.sandbox_dir.trim();
+            if dir.is_empty() {
+                None
+            } else {
+                Some(format!(
+                    "cd {} && cargo run --release --bin tsbx-sandbox",
+                    shell_escape(dir)
+                ))
+            }
+        })
+        .unwrap_or_else(|| "cargo run --release --bin tsbx-sandbox".to_string());
 
     let mut child = Command::new("bash")
         .arg("-c")
@@ -89,4 +101,18 @@ where
             }
         }
     })
+}
+
+fn shell_escape(input: &str) -> String {
+    let mut escaped = String::with_capacity(input.len() + 2);
+    escaped.push('\'');
+    for ch in input.chars() {
+        if ch == '\'' {
+            escaped.push_str("'\"'\"'");
+        } else {
+            escaped.push(ch);
+        }
+    }
+    escaped.push('\'');
+    escaped
 }
