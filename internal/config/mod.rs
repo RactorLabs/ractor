@@ -21,6 +21,12 @@ pub struct Config {
     pub updated_at: String,
     #[serde(default)]
     pub sandbox_dir: String,
+    #[serde(default)]
+    pub tsbx_api_url: String,
+    #[serde(default)]
+    pub sandbox_id: String,
+    #[serde(default)]
+    pub tsbx_token: String,
 }
 
 impl Default for Config {
@@ -34,6 +40,9 @@ impl Default for Config {
             created_at: now.clone(),
             updated_at: now,
             sandbox_dir: default_sandbox_dir(),
+            tsbx_api_url: String::new(),
+            sandbox_id: String::new(),
+            tsbx_token: String::new(),
         }
     }
 }
@@ -55,6 +64,15 @@ pub fn load_or_default() -> Result<Config> {
     }
     if cfg.sandbox_dir.trim().is_empty() {
         cfg.sandbox_dir = default_sandbox_dir();
+    }
+    if cfg.tsbx_api_url.trim().is_empty() {
+        cfg.tsbx_api_url = String::new();
+    }
+    if cfg.sandbox_id.trim().is_empty() {
+        cfg.sandbox_id = String::new();
+    }
+    if cfg.tsbx_token.trim().is_empty() {
+        cfg.tsbx_token = String::new();
     }
     Ok(cfg)
 }

@@ -3,6 +3,7 @@ use anyhow::{bail, Context, Result};
 use std::env;
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -11,6 +12,21 @@ use std::time::SystemTime;
 pub fn start(cfg: &Config) -> Result<()> {
     if cfg.api_key.trim().is_empty() || cfg.inference_url.trim().is_empty() {
         bail!("Missing provider configuration; run `tsbx configure` first.");
+    }
+    if cfg.tsbx_api_url.trim().is_empty()
+        || cfg.sandbox_id.trim().is_empty()
+        || cfg.tsbx_token.trim().is_empty()
+    {
+        bail!("Missing TSBX API configuration; run `tsbx configure` and supply API URL, sandbox ID, and token.");
+    }
+    if cfg.sandbox_dir.trim().is_empty() {
+        bail!("Sandbox workspace directory is not configured; rerun `tsbx configure`.");
+    }
+    if !Path::new(cfg.sandbox_dir.trim()).exists() {
+        bail!(
+            "Sandbox workspace directory '{}' does not exist.",
+            cfg.sandbox_dir
+        );
     }
 
     config::ensure_dirs()?;
@@ -27,18 +43,7 @@ pub fn start(cfg: &Config) -> Result<()> {
 
     let command = env::var("TSBX_SANDBOX_COMMAND")
         .ok()
-        .or_else(|| {
-            let dir = cfg.sandbox_dir.trim();
-            if dir.is_empty() {
-                None
-            } else {
-                Some(format!(
-                    "cd {} && cargo run --release --bin tsbx-sandbox",
-                    shell_escape(dir)
-                ))
-            }
-        })
-        .unwrap_or_else(|| "cargo run --release --bin tsbx-sandbox".to_string());
+        .unwrap_or_else(|| build_default_command(cfg));
 
     let mut child = Command::new("bash")
         .arg("-c")
@@ -49,6 +54,9 @@ pub fn start(cfg: &Config) -> Result<()> {
         .env("TSBX_INFERENCE_URL", cfg.inference_url.as_str())
         .env("TSBX_DEFAULT_MODEL", cfg.default_model.as_str())
         .env("TSBX_API_KEY", cfg.api_key.as_str())
+        .env("TSBX_TOKEN", cfg.tsbx_token.as_str())
+        .env("TSBX_API_URL", cfg.tsbx_api_url.as_str())
+        .env("SANDBOX_ID", cfg.sandbox_id.as_str())
         .spawn()
         .with_context(|| format!("unable to run command: {command}"))?;
 
@@ -115,4 +123,13 @@ fn shell_escape(input: &str) -> String {
     }
     escaped.push('\'');
     escaped
+}
+
+fn build_default_command(cfg: &Config) -> String {
+    format!(
+        "cd {workspace} && cargo run --release --bin tsbx-sandbox -- --api-url {api_url} --sandbox-id {sandbox_id}",
+        workspace = shell_escape(cfg.sandbox_dir.trim()),
+        api_url = shell_escape(cfg.tsbx_api_url.trim()),
+        sandbox_id = shell_escape(cfg.sandbox_id.trim()),
+    )
 }

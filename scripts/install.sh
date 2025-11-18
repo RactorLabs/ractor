@@ -119,12 +119,15 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   "api_key": "",
   "created_at": "",
   "updated_at": "",
-  "sandbox_dir": ""
+  "sandbox_dir": "",
+  "tsbx_api_url": "",
+  "sandbox_id": "",
+  "tsbx_token": ""
 }
 JSON
   chmod 600 "$CONFIG_FILE"
 else
-  for key in provider_name inference_url api_key; do
+  for key in provider_name inference_url api_key tsbx_api_url sandbox_id tsbx_token; do
     if grep -Eq "\"${key}\"[[:space:]]*:[[:space:]]*\"[[:space:]]*\"" "$CONFIG_FILE"; then
       needs_config=1
       break

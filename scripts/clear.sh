@@ -17,7 +17,7 @@ fi
 
 if ! docker ps --format '{{.Names}}' | grep -Fxq "${MYSQL_CONTAINER}"; then
   echo "[ERROR] MySQL container '${MYSQL_CONTAINER}' is not running." >&2
-  echo "        Start it with 'tsbx start mysql' before running this script." >&2
+  echo "        Start your MySQL container first (e.g., via Docker compose) before running this script." >&2
   exit 1
 fi
 

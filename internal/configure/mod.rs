@@ -20,6 +20,9 @@ pub fn run(mut cfg: Config) -> Result<Config> {
     };
     let sandbox_input = prompt("Sandbox workspace directory", &sandbox_prompt)?;
     cfg.sandbox_dir = normalize_workspace_dir(&sandbox_input)?;
+    cfg.tsbx_api_url = prompt_required("TSBX API URL", &cfg.tsbx_api_url)?;
+    cfg.sandbox_id = prompt_required("Sandbox ID", &cfg.sandbox_id)?;
+    cfg.tsbx_token = prompt_required("TSBX API token (TSBX_TOKEN)", &cfg.tsbx_token)?;
 
     if cfg.api_key.trim().is_empty() {
         bail!("API key cannot be empty");

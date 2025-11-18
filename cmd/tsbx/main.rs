@@ -18,6 +18,12 @@ fn main() {
     let command = args[1].to_lowercase();
     match command.as_str() {
         "start" => {
+            if args.len() > 2 {
+                eprintln!(
+                    "Warning: ignoring extra arguments passed to `tsbx start`: {}",
+                    args[2..].join(" ")
+                );
+            }
             if let Err(err) = cmd_start() {
                 eprintln!("Error: {err}");
                 std::process::exit(1);
