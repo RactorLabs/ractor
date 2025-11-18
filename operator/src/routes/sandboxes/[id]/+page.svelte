@@ -2075,14 +2075,14 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   </div>
 
   <style>
-  .muted-card {
+  :global(.muted-card) {
     background-color: var(--bs-body-bg);
     opacity: 0.94;
   }
-  .muted-card .badge {
+  :global(.muted-card .badge) {
     opacity: 0.85;
   }
-  .muted-card .state-label {
+  :global(.muted-card .state-label) {
     color: var(--bs-secondary-color) !important;
     font-weight: 600;
   }
