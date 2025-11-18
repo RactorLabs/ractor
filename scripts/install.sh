@@ -132,10 +132,14 @@ success "Installation complete"
 if [[ $first_install -eq 1 ]]; then
   if [[ "${TSBX_AUTO_CONFIGURE:-1}" == "1" ]]; then
     info "Launching tsbx configure (set TSBX_AUTO_CONFIGURE=0 to skip)…"
-    if "$INSTALL_DIR/tsbx" configure; then
-      success "Configuration saved"
+    if [[ -e /dev/tty && -r /dev/tty && -w /dev/tty ]]; then
+      if "$INSTALL_DIR/tsbx" configure </dev/tty >/dev/tty 2>/dev/tty; then
+        success "Configuration saved"
+      else
+        warn "Automatic configuration failed; run 'tsbx configure' manually"
+      fi
     else
-      warn "Automatic configuration failed; run 'tsbx configure' manually"
+      warn "No interactive TTY detected; run 'tsbx configure' once installation finishes"
     fi
   else
     echo "Run: tsbx configure"
