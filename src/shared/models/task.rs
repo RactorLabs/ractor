@@ -399,7 +399,30 @@ fn normalize_output_item(item: Value) -> Option<Value> {
                 _ => {
                     let text = match content_value {
                         Some(Value::String(s)) => s,
-                        Some(other) => other.to_string(),
+                        Some(Value::Object(obj)) => {
+                            // Try to extract string content from nested object
+                            if let Some(nested_content) = obj.get("content") {
+                                if let Some(s) = nested_content.as_str() {
+                                    s.to_string()
+                                } else {
+                                    // Serialize nested content as proper JSON
+                                    serde_json::to_string(nested_content).unwrap_or_default()
+                                }
+                            } else if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
+                                text.to_string()
+                            } else {
+                                // Serialize entire object as proper JSON
+                                serde_json::to_string(&Value::Object(obj)).unwrap_or_default()
+                            }
+                        }
+                        Some(Value::Array(arr)) => {
+                            // Serialize array as proper JSON
+                            serde_json::to_string(&Value::Array(arr)).unwrap_or_default()
+                        }
+                        Some(other) => {
+                            // For primitives, convert to string
+                            serde_json::to_string(&other).unwrap_or_else(|_| other.to_string())
+                        }
                         None => String::new(),
                     };
                     let mut normalized = serde_json::Map::new();
