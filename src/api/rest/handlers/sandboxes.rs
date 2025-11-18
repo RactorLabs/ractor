@@ -48,7 +48,6 @@ async fn is_admin_principal(auth: &AuthContext, state: &AppState) -> bool {
 fn check_not_terminated(sandbox: &Sandbox) -> ApiResult<()> {
     if sandbox.state.eq_ignore_ascii_case("terminated")
         || sandbox.state.eq_ignore_ascii_case("terminating")
-        || sandbox.state.eq_ignore_ascii_case("initializing")
         || sandbox.state.eq_ignore_ascii_case("deleted")
     {
         return Err(ApiError::BadRequest("Sandbox not available.".to_string()));
