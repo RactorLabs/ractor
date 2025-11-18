@@ -621,6 +621,7 @@ impl TaskHandler {
                 let canonical = match raw_type.as_str() {
                     "md" | "markdown" => "md",
                     "json" => "json",
+                    "commentary" => "commentary",
                     _ => "text",
                 };
                 map.insert("type".into(), Value::String(canonical.to_string()));
