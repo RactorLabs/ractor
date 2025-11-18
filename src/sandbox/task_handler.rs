@@ -354,7 +354,9 @@ impl TaskHandler {
                     // Add items from items array or content array
                     if let Some(items_arr) = parsed.get("items").and_then(|v| v.as_array()) {
                         items.extend(items_arr.clone());
-                    } else if let Some(content_arr) = parsed.get("content").and_then(|v| v.as_array()) {
+                    } else if let Some(content_arr) =
+                        parsed.get("content").and_then(|v| v.as_array())
+                    {
                         items.extend(content_arr.clone());
                     }
 
@@ -491,13 +493,16 @@ impl TaskHandler {
                         // Add items from items array or content array
                         if let Some(items_arr) = output.get("items").and_then(|v| v.as_array()) {
                             items.extend(items_arr.clone());
-                        } else if let Some(content_arr) = output.get("content").and_then(|v| v.as_array()) {
+                        } else if let Some(content_arr) =
+                            output.get("content").and_then(|v| v.as_array())
+                        {
                             items.extend(content_arr.clone());
                         }
 
                         // If no items found, treat as markdown
                         if items.is_empty() {
-                            let fallback = command.body.as_deref().unwrap_or("No content provided.");
+                            let fallback =
+                                command.body.as_deref().unwrap_or("No content provided.");
                             items.push(json!({
                                 "type": "md",
                                 "content": fallback

@@ -49,3 +49,6 @@ Thumbs.db
 
 # Shell history
 history.txt
+
+# Build artifacts
+dist/

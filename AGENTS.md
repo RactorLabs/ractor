@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `src/`: Rust services — `api/` (REST API), `controller/` (orchestration), `sandbox/` (runtime), `shared/` (common code). Binaries: `tsbx-api`, `tsbx-controller`, `tsbx-sandbox`.
-- `cli/`: Node.js CLI (`tsbx`).
+- `cmd/tsbx/`: Go-based Linux CLI (`tsbx`).
 - `scripts/`: Dev automation (`build.sh`, `link.sh`, `install.sh`, `rebuild.sh`, `release.sh`, `bump.sh`, `push.sh`).
 - `db/migrations/`: SQLx migrations (MySQL). Seeds an `admin` operator.
 - `assets/`: Static assets.
@@ -12,17 +12,13 @@
 
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
-- Start services (Docker via CLI): `tsbx start [components...]`
-  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference traffic is proxied to `TSBX_INFERENCE_URL` (must be provided; typically points to `https://api.positron.ai/v1`).
-  - In dev, use `./scripts/build.sh` to build images when needed.
-- Stop: `tsbx stop [components...]` (supports `sandboxes` to stop all sandbox containers).
-- Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.
+- CLI helpers: `tsbx start` (boots a sandbox via the runtime command), `tsbx configure`, and `tsbx version`.
+- In dev, use `./scripts/build.sh` to rebuild Docker images when needed.
 
 ## Contributor Workflow Rules
 
-- Use the CLI for service management: `tsbx start|stop|doctor|reset|clean|pull|fix` (plus `dev_build`/`dev_rebuild` shortcuts for local Docker image work).
-- Use repo scripts only where needed: `./scripts/build.sh`, `./scripts/link.sh`.
-- Always run `./scripts/link.sh` before invoking the `tsbx` CLI during development.
+- Use the CLI for sandbox launches: `tsbx start` plus `tsbx configure`/`tsbx version`.
+- Use repo scripts only where needed: `./scripts/build.sh` and friends.
 - Keep changes minimal and consistent with existing patterns; prefer editing within current modules.
 
 ## Coding Style & Naming Conventions

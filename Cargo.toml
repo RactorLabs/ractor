@@ -51,3 +51,7 @@ path = "src/controller/main.rs"
 [[bin]]
 name = "tsbx-sandbox"
 path = "src/sandbox/main.rs"
+
+[[bin]]
+name = "tsbx"
+path = "cmd/tsbx/main.rs"

@@ -5,41 +5,56 @@
 
 ## Overview
 
-TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bundles a Rust service stack, a Node.js CLI, and an Operator UI so teams can provision, monitor, and control persistent workspaces connected to an OpenAI-compatible inference endpoint.
+TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bundles a Rust service stack, a minimal Linux CLI, and an Operator UI so teams can provision, monitor, and control persistent workspaces connected to an OpenAI-compatible inference endpoint.
 
 ## Requirements
 
 - Linux host with Docker 20.10+
-- Node.js 18+ and npm (for the CLI)
-- Rust 1.82+ (only if you plan to build the Rust services locally)
-- Inference endpoint exposed at `TSBX_INFERENCE_URL` with a valid API key and model name
+- `bash`, `curl`, and `tar` (for the installer)
+- Rust 1.82+ only if you plan to build the server binaries locally
+- Inference endpoint exposed over HTTPS with a valid API key
 
-## Quick Setup
+## Quick Setup (Linux)
 
-1. **Install or link the CLI**
+1. **Install the CLI**
    ```bash
-   npm install -g ./cli        # from this repo
-   # or
-   npm install -g @tsbx/cli
-   # for local changes
-   ./scripts/link.sh
+   curl -fsSL https://raw.githubusercontent.com/RactorLabs/tsbx/main/scripts/install.sh | bash
    ```
+   The script downloads the latest `tsbx` binary to `~/.local/bin/tsbx`, creates `~/.config/tsbx/`, and prints a reminder to configure credentials.
 
-2. **Provide inference credentials**
+2. **Capture provider settings**
    ```bash
-   export TSBX_INFERENCE_URL="https://api.positron.ai/v1/chat/completions"
-   export TSBX_INFERENCE_API_KEY="replace-with-your-api-key"
-   export TSBX_INFERENCE_MODELS="llama-3.2-3b-instruct-fast-tp2,llama-3.2-405b"
+   tsbx configure
    ```
-   The first model in `TSBX_INFERENCE_MODELS` becomes the default selection for new sandboxes.
+   Follow the prompts for provider name, inference URL, default model, and API key. The CLI writes `~/.config/tsbx/config.json` with `0600` permissions.
 
-3. **Start the core services**
+3. **Start a sandbox**
    ```bash
    tsbx start
    ```
-   Pass component names (e.g., `tsbx start api controller`) if you want to launch a subset.
+   The CLI prints “Starting a new TSBX sandbox…” and launches the runtime (by default it runs `cargo run --release --bin tsbx-sandbox`). Boot logs land in `~/.config/tsbx/logs/`.
 
-4. **Visit the Operator UI**  
-   Open <http://localhost> (or your configured `TSBX_HOST_URL`) to browse sandboxes, launch tasks, and monitor activity. The REST API is available at `<host>/api`.
+4. **Check the CLI version**
+   ```bash
+   tsbx version
+   ```
 
-> If something misbehaves, run `tsbx doctor` or `tsbx fix` from the CLI for guided troubleshooting.
+### Commands
+
+| Command          | Description                                                         |
+| ---------------- | ------------------------------------------------------------------- |
+| `tsbx start`     | Launches a sandbox and streams logs to `~/.config/tsbx/logs/`.      |
+| `tsbx configure` | Interactive prompt that validates and stores provider credentials.  |
+| `tsbx version`   | Prints the CLI version string.                                      |
+
+Set `TSBX_SANDBOX_COMMAND` if you need to override the process that actually boots a sandbox (for example, `export TSBX_SANDBOX_COMMAND='./scripts/run_sandbox.sh'`).
+
+### Building release binaries
+
+Run the helper script to produce the archive expected by `scripts/install.sh`:
+
+```bash
+./scripts/package_binary.sh
+```
+
+It builds `cargo build --release --bin tsbx`, places the binary in `dist/linux/tsbx-linux-<arch>/`, and creates `tsbx-linux-<arch>.tar.gz`. Upload that tarball to your GitHub release (repeat on each architecture you plan to support, e.g., x86_64 and aarch64).

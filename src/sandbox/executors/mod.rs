@@ -141,7 +141,7 @@ async fn execute_command(
             &task.id,
             Some(if success { "completed" } else { "failed" }.to_string()),
             Some(output_items),
-            None,  // No steps for non-NL tasks
+            None, // No steps for non-NL tasks
             Some(task.context_length),
             None,
         )

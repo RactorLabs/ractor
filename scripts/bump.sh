@@ -59,16 +59,6 @@ echo "Current: $cur -> New: $new"
 # Update Cargo.toml (first standalone version line in [package])
 sed -i "0,/^version = \".*\"$/s//version = \"$new\"/" Cargo.toml
 
-# Update CLI package.json if present
-if [[ -f cli/package.json ]]; then
-  if command -v jq >/dev/null 2>&1; then
-    tmp=$(mktemp)
-    jq -r --arg v "$new" '.version=$v' cli/package.json > "$tmp" && mv "$tmp" cli/package.json
-  else
-    sed -i "0,/\"version\": \"[0-9]\+\.[0-9]\+\.[0-9]\+\"/s//\"version\": \"$new\"/" cli/package.json || true
-  fi
-fi
-
 # Update Operator docs badge (safe regex)
 if [[ -f operator/src/routes/docs/+page.svelte ]]; then
   sed -i "s/const API_VERSION = '[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\([^']*\)'/const API_VERSION = '$new\1'/" operator/src/routes/docs/+page.svelte || true
@@ -96,11 +86,6 @@ if [[ $DO_BUILD -eq 1 ]]; then
   cargo build --release
 else
   echo "Skipping Rust build (--no-build)"
-fi
-
-if [[ -f cli/package.json && $DO_BUILD -eq 1 ]]; then
-  echo "Installing CLI deps and updating lockfile (cli/)"
-  (cd cli && npm install)
 fi
 
 if [[ -f operator/package.json && $DO_BUILD -eq 1 ]]; then
