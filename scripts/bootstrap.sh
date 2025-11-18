@@ -17,7 +17,26 @@ success() { printf '\033[32m[SUCCESS]\033[0m %s\n' "$1"; }
 warn() { printf '\033[33m[WARN]\033[0m %s\n' "$1"; }
 error() { printf '\033[31m[ERROR]\033[0m %s\n' "$1" >&2; }
 
+ensure_tty() {
+  if [[ -n "${BOOTSTRAP_TTY_IN:-}" && -n "${BOOTSTRAP_TTY_OUT:-}" ]]; then
+    return
+  fi
+  if [[ -r /dev/tty && -w /dev/tty ]]; then
+    BOOTSTRAP_TTY_IN="/dev/tty"
+    BOOTSTRAP_TTY_OUT="/dev/tty"
+    return
+  fi
+  if [[ -t 0 && -t 1 ]]; then
+    BOOTSTRAP_TTY_IN="/dev/stdin"
+    BOOTSTRAP_TTY_OUT="/dev/stdout"
+    return
+  fi
+  error "No interactive TTY detected. Run this script directly from a terminal."
+  exit 1
+}
+
 prompt_value() {
+  ensure_tty
   local __var="$1"
   local __label="$2"
   local __default="${3:-}"
@@ -25,15 +44,19 @@ prompt_value() {
   local __value=""
   while true; do
     if [[ -n "$__default" ]]; then
-      read -r -p "$__label [$__default]: " __value
+      printf "%s [%s]: " "$__label" "$__default" >"$BOOTSTRAP_TTY_OUT"
     else
-      read -r -p "$__label: " __value
+      printf "%s: " "$__label" >"$BOOTSTRAP_TTY_OUT"
+    fi
+    if ! IFS= read -r __value <"$BOOTSTRAP_TTY_IN"; then
+      error "Failed to read input from terminal"
+      exit 1
     fi
     if [[ -z "$__value" ]]; then
       __value="$__default"
     fi
     if [[ "$__required" == "1" && -z "$__value" ]]; then
-      echo "Value is required."
+      printf "Value is required.\n" >"$BOOTSTRAP_TTY_OUT"
       continue
     fi
     printf -v "$__var" '%s' "$__value"
