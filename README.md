@@ -21,6 +21,7 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
    curl -fsSL https://raw.githubusercontent.com/RactorLabs/tsbx/main/scripts/install.sh | bash
    ```
    The script downloads the latest `tsbx` binary to `~/.local/bin/tsbx`, creates `~/.config/tsbx/`, and prints a reminder to configure credentials.
+   If a GitHub release asset is not available, it falls back to building the CLI from source; set `TSBX_SOURCE_REF=<branch>` before running the command if you need it to build from a specific branch.
 
 2. **Capture provider settings**
    ```bash

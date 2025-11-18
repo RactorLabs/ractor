@@ -3,6 +3,7 @@ set -euo pipefail
 
 OWNER="RactorLabs"
 REPO="tsbx"
+SOURCE_REF="${TSBX_SOURCE_REF:-main}"
 INSTALL_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${HOME}/.config/tsbx"
 LOG_DIR="${CONFIG_DIR}/logs"
@@ -11,6 +12,7 @@ TMP_DIR="$(mktemp -d)"
 
 info() { printf '\033[34m[INFO]\033[0m %s\n' "$1"; }
 success() { printf '\033[32m[SUCCESS]\033[0m %s\n' "$1"; }
+warn() { printf '\033[33m[WARN]\033[0m %s\n' "$1"; }
 error() { printf '\033[31m[ERROR]\033[0m %s\n' "$1" >&2; }
 
 cleanup() {
@@ -28,7 +30,12 @@ require() {
 require curl
 require tar
 
-arch=$(uname -m)
+if [[ "$(uname -s)" != "Linux" ]]; then
+  error "Only Linux installations are supported by this installer"
+  exit 1
+fi
+
+arch="$(uname -m)"
 case "$arch" in
   x86_64|amd64)
     asset_arch="x86_64"
@@ -43,27 +50,59 @@ case "$arch" in
 esac
 
 asset="tsbx-linux-${asset_arch}.tar.gz"
-url="https://github.com/${OWNER}/${REPO}/releases/latest/download/${asset}"
+asset_url="https://github.com/${OWNER}/${REPO}/releases/latest/download/${asset}"
+source_url="https://codeload.github.com/${OWNER}/${REPO}/tar.gz/${SOURCE_REF}"
 archive_path="${TMP_DIR}/${asset}"
+install_path=""
 
-info "Downloading ${asset}…"
-curl -fsSL "$url" -o "$archive_path"
-info "Extracting binary…"
-tar -xzf "$archive_path" -C "$TMP_DIR"
+install_binary_from_archive() {
+  info "Extracting binary…"
+  tar -xzf "$archive_path" -C "$TMP_DIR"
+  if [[ -f "${TMP_DIR}/tsbx" ]]; then
+    install_path="${TMP_DIR}/tsbx"
+    return
+  fi
+  install_path="$(find "$TMP_DIR" -type f -name tsbx -print -quit)"
+  if [[ -z "$install_path" || ! -f "$install_path" ]]; then
+    error "Binary not found in archive"
+    exit 1
+  fi
+}
+
+build_from_source() {
+  require cargo
+
+  src_archive="${TMP_DIR}/tsbx-source.tar.gz"
+  info "Downloading source (${SOURCE_REF})…"
+  curl -fsSL "$source_url" -o "$src_archive"
+  info "Extracting source…"
+  tar -xzf "$src_archive" -C "$TMP_DIR"
+  src_dir="$(find "$TMP_DIR" -maxdepth 1 -type d -name "${OWNER}-${REPO}-*" -print -quit)"
+  if [[ -z "$src_dir" ]]; then
+    error "Failed to locate extracted source directory"
+    exit 1
+  fi
+
+  info "Building tsbx CLI from source (this may take a few minutes)…"
+  (cd "$src_dir" && cargo build --release --bin tsbx)
+
+  install_path="${src_dir}/target/release/tsbx"
+  if [[ ! -f "$install_path" ]]; then
+    error "Cargo build completed but tsbx binary was not found"
+    exit 1
+  fi
+}
+
+if curl -fsSL "$asset_url" -o "$archive_path"; then
+  info "Downloaded ${asset}"
+  install_binary_from_archive
+else
+  warn "Prebuilt ${asset} not available (HTTP ${?}); falling back to building from source"
+  build_from_source
+fi
 
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$LOG_DIR"
 chmod 700 "$CONFIG_DIR" "$LOG_DIR"
-
-if [[ -f "${TMP_DIR}/tsbx" ]]; then
-  install_path="${TMP_DIR}/tsbx"
-else
-  install_path="$(find "$TMP_DIR" -type f -name tsbx -print -quit)"
-fi
-
-if [[ -z "$install_path" || ! -f "$install_path" ]]; then
-  error "Binary not found in archive"
-  exit 1
-fi
 
 install -m 755 "$install_path" "$INSTALL_DIR/tsbx"
 success "Installed tsbx to $INSTALL_DIR/tsbx"
@@ -71,7 +110,7 @@ success "Installed tsbx to $INSTALL_DIR/tsbx"
 first_install=0
 if [[ ! -f "$CONFIG_FILE" ]]; then
   first_install=1
-  cat >"$CONFIG_FILE" <<JSON
+  cat >"$CONFIG_FILE" <<'JSON'
 {
   "provider_name": "",
   "inference_url": "",
