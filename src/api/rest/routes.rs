@@ -78,6 +78,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             get(handlers::sandboxes::get_sandbox_stats),
         )
         .route(
+            "/sandboxes/{id}/delete",
+            post(handlers::sandboxes::delete_sandbox),
+        )
+        .route(
             "/sandboxes/{id}",
             delete(handlers::sandboxes::terminate_sandbox),
         )

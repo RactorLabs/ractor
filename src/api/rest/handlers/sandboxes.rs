@@ -55,6 +55,14 @@ fn check_not_terminated(sandbox: &Sandbox) -> ApiResult<()> {
     Ok(())
 }
 
+// Helper: check if sandbox is deleted and return specific error
+fn check_not_deleted(sandbox: &Sandbox) -> ApiResult<()> {
+    if sandbox.state.eq_ignore_ascii_case("deleted") {
+        return Err(ApiError::BadRequest("Sandbox has been deleted.".to_string()));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 pub struct SandboxResponse {
     pub id: String, // Primary key - UUID
@@ -864,6 +872,9 @@ pub async fn get_sandbox(
     // Find sandbox by id (admin can access any sandbox)
     let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
 
+    // Allow getting deleted sandboxes so UI can show DELETED state
+    // Task operations will be blocked separately
+
     Ok(Json(
         SandboxResponse::from_sandbox(sandbox, &state.db).await?,
     ))
@@ -1329,6 +1340,48 @@ pub async fn terminate_sandbox(
     Ok(())
 }
 
+pub async fn delete_sandbox(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<()> {
+    // Check permission for deleting sandboxes (admin only). Owners can delete without RBAC grant
+    if is_admin_principal(&auth, &state).await {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_DELETE)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to delete sandbox".to_string())
+            })?;
+    }
+
+    // Get username for ownership check
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+
+    // Find sandbox by ID (admin can access any sandbox for delete)
+    let is_admin = is_admin_principal(&auth, &state).await;
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+
+    // Soft delete: mark sandbox as deleted (allowed even if terminated)
+    sqlx::query(
+        r#"UPDATE sandboxes
+           SET state = 'deleted', last_activity_at = NOW()
+           WHERE id = ?"#,
+    )
+    .bind(&sandbox.id)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!("Failed to mark sandbox deleted: {}", e))
+    })?;
+
+    tracing::info!("Marked sandbox {} as deleted", sandbox.id);
+
+    Ok(())
+}
+
 // GET /sandboxes/{id}/stats — aggregated sandbox statistics
 pub async fn get_sandbox_stats(
     State(state): State<Arc<AppState>>,
@@ -1741,6 +1794,8 @@ pub async fn list_tasks(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
 
+    check_not_deleted(&sandbox)?;
+
     let list = SandboxTask::find_by_sandbox(&state.db, &sandbox.id, query.limit, query.offset)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to fetch tasks: {}", e)))?;
@@ -1921,10 +1976,12 @@ pub async fn get_task_by_id(
     Path((sandbox_id, task_id)): Path<(String, String)>,
     Extension(_auth): Extension<AuthContext>,
 ) -> ApiResult<Json<TaskView>> {
-    let _sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
+    let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &sandbox_id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::NotFound("Sandbox not found".to_string()))?;
+
+    check_not_deleted(&sandbox)?;
 
     let cur = SandboxTask::find_by_id(&state.db, &task_id)
         .await

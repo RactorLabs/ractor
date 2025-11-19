@@ -622,6 +622,7 @@ import { getToken } from '$lib/auth.js';
     const s = String(state || '').toLowerCase();
     if (s === 'terminated') return 'bi bi-power';
     if (s === 'terminating') return 'spinner-border spinner-border-sm text-danger';
+    if (s === 'deleted') return 'bi bi-trash';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'initializing') return 'spinner-border spinner-border-sm text-info';
@@ -729,6 +730,27 @@ import { getToken } from '$lib/auth.js';
       alert(e.message || String(e));
     }
   }
+
+  // Delete modal state and actions
+  let showDeleteModal = false;
+  function openDeleteModal() { showDeleteModal = true; }
+  function closeDeleteModal() { showDeleteModal = false; }
+  async function confirmDeleteSandbox() {
+    try {
+      const cur = String(sandboxId || '').trim();
+      const res = await apiFetch(`/sandboxes/${encodeURIComponent(cur)}/delete`, { method: 'POST' });
+      if (!res.ok) throw new Error(res?.data?.message || res?.data?.error || `Delete failed (HTTP ${res.status})`);
+      showDeleteModal = false;
+      if (sandbox) {
+        sandbox = { ...sandbox, state: 'deleted' };
+      }
+      // Refresh details so the UI shows updated state
+      await fetchSandbox();
+    } catch (e) {
+      alert(e.message || String(e));
+    }
+  }
+  function deleteSandbox() { openDeleteModal(); }
 
   // Snapshot modal state and actions
   let showSnapshotModal = false;
@@ -1466,6 +1488,29 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   </div>
 {/if}
 
+<!-- Delete Modal -->
+{#if showDeleteModal}
+  <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Delete Sandbox</h5>
+          <button type="button" class="btn-close" aria-label="Close" on:click={closeDeleteModal}></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-body text-opacity-75 mb-0">
+            Deleting this sandbox marks it as deleted and prevents any further operations. The sandbox data and history will remain accessible but read-only. This action cannot be undone.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" on:click={closeDeleteModal}>Cancel</button>
+          <button class="btn btn-danger" on:click={confirmDeleteSandbox}>Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- Snapshot Modal -->
 {#if showSnapshotModal}
   <div class="modal fade show" style="display: block; background: rgba(0,0,0,.3);" tabindex="-1" role="dialog" aria-modal="true">
@@ -1505,19 +1550,23 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 <div class="fw-bold fs-22px">Loading...</div>
               {/if}
             </div>
-            <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
-            {#if sandboxInferenceModel}
-              <div class="small text-body-secondary mt-1">
-                Model: <span class="font-monospace">{sandboxInferenceModel}</span>
-              </div>
-            {/if}
-            {#if sandbox}
-              {#if isAdmin}
-                <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
+            {#if stateStr !== 'deleted'}
+              <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
+              {#if sandboxInferenceModel}
+                <div class="small text-body-secondary mt-1">
+                  Model: <span class="font-monospace">{sandboxInferenceModel}</span>
+                </div>
               {/if}
-              <div class="small text-body-secondary mt-1">
-                Idle Timeout: {fmtDuration(Number(sandbox.idle_timeout_seconds ?? 0))}
-              </div>
+              {#if sandbox}
+                {#if isAdmin}
+                  <div class="small text-body-secondary mt-1">Owner: <span class="font-monospace">{sandbox.created_by}</span></div>
+                {/if}
+                <div class="small text-body-secondary mt-1">
+                  Idle Timeout: {fmtDuration(Number(sandbox.idle_timeout_seconds ?? 0))}
+                </div>
+              {/if}
+            {:else}
+              <div class="small text-body-secondary flex-grow-1">This sandbox has been deleted.</div>
             {/if}
             <!-- Public URL in main card -->
             
@@ -1546,14 +1595,18 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end">
-                    {#if !['terminated','terminating','initializing'].includes(stateStr)}
+                    {#if !['terminated','terminating','initializing','deleted'].includes(stateStr)}
                       <li><button class="dropdown-item" on:click={openEditTags}><i class="bi bi-tags me-2"></i>Edit Tags</button></li>
                       <li><button class="dropdown-item" on:click={openEditTimeouts}><i class="bi bi-hourglass-split me-2"></i>Edit Timeouts</button></li>
                       <li><hr class="dropdown-divider" /></li>
                     {/if}
                     <li><a class="dropdown-item" href="/snapshots?sandbox_id={sandbox?.id || sandboxId}"><i class="bi bi-images me-2"></i>View Snapshots</a></li>
-                    {#if !['terminated','terminating','initializing'].includes(stateStr)}
+                    {#if !['terminated','terminating','initializing','deleted'].includes(stateStr)}
                       <li><button class="dropdown-item" on:click={openSnapshotModal}><i class="bi bi-camera me-2"></i>Create Snapshot</button></li>
+                    {/if}
+                    {#if stateStr !== 'deleted'}
+                      <li><hr class="dropdown-divider" /></li>
+                      <li><button class="dropdown-item text-danger" on:click={deleteSandbox}><i class="bi bi-trash me-2"></i>Delete</button></li>
                     {/if}
                   </ul>
                 </div>
@@ -1565,7 +1618,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
       <div class="col-12 col-lg-6 d-none d-lg-block">
         <Card class="h-100">
           <div class="card-body small">
-            {#if sandbox}
+            {#if stateStr === 'deleted'}
+              <div class="text-body-secondary">Sandbox has been deleted.</div>
+            {:else if sandbox}
               {#if sandbox.snapshot_id}
                 <div class="mt-1">
                   Source Snapshot: <a href="/snapshots/{encodeURIComponent(sandbox.snapshot_id)}" class="font-monospace text-decoration-none">{sandbox.snapshot_id}</a>
@@ -1672,8 +1727,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     <div class="col-12 col-lg-6 d-flex flex-column h-100" style="min-height: 0; min-width: 0;">
       <Card class="flex-fill d-flex flex-column task-pane" style="min-height: 0;">
         <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
-          <div class="flex-fill d-flex flex-column task-tracking" style="min-height: 0;">
-            {#if showTaskDetail}
+          {#if stateStr === 'deleted'}
+            <div class="d-flex align-items-center justify-content-center flex-fill">
+              <div class="text-body-secondary">Sandbox has been deleted.</div>
+            </div>
+          {:else}
+            <div class="flex-fill d-flex flex-column task-tracking" style="min-height: 0;">
+              {#if showTaskDetail}
               <div class="task-detail flex-fill px-3 py-3 border-top" style="overflow-y: auto; min-height: 0;">
                 <div class="d-flex flex-wrap align-items-center justify-content-between mb-3 gap-3">
                   <div class="d-flex align-items-start gap-3 flex-wrap">
@@ -1912,13 +1972,23 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               </div>
             </form>
           </div>
+          {/if}
         </div>
       </Card>
     </div>
     <div class="col-12 col-lg-6 d-none d-lg-flex flex-column h-100" style="min-height: 0; min-width: 0;">
         <!-- Content (Files) side panel -->
         <Card class="flex-fill d-flex flex-column files-pane" style="min-height: 0;">
-          {#if stateStr === 'terminated'}
+          {#if stateStr === 'deleted'}
+            <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
+              <div class="flex-fill d-flex align-items-center justify-content-center p-3">
+                <div class="text-center text-body text-opacity-75">
+                  <div class="fs-5 mb-2"><i class="bi bi-trash me-2"></i>Sandbox deleted</div>
+                  <p class="small mb-3 text-body-secondary">This sandbox has been deleted.</p>
+                </div>
+              </div>
+            </div>
+          {:else if stateStr === 'terminated'}
             <div class="card-body p-0 d-flex flex-column flex-fill" style="min-height: 0;">
               <div class="flex-fill d-flex align-items-center justify-content-center p-3">
                 <div class="text-center text-body text-opacity-75">
