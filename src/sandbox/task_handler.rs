@@ -39,6 +39,23 @@ pub struct TaskHandler {
 }
 
 impl TaskHandler {
+    fn request_structured_output_retry(conversation: &mut Vec<ChatMessage>) {
+        if conversation
+            .last()
+            .map(|m| m.role.eq_ignore_ascii_case("assistant"))
+            .unwrap_or(false)
+        {
+            let _ = conversation.pop();
+        }
+        conversation.push(ChatMessage {
+            role: "user".to_string(),
+            content: "Your <output> response must be valid JSON (no markdown fences or escaping) containing a `commentary` string and an `items` array of typed entries. Please rerun the final reasoning step and respond with that exact structure."
+                .to_string(),
+            name: None,
+            tool_call_id: None,
+        });
+    }
+
     pub fn new(
         api_client: Arc<TSBXClient>,
         inference_client: Arc<InferenceClient>,
@@ -349,60 +366,34 @@ impl TaskHandler {
                     continue;
                 }
                 let sanitized = self.guardrails.validate_output(&final_text)?;
-
-                // Parse output as JSON and build items array
-                let output_items = if let Ok(parsed) = serde_json::from_str::<Value>(&sanitized) {
-                    let mut items = Vec::new();
-
-                    // Check for commentary field and convert to item
-                    if let Some(commentary) = parsed.get("commentary") {
-                        if let Some(commentary_str) = commentary.as_str() {
-                            if !commentary_str.trim().is_empty() {
-                                items.push(json!({
-                                    "type": "commentary",
-                                    "content": commentary_str
-                                }));
-                            }
-                        }
-                    }
-
-                    // Add items from items array or content array
-                    if let Some(items_arr) = parsed.get("items").and_then(|v| v.as_array()) {
-                        items.extend(items_arr.clone());
-                    } else if let Some(content_arr) = parsed.get("content").and_then(|v| v.as_array()) {
-                        items.extend(content_arr.clone());
-                    }
-
-                    // If no items found, treat entire output as markdown
-                    if items.is_empty() {
-                        items.push(json!({
-                            "type": "md",
-                            "content": sanitized.clone()
-                        }));
-                    }
-
-                    let normalized = normalize_output_items(items);
-                    self.sanitize_output_items(normalized)?
-                } else {
-                    // Failed to parse as JSON - treat as markdown
-                    warn!("Failed to parse output as JSON, treating as markdown");
-                    vec![json!({
-                        "type": "md",
-                        "content": sanitized.clone()
-                    })]
+                let stripped = strip_code_fences(&sanitized);
+                let Some(parsed) = parse_structured_output_value(&stripped) else {
+                    warn!("Invalid <output> payload; requesting retry");
+                    Self::request_structured_output_retry(&mut conversation);
+                    continue;
+                };
+                let Some(output_items_raw) = collect_output_items(&parsed) else {
+                    warn!("Structured output missing items/content; requesting retry");
+                    Self::request_structured_output_retry(&mut conversation);
+                    continue;
                 };
 
+                let normalized = normalize_output_items(output_items_raw);
+                let sanitized_items = self.sanitize_output_items(normalized)?;
+                let pretty_display =
+                    serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| stripped.clone());
+                let display_text = self.guardrails.validate_output(&pretty_display)?;
                 let segment = json!({
                     "type": "final",
                     "tool": "output",
-                    "content": sanitized,
+                    "content": display_text.clone(),
                 });
                 let _ = self
                     .api_client
                     .update_task(
                         &task.id,
                         Some("completed".to_string()),
-                        Some(output_items),
+                        Some(sanitized_items),
                         Some(vec![segment]),
                         Some(context_length),
                         None,
@@ -410,7 +401,7 @@ impl TaskHandler {
                     .await;
                 conversation.push(ChatMessage {
                     role: "assistant".to_string(),
-                    content: sanitized,
+                    content: display_text,
                     name: None,
                     tool_call_id: None,
                 });
@@ -519,13 +510,16 @@ impl TaskHandler {
                         // Add items from items array or content array
                         if let Some(items_arr) = output.get("items").and_then(|v| v.as_array()) {
                             items.extend(items_arr.clone());
-                        } else if let Some(content_arr) = output.get("content").and_then(|v| v.as_array()) {
+                        } else if let Some(content_arr) =
+                            output.get("content").and_then(|v| v.as_array())
+                        {
                             items.extend(content_arr.clone());
                         }
 
                         // If no items found, treat as markdown
                         if items.is_empty() {
-                            let fallback = command.body.as_deref().unwrap_or("No content provided.");
+                            let fallback =
+                                command.body.as_deref().unwrap_or("No content provided.");
                             items.push(json!({
                                 "type": "md",
                                 "content": fallback
@@ -534,11 +528,16 @@ impl TaskHandler {
 
                         let normalized = normalize_output_items(items);
                         let sanitized_items = self.sanitize_output_items(normalized)?;
-                        let summary_md = summarize_output_items(&sanitized_items);
+                        let body_text = command.body.as_deref().unwrap_or_default();
+                        let display_text = if body_text.trim().is_empty() {
+                            summarize_output_items(&sanitized_items)
+                        } else {
+                            self.guardrails.validate_output(body_text)?
+                        };
                         let final_segment = json!({
                             "type": "final",
                             "tool": "output",
-                            "content": summary_md.clone(),
+                            "content": display_text.clone(),
                         });
 
                         let _ = self
@@ -555,7 +554,7 @@ impl TaskHandler {
 
                         conversation.push(ChatMessage {
                             role: "assistant".to_string(),
-                            content: summary_md,
+                            content: display_text,
                             name: None,
                             tool_call_id: None,
                         });
@@ -874,5 +873,83 @@ fn truncate_output_text(value: &Value, max_chars: usize, truncated: &mut bool) -
     } else {
         *truncated = false;
         text
+    }
+}
+
+fn strip_code_fences(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if !trimmed.starts_with("```") {
+        return trimmed.to_string();
+    }
+
+    // Remove opening fence (and optional language tag)
+    let mut body = &trimmed[3..];
+    if let Some(idx) = body.find('\n') {
+        body = &body[idx + 1..];
+    } else {
+        body = "";
+    }
+
+    if let Some(end) = body.rfind("```") {
+        body[..end].trim().to_string()
+    } else {
+        body.trim().to_string()
+    }
+}
+
+fn looks_like_structured_json(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if trimmed.len() < 2 {
+        return false;
+    }
+    (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+}
+
+fn parse_structured_output_value(raw: &str) -> Option<Value> {
+    let mut candidate = raw.trim().to_string();
+    if candidate.is_empty() {
+        return None;
+    }
+    for _ in 0..3 {
+        match serde_json::from_str::<Value>(&candidate) {
+            Ok(Value::String(inner)) if looks_like_structured_json(&inner) => {
+                candidate = inner;
+                continue;
+            }
+            Ok(value) => return Some(value),
+            Err(_) => return None,
+        }
+    }
+    None
+}
+
+fn collect_output_items(parsed: &Value) -> Option<Vec<Value>> {
+    let map = parsed.as_object()?;
+    let mut items = Vec::new();
+
+    if let Some(commentary) = map.get("commentary").and_then(|v| v.as_str()) {
+        if !commentary.trim().is_empty() {
+            items.push(json!({
+                "type": "commentary",
+                "content": commentary
+            }));
+        }
+    }
+
+    if let Some(Value::Array(arr)) = map.get("items") {
+        if !arr.is_empty() {
+            items.extend(arr.clone());
+        }
+    } else if let Some(Value::Array(arr)) = map.get("content") {
+        if !arr.is_empty() {
+            items.extend(arr.clone());
+        }
+    }
+
+    if items.is_empty() {
+        None
+    } else {
+        Some(items)
     }
 }
