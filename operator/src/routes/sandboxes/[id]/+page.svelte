@@ -2157,8 +2157,8 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     font-weight: 600;
   }
 
-  :global(.top-actions) { position: relative; z-index: 3001; }
-  :global(.top-actions .dropdown-menu) { z-index: 3002 !important; }
+  :global(.top-actions) { position: relative; z-index: 10; }
+  :global(.top-actions .dropdown-menu) { z-index: 1050 !important; }
   :global(.modal) { z-index: 2000; }
   :global(.modal-backdrop) { z-index: 1990; }
   :global(.card) { overflow: visible; }
