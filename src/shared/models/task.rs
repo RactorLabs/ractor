@@ -355,6 +355,14 @@ pub fn extract_output_items(value: &serde_json::Value) -> Vec<serde_json::Value>
     }
     if let Some(obj) = value.as_object() {
         let mut items = Vec::new();
+        // Extract commentary field first
+        if let Some(commentary) = obj.get("commentary") {
+            if let Some(commentary_str) = commentary.as_str() {
+                if !commentary_str.trim().is_empty() {
+                    items.push(json!({ "type": "commentary", "content": commentary_str }));
+                }
+            }
+        }
         if let Some(text) = obj.get("text").and_then(|v| v.as_str()) {
             items.push(json!({ "type": "md", "content": text }));
         }
