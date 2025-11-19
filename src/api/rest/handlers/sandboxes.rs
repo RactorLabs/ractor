@@ -58,7 +58,9 @@ fn check_not_terminated(sandbox: &Sandbox) -> ApiResult<()> {
 // Helper: check if sandbox is deleted and return specific error
 fn check_not_deleted(sandbox: &Sandbox) -> ApiResult<()> {
     if sandbox.state.eq_ignore_ascii_case("deleted") {
-        return Err(ApiError::BadRequest("Sandbox has been deleted.".to_string()));
+        return Err(ApiError::BadRequest(
+            "Sandbox has been deleted.".to_string(),
+        ));
     }
     Ok(())
 }
@@ -1373,9 +1375,7 @@ pub async fn delete_sandbox(
     .bind(&sandbox.id)
     .execute(&*state.db)
     .await
-    .map_err(|e| {
-        ApiError::Internal(anyhow::anyhow!("Failed to mark sandbox deleted: {}", e))
-    })?;
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to mark sandbox deleted: {}", e)))?;
 
     tracing::info!("Marked sandbox {} as deleted", sandbox.id);
 

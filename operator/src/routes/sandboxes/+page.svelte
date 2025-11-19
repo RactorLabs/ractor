@@ -225,26 +225,6 @@
     </div>
   </div>
 {/if}
-
-<style>
-  :global(.card) { overflow: visible; }
-  :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
-  :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
-  .text-truncate { display: block; }
-  :global(.modal) { z-index: 2000; }
-  :global(.modal-backdrop) { z-index: 1990; }
-  :global(.muted-card) {
-    background-color: var(--bs-body-bg);
-    opacity: 0.94;
-  }
-  :global(.muted-card .badge) {
-    opacity: 0.85;
-  }
-  :global(.muted-card .state-label) {
-    color: var(--bs-secondary-color) !important;
-    font-weight: 600;
-  }
-</style>
 <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
   <div class="fw-bold fs-20px">Sandboxes</div>
   <div class="ms-auto d-flex align-items-center gap-2">
@@ -513,3 +493,23 @@
     </div>
   </div>
 {/if}
+
+<style>
+  :global(.card) { overflow: visible; }
+  :global(.list-actions) { position: relative; z-index: 3001; isolation: isolate; }
+  :global(.card .card-arrow) { z-index: 0; pointer-events: none; }
+  .text-truncate { display: block; }
+  :global(.modal) { z-index: 2000; }
+  :global(.modal-backdrop) { z-index: 1990; }
+  :global(.muted-card) {
+    background-color: var(--bs-body-bg);
+    opacity: 0.94;
+  }
+  :global(.muted-card .badge) {
+    opacity: 0.85;
+  }
+  :global(.muted-card .state-label) {
+    color: var(--bs-secondary-color) !important;
+    font-weight: 600;
+  }
+</style>
