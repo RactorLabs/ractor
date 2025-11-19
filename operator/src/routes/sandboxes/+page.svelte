@@ -17,7 +17,7 @@
   });
   $: terminatedSandboxes = sandboxes.filter(s => {
     const state = String(s?.state || '').toLowerCase();
-    return state === 'terminated' || state === 'deleted';
+    return state === 'terminated';
   });
   // Filters + pagination
   let q = '';
