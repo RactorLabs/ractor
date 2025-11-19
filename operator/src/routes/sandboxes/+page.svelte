@@ -11,8 +11,14 @@
   let loading = true;
   let error = null;
   let sandboxes = [];
-  $: activeSandboxes = sandboxes.filter(s => String(s?.state || '').toLowerCase() !== 'terminated');
-  $: terminatedSandboxes = sandboxes.filter(s => String(s?.state || '').toLowerCase() === 'terminated');
+  $: activeSandboxes = sandboxes.filter(s => {
+    const state = String(s?.state || '').toLowerCase();
+    return state !== 'terminated' && state !== 'deleted';
+  });
+  $: terminatedSandboxes = sandboxes.filter(s => {
+    const state = String(s?.state || '').toLowerCase();
+    return state === 'terminated' || state === 'deleted';
+  });
   // Filters + pagination
   let q = '';
   let stateFilter = '';
@@ -31,6 +37,7 @@
     const s = String(state || '').toLowerCase();
     if (s === 'terminated') return 'bi bi-power';
     if (s === 'terminating') return 'spinner-border spinner-border-sm text-danger';
+    if (s === 'deleted') return 'bi bi-trash';
     if (s === 'idle') return 'bi bi-sun';
     if (s === 'busy') return 'spinner-border spinner-border-sm';
     if (s === 'initializing') return 'spinner-border spinner-border-sm text-info';

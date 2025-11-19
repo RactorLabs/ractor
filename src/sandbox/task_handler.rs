@@ -432,7 +432,7 @@ impl TaskHandler {
                 "type": "tool_call",
                 "tool": command_name,
                 "xml": command_text,
-                "arguments": command.args.clone(),
+                "arguments": command.attributes.clone(),
             });
             let _ = self
                 .api_client
