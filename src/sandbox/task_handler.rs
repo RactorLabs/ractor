@@ -427,6 +427,25 @@ impl TaskHandler {
                 continue;
             }
 
+            // Add tool call to steps before execution
+            let tool_call_segment = json!({
+                "type": "tool_call",
+                "tool": command_name,
+                "xml": command_text,
+                "arguments": command.args.clone(),
+            });
+            let _ = self
+                .api_client
+                .update_task(
+                    &task.id,
+                    Some("processing".to_string()),
+                    None,
+                    Some(vec![tool_call_segment.clone()]),
+                    Some(context_length),
+                    None,
+                )
+                .await;
+
             match self.toolkit.execute_invocation(&command).await {
                 Ok(ExecutionResult { args, output }) => {
                     // Check if task was cancelled during tool execution
@@ -443,12 +462,6 @@ impl TaskHandler {
                         output_text.clone()
                     };
 
-                    let tool_call_segment = json!({
-                        "type": "tool_call",
-                        "tool": command_name,
-                        "xml": command_text,
-                        "arguments": args.clone(),
-                    });
                     let tool_result_segment = json!({
                         "type": "tool_result",
                         "tool": command_name,
@@ -468,7 +481,7 @@ impl TaskHandler {
                             &task.id,
                             Some("processing".to_string()),
                             None,
-                            Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
+                            Some(vec![tool_result_segment.clone()]),
                             Some(context_length),
                             tracked_tool.clone(),
                         )
@@ -550,17 +563,9 @@ impl TaskHandler {
                     }
                 }
                 Err(exec_error) => {
-                    let args = exec_error.args;
                     let error_message =
                         format!("Tool '{}' failed: {}", command_name, exec_error.message);
                     warn!("{}", error_message);
-
-                    let tool_call_segment = json!({
-                        "type": "tool_call",
-                        "tool": command_name,
-                        "xml": command_text,
-                        "arguments": args.clone(),
-                    });
 
                     let mut truncated_error = false;
                     let error_value = serde_json::Value::String(error_message.clone());
@@ -590,7 +595,7 @@ impl TaskHandler {
                             &task.id,
                             Some("processing".to_string()),
                             None,
-                            Some(vec![tool_call_segment.clone(), tool_result_segment.clone()]),
+                            Some(vec![tool_result_segment.clone()]),
                             Some(context_length),
                             tracked_tool,
                         )
