@@ -1541,7 +1541,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   <div class="col-12">
     <div class="row g-3 align-items-stretch">
       <div class="col-12 col-lg-6">
-        <Card class="h-100 muted-card">
+        <Card class="h-100 muted-card info-card">
           <div class="card-body d-flex flex-column">
             <div class="d-flex align-items-center gap-2 mb-1">
               {#if sandbox}
@@ -2157,7 +2157,8 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     font-weight: 600;
   }
 
-  :global(.top-actions) { position: relative; z-index: 10; }
+  :global(.info-card) { position: relative; z-index: 10; }
+  :global(.top-actions) { position: relative; z-index: 1; }
   :global(.top-actions .dropdown-menu) { z-index: 1050 !important; }
   :global(.modal) { z-index: 2000; }
   :global(.modal-backdrop) { z-index: 1990; }
