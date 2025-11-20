@@ -141,18 +141,6 @@
             <div class="fw-bold fs-20px">{section.title}</div>
             <div class="text-body text-opacity-75 small">{section.description}</div>
           </div>
-          {#if section.endpoints && section.endpoints.length}
-            <div class="mb-3">
-              <div class="fw-500 text-body text-opacity-75 small mb-1">Endpoints</div>
-              <div class="d-flex flex-wrap gap-2">
-                {#each section.endpoints as ep}
-                  <a class="badge bg-light text-body-secondary border rounded-pill text-decoration-none px-2 py-1" href={`#${endpointId(section, ep)}`}>
-                    <span class="font-monospace">{ep.method}</span>&nbsp;<span class="font-monospace">{ep.path}</span>
-                  </a>
-                {/each}
-              </div>
-            </div>
-          {/if}
           <div>
             <div class="row g-3">
               {#each section.endpoints as ep}
