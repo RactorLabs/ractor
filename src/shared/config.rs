@@ -43,8 +43,6 @@ pub struct ProviderConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProviderModel {
     pub name: String,
-    #[serde(default)]
-    pub display_name: Option<String>,
 }
 
 impl TsbxConfig {
@@ -159,12 +157,7 @@ impl ProviderConfig {
                 }
                 Ok(InferenceModelInfo {
                     name: model_name.to_string(),
-                    display_name: model
-                        .display_name
-                        .as_ref()
-                        .map(|v| v.trim().to_string())
-                        .filter(|v| !v.is_empty())
-                        .unwrap_or_else(|| model_name.to_string()),
+                    display_name: model_name.to_string(),
                 })
             })
             .collect::<Result<Vec<_>>>()?;

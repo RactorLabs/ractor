@@ -19,8 +19,7 @@ function normalizeModel(model) {
   if (!name) {
     return null;
   }
-  const displayName = (model.display_name || name).trim() || name;
-  return { name, display_name: displayName };
+  return { name, display_name: name };
 }
 
 function normalizeProvider(raw) {

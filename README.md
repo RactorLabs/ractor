@@ -59,8 +59,8 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
         "url": "https://api.positron.ai/v1/chat/completions",
         "default_model": "llama-3.2-3b-instruct-fast-tp2",
         "models": [
-          { "name": "llama-3.2-3b-instruct-fast-tp2", "display_name": "Llama 3.2 3B (fast)" },
-          { "name": "llama-3.1-8b-instruct-good-tp2", "display_name": "Llama 3.1 8B (quality)" }
+          { "name": "llama-3.2-3b-instruct-fast-tp2" },
+          { "name": "llama-3.1-8b-instruct-good-tp2" }
         ]
       }
     ]
