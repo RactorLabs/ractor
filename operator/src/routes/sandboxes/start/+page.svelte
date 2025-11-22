@@ -149,6 +149,9 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               <select id="inference-provider" class="form-select" disabled>
                 <option>{inferenceProviderName}</option>
               </select>
+              <div class="form-text">
+                This is the large language model provider that will be used for this sandbox.
+              </div>
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label d-flex align-items-center gap-2" for="inference-model">
