@@ -213,10 +213,10 @@ $: hasProviders = inferenceProviders.length > 0;
                 bind:value={inferenceApiKey}
               />
               <div class="form-text">
-                If provided, this key will be used for inference requests with {selectedProviderLabel || 'the selected provider'}. It will not be stored.
+                If provided, this key will be used for NL tasks in this sandbox only and will not be stored.
               </div>
               <div class="alert alert-info small mt-2 mb-0">
-                Natural Language (NL) tasks require an inference key for {selectedProviderLabel || 'this provider'}. Leave this blank only if you do not need NL tasks for the sandbox.
+                Natural Language (NL) tasks require an inference key. Leave this blank only if you do not need NL tasks for the sandbox.
               </div>
             </div>
 
