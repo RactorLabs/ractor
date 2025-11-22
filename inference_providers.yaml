@@ -1,0 +1,12 @@
+providers:
+  - name: Hyperbolic
+    url: https://api.hyperbolic.xyz/v1/chat/completions
+    supported_models:
+      - openai/gpt-oss-120b
+      - openai/gpt-oss-20b
+  - name: Positron
+    url: https://api.positron.ai/v1/chat/completions
+    supported_models:
+      - llama-3.1-8b-instruct-good-tp2
+      - llama-3.2-1b-instruct-fast-tp2
+      - llama-3.2-3b-instruct-fast-tp2
