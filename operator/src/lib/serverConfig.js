@@ -52,7 +52,7 @@ function normalizeProvider(raw) {
   };
 }
 
-function normalizeProviders(rawProviders, defaultProviderName) {
+function normalizeProviders(rawProviders) {
   const providers = [];
   if (Array.isArray(rawProviders)) {
     for (const raw of rawProviders) {
@@ -63,23 +63,9 @@ function normalizeProviders(rawProviders, defaultProviderName) {
     }
   }
 
-  if (providers.length) {
-    const targetName = typeof defaultProviderName === 'string' ? defaultProviderName.trim().toLowerCase() : '';
-    let matched = false;
-    providers.forEach((provider, idx) => {
-      if (targetName && provider.name.toLowerCase() === targetName) {
-        provider.is_default = true;
-        matched = true;
-      } else {
-        provider.is_default = false;
-      }
-    });
-    if (!matched) {
-      providers.forEach((provider, idx) => {
-        provider.is_default = idx === 0;
-      });
-    }
-  }
+  providers.forEach((provider, idx) => {
+    provider.is_default = idx === 0;
+  });
 
   return providers;
 }
@@ -109,7 +95,7 @@ export function loadServerConfig() {
     return {
       hostName,
       hostUrl,
-      inferenceProviders: normalizeProviders(parsed?.inference?.providers, parsed?.inference?.default_provider)
+      inferenceProviders: normalizeProviders(parsed?.inference?.providers)
     };
   } catch (_) {
     return {

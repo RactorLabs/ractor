@@ -27,7 +27,7 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
 
 2. **Configure host + inference providers**
    - Copy `config/tsbx.sample.json` to `~/.tsbx/tsbx.json` (or supply `--config <path>` when running `tsbx start`).
-   - Fill in the `host` block plus the `inference` section’s `providers` array. Each provider needs a `url`, supported `models`, and (optionally) `default_model`. Set `inference.default_provider` to the provider name you want selected by default.
+   - Fill in the `host` block plus the `inference` section’s `providers` array. Each provider just needs a `url` and `models`. The first provider in the list becomes the default, and each provider’s first model is used unless you override it per sandbox.
    - Individual sandboxes can supply their own inference API key during creation; NL tasks remain disabled for sandboxes that launch without a key.
 
 3. **Start the core services**
@@ -52,12 +52,10 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
     "url": "http://localhost"
   },
   "inference": {
-    "default_provider": "Positron",
     "providers": [
       {
         "name": "Positron",
         "url": "https://api.positron.ai/v1/chat/completions",
-        "default_model": "llama-3.2-3b-instruct-fast-tp2",
         "models": [
           { "name": "llama-3.2-3b-instruct-fast-tp2" },
           { "name": "llama-3.1-8b-instruct-good-tp2" }
@@ -69,5 +67,5 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
 ```
 
 - `host.name` / `host.url` drive Operator UI branding and task links.
-- Each provider must define at least one model. `default_model` is optional; if omitted, the first model becomes the default.
+- Each provider must define at least one model. The first entry is treated as that provider’s default model.
 - The Controller injects provider URL/model into each sandbox; Operator UI fetches the list via `GET /api/v0/inference/providers`.

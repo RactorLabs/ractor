@@ -25,8 +25,6 @@ pub struct HostConfig {
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct InferenceConfig {
     #[serde(default)]
-    pub default_provider: Option<String>,
-    #[serde(default)]
     pub providers: Vec<ProviderConfig>,
 }
 
@@ -36,8 +34,6 @@ pub struct ProviderConfig {
     pub url: String,
     #[serde(default)]
     pub models: Vec<ProviderModel>,
-    #[serde(default)]
-    pub default_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,13 +56,6 @@ impl TsbxConfig {
         config.host.url = config.host.url.trim().trim_end_matches('/').to_string();
         if config.host.url.is_empty() {
             config.host.url = default_host_url();
-        }
-
-        if let Some(default_provider) = config.inference.default_provider.as_mut() {
-            *default_provider = default_provider.trim().to_string();
-            if default_provider.is_empty() {
-                config.inference.default_provider = None;
-            }
         }
 
         Ok(config)
@@ -92,30 +81,8 @@ impl TsbxConfig {
             ));
         }
 
-        let target = self
-            .inference
-            .default_provider
-            .as_deref()
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(|s| s.to_ascii_lowercase());
-
-        let mut matched = false;
-        if let Some(target_name) = target {
-            for provider in providers.iter_mut() {
-                if provider.name.to_ascii_lowercase() == target_name {
-                    provider.is_default = true;
-                    matched = true;
-                } else {
-                    provider.is_default = false;
-                }
-            }
-        }
-
-        if !matched {
-            for (idx, provider) in providers.iter_mut().enumerate() {
-                provider.is_default = idx == 0;
-            }
+        for (idx, provider) in providers.iter_mut().enumerate() {
+            provider.is_default = idx == 0;
         }
 
         InferenceRegistry::new(providers)
@@ -169,16 +136,7 @@ impl ProviderConfig {
             ));
         }
 
-        let default_model = self
-            .default_model
-            .as_deref()
-            .and_then(|value| {
-                models
-                    .iter()
-                    .find(|m| m.name.eq_ignore_ascii_case(value))
-                    .map(|m| m.name.clone())
-            })
-            .unwrap_or_else(|| models[0].name.clone());
+        let default_model = models[0].name.clone();
 
         Ok(InferenceProviderInfo {
             name: name.to_string(),
