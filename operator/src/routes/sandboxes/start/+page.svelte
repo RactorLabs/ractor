@@ -145,11 +145,14 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               />
             </div>
             <div class="col-12 col-md-6">
+              <label class="form-label" for="inference-provider">Inference Provider</label>
+              <select id="inference-provider" class="form-select" disabled>
+                <option>{inferenceProviderName}</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-6">
               <label class="form-label d-flex align-items-center gap-2" for="inference-model">
                 <span>Inference Model</span>
-                {#if inferenceProviderName}
-                  <span class="badge bg-secondary text-uppercase fw-normal">{inferenceProviderName}</span>
-                {/if}
               </label>
               <select
                 id="inference-model"
