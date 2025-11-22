@@ -46,6 +46,7 @@ impl From<sqlx::Error> for DatabaseError {
 pub struct AppState {
     pub db: std::sync::Arc<Pool<MySql>>,
     pub jwt_secret: String,
+    pub inference_name: String,
     pub inference_models: Vec<String>,
     pub default_inference_model: String,
 }

@@ -631,6 +631,15 @@ pub async fn init_database(
         }
     };
 
+    let inference_name = std::env::var("TSBX_INFERENCE_NAME")
+        .map_err(|_| "TSBX_INFERENCE_NAME must be set before starting services")?
+        .trim()
+        .to_string();
+
+    if inference_name.is_empty() {
+        return Err("TSBX_INFERENCE_NAME must not be empty".into());
+    }
+
     let inference_models: Vec<String> = inference_models_raw
         .split(',')
         .map(|s| s.trim().to_string())
@@ -645,6 +654,7 @@ pub async fn init_database(
     Ok(AppState {
         db,
         jwt_secret,
+        inference_name,
         inference_models,
         default_inference_model,
     })

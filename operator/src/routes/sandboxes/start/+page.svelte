@@ -28,6 +28,7 @@ let idleTimeoutSeconds = 900; // default 15 minutes
 let description = '';
 let descriptionInput;
 
+let inferenceProviderName = data?.globalStats?.inference_name || '';
 let availableModels = Array.isArray(data?.globalStats?.inference_models)
   ? data.globalStats.inference_models
   : [];
@@ -144,7 +145,12 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               />
             </div>
             <div class="col-12 col-md-6">
-              <label class="form-label" for="inference-model">Inference Model</label>
+              <label class="form-label d-flex align-items-center gap-2" for="inference-model">
+                <span>Inference Model</span>
+                {#if inferenceProviderName}
+                  <span class="badge bg-secondary text-uppercase fw-normal">{inferenceProviderName}</span>
+                {/if}
+              </label>
               <select
                 id="inference-model"
                 class="form-select"

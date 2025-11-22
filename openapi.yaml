@@ -1218,6 +1218,9 @@ components:
           type: object
           additionalProperties:
             type: integer
+        inference_name:
+          type: string
+          nullable: true
         inference_url:
           type: string
           nullable: true

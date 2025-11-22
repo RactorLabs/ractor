@@ -72,6 +72,8 @@ import { getToken } from '$lib/auth.js';
     sandbox?.inference_model ||
     $page?.data?.globalStats?.default_inference_model ||
     '';
+  $: sandboxInferenceProvider =
+    $page?.data?.globalStats?.inference_name || '';
   let stateStr = '';
   // Task tracking state
   let tasks = [];
@@ -1553,8 +1555,12 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             {#if stateStr !== 'deleted'}
               <div class="small text-body text-opacity-75 flex-grow-1">{sandbox?.description || sandbox?.desc || 'No description'}</div>
               {#if sandboxInferenceModel}
-                <div class="small text-body-secondary mt-1">
-                  Model: <span class="font-monospace">{sandboxInferenceModel}</span>
+                <div class="small text-body-secondary mt-1 d-flex align-items-center gap-2 flex-wrap">
+                  <span>Model:</span>
+                  <span class="font-monospace">{sandboxInferenceModel}</span>
+                  {#if sandboxInferenceProvider}
+                    <span class="badge bg-secondary text-uppercase fw-normal">{sandboxInferenceProvider}</span>
+                  {/if}
                 </div>
               {/if}
               {#if sandbox}

@@ -102,6 +102,7 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
+    .option('--inference-name <name>', 'Inference provider name (required)')
     .option('--inference-models <models>', 'Comma-separated inference model list (first entry is default, required)')
     .option('--inference-url <url>', 'Inference API base URL (required)')
     .option('--inference-api-key <key>', 'Inference API key (Bearer token, required)')
@@ -308,6 +309,7 @@ module.exports = (program) => {
           throw new Error(`Missing ${flagName}. Provide ${flagName} or set ${envName}.`);
         };
 
+        const INFERENCE_NAME = resolveRequired(options.inferenceName, 'TSBX_INFERENCE_NAME', '--inference-name');
         const INFERENCE_URL = resolveRequired(options.inferenceUrl, 'TSBX_INFERENCE_URL', '--inference-url');
         const INFERENCE_API_KEY = resolveRequired(options.inferenceApiKey, 'TSBX_INFERENCE_API_KEY', '--inference-api-key');
         const INFERENCE_MODELS = resolveRequired(options.inferenceModels, 'TSBX_INFERENCE_MODELS', '--inference-models');
@@ -394,6 +396,7 @@ module.exports = (program) => {
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
+                '-e',`TSBX_INFERENCE_NAME=${INFERENCE_NAME}`,
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`,
@@ -410,6 +413,7 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
+              const desiredInferenceName = INFERENCE_NAME;
               const desiredInferenceUrl = INFERENCE_URL;
               const desiredModels = INFERENCE_MODELS;
 
@@ -422,10 +426,12 @@ module.exports = (program) => {
                     const idx = e.indexOf('=');
                     return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
                   }));
+                  const currentName = envMap['TSBX_INFERENCE_NAME'];
                   const currentUrl = envMap['TSBX_INFERENCE_URL'];
                   const currentModels = envMap['TSBX_INFERENCE_MODELS'];
                   const currentKey = envMap['TSBX_INFERENCE_API_KEY'];
                   const needsRecreate =
+                    currentName !== desiredInferenceName ||
                     currentUrl !== desiredInferenceUrl ||
                     currentModels !== desiredModels ||
                     currentKey !== INFERENCE_API_KEY;
@@ -458,6 +464,7 @@ module.exports = (program) => {
                 '-v','tsbx_snapshots_data:/data/snapshots',
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
+                '-e',`TSBX_INFERENCE_NAME=${desiredInferenceName}`,
                 '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
                 '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODELS=${desiredModels}`,
@@ -516,6 +523,9 @@ module.exports = (program) => {
               );
               if (INFERENCE_URL) {
                 args.push('-e', `TSBX_INFERENCE_URL=${INFERENCE_URL}`);
+              }
+              if (INFERENCE_NAME) {
+                args.push('-e', `TSBX_INFERENCE_NAME=${INFERENCE_NAME}`);
               }
               if (INFERENCE_MODELS) {
                 args.push('-e', `TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`);

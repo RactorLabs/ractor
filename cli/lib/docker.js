@@ -167,6 +167,7 @@ class DockerManager {
           '--network', 'tsbx_network',
           ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
           ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
+          ...(process.env.TSBX_INFERENCE_NAME ? ['-e', `TSBX_INFERENCE_NAME=${process.env.TSBX_INFERENCE_NAME}`] : []),
           ...(process.env.TSBX_INFERENCE_URL ? ['-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL}`] : []),
           ...(process.env.TSBX_INFERENCE_MODELS ? ['-e', `TSBX_INFERENCE_MODELS=${process.env.TSBX_INFERENCE_MODELS}`] : []),
           this.images.operator
@@ -186,6 +187,7 @@ class DockerManager {
         break;
 
       case 'api': {
+        const inferenceName = requireEnv('TSBX_INFERENCE_NAME');
         const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
         const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
         const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
@@ -198,6 +200,7 @@ class DockerManager {
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
+          '-e', `TSBX_INFERENCE_NAME=${inferenceName}`,
           '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
           '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
           '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,
@@ -207,6 +210,7 @@ class DockerManager {
       }
 
       case 'controller': {
+        const inferenceName = requireEnv('TSBX_INFERENCE_NAME');
         const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
         const inferenceApiKey = requireEnv('TSBX_INFERENCE_API_KEY');
         const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
@@ -219,6 +223,7 @@ class DockerManager {
           '-v', 'tsbx_snapshots_data:/data/snapshots',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
+          '-e', `TSBX_INFERENCE_NAME=${inferenceName}`,
           '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
           '-e', `TSBX_INFERENCE_API_KEY=${inferenceApiKey}`,
           '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,

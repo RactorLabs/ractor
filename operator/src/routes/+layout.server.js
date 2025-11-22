@@ -1,6 +1,7 @@
 export async function load({ fetch, cookies }) {
   const hostName = process.env.TSBX_HOST_NAME || 'TSBX';
   const hostUrl = (process.env.TSBX_HOST_URL || 'http://localhost').replace(/\/$/, '');
+  const envInferenceName = (process.env.TSBX_INFERENCE_NAME || '').trim();
   const envInferenceUrl = (process.env.TSBX_INFERENCE_URL || '').trim();
   const envInferenceModels = (process.env.TSBX_INFERENCE_MODELS || '')
     .split(',')
@@ -30,6 +31,7 @@ export async function load({ fetch, cookies }) {
       sandboxes_active: 0,
       sandboxes_terminated: 0,
       sandboxes_by_state: {},
+      inference_name: envInferenceName || null,
       inference_url: envInferenceUrl || null,
       inference_models: envInferenceModels,
       default_inference_model: envInferenceModels[0] || null,
@@ -44,6 +46,9 @@ export async function load({ fetch, cookies }) {
     }
     if (!globalStats.inference_url && envInferenceUrl) {
       globalStats.inference_url = envInferenceUrl;
+    }
+    if (!globalStats.inference_name && envInferenceName) {
+      globalStats.inference_name = envInferenceName;
     }
   }
 
