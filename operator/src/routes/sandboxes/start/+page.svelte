@@ -47,6 +47,21 @@ let inferenceApiKey = ''; // New variable for inference API key
 $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
   selectedModel = availableModels[0].value;
 }
+let lastProviderName = selectedProvider?.name || '';
+$: if ((selectedProvider?.name || '') !== lastProviderName) {
+  lastProviderName = selectedProvider?.name || '';
+  const providerDefault =
+    selectedProvider &&
+    selectedProvider.default_model &&
+    availableModels.find((model) => model.value === selectedProvider.default_model)
+      ? selectedProvider.default_model
+      : null;
+  const providerFirst = availableModels[0]?.value || '';
+  const desired = providerDefault || providerFirst;
+  if (desired) {
+    selectedModel = desired;
+  }
+}
 $: hasProviders = inferenceProviders.length > 0;
 
   // Environment entries as dynamic rows
