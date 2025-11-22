@@ -49,6 +49,8 @@ pub struct CreateSandboxRequest {
     pub snapshot_id: Option<String>,
     #[serde(default)]
     pub inference_model: Option<String>,
+    #[serde(default)]
+    pub inference_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

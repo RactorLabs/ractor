@@ -59,9 +59,7 @@ impl DockerManager {
             Ok(val) => val,
             Err(_) => {
                 warn!("TSBX_INFERENCE_MODEL is deprecated; please set TSBX_INFERENCE_MODELS. Using legacy value for now.");
-                std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| {
-                    panic!("TSBX_INFERENCE_MODELS must be set (comma-separated list of models)")
-                })
+                std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| "".to_string())
             }
         };
         let available_models: Vec<String> = models_raw
@@ -700,6 +698,7 @@ echo 'Session directories created (.env, logs)'
                 principal_type,
                 Some(request_created_at),
                 None,
+                None,
             )
             .await?;
 
@@ -833,6 +832,7 @@ echo 'Session directories created (.env, logs)'
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
         inference_model: Option<String>,
+        inference_api_key: Option<String>, // New parameter
     ) -> Result<String> {
         let container_name = self
             .create_container_internal_with_tokens(
@@ -845,6 +845,7 @@ echo 'Session directories created (.env, logs)'
                 principal_type,
                 Some(request_created_at),
                 inference_model,
+                inference_api_key, // Pass the new parameter
             )
             .await?;
         Ok(container_name)
@@ -915,14 +916,6 @@ echo 'Session directories created (.env, logs)'
             return Err(anyhow!("TSBX_INFERENCE_URL must not be empty"));
         }
         env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
-
-        let api_key = std::env::var("TSBX_INFERENCE_API_KEY")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_API_KEY must be set before starting services"))?;
-        let trimmed_key = api_key.trim();
-        if trimmed_key.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_API_KEY must not be empty"));
-        }
-        env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
 
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
@@ -1057,6 +1050,7 @@ echo 'Session directories created (.env, logs)'
         principal_type: String,
         request_created_at: Option<chrono::DateTime<chrono::Utc>>,
         inference_model: Option<String>,
+        inference_api_key: Option<String>, // New parameter
     ) -> Result<String> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
@@ -1116,13 +1110,17 @@ echo 'Session directories created (.env, logs)'
         }
         env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
 
-        let api_key = std::env::var("TSBX_INFERENCE_API_KEY")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_API_KEY must be set before starting services"))?;
-        let trimmed_key = api_key.trim();
-        if trimmed_key.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_API_KEY must not be empty"));
+        // Use provided inference API key, otherwise fallback to system-wide
+        let final_inference_api_key = if let Some(key) = inference_api_key {
+            info!("Using provided inference API key for sandbox {}", sandbox_id);
+            key
+        } else {
+            "".to_string()
+        };
+        let trimmed_key = final_inference_api_key.trim();
+        if !trimmed_key.is_empty() {
+            env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
         }
-        env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
 
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));

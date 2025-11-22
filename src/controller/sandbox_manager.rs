@@ -563,6 +563,12 @@ impl SandboxManager {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let inference_api_key = request
+            .payload
+            .get("inference_api_key")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         // Extract principal information for logging and token generation
         let principal = request
             .payload
@@ -610,6 +616,7 @@ impl SandboxManager {
                 principal_type_str.to_string(),
                 request.created_at,
                 sandbox.inference_model.clone(),
+                inference_api_key,
             )
             .await?;
 

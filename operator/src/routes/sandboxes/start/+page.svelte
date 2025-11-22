@@ -36,6 +36,7 @@ let selectedModel =
   data?.globalStats?.default_inference_model ||
   availableModels[0] ||
   '';
+let inferenceApiKey = ''; // New variable for inference API key
 $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
   selectedModel = availableModels[0];
 }
@@ -89,6 +90,7 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
         setup: setup?.trim() ? setup : null,
         startup_task: startupTask?.trim() ? startupTask : null,
         inference_model: selectedModel.trim(),
+        inference_api_key: inferenceApiKey?.trim() ? inferenceApiKey : null, // Include inference API key
         env: asEnvMap()
       };
 
@@ -176,6 +178,19 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               </div>
             </div>
             
+            <div class="col-12">
+              <label class="form-label" for="inference-api-key">Inference API Key (Optional)</label>
+              <input
+                type="text"
+                class="form-control"
+                id="inference-api-key"
+                placeholder="Enter Inference API Key"
+                bind:value={inferenceApiKey}
+              />
+              <div class="form-text">
+                If provided, this key will be used for inference requests within the sandbox. It will not be stored.
+              </div>
+            </div>
 
             <div class="col-12">
               <label class="form-label" for="startup-task">Startup Task (optional)</label>

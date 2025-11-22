@@ -1104,7 +1104,8 @@ pub async fn create_sandbox(
             crate::shared::rbac::AuthPrincipal::Operator(_) => "Admin",
         },
         "user_token": auth.token,
-        "inference_model": chosen_model
+        "inference_model": chosen_model,
+        "inference_api_key": req.inference_api_key
     });
 
     sqlx::query(

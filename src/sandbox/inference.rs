@@ -94,15 +94,13 @@ impl InferenceClient {
             .build()
             .map_err(|e| HostError::Model(format!("Failed to create inference client: {}", e)))?;
 
-        let raw_key = std::env::var("TSBX_INFERENCE_API_KEY")
-            .map_err(|_| HostError::Model("TSBX_INFERENCE_API_KEY must be set".to_string()))?;
+        let raw_key = std::env::var("TSBX_INFERENCE_API_KEY").unwrap_or_else(|_| "".to_string());
         let trimmed_key = raw_key.trim();
-        if trimmed_key.is_empty() {
-            return Err(HostError::Model(
-                "TSBX_INFERENCE_API_KEY must not be empty".to_string(),
-            ));
-        }
-        let auth_header = format!("Bearer {}", trimmed_key);
+        let auth_header = if trimmed_key.is_empty() {
+            "".to_string()
+        } else {
+            format!("Bearer {}", trimmed_key)
+        };
 
         let raw_model = std::env::var("TSBX_INFERENCE_MODEL")
             .map_err(|_| HostError::Model("TSBX_INFERENCE_MODEL must be set".to_string()))?;
