@@ -38,7 +38,6 @@ function normalizeProvider(raw) {
   if (!models.length) {
     return null;
   }
-  const displayName = (raw.display_name || name).trim() || name;
   const defaultModel =
     typeof raw.default_model === 'string'
       ? (models.find((m) => m.name.toLowerCase() === raw.default_model.trim().toLowerCase()) || models[0]).name
@@ -46,15 +45,15 @@ function normalizeProvider(raw) {
 
   return {
     name,
-    display_name: displayName,
+    display_name: name,
     url,
     models,
     default_model: defaultModel,
-    is_default: !!raw.default
+    is_default: false
   };
 }
 
-function normalizeProviders(rawProviders) {
+function normalizeProviders(rawProviders, defaultProviderName) {
   const providers = [];
   if (Array.isArray(rawProviders)) {
     for (const raw of rawProviders) {
@@ -66,10 +65,21 @@ function normalizeProviders(rawProviders) {
   }
 
   if (providers.length) {
-    const firstDefault = providers.findIndex((p) => p.is_default);
+    const targetName = typeof defaultProviderName === 'string' ? defaultProviderName.trim().toLowerCase() : '';
+    let matched = false;
     providers.forEach((provider, idx) => {
-      provider.is_default = firstDefault >= 0 ? idx === firstDefault : idx === 0;
+      if (targetName && provider.name.toLowerCase() === targetName) {
+        provider.is_default = true;
+        matched = true;
+      } else {
+        provider.is_default = false;
+      }
     });
+    if (!matched) {
+      providers.forEach((provider, idx) => {
+        provider.is_default = idx === 0;
+      });
+    }
   }
 
   return providers;
@@ -100,7 +110,7 @@ export function loadServerConfig() {
     return {
       hostName,
       hostUrl,
-      inferenceProviders: normalizeProviders(parsed?.inference_providers)
+      inferenceProviders: normalizeProviders(parsed?.inference?.providers, parsed?.inference?.default_provider)
     };
   } catch (_) {
     return {

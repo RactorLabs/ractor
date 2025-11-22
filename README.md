@@ -27,7 +27,7 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
 
 2. **Configure host + inference providers**
    - Copy `config/tsbx.sample.json` to `~/.tsbx/tsbx.json` (or supply `--config <path>` when running `tsbx start`).
-   - Fill in the `host` block plus each provider’s `url`, supported `models`, and (optionally) `default_model`. The first provider marked `"default": true` becomes the default selection for new sandboxes.
+   - Fill in the `host` block plus the `inference` section’s `providers` array. Each provider needs a `url`, supported `models`, and (optionally) `default_model`. Set `inference.default_provider` to the provider name you want selected by default.
    - Individual sandboxes can supply their own inference API key during creation; NL tasks remain disabled for sandboxes that launch without a key.
 
 3. **Start the core services**
@@ -51,19 +51,20 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
     "name": "TSBX",
     "url": "http://localhost"
   },
-  "inference_providers": [
-    {
-      "name": "Positron",
-      "display_name": "Positron",
-      "url": "https://api.positron.ai/v1/chat/completions",
-      "default": true,
-      "default_model": "llama-3.2-3b-instruct-fast-tp2",
-      "models": [
-        { "name": "llama-3.2-3b-instruct-fast-tp2", "display_name": "Llama 3.2 3B (fast)" },
-        { "name": "llama-3.1-8b-instruct-good-tp2", "display_name": "Llama 3.1 8B (quality)" }
-      ]
-    }
-  ]
+  "inference": {
+    "default_provider": "Positron",
+    "providers": [
+      {
+        "name": "Positron",
+        "url": "https://api.positron.ai/v1/chat/completions",
+        "default_model": "llama-3.2-3b-instruct-fast-tp2",
+        "models": [
+          { "name": "llama-3.2-3b-instruct-fast-tp2", "display_name": "Llama 3.2 3B (fast)" },
+          { "name": "llama-3.1-8b-instruct-good-tp2", "display_name": "Llama 3.1 8B (quality)" }
+        ]
+      }
+    ]
+  }
 }
 ```
 

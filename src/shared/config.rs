@@ -11,7 +11,7 @@ pub struct TsbxConfig {
     #[serde(default)]
     pub host: HostConfig,
     #[serde(default)]
-    pub inference_providers: Vec<ProviderConfig>,
+    pub inference: InferenceConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -22,18 +22,22 @@ pub struct HostConfig {
     pub url: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct InferenceConfig {
+    #[serde(default)]
+    pub default_provider: Option<String>,
+    #[serde(default)]
+    pub providers: Vec<ProviderConfig>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProviderConfig {
     pub name: String,
-    #[serde(default)]
-    pub display_name: Option<String>,
     pub url: String,
     #[serde(default)]
     pub models: Vec<ProviderModel>,
     #[serde(default)]
     pub default_model: Option<String>,
-    #[serde(default)]
-    pub default: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +64,13 @@ impl TsbxConfig {
             config.host.url = default_host_url();
         }
 
+        if let Some(default_provider) = config.inference.default_provider.as_mut() {
+            *default_provider = default_provider.trim().to_string();
+            if default_provider.is_empty() {
+                config.inference.default_provider = None;
+            }
+        }
+
         Ok(config)
     }
 
@@ -70,11 +81,45 @@ impl TsbxConfig {
     }
 
     pub fn build_inference_registry(&self) -> Result<InferenceRegistry> {
-        let providers = self
-            .inference_providers
+        let mut providers = self
+            .inference
+            .providers
             .iter()
             .map(|raw| raw.to_provider_info())
             .collect::<Result<Vec<_>>>()?;
+
+        if providers.is_empty() {
+            return Err(anyhow!(
+                "At least one inference provider must be defined in tsbx.json"
+            ));
+        }
+
+        let target = self
+            .inference
+            .default_provider
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_ascii_lowercase());
+
+        let mut matched = false;
+        if let Some(target_name) = target {
+            for provider in providers.iter_mut() {
+                if provider.name.to_ascii_lowercase() == target_name {
+                    provider.is_default = true;
+                    matched = true;
+                } else {
+                    provider.is_default = false;
+                }
+            }
+        }
+
+        if !matched {
+            for (idx, provider) in providers.iter_mut().enumerate() {
+                provider.is_default = idx == 0;
+            }
+        }
+
         InferenceRegistry::new(providers)
     }
 }
@@ -144,16 +189,11 @@ impl ProviderConfig {
 
         Ok(InferenceProviderInfo {
             name: name.to_string(),
-            display_name: self
-                .display_name
-                .as_ref()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| name.to_string()),
+            display_name: name.to_string(),
             url: url.to_string(),
             models,
             default_model,
-            is_default: self.default,
+            is_default: false,
         })
     }
 }
