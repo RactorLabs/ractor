@@ -1,3 +1,4 @@
+use crate::shared::config::TsbxConfig;
 use crate::shared::models::{AppState, DatabaseError};
 use crate::shared::rbac::{Operator, Role, RoleBinding, SubjectType};
 use chrono::Utc;
@@ -576,6 +577,7 @@ impl AppState {
 pub async fn init_database(
     database_url: &str,
     jwt_secret: String,
+    config: Arc<TsbxConfig>,
 ) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("Initializing database connection");
 
@@ -618,44 +620,16 @@ pub async fn init_database(
         }
     }
 
-    let inference_models_raw = match std::env::var("TSBX_INFERENCE_MODELS") {
-        Ok(value) => value,
-        Err(_) => {
-            let legacy = std::env::var("TSBX_INFERENCE_MODEL").map_err(|_| {
-                "TSBX_INFERENCE_MODELS must be set (comma-separated list of supported models)"
-            })?;
-            warn!(
-                "TSBX_INFERENCE_MODEL is deprecated; please set TSBX_INFERENCE_MODELS. Using legacy value for now."
-            );
-            legacy
-        }
-    };
-
-    let inference_name = std::env::var("TSBX_INFERENCE_NAME")
-        .map_err(|_| "TSBX_INFERENCE_NAME must be set before starting services")?
-        .trim()
-        .to_string();
-
-    if inference_name.is_empty() {
-        return Err("TSBX_INFERENCE_NAME must not be empty".into());
-    }
-
-    let inference_models: Vec<String> = inference_models_raw
-        .split(',')
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-
-    if inference_models.is_empty() {
-        return Err("TSBX_INFERENCE_MODELS must list at least one model".into());
-    }
-    let default_inference_model = inference_models[0].clone();
+    let inference_registry = std::sync::Arc::new(
+        config
+            .build_inference_registry()
+            .map_err(|e| format!("Failed to build inference registry: {}", e))?,
+    );
 
     Ok(AppState {
         db,
         jwt_secret,
-        inference_name,
-        inference_models,
-        default_inference_model,
+        config,
+        inference_registry,
     })
 }

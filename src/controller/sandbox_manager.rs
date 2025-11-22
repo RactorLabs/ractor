@@ -7,6 +7,7 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use std::convert::TryFrom;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -16,7 +17,7 @@ use tracing::{error, info, warn};
 pub mod constants;
 pub use constants::SANDBOX_STATE_INITIALIZING;
 
-// Using external inference service via TSBX_INFERENCE_URL
+// Inference providers are resolved from the shared configuration file
 
 #[path = "../shared/rbac.rs"]
 pub mod rbac;
@@ -24,6 +25,8 @@ use rbac::{RbacClaims, SubjectType};
 
 use super::docker_manager::DockerManager;
 use super::shared_task::{extract_output_items, TaskType};
+use crate::controller::shared_config::TsbxConfig;
+use crate::controller::shared_inference::InferenceRegistry;
 
 #[path = "../shared/models/sandbox.rs"]
 pub mod sandbox_model;
@@ -58,14 +61,18 @@ pub struct SandboxManager {
 }
 
 impl SandboxManager {
-    pub async fn new(database_url: &str) -> Result<Self> {
+    pub async fn new(
+        database_url: &str,
+        config: Arc<TsbxConfig>,
+        inference_registry: Arc<InferenceRegistry>,
+    ) -> Result<Self> {
         let pool = MySqlPoolOptions::new()
             .max_connections(5)
             .connect(database_url)
             .await?;
 
         let docker = Docker::connect_with_socket_defaults()?;
-        let docker_manager = DockerManager::new(docker, pool.clone());
+        let docker_manager = DockerManager::new(docker, pool.clone(), config, inference_registry);
 
         let jwt_secret = std::env::var("JWT_SECRET")
             .unwrap_or_else(|_| "default-secret-change-in-production".to_string());
@@ -523,7 +530,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_provider, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -615,7 +622,6 @@ impl SandboxManager {
                 principal.to_string(),
                 principal_type_str.to_string(),
                 request.created_at,
-                sandbox.inference_model.clone(),
                 inference_api_key,
             )
             .await?;
@@ -765,7 +771,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_provider, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -980,7 +986,7 @@ impl SandboxManager {
     pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_provider, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -1063,7 +1069,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_provider, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",

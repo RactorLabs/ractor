@@ -13,7 +13,7 @@
 - Build Rust: `cargo build --release` (creates binaries in `target/release/`).
 - Run CI-like checks: `cargo test --verbose`.
 - Start services (Docker via CLI): `tsbx start [components...]`
-  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference traffic is proxied to `TSBX_INFERENCE_URL` (must be provided; typically points to `https://api.positron.ai/v1`).
+  - Defaults to MySQL (`3307`), API (`9000`), Operator, Controller, Gateway (`80`). Inference providers/models plus host branding come from `~/.tsbx/tsbx.json` (see `config/tsbx.sample.json` for the schema); the CLI mounts this file into each service.
   - In dev, use `./scripts/build.sh` to build images when needed.
 - Stop: `tsbx stop [components...]` (supports `sandboxes` to stop all sandbox containers).
 - Dev CLI link: `./scripts/link.sh` then use `tsbx --help` or `tsbx start`.
@@ -55,13 +55,13 @@ Note on commit message formatting:
 
 ## Security & Configuration Tips
 
-- .env files are no longer required for starting services via CLI. Pass configuration via `tsbx start` flags. Avoid committing environment values.
+- .env files are no longer required for starting services via CLI. Pass configuration via `tsbx start --config` (defaults to `~/.tsbx/tsbx.json`) plus component flags. Avoid committing environment values.
 - Required vars: `DATABASE_URL`, `JWT_SECRET`, `RUST_LOG`.
 
 - Example local DB: `mysql://tsbx:tsbx@localhost:3307/tsbx`.
 - Use least-privileged credentials and rotate `JWT_SECRET` in production.
 - Migrations auto-run on startup; set `SKIP_MIGRATIONS=1` to skip if DB is pre-provisioned.
-- The CLI injects `TSBX_HOST_NAME`/`TSBX_HOST_URL` into Operator, Controller and sandboxes for consistent links/branding.
+- The shared config file (`~/.tsbx/tsbx.json`) defines `host.name`/`host.url` plus inference providers. The CLI mounts it into API, Controller, and Operator containers via `TSBX_CONFIG_PATH`; the controller propagates host info into sandboxes when starting containers.
 
 ## Data Model Highlights (Sessions)
 

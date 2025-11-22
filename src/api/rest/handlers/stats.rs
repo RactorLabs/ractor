@@ -66,20 +66,18 @@ pub async fn get_global_stats(
 
     let active = total.saturating_sub(inactive);
 
-    let inference_url = std::env::var("TSBX_INFERENCE_URL")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
+    let provider = state.inference_registry.default_provider();
+    let inference_url = Some(provider.url.clone());
 
     Ok(Json(GlobalStatsResponse {
         sandboxes_total: total,
         sandboxes_active: active,
         sandboxes_terminated: terminated,
         sandboxes_by_state: JsonValue::Object(state_map),
-        inference_name: Some(state.inference_name.clone()),
+        inference_name: Some(provider.display_name.clone()),
         inference_url,
-        inference_models: state.inference_models.clone(),
-        default_inference_model: Some(state.default_inference_model.clone()),
+        inference_models: provider.models.iter().map(|m| m.name.clone()).collect(),
+        default_inference_model: Some(provider.default_model.clone()),
         captured_at: Utc::now().to_rfc3339(),
     }))
 }

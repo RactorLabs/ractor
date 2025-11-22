@@ -56,6 +56,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         // Global stats
         .route("/stats", get(handlers::stats::get_global_stats))
+        .route(
+            "/inference/providers",
+            get(handlers::inference::list_providers),
+        )
         // Sandbox endpoints
         .route("/sandboxes", get(handlers::sandboxes::list_sandboxes))
         .route("/sandboxes", post(handlers::sandboxes::create_sandbox))

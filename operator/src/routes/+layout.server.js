@@ -1,14 +1,12 @@
+import { loadServerConfig } from '$lib/serverConfig.js';
+
 export async function load({ fetch, cookies }) {
-  const hostName = process.env.TSBX_HOST_NAME || 'TSBX';
-  const hostUrl = (process.env.TSBX_HOST_URL || 'http://localhost').replace(/\/$/, '');
-  const envInferenceName = (process.env.TSBX_INFERENCE_NAME || '').trim();
-  const envInferenceUrl = (process.env.TSBX_INFERENCE_URL || '').trim();
-  const envInferenceModels = (process.env.TSBX_INFERENCE_MODELS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter((s) => s.length);
+  const serverConfig = loadServerConfig();
+  const hostName = serverConfig.hostName;
+  const hostUrl = serverConfig.hostUrl;
 
   let globalStats = null;
+  let inferenceProviders = serverConfig.inferenceProviders;
   const token = cookies.get('tsbx_token');
   if (token) {
     try {
@@ -21,9 +19,25 @@ export async function load({ fetch, cookies }) {
         globalStats = await res.json();
       }
     } catch (_) {
-      // Ignore stats fetch errors; UI will fall back to env values
+      // ignore stats fetch errors; fallback below
+    }
+
+    try {
+      const providerRes = await fetch('/api/v0/inference/providers', {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (providerRes.ok) {
+        inferenceProviders = await providerRes.json();
+      }
+    } catch (_) {
+      // ignore provider fetch errors
     }
   }
+
+  const defaultProvider =
+    inferenceProviders.find((p) => p.is_default) || inferenceProviders[0] || null;
 
   if (!globalStats) {
     globalStats = {
@@ -31,30 +45,18 @@ export async function load({ fetch, cookies }) {
       sandboxes_active: 0,
       sandboxes_terminated: 0,
       sandboxes_by_state: {},
-      inference_name: envInferenceName || null,
-      inference_url: envInferenceUrl || null,
-      inference_models: envInferenceModels,
-      default_inference_model: envInferenceModels[0] || null,
+      inference_name: defaultProvider?.display_name || null,
+      inference_url: defaultProvider?.url || null,
+      inference_models: defaultProvider ? defaultProvider.models.map((m) => m.name) : [],
+      default_inference_model: defaultProvider?.default_model || null,
       captured_at: new Date().toISOString()
     };
-  } else {
-    if ((!globalStats.inference_models || !globalStats.inference_models.length) && envInferenceModels.length) {
-      globalStats.inference_models = envInferenceModels;
-    }
-    if (!globalStats.default_inference_model && envInferenceModels.length) {
-      globalStats.default_inference_model = envInferenceModels[0];
-    }
-    if (!globalStats.inference_url && envInferenceUrl) {
-      globalStats.inference_url = envInferenceUrl;
-    }
-    if (!globalStats.inference_name && envInferenceName) {
-      globalStats.inference_name = envInferenceName;
-    }
   }
 
   return {
     hostName,
     hostUrl,
-    globalStats
+    globalStats,
+    inferenceProviders
   };
 }

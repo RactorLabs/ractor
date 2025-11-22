@@ -1,6 +1,7 @@
 const chalk = require('chalk');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const COMPONENT_ALIASES = {
@@ -14,6 +15,15 @@ function resolveComponentAliases(list = []) {
     const lower = (name || '').toLowerCase();
     return COMPONENT_ALIASES[lower] || lower;
   });
+}
+
+function expandHomePath(p) {
+  if (!p) return p;
+  if (p === '~') return os.homedir();
+  if (p.startsWith('~/')) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
 }
 
 function execCmd(cmd, args = [], opts = {}) {
@@ -102,9 +112,7 @@ module.exports = (program) => {
     .option('-p, --pull', 'Pull base images (mysql) before starting')
     .option('-d, --detached', 'Run in detached mode', true)
     .option('-f, --foreground', 'Run MySQL in foreground mode')
-    .option('--inference-name <name>', 'Inference provider name (required)')
-    .option('--inference-models <models>', 'Comma-separated inference model list (first entry is default, required)')
-    .option('--inference-url <url>', 'Inference API base URL (required)')
+    .option('--config <path>', 'Path to tsbx.json configuration file', path.join(os.homedir(), '.tsbx', 'tsbx.json'))
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -142,10 +150,6 @@ module.exports = (program) => {
 
         const detached = options.foreground ? false : (options.detached !== false);
         const tag = readProjectVersionOrLatest();
-
-        // Resolve host branding and URL only here (script-level default allowed)
-        const TSBX_HOST_NAME = process.env.TSBX_HOST_NAME || 'TSBX';
-        const TSBX_HOST_URL = (process.env.TSBX_HOST_URL || 'http://localhost').replace(/\/$/, '');
 
         function withPort(baseUrl, port) {
           try {
@@ -294,23 +298,21 @@ module.exports = (program) => {
           } catch (_) { return ''; }
         }
 
-        const resolveRequired = (cliValue, envName, flagName) => {
-          if (cliValue !== undefined && cliValue !== null) {
-            const trimmedCli = String(cliValue).trim();
-            if (trimmedCli !== '') {
-              return trimmedCli;
-            }
-          }
-          const envValue = process.env[envName];
-          if (envValue && envValue.trim() !== '') {
-            return envValue.trim();
-          }
-          throw new Error(`Missing ${flagName}. Provide ${flagName} or set ${envName}.`);
-        };
-
-        const INFERENCE_NAME = resolveRequired(options.inferenceName, 'TSBX_INFERENCE_NAME', '--inference-name');
-        const INFERENCE_URL = resolveRequired(options.inferenceUrl, 'TSBX_INFERENCE_URL', '--inference-url');
-        const INFERENCE_MODELS = resolveRequired(options.inferenceModels, 'TSBX_INFERENCE_MODELS', '--inference-models');
+        const defaultConfig = path.join(os.homedir(), '.tsbx', 'tsbx.json');
+        const resolvedConfigPath = path.resolve(expandHomePath(options.config || defaultConfig));
+        if (!fs.existsSync(resolvedConfigPath)) {
+          throw new Error(`Config file not found at ${resolvedConfigPath}. Provide --config or copy config/tsbx.sample.json to ~/.tsbx/tsbx.json.`);
+        }
+        let parsedConfig;
+        try {
+          parsedConfig = JSON.parse(fs.readFileSync(resolvedConfigPath, 'utf8'));
+        } catch (err) {
+          throw new Error(`Failed to parse config at ${resolvedConfigPath}: ${err.message}`);
+        }
+        const hostNameFromConfig = (parsedConfig?.host?.name || 'TSBX').trim() || 'TSBX';
+        const hostUrlFromConfig = String(parsedConfig?.host?.url || 'http://localhost').replace(/\/$/, '');
+        const configMount = ['-v', `${resolvedConfigPath}:/app/config/tsbx.json:ro`];
+        const configEnv = ['-e', 'TSBX_CONFIG_PATH=/app/config/tsbx.json'];
         for (const comp of components) {
           switch (comp) {
             case 'mysql': {
@@ -387,16 +389,13 @@ module.exports = (program) => {
               const args = ['run','-d',
                 '--name','tsbx_api',
                 '--network','tsbx_network',
+                ...configMount,
                 '-v','tsbx_snapshots_data:/data/snapshots:ro',
                 '-v','/var/run/docker.sock:/var/run/docker.sock:ro',
+                ...configEnv,
                 '-e',`DATABASE_URL=${options.apiDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx'}`,
                 '-e',`JWT_SECRET=${options.apiJwtSecret || process.env.JWT_SECRET || 'development-secret-key'}`,
                 '-e',`RUST_LOG=${options.apiRustLog || 'info'}`,
-                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
-                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
-                '-e',`TSBX_INFERENCE_NAME=${INFERENCE_NAME}`,
-                '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
-                '-e',`TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`,
                 ...(options.apiTSBXHost ? ['-e', `TSBX_HOST=${options.apiTSBXHost}`] : []),
                 ...(options.apiTSBXPort ? ['-e', `TSBX_PORT=${options.apiTSBXPort}`] : []),
                 API_IMAGE
@@ -410,42 +409,17 @@ module.exports = (program) => {
 
             case 'controller': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring controller service is running...');
-              const desiredInferenceName = INFERENCE_NAME;
-              const desiredInferenceUrl = INFERENCE_URL;
-              const desiredModels = INFERENCE_MODELS;
 
-              // If container exists, verify env matches; recreate if not
               if (await containerExists('tsbx_controller')) {
-                try {
-                  const inspect = await execCmd('docker', ['inspect','tsbx_controller','--format','{{range .Config.Env}}{{println .}}{{end}}'], { silent: true });
-                  const currentEnv = (inspect.stdout || '').split('\n').filter(Boolean);
-                  const envMap = Object.fromEntries(currentEnv.map(e => {
-                    const idx = e.indexOf('=');
-                    return idx === -1 ? [e, ''] : [e.slice(0, idx), e.slice(idx+1)];
-                  }));
-                  const currentName = envMap['TSBX_INFERENCE_NAME'];
-                  const currentUrl = envMap['TSBX_INFERENCE_URL'];
-                  const currentModels = envMap['TSBX_INFERENCE_MODELS'];
-                  const needsRecreate =
-                    currentName !== desiredInferenceName ||
-                    currentUrl !== desiredInferenceUrl ||
-                    currentModels !== desiredModels;
-                  if (needsRecreate) {
-                    console.log(chalk.blue('[INFO] ') + 'Recreating controller to apply updated inference configuration');
-                    try { await docker(['rm','-f','tsbx_controller']); } catch (_) {}
-                  } else if (!(await containerRunning('tsbx_controller'))) {
-                    await docker(['start','tsbx_controller']);
-                    console.log(chalk.green('[SUCCESS] ') + 'Controller started');
-                    console.log();
-                    break;
-                  } else {
-                    console.log(chalk.green('[SUCCESS] ') + 'Controller already running');
-                    console.log();
-                    break;
-                  }
-                } catch (e) {
-                  // If inspection fails, fall through to create
+                if (await containerRunning('tsbx_controller')) {
+                  console.log(chalk.green('[SUCCESS] ') + 'Controller already running');
+                  console.log();
+                  break;
                 }
+                await docker(['start','tsbx_controller']);
+                console.log(chalk.green('[SUCCESS] ') + 'Controller started');
+                console.log();
+                break;
               }
 
               const sandboxImage = options.controllerSandboxImage || await resolveTSBXImage('sandbox','tsbx_sandbox','registry.digitalocean.com/tsbx/tsbx_sandbox', tag);
@@ -455,15 +429,12 @@ module.exports = (program) => {
               const args = ['run','-d',
                 '--name','tsbx_controller',
                 '--network','tsbx_network',
+                ...configMount,
                 '-v','/var/run/docker.sock:/var/run/docker.sock',
                 '-v','tsbx_snapshots_data:/data/snapshots',
+                ...configEnv,
                 '-e',`DATABASE_URL=${controllerDbUrl}`,
                 '-e',`JWT_SECRET=${controllerJwt}`,
-                '-e',`TSBX_INFERENCE_NAME=${desiredInferenceName}`,
-                '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
-                '-e',`TSBX_INFERENCE_MODELS=${desiredModels}`,
-                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
-                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`SANDBOX_IMAGE=${sandboxImage}`,
                 '-e',`SANDBOX_CPU_LIMIT=${options.controllerSandboxCpuLimit || '0.5'}`,
                 '-e',`SANDBOX_MEMORY_LIMIT=${(getOptionSource('controllerSandboxMemoryLimit')==='cli' ? options.controllerSandboxMemoryLimit : (process.env.SANDBOX_MEMORY_LIMIT || options.controllerSandboxMemoryLimit || '536870912'))}`,
@@ -480,11 +451,6 @@ module.exports = (program) => {
 
             case 'operator': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring Operator UI is running...');
-
-              if (!process.env.TSBX_HOST_NAME || !process.env.TSBX_HOST_URL) {
-                console.error(chalk.red('[ERROR] ') + 'TSBX_HOST_NAME and TSBX_HOST_URL must be set before starting tsbx_operator.');
-                process.exit(1);
-              }
 
               if (await containerExists('tsbx_operator')) {
                 // If container exists, ensure it matches the desired image; recreate if not
@@ -512,18 +478,9 @@ module.exports = (program) => {
               args.push(
                 '--name','tsbx_operator',
                 '--network','tsbx_network',
-                '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
-                '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`
+                ...configMount,
+                ...configEnv
               );
-              if (INFERENCE_URL) {
-                args.push('-e', `TSBX_INFERENCE_URL=${INFERENCE_URL}`);
-              }
-              if (INFERENCE_NAME) {
-                args.push('-e', `TSBX_INFERENCE_NAME=${INFERENCE_NAME}`);
-              }
-              if (INFERENCE_MODELS) {
-                args.push('-e', `TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`);
-              }
               args.push(await resolveTSBXImage('operator','tsbx_operator','registry.digitalocean.com/tsbx/tsbx_operator', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Operator UI container started');
@@ -609,7 +566,7 @@ module.exports = (program) => {
           try {
             const g = await docker(['ps','--filter','name=tsbx_gateway','--format','{{.Names}}'], { silent: true });
             if (g.stdout.trim()) {
-              const gatewayBaseUrl = hostPort === '80' ? TSBX_HOST_URL : withPort(TSBX_HOST_URL, hostPort);
+              const gatewayBaseUrl = hostPort === '80' ? hostUrlFromConfig : withPort(hostUrlFromConfig, hostPort);
               console.log(`  • Gateway: ${gatewayBaseUrl}/`);
               console.log(`  • Operator UI: ${gatewayBaseUrl}/`);
               console.log(`  • API via Gateway: ${gatewayBaseUrl}/api`);

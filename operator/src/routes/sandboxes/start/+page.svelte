@@ -28,18 +28,26 @@ let idleTimeoutSeconds = 900; // default 15 minutes
 let description = '';
 let descriptionInput;
 
-let inferenceProviderName = data?.globalStats?.inference_name || '';
-let availableModels = Array.isArray(data?.globalStats?.inference_models)
-  ? data.globalStats.inference_models
-  : [];
-let selectedModel =
-  data?.globalStats?.default_inference_model ||
-  availableModels[0] ||
+const inferenceProviders = Array.isArray(data?.inferenceProviders) ? data.inferenceProviders : [];
+let selectedProviderName =
+  inferenceProviders.find((p) => p.is_default)?.name ||
+  inferenceProviders[0]?.name ||
   '';
+$: selectedProvider =
+  inferenceProviders.find((p) => p.name === selectedProviderName) || null;
+$: selectedProviderLabel = selectedProvider?.display_name || selectedProvider?.name || '';
+$: availableModels = selectedProvider
+  ? selectedProvider.models.map((model) => ({
+      value: model.name,
+      label: model.display_name || model.name
+    }))
+  : [];
+let selectedModel = selectedProvider ? selectedProvider.default_model : '';
 let inferenceApiKey = ''; // New variable for inference API key
 $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
-  selectedModel = availableModels[0];
+  selectedModel = availableModels[0].value;
 }
+$: hasProviders = inferenceProviders.length > 0;
 
   // Environment entries as dynamic rows
   let envEntries = [{ key: '', val: '' }];
@@ -73,6 +81,9 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
     error = null;
     loading = true;
     try {
+      if (!hasProviders) {
+        throw new Error('No inference providers are configured.');
+      }
       if (!selectedModel || !selectedModel.trim()) {
         throw new Error('Please select an inference model.');
       }
@@ -89,6 +100,7 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
         instructions: instructions?.trim() ? instructions : null,
         setup: setup?.trim() ? setup : null,
         startup_task: startupTask?.trim() ? startupTask : null,
+        inference_provider: selectedProvider?.name || null,
         inference_model: selectedModel.trim(),
         inference_api_key: inferenceApiKey?.trim() ? inferenceApiKey : null, // Include inference API key
         env: asEnvMap()
@@ -120,7 +132,7 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
         <div class="fw-bold fs-20px">Start Sandbox</div>
         <div class="ms-auto d-flex align-items-center gap-2">
           <div class="small text-body text-opacity-75 d-none d-sm-block">Ctrl+Enter to submit</div>
-          <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading || !selectedModel} aria-label="Submit">
+          <button type="button" class="btn btn-outline-theme btn-sm" on:click|preventDefault={submit} disabled={loading || !selectedModel || !hasProviders} aria-label="Submit">
             {#if loading}
               <span class="spinner-border spinner-border-sm me-2"></span>Submitting…
             {:else}
@@ -131,8 +143,10 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
       </div>
       <div class="card-body">
         {#if error}<div class="alert alert-danger small">{error}</div>{/if}
-        {#if !availableModels.length}
-          <div class="alert alert-warning small">No inference models are configured for this host. Set TSBX_INFERENCE_MODELS and reload before creating a sandbox.</div>
+        {#if !hasProviders}
+          <div class="alert alert-warning small">No inference providers are configured. Update <code>~/.tsbx/tsbx.json</code> (see <code>config/tsbx.sample.json</code>) and restart the stack before creating a sandbox.</div>
+        {:else if hasProviders && !availableModels.length}
+          <div class="alert alert-warning small">The selected provider has no models configured. Update <code>~/.tsbx/tsbx.json</code> before continuing.</div>
         {/if}
         <form on:submit|preventDefault={submit} on:keydown={handleCtrlEnter}>
           <div class="row g-3">
@@ -148,11 +162,22 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
             </div>
             <div class="col-12 col-md-6">
               <label class="form-label" for="inference-provider">Inference Provider</label>
-              <select id="inference-provider" class="form-select" disabled>
-                <option>{inferenceProviderName}</option>
+              <select
+                id="inference-provider"
+                class="form-select"
+                bind:value={selectedProviderName}
+                disabled={!hasProviders || loading}
+              >
+                {#if hasProviders}
+                  {#each inferenceProviders as provider}
+                    <option value={provider.name}>{provider.display_name || provider.name}</option>
+                  {/each}
+                {:else}
+                  <option value="">No providers configured</option>
+                {/if}
               </select>
               <div class="form-text">
-                This is the large language model provider that will be used for this sandbox.
+                Choose which configured provider should back this sandbox.
               </div>
             </div>
             <div class="col-12 col-md-6">
@@ -167,7 +192,7 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               >
                 {#if availableModels.length}
                   {#each availableModels as model}
-                    <option value={model}>{model}</option>
+                    <option value={model.value}>{model.label}</option>
                   {/each}
                 {:else}
                   <option value="">No models configured</option>
@@ -188,10 +213,10 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
                 bind:value={inferenceApiKey}
               />
               <div class="form-text">
-                If provided, this key will be used for inference requests within the sandbox. It will not be stored.
+                If provided, this key will be used for inference requests with {selectedProviderLabel || 'the selected provider'}. It will not be stored.
               </div>
               <div class="alert alert-info small mt-2 mb-0">
-                Natural Language (NL) tasks require an inference key. Leave this blank only if you do not need NL tasks for the sandbox.
+                Natural Language (NL) tasks require an inference key for {selectedProviderLabel || 'this provider'}. Leave this blank only if you do not need NL tasks for the sandbox.
               </div>
             </div>
 

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use crate::api::rest::create_router;
-use crate::shared::init_database;
+use crate::shared::{config, init_database};
 
 pub async fn run_rest_server() -> Result<()> {
     // Environment variables are loaded via cargo run or runtime
@@ -52,7 +52,14 @@ PID: {}
     let host = std::env::var("TSBX_HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
     let port = std::env::var("TSBX_PORT").unwrap_or_else(|_| "9000".to_string());
 
-    let app_state = match init_database(&database_url, jwt_secret).await {
+    let config_path = config::resolve_config_path();
+    let config = Arc::new(
+        config::TsbxConfig::load_from_path(&config_path)
+            .map_err(|e| anyhow::anyhow!("Failed to load config: {}", e))?,
+    );
+    info!("Loaded config from {}", config_path.display());
+
+    let app_state = match init_database(&database_url, jwt_secret, config).await {
         Ok(state) => {
             info!("Connected to database successfully!");
             Arc::new(state)

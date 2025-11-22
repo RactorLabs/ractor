@@ -12,10 +12,14 @@ use bytes::Bytes;
 use futures::StreamExt;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+use crate::controller::shared_config::TsbxConfig;
+use crate::controller::shared_inference::{InferenceRegistry, ResolvedInferenceTarget};
 
 pub struct DockerManager {
     docker: Docker,
@@ -23,8 +27,8 @@ pub struct DockerManager {
     cpu_limit: f64,
     memory_limit: i64,
     db_pool: MySqlPool,
-    available_models: Vec<String>,
-    default_inference_model: String,
+    config: Arc<TsbxConfig>,
+    inference_registry: Arc<InferenceRegistry>,
 }
 
 fn render_env_file(env: &HashMap<String, String>) -> String {
@@ -54,24 +58,12 @@ fn parse_env_content(content: &str) -> HashMap<String, String> {
 }
 
 impl DockerManager {
-    pub fn new(docker: Docker, db_pool: MySqlPool) -> Self {
-        let models_raw = match std::env::var("TSBX_INFERENCE_MODELS") {
-            Ok(val) => val,
-            Err(_) => {
-                warn!("TSBX_INFERENCE_MODEL is deprecated; please set TSBX_INFERENCE_MODELS. Using legacy value for now.");
-                std::env::var("TSBX_INFERENCE_MODEL").unwrap_or_else(|_| "".to_string())
-            }
-        };
-        let available_models: Vec<String> = models_raw
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        if available_models.is_empty() {
-            panic!("TSBX_INFERENCE_MODELS must contain at least one model");
-        }
-        let default_inference_model = available_models[0].clone();
-
+    pub fn new(
+        docker: Docker,
+        db_pool: MySqlPool,
+        config: Arc<TsbxConfig>,
+        inference_registry: Arc<InferenceRegistry>,
+    ) -> Self {
         Self {
             docker,
             db_pool,
@@ -85,8 +77,8 @@ impl DockerManager {
                 .unwrap_or_else(|_| "536870912".to_string())
                 .parse()
                 .unwrap_or(536870912),
-            available_models,
-            default_inference_model,
+            config,
+            inference_registry,
         }
     }
 
@@ -125,33 +117,27 @@ impl DockerManager {
         format!("tsbx_sandbox_{}", sandbox_id)
     }
 
-    async fn resolve_inference_model(
+    async fn resolve_inference_target(
         &self,
         sandbox_id: &str,
-        provided: Option<String>,
-    ) -> Result<String> {
-        if let Some(model) = provided {
-            let trimmed = model.trim();
-            if !trimmed.is_empty() {
-                return Ok(trimmed.to_string());
-            }
-        }
-
-        if let Ok((stored_model,)) = sqlx::query_as::<_, (Option<String>,)>(
-            "SELECT inference_model FROM sandboxes WHERE id = ?",
+        provider_override: Option<String>,
+        model_override: Option<String>,
+    ) -> Result<ResolvedInferenceTarget> {
+        let (db_provider, db_model) = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT inference_provider, inference_model FROM sandboxes WHERE id = ?",
         )
         .bind(sandbox_id)
         .fetch_one(&self.db_pool)
-        .await
-        {
-            if let Some(model) = stored_model {
-                if !model.trim().is_empty() {
-                    return Ok(model);
-                }
-            }
-        }
+        .await?;
 
-        Ok(self.default_inference_model.clone())
+        let provider = provider_override
+            .or(db_provider)
+            .filter(|s| !s.trim().is_empty());
+        let model = model_override.or(db_model).filter(|s| !s.trim().is_empty());
+
+        self.inference_registry
+            .resolve_provider_and_model(provider.as_deref(), model.as_deref())
+            .map_err(|e| anyhow!(e.to_string()))
     }
 
     // Check if sandbox volume exists
@@ -522,7 +508,7 @@ echo 'Session directories created (.env, logs)'
 
         // Now create and start the container with the copied env as environment variables
         let container_name = self
-            .create_container_internal(sandbox_id, Some(env), instructions, setup, None)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup)
             .await?;
 
         Ok(container_name)
@@ -698,7 +684,6 @@ echo 'Session directories created (.env, logs)'
                 principal_type,
                 Some(request_created_at),
                 None,
-                None,
             )
             .await?;
 
@@ -816,7 +801,7 @@ echo 'Session directories created (.env, logs)'
         setup: Option<String>,
     ) -> Result<String> {
         let container_name = self
-            .create_container_internal(sandbox_id, Some(env), instructions, setup, None)
+            .create_container_internal(sandbox_id, Some(env), instructions, setup)
             .await?;
         Ok(container_name)
     }
@@ -831,7 +816,6 @@ echo 'Session directories created (.env, logs)'
         principal: String,
         principal_type: String,
         request_created_at: chrono::DateTime<chrono::Utc>,
-        inference_model: Option<String>,
         inference_api_key: Option<String>, // New parameter
     ) -> Result<String> {
         let container_name = self
@@ -844,7 +828,6 @@ echo 'Session directories created (.env, logs)'
                 principal,
                 principal_type,
                 Some(request_created_at),
-                inference_model,
                 inference_api_key, // Pass the new parameter
             )
             .await?;
@@ -853,7 +836,7 @@ echo 'Session directories created (.env, logs)'
 
     pub async fn create_container(&self, sandbox_id: &str) -> Result<String> {
         let container_name = self
-            .create_container_internal(sandbox_id, None, None, None, None)
+            .create_container_internal(sandbox_id, None, None, None)
             .await?;
         Ok(container_name)
     }
@@ -864,7 +847,6 @@ echo 'Session directories created (.env, logs)'
         env_map: Option<std::collections::HashMap<String, String>>,
         instructions: Option<String>,
         setup: Option<String>,
-        inference_model: Option<String>,
     ) -> Result<String> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
 
@@ -890,8 +872,8 @@ echo 'Session directories created (.env, logs)'
 
         // No port bindings or exposed ports needed.
 
-        let model_to_use = self
-            .resolve_inference_model(sandbox_id, inference_model)
+        let inference_target = self
+            .resolve_inference_target(sandbox_id, None, None)
             .await?;
 
         // Set environment variables for the sandbox structure
@@ -902,26 +884,28 @@ echo 'Session directories created (.env, logs)'
         ];
 
         // Propagate host branding and URL to sandboxes (provided by start script)
-        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
-        let host_url =
-            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
+        let host_name = self.config.host.name.clone();
+        let host_url = self.config.host.url.clone();
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
-        // Configure inference endpoint for model access
-        let inference_url = std::env::var("TSBX_INFERENCE_URL")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_URL must be set before starting services"))?;
-        let trimmed_url = inference_url.trim();
-        if trimmed_url.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_URL must not be empty"));
-        }
-        env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
+        env_vars.push(format!(
+            "TSBX_INFERENCE_PROVIDER={}",
+            inference_target.provider.name
+        ));
+        env_vars.push(format!(
+            "TSBX_INFERENCE_PROVIDER_NAME={}",
+            inference_target.provider.display_name
+        ));
+        env_vars.push(format!(
+            "TSBX_INFERENCE_URL={}",
+            inference_target.provider.url
+        ));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_target.model));
 
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
-
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", model_to_use));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 
@@ -1049,7 +1033,6 @@ echo 'Session directories created (.env, logs)'
         principal: String,
         principal_type: String,
         request_created_at: Option<chrono::DateTime<chrono::Utc>>,
-        inference_model: Option<String>,
         inference_api_key: Option<String>, // New parameter
     ) -> Result<String> {
         let container_name = format!("tsbx_sandbox_{}", sandbox_id);
@@ -1079,10 +1062,6 @@ echo 'Session directories created (.env, logs)'
 
         // No port bindings or exposed ports needed.
 
-        let model_to_use = self
-            .resolve_inference_model(sandbox_id, inference_model)
-            .await?;
-
         // Set environment variables for the sandbox structure
         let mut env_vars = vec![
             format!("TSBX_API_URL=http://tsbx_api:9000"),
@@ -1095,20 +1074,28 @@ echo 'Session directories created (.env, logs)'
         ];
 
         // Propagate host branding and URL to sandboxes (provided by start script)
-        let host_name = std::env::var("TSBX_HOST_NAME").unwrap_or_else(|_| "TSBX".to_string());
-        let host_url =
-            std::env::var("TSBX_HOST_URL").expect("TSBX_HOST_URL must be set by the start script");
+        let host_name = self.config.host.name.clone();
+        let host_url = self.config.host.url.clone();
         env_vars.push(format!("TSBX_HOST_NAME={}", host_name));
         env_vars.push(format!("TSBX_HOST_URL={}", host_url));
 
-        // Configure inference endpoint for model access
-        let inference_url = std::env::var("TSBX_INFERENCE_URL")
-            .map_err(|_| anyhow!("TSBX_INFERENCE_URL must be set before starting services"))?;
-        let trimmed_url = inference_url.trim();
-        if trimmed_url.is_empty() {
-            return Err(anyhow!("TSBX_INFERENCE_URL must not be empty"));
-        }
-        env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
+        let inference_target = self
+            .resolve_inference_target(sandbox_id, None, None)
+            .await?;
+
+        env_vars.push(format!(
+            "TSBX_INFERENCE_PROVIDER={}",
+            inference_target.provider.name
+        ));
+        env_vars.push(format!(
+            "TSBX_INFERENCE_PROVIDER_NAME={}",
+            inference_target.provider.display_name
+        ));
+        env_vars.push(format!(
+            "TSBX_INFERENCE_URL={}",
+            inference_target.provider.url
+        ));
+        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", inference_target.model));
 
         if let Some(trimmed_key) = inference_api_key
             .as_ref()
@@ -1125,8 +1112,6 @@ echo 'Session directories created (.env, logs)'
         if let Ok(timeout) = std::env::var("TSBX_INFERENCE_TIMEOUT_SECS") {
             env_vars.push(format!("TSBX_INFERENCE_TIMEOUT_SECS={}", timeout));
         }
-
-        env_vars.push(format!("TSBX_INFERENCE_MODEL={}", model_to_use));
 
         // No web_search tool; do not propagate BRAVE_API_KEY
 

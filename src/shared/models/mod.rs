@@ -1,5 +1,8 @@
 use sqlx::{MySql, Pool};
+use std::sync::Arc;
 use thiserror::Error;
+
+use crate::shared::{config::TsbxConfig, inference::InferenceRegistry};
 
 pub mod constants;
 pub mod sandbox;
@@ -46,7 +49,6 @@ impl From<sqlx::Error> for DatabaseError {
 pub struct AppState {
     pub db: std::sync::Arc<Pool<MySql>>,
     pub jwt_secret: String,
-    pub inference_name: String,
-    pub inference_models: Vec<String>,
-    pub default_inference_model: String,
+    pub config: Arc<TsbxConfig>,
+    pub inference_registry: Arc<InferenceRegistry>,
 }

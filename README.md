@@ -12,7 +12,7 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
 - Linux host with Docker 20.10+
 - Node.js 18+ and npm (for the CLI)
 - Rust 1.82+ (only if you plan to build the Rust services locally)
-- Inference endpoint exposed at `TSBX_INFERENCE_URL` with a valid API key and model name
+- Host + inference providers/models defined in `~/.tsbx/tsbx.json` (copy `config/tsbx.sample.json`)
 
 ## Quick Setup
 
@@ -25,14 +25,10 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
    ./scripts/link.sh
    ```
 
-2. **Provide inference credentials**
-   ```bash
-   export TSBX_INFERENCE_NAME="Positron"
-   export TSBX_INFERENCE_URL="https://api.positron.ai/v1/chat/completions"
-   export TSBX_INFERENCE_MODELS="llama-3.2-3b-instruct-fast-tp2,llama-3.2-405b"
-   ```
-   The first model in `TSBX_INFERENCE_MODELS` becomes the default selection for new sandboxes.
-   Individual sandboxes supply their own inference API key at creation time; NL tasks remain disabled for sandboxes that launch without a key, and no host-level inference key is stored.
+2. **Configure host + inference providers**
+   - Copy `config/tsbx.sample.json` to `~/.tsbx/tsbx.json` (or supply `--config <path>` when running `tsbx start`).
+   - Fill in the `host` block plus each provider’s `url`, supported `models`, and (optionally) `default_model`. The first provider marked `"default": true` becomes the default selection for new sandboxes.
+   - Individual sandboxes can supply their own inference API key during creation; NL tasks remain disabled for sandboxes that launch without a key.
 
 3. **Start the core services**
    ```bash
@@ -41,6 +37,36 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
    Pass component names (e.g., `tsbx start api controller`) if you want to launch a subset.
 
 4. **Visit the Operator UI**  
-   Open <http://localhost> (or your configured `TSBX_HOST_URL`) to browse sandboxes, launch tasks, and monitor activity. The REST API is available at `<host>/api`.
+   Open the `host.url` defined in your `tsbx.json` (defaults to <http://localhost>) to browse sandboxes, launch tasks, and monitor activity. The REST API is available at `<host>/api`.
 
 > If something misbehaves, run `tsbx doctor` or `tsbx fix` from the CLI for guided troubleshooting.
+
+## Configuration File
+
+TSBX reads all branding + inference metadata from a single JSON file (default `~/.tsbx/tsbx.json`, override with `tsbx start --config <path>`). Use `config/tsbx.sample.json` as a starting point:
+
+```json
+{
+  "host": {
+    "name": "TSBX",
+    "url": "http://localhost"
+  },
+  "inference_providers": [
+    {
+      "name": "Positron",
+      "display_name": "Positron",
+      "url": "https://api.positron.ai/v1/chat/completions",
+      "default": true,
+      "default_model": "llama-3.2-3b-instruct-fast-tp2",
+      "models": [
+        { "name": "llama-3.2-3b-instruct-fast-tp2", "display_name": "Llama 3.2 3B (fast)" },
+        { "name": "llama-3.1-8b-instruct-good-tp2", "display_name": "Llama 3.1 8B (quality)" }
+      ]
+    }
+  ]
+}
+```
+
+- `host.name` / `host.url` drive Operator UI branding and task links.
+- Each provider must define at least one model. `default_model` is optional; if omitted, the first model becomes the default.
+- The Controller injects provider URL/model into each sandbox; Operator UI fetches the list via `GET /api/v0/inference/providers`.

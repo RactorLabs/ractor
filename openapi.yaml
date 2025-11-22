@@ -964,6 +964,24 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /inference/providers:
+    get:
+      tags:
+      - Sandboxes
+      summary: List configured inference providers and their models
+      responses:
+        '200':
+          description: Inference provider list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InferenceProvider'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 openapi: 3.0.3
 info:
   title: TSBX API
@@ -1144,6 +1162,9 @@ components:
           type: array
           items:
             type: string
+        inference_provider:
+          type: string
+          description: Name of the inference provider assigned to this sandbox
         inference_model:
           type: string
           nullable: true
@@ -1280,6 +1301,10 @@ components:
         prompt:
           type: string
           nullable: true
+        inference_provider:
+          type: string
+          nullable: true
+          description: Selected inference provider name (defaults to the primary provider when omitted)
         inference_model:
           type: string
           nullable: true
@@ -1306,6 +1331,30 @@ components:
           type: integer
         tasks_completed:
           type: integer
+    InferenceModel:
+      type: object
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+    InferenceProvider:
+      type: object
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        url:
+          type: string
+        models:
+          type: array
+          items:
+            $ref: '#/components/schemas/InferenceModel'
+        default_model:
+          type: string
+        is_default:
+          type: boolean
     UpdateSessionRequest:
       type: object
       properties:

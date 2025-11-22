@@ -1,12 +1,30 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
-function requireEnv(name) {
-  const value = process.env[name];
-  if (!value || value.trim() === '') {
-    throw new Error(`Environment variable ${name} must be set`);
+function expandHome(p) {
+  if (!p) return p;
+  if (p.startsWith('~/')) {
+    return path.join(os.homedir(), p.slice(2));
   }
-  return value.trim();
+  if (p === '~') {
+    return os.homedir();
+  }
+  return p;
+}
+
+function resolveConfigPath() {
+  const candidate =
+    process.env.TSBX_CONFIG_PATH ||
+    path.join(os.homedir(), '.tsbx', 'tsbx.json');
+  const resolved = path.resolve(expandHome(candidate));
+  if (!fs.existsSync(resolved)) {
+    throw new Error(
+      `Config file not found at ${resolved}. Provide --config or create ~/.tsbx/tsbx.json (see config/tsbx.sample.json).`
+    );
+  }
+  return resolved;
 }
 
 class DockerManager {
@@ -161,17 +179,20 @@ class DockerManager {
         break;
 
       case 'operator':
-        await this.execDocker([
-          'run', '-d',
-          '--name', 'tsbx_operator',
-          '--network', 'tsbx_network',
-          ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
-          ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
-          ...(process.env.TSBX_INFERENCE_NAME ? ['-e', `TSBX_INFERENCE_NAME=${process.env.TSBX_INFERENCE_NAME}`] : []),
-          ...(process.env.TSBX_INFERENCE_URL ? ['-e', `TSBX_INFERENCE_URL=${process.env.TSBX_INFERENCE_URL}`] : []),
-          ...(process.env.TSBX_INFERENCE_MODELS ? ['-e', `TSBX_INFERENCE_MODELS=${process.env.TSBX_INFERENCE_MODELS}`] : []),
-          this.images.operator
-        ]);
+        {
+          const configPath = resolveConfigPath();
+          const configVolume = ['-v', `${configPath}:/app/config/tsbx.json:ro`];
+          const configEnv = ['-e', 'TSBX_CONFIG_PATH=/app/config/tsbx.json'];
+
+          await this.execDocker([
+            'run', '-d',
+            '--name', 'tsbx_operator',
+            '--network', 'tsbx_network',
+            ...configVolume,
+            ...configEnv,
+            this.images.operator
+          ]);
+        }
         console.log('🚀 tsbx_operator started');
         break;
 
@@ -187,44 +208,40 @@ class DockerManager {
         break;
 
       case 'api': {
-        const inferenceName = requireEnv('TSBX_INFERENCE_NAME');
-        const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
-        const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
+        const configPath = resolveConfigPath();
+        const configVolume = ['-v', `${configPath}:/app/config/tsbx.json:ro`];
+        const configEnv = ['-e', 'TSBX_CONFIG_PATH=/app/config/tsbx.json'];
 
         await this.execDocker([
           'run', '-d',
           '--name', 'tsbx_api',
           '--network', 'tsbx_network',
+          ...configVolume,
+          ...configEnv,
           '-p', '9000:9000',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
           '-e', 'RUST_LOG=info',
-          '-e', `TSBX_INFERENCE_NAME=${inferenceName}`,
-          '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
-          '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,
           this.images.api
         ]);
         break;
       }
 
       case 'controller': {
-        const inferenceName = requireEnv('TSBX_INFERENCE_NAME');
-        const inferenceUrl = requireEnv('TSBX_INFERENCE_URL');
-        const inferenceModels = requireEnv('TSBX_INFERENCE_MODELS');
+        const configPath = resolveConfigPath();
+        const configVolume = ['-v', `${configPath}:/app/config/tsbx.json:ro`];
+        const configEnv = ['-e', 'TSBX_CONFIG_PATH=/app/config/tsbx.json'];
 
         await this.execDocker([
           'run', '-d',
           '--name', 'tsbx_controller',
           '--network', 'tsbx_network',
+          ...configVolume,
+          ...configEnv,
           '-v', '/var/run/docker.sock:/var/run/docker.sock',
           '-v', 'tsbx_snapshots_data:/data/snapshots',
           '-e', 'DATABASE_URL=mysql://tsbx:tsbx@mysql:3306/tsbx',
           '-e', 'JWT_SECRET=development-secret-key',
-          '-e', `TSBX_INFERENCE_NAME=${inferenceName}`,
-          '-e', `TSBX_INFERENCE_URL=${inferenceUrl}`,
-          '-e', `TSBX_INFERENCE_MODELS=${inferenceModels}`,
-          ...(process.env.TSBX_HOST_NAME ? ['-e', `TSBX_HOST_NAME=${process.env.TSBX_HOST_NAME}`] : []),
-          ...(process.env.TSBX_HOST_URL ? ['-e', `TSBX_HOST_URL=${process.env.TSBX_HOST_URL}`] : []),
           '-e', `SANDBOX_IMAGE=${this.images.sandbox}`,
           '-e', 'SANDBOX_CPU_LIMIT=0.5',
           '-e', 'SANDBOX_MEMORY_LIMIT=536870912',

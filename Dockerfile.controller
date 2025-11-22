@@ -8,6 +8,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
+
+
 # Copy the pre-built binary from local build
 COPY target/release/tsbx-controller /usr/local/bin/tsbx-controller
 

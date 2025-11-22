@@ -15,6 +15,8 @@
   import PerfectScrollbar from '/src/components/plugins/PerfectScrollbar.svelte';
 import { getToken } from '$lib/auth.js';
 
+export let data;
+
   let md;
   try {
     md = new MarkdownIt({ html: false, linkify: true, breaks: true }).use(taskLists, { label: true, labelAfter: true });
@@ -68,12 +70,14 @@ import { getToken } from '$lib/auth.js';
   let sandbox = null;
   // Update page title to show sandbox ID
   $: setPageTitle(sandbox?.id ? `Sandbox ${sandbox.id}` : 'Sandbox');
-  $: sandboxInferenceModel =
-    sandbox?.inference_model ||
-    $page?.data?.globalStats?.default_inference_model ||
-    '';
+  const inferenceProviders = Array.isArray(data?.inferenceProviders) ? data.inferenceProviders : [];
+  $: sandboxInferenceModel = sandbox?.inference_model || '';
   $: sandboxInferenceProvider =
-    $page?.data?.globalStats?.inference_name || '';
+    (() => {
+      if (!sandbox?.inference_provider) return '';
+      const match = inferenceProviders.find((p) => p.name === sandbox.inference_provider);
+      return match?.display_name || sandbox.inference_provider;
+    })();
   let stateStr = '';
   // Task tracking state
   let tasks = [];
