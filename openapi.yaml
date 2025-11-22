@@ -1148,6 +1148,9 @@ components:
           type: string
           nullable: true
           description: Inference model assigned to this sandbox
+        nl_task_enabled:
+          type: boolean
+          description: Indicates if natural language (inference-backed) tasks are allowed for this sandbox
         is_published:
           type: boolean
         published_at:
@@ -1277,6 +1280,14 @@ components:
         prompt:
           type: string
           nullable: true
+        inference_model:
+          type: string
+          nullable: true
+          description: Override inference model (defaults to host setting when omitted).
+        inference_api_key:
+          type: string
+          nullable: true
+          description: Sandbox-scoped inference key used for NL tasks; omit to rely on the host default or disable NL entirely.
         stop_timeout_seconds:
           type: integer
           nullable: true

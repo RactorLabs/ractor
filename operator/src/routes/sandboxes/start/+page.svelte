@@ -190,6 +190,9 @@ $: if ((!selectedModel || !selectedModel.trim()) && availableModels.length) {
               <div class="form-text">
                 If provided, this key will be used for inference requests within the sandbox. It will not be stored.
               </div>
+              <div class="alert alert-info small mt-2 mb-0">
+                Natural Language (NL) tasks require an inference key. Leave this blank only if you do not need NL tasks for the sandbox.
+              </div>
             </div>
 
             <div class="col-12">

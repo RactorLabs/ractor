@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS sandboxes (
     metadata JSON DEFAULT ('{}'),
     tags JSON NOT NULL DEFAULT ('[]'),
     inference_model VARCHAR(255) NULL,
+    nl_task_enabled BOOLEAN NOT NULL DEFAULT TRUE,
 
     -- Timeout functionality (idle/busy)
     idle_timeout_seconds INT NOT NULL DEFAULT 900,

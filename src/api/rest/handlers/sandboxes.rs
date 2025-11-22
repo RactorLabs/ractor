@@ -77,6 +77,7 @@ pub struct SandboxResponse {
     pub metadata: serde_json::Value,
     pub tags: Vec<String>,
     pub inference_model: Option<String>,
+    pub nl_task_enabled: bool,
     pub idle_timeout_seconds: i32,
     pub idle_from: Option<String>,
     pub busy_from: Option<String>,
@@ -211,6 +212,7 @@ impl SandboxResponse {
             metadata: sandbox.metadata,
             tags,
             inference_model: sandbox.inference_model,
+            nl_task_enabled: sandbox.nl_task_enabled,
             idle_timeout_seconds: sandbox.idle_timeout_seconds,
             idle_from: sandbox.idle_from.map(|dt| dt.to_rfc3339()),
             busy_from: sandbox.busy_from.map(|dt| dt.to_rfc3339()),
@@ -804,7 +806,7 @@ pub async fn list_sandboxes(
     let select_sql = format!(
         r#"
         SELECT id, created_by, state, description, snapshot_id,
-               created_at, last_activity_at, metadata, tags, inference_model,
+               created_at, last_activity_at, metadata, tags, inference_model, nl_task_enabled,
                idle_timeout_seconds, idle_from, busy_from,
                 tokens_prompt, tokens_completion,
                 tool_count, runtime_seconds,
@@ -1061,6 +1063,10 @@ pub async fn create_sandbox(
     };
 
     let mut req = req;
+    req.inference_api_key = req
+        .inference_api_key
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
 
     let requested_model = req
         .inference_model
@@ -1859,6 +1865,11 @@ pub async fn create_task(
         }
     }
     let task_type = req.task_type.unwrap_or(TaskType::NL);
+    if task_type == TaskType::NL && !sandbox.nl_task_enabled {
+        return Err(ApiError::BadRequest(
+            "This task type is not supported for this sandbox. Create a new sandbox with an inference key to use NL tasks.".to_string(),
+        ));
+    }
 
     let created_by = match &auth.principal {
         crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,

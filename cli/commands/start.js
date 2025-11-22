@@ -105,7 +105,6 @@ module.exports = (program) => {
     .option('--inference-name <name>', 'Inference provider name (required)')
     .option('--inference-models <models>', 'Comma-separated inference model list (first entry is default, required)')
     .option('--inference-url <url>', 'Inference API base URL (required)')
-    .option('--inference-api-key <key>', 'Inference API key (Bearer token, required)')
     // MySQL options
     .option('--mysql-port <port>', 'Host port for MySQL', '3307')
     .option('--mysql-root-password <pw>', 'MySQL root password', 'root')
@@ -311,7 +310,6 @@ module.exports = (program) => {
 
         const INFERENCE_NAME = resolveRequired(options.inferenceName, 'TSBX_INFERENCE_NAME', '--inference-name');
         const INFERENCE_URL = resolveRequired(options.inferenceUrl, 'TSBX_INFERENCE_URL', '--inference-url');
-        const INFERENCE_API_KEY = resolveRequired(options.inferenceApiKey, 'TSBX_INFERENCE_API_KEY', '--inference-api-key');
         const INFERENCE_MODELS = resolveRequired(options.inferenceModels, 'TSBX_INFERENCE_MODELS', '--inference-models');
         for (const comp of components) {
           switch (comp) {
@@ -398,7 +396,6 @@ module.exports = (program) => {
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,
                 '-e',`TSBX_INFERENCE_NAME=${INFERENCE_NAME}`,
                 '-e',`TSBX_INFERENCE_URL=${INFERENCE_URL}`,
-                '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODELS=${INFERENCE_MODELS}`,
                 ...(options.apiTSBXHost ? ['-e', `TSBX_HOST=${options.apiTSBXHost}`] : []),
                 ...(options.apiTSBXPort ? ['-e', `TSBX_PORT=${options.apiTSBXPort}`] : []),
@@ -429,12 +426,10 @@ module.exports = (program) => {
                   const currentName = envMap['TSBX_INFERENCE_NAME'];
                   const currentUrl = envMap['TSBX_INFERENCE_URL'];
                   const currentModels = envMap['TSBX_INFERENCE_MODELS'];
-                  const currentKey = envMap['TSBX_INFERENCE_API_KEY'];
                   const needsRecreate =
                     currentName !== desiredInferenceName ||
                     currentUrl !== desiredInferenceUrl ||
-                    currentModels !== desiredModels ||
-                    currentKey !== INFERENCE_API_KEY;
+                    currentModels !== desiredModels;
                   if (needsRecreate) {
                     console.log(chalk.blue('[INFO] ') + 'Recreating controller to apply updated inference configuration');
                     try { await docker(['rm','-f','tsbx_controller']); } catch (_) {}
@@ -466,7 +461,6 @@ module.exports = (program) => {
                 '-e',`JWT_SECRET=${controllerJwt}`,
                 '-e',`TSBX_INFERENCE_NAME=${desiredInferenceName}`,
                 '-e',`TSBX_INFERENCE_URL=${desiredInferenceUrl}`,
-                '-e',`TSBX_INFERENCE_API_KEY=${INFERENCE_API_KEY}`,
                 '-e',`TSBX_INFERENCE_MODELS=${desiredModels}`,
                 '-e',`TSBX_HOST_NAME=${TSBX_HOST_NAME}`,
                 '-e',`TSBX_HOST_URL=${TSBX_HOST_URL}`,

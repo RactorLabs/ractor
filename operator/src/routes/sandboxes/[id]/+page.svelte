@@ -152,7 +152,13 @@ import { getToken } from '$lib/auth.js';
     { value: 'PY', label: 'Python', short: 'PY', description: 'Execute the prompt with python3 -c.' },
     { value: 'JS', label: 'JavaScript', short: 'JS', description: 'Execute the prompt via node -e.' }
   ];
+  const fallbackNonNlTaskType =
+    taskTypeOptions.find((opt) => opt.value !== 'NL')?.value || 'NL';
   let taskType = 'NL';
+  $: nlTaskEnabled = sandbox?.nl_task_enabled !== false;
+  $: if (!nlTaskEnabled && taskType === 'NL') {
+    taskType = fallbackNonNlTaskType;
+  }
   function taskTypeLabel(code) {
     if (!code || typeof code !== 'string') return 'Natural Language';
     const upper = code.toUpperCase();
@@ -176,6 +182,18 @@ import { getToken } from '$lib/auth.js';
       return `btn btn-sm task-type-btn ${typeClass} selected`;
     }
     return `btn btn-sm task-type-btn ${typeClass}`;
+  }
+  function isTaskTypeLocked(code) {
+    if (!code) return false;
+    return code.toUpperCase() === 'NL' && !nlTaskEnabled;
+  }
+  function taskTypeHelp(code) {
+    if (isTaskTypeLocked(code)) {
+      return 'NL tasks require an inference key. Create a new sandbox with an inference key to enable them.';
+    }
+    const upper = (code || '').toUpperCase();
+    const found = taskTypeOptions.find((opt) => opt.value === upper);
+    return found?.description || '';
   }
   let pollHandle = null;
   let runtimeSeconds = 0;
@@ -1937,13 +1955,20 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             </div>
             <form class="task-form" on:submit|preventDefault={createTask}>
               <div class="mb-2">
+                {#if !nlTaskEnabled}
+                  <div class="alert alert-warning small mb-2">
+                    Natural Language (NL) tasks are disabled for this sandbox because it was created without an inference key. Create a new sandbox with an inference key to keep NL available.
+                  </div>
+                {/if}
                 <div class="d-flex flex-wrap gap-2">
                   {#each taskTypeOptions as option}
                     <button
                       type="button"
                       class={taskTypeButtonClass(option.value, taskType === option.value)}
-                      on:click={() => (taskType = option.value)}
-                      disabled={taskInputDisabled}
+                      on:click={() => { if (!isTaskTypeLocked(option.value) && !taskInputDisabled) taskType = option.value; }}
+                      disabled={taskInputDisabled || isTaskTypeLocked(option.value)}
+                      aria-disabled={taskInputDisabled || isTaskTypeLocked(option.value)}
+                      title={taskTypeHelp(option.value)}
                     >
                       {option.label}
                     </button>

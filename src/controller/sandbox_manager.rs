@@ -523,7 +523,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -765,7 +765,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -980,7 +980,7 @@ impl SandboxManager {
     pub async fn handle_create_snapshot(&self, request: SandboxRequest) -> Result<()> {
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -1063,7 +1063,7 @@ impl SandboxManager {
         // Look up the sandbox from the database using sandbox_id
         let sandbox = sqlx::query_as::<_, Sandbox>(
             "SELECT id, created_by, state, description, snapshot_id, created_at, last_activity_at,
-             metadata, tags, inference_model, idle_timeout_seconds, idle_from, busy_from,
+             metadata, tags, inference_model, nl_task_enabled, idle_timeout_seconds, idle_from, busy_from,
              tokens_prompt, tokens_completion, tool_count,
              runtime_seconds, tasks_completed
              FROM sandboxes WHERE id = ?",
@@ -1093,6 +1093,14 @@ impl SandboxManager {
             .and_then(|v| v.as_str())
             .map(TaskType::from_db_value)
             .unwrap_or(TaskType::NL);
+
+        if task_type == TaskType::NL && !sandbox.nl_task_enabled {
+            warn!(
+                "Sandbox {} cannot accept NL tasks because no inference key was provided",
+                sandbox.id
+            );
+            anyhow::bail!("NL tasks disabled for sandbox without inference key");
+        }
 
         let timeout_seconds = request
             .payload

@@ -1110,15 +1110,15 @@ echo 'Session directories created (.env, logs)'
         }
         env_vars.push(format!("TSBX_INFERENCE_URL={}", trimmed_url));
 
-        // Use provided inference API key, otherwise fallback to system-wide
-        let final_inference_api_key = if let Some(key) = inference_api_key {
-            info!("Using provided inference API key for sandbox {}", sandbox_id);
-            key
-        } else {
-            "".to_string()
-        };
-        let trimmed_key = final_inference_api_key.trim();
-        if !trimmed_key.is_empty() {
+        if let Some(trimmed_key) = inference_api_key
+            .as_ref()
+            .map(|k| k.trim())
+            .filter(|k| !k.is_empty())
+        {
+            info!(
+                "Using provided inference API key for sandbox {}",
+                sandbox_id
+            );
             env_vars.push(format!("TSBX_INFERENCE_API_KEY={}", trimmed_key));
         }
 

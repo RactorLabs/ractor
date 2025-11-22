@@ -240,7 +240,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes?state=idle&tags=prod&tags=team/core&limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'ListSandboxesResult' },
           responses: [
-            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
+            { status: 200, body: `{"items":[{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":["prod","team/core"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","nl_task_enabled":true,"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}],"total":1,"limit":20,"offset":0,"page":1,"pages":1}` }
           ]
         },
         {
@@ -253,6 +253,7 @@ export function getApiDocs(base) {
             { in: 'body', name: 'metadata', type: 'object', required: false, desc: 'Arbitrary metadata JSON (default {}).' },
             { in: 'body', name: 'tags', type: 'string[]', required: false, desc: "Tag list (stored lowercase; allowed characters letters, digits, '/', '-', '_', '.')." },
             { in: 'body', name: 'inference_model', type: 'string|null', required: false, desc: 'Override inference model for this sandbox (uses system default if omitted).' },
+            { in: 'body', name: 'inference_api_key', type: 'string|null', required: false, desc: 'Sandbox-scoped inference API key; required when you want NL tasks available but do not rely on the host default key.' },
             { in: 'body', name: 'env', type: 'object<string,string>', required: false, desc: 'Environment variable map to inject on boot.' },
             { in: 'body', name: 'instructions', type: 'string|null', required: false, desc: 'Optional instructions passed to the sandbox runtime.' },
             { in: 'body', name: 'setup', type: 'string|null', required: false, desc: 'Optional setup script executed on boot.' },
@@ -260,10 +261,10 @@ export function getApiDocs(base) {
             { in: 'body', name: 'idle_timeout_seconds', type: 'int|null', required: false, desc: 'Override idle timeout seconds (defaults to 900).' },
             { in: 'body', name: 'snapshot_id', type: 'string|null', required: false, desc: 'Restore from an existing snapshot (files copied by the controller).' }
           ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2"}'`,
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"Demo","tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","inference_api_key":"sandbox-local-key"}'`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{},"runtime_seconds":0,"tasks_completed":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"initializing","description":"Demo","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":null,"metadata":{},"tags":["prod"],"inference_model":"llama-3.2-3b-instruct-fast-tp2","nl_task_enabled":true,"idle_timeout_seconds":900,"idle_from":null,"busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
@@ -277,7 +278,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'Sandbox' },
           responses: [
-            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"inference_model":"llama-3.2-3b-instruct-fast-tp2","idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}` }
+            { status: 200, body: `{"id":"fa36e542-b9b8-11f0-aadd-064ac08387fc","created_by":"admin","state":"idle","description":"Demo sandbox","snapshot_id":null,"created_at":"2025-01-01T12:00:00Z","last_activity_at":"2025-01-01T12:10:00Z","metadata":{},"tags":[],"inference_model":"llama-3.2-3b-instruct-fast-tp2","nl_task_enabled":true,"idle_timeout_seconds":900,"idle_from":"2025-01-01T12:10:00Z","busy_from":null,"tokens_prompt":0,"tokens_completion":0,"tool_count":{"run_bash":3,"read_file":1},"runtime_seconds":0,"tasks_completed":0}` }
           ]
         },
         {
