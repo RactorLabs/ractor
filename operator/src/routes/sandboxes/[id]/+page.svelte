@@ -160,6 +160,9 @@ export let data;
     taskTypeOptions.find((opt) => opt.value !== 'NL')?.value || 'NL';
   let taskType = 'NL';
   $: nlTaskEnabled = sandbox?.nl_task_enabled !== false;
+  $: visibleTaskTypeOptions = nlTaskEnabled
+    ? taskTypeOptions
+    : taskTypeOptions.filter((opt) => opt.value !== 'NL');
   $: if (!nlTaskEnabled && taskType === 'NL') {
     taskType = fallbackNonNlTaskType;
   }
@@ -187,14 +190,7 @@ export let data;
     }
     return `btn btn-sm task-type-btn ${typeClass}`;
   }
-  function isTaskTypeLocked(code) {
-    if (!code) return false;
-    return code.toUpperCase() === 'NL' && !nlTaskEnabled;
-  }
   function taskTypeHelp(code) {
-    if (isTaskTypeLocked(code)) {
-      return 'NL tasks require an inference key. Create a new sandbox with an inference key to enable them.';
-    }
     const upper = (code || '').toUpperCase();
     const found = taskTypeOptions.find((opt) => opt.value === upper);
     return found?.description || '';
@@ -1959,19 +1955,14 @@ onDestroy(() => { fmRevokePreviewUrl(); });
             </div>
             <form class="task-form" on:submit|preventDefault={createTask}>
               <div class="mb-2">
-                {#if !nlTaskEnabled}
-                  <div class="alert alert-warning small mb-2">
-                    Natural Language (NL) tasks are disabled for this sandbox because it was created without an inference key. Create a new sandbox with an inference key to keep NL available.
-                  </div>
-                {/if}
                 <div class="d-flex flex-wrap gap-2">
-                  {#each taskTypeOptions as option}
+                  {#each visibleTaskTypeOptions as option}
                     <button
                       type="button"
                       class={taskTypeButtonClass(option.value, taskType === option.value)}
-                      on:click={() => { if (!isTaskTypeLocked(option.value) && !taskInputDisabled) taskType = option.value; }}
-                      disabled={taskInputDisabled || isTaskTypeLocked(option.value)}
-                      aria-disabled={taskInputDisabled || isTaskTypeLocked(option.value)}
+                      on:click={() => { if (!taskInputDisabled) taskType = option.value; }}
+                      disabled={taskInputDisabled}
+                      aria-disabled={taskInputDisabled}
                       title={taskTypeHelp(option.value)}
                     >
                       {option.label}
