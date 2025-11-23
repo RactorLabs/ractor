@@ -181,7 +181,7 @@ $: hasProviders = inferenceProviders.length > 0;
                 id="inference-provider"
                 class="form-select"
                 bind:value={selectedProviderName}
-                disabled={!hasProviders || loading}
+                disabled={!hasProviders || loading || inferenceProviders.length === 1}
               >
                 {#if hasProviders}
                   {#each inferenceProviders as provider}
@@ -203,7 +203,7 @@ $: hasProviders = inferenceProviders.length > 0;
                 id="inference-model"
                 class="form-select"
                 bind:value={selectedModel}
-                disabled={!availableModels.length || loading}
+                disabled={!availableModels.length || loading || availableModels.length === 1}
               >
                 {#if availableModels.length}
                   {#each availableModels as model}
