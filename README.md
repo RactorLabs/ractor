@@ -34,6 +34,7 @@ TSBX orchestrates long-lived, Docker-backed sandboxes for agent workflows. It bu
    ```bash
    tsbx start
    ```
+   The CLI now reapplies the SQL files in `db/migrations/` every time the MySQL container starts, so schema changes are captured even when you reuse existing Docker volumes.
    Pass component names (e.g., `tsbx start api controller`) if you want to launch a subset.
 
 4. **Visit the Operator UI**  
