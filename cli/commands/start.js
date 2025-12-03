@@ -104,6 +104,72 @@ async function waitForMysql() {
   throw new Error('MySQL failed to become healthy');
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runMysqlScript(filePath, options) {
+  return new Promise((resolve, reject) => {
+    const dbName = options.mysqlDatabase || 'tsbx';
+    const rootPassword = options.mysqlRootPassword || 'root';
+    const child = spawn('docker', ['exec', '-i', 'mysql', 'mysql', '-h', 'localhost', '-u', 'root', `-p${rootPassword}`, dbName], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (d) => {
+      stderr += d.toString();
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(stderr || `mysql exited with code ${code}`));
+      }
+    });
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', reject);
+    stream.pipe(child.stdin);
+  });
+}
+
+async function applyMysqlMigrations(options) {
+  const migrationsDir = path.join(process.cwd(), 'db', 'migrations');
+  if (!fs.existsSync(migrationsDir)) {
+    console.log(chalk.yellow('[WARNING] ') + 'No db/migrations directory found; skipping MySQL migrations.');
+    return;
+  }
+  const sqlFiles = fs
+    .readdirSync(migrationsDir)
+    .filter((name) => name.toLowerCase().endsWith('.sql'))
+    .sort();
+  if (!sqlFiles.length) {
+    console.log(chalk.yellow('[WARNING] ') + 'db/migrations is empty; skipping MySQL migrations.');
+    return;
+  }
+  console.log(chalk.blue('[INFO] ') + `Applying database migrations (${sqlFiles.length} file${sqlFiles.length === 1 ? '' : 's'})...`);
+  for (const file of sqlFiles) {
+    const fullPath = path.join(migrationsDir, file);
+    let applied = false;
+    for (let attempt = 1; attempt <= 5 && !applied; attempt++) {
+      try {
+        await runMysqlScript(fullPath, options);
+        applied = true;
+      } catch (err) {
+        if (attempt >= 5) {
+          throw err;
+        }
+        console.log(
+          chalk.yellow('[WARNING] ') +
+            `Failed to apply ${file} (attempt ${attempt}/5): ${err.message.trim()}. Retrying...`
+        );
+        await sleep(2000);
+      }
+    }
+  }
+  console.log(chalk.green('[SUCCESS] ') + 'Database migrations applied');
+}
+
 module.exports = (program) => {
   program
     .command('start')
@@ -317,40 +383,42 @@ module.exports = (program) => {
           switch (comp) {
             case 'mysql': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring MySQL database is running...');
-              if (await containerRunning('mysql')) { console.log(chalk.green('[SUCCESS] ') + 'MySQL already running'); console.log(); break; }
-              if (await containerExists('mysql')) {
+              if (await containerRunning('mysql')) {
+                console.log(chalk.green('[SUCCESS] ') + 'MySQL already running');
+              } else if (await containerExists('mysql')) {
                 await docker(['start','mysql']);
+                await waitForMysql();
                 console.log(chalk.green('[SUCCESS] ') + 'MySQL started');
-                console.log();
-                break;
+              } else {
+                const args = ['run'];
+                if (detached) args.push('-d');
+                args.push(
+                  '--name','mysql',
+                  '--network','tsbx_network',
+                  '-p', `${String(options.mysqlPort || '3307')}:3306`,
+                  '-v','mysql_data:/var/lib/mysql',
+                  '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
+                  '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'tsbx'}`,
+                  '-e',`MYSQL_USER=${options.mysqlUser || 'tsbx'}`,
+                  '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'tsbx'}`,
+                  '--health-cmd','mysqladmin ping -h localhost -u root -proot',
+                  '--health-interval','10s',
+                  '--health-timeout','5s',
+                  '--health-retries','5',
+                  'mysql:8.0',
+                  // Persist logs into data volume
+                  '--log-error=/var/lib/mysql/mysql-error.log',
+                  '--slow_query_log=ON',
+                  '--long_query_time=2',
+                  '--slow_query_log_file=/var/lib/mysql/mysql-slow.log',
+                  '--default-authentication-plugin=mysql_native_password',
+                  '--collation-server=utf8mb4_unicode_ci',
+                  '--character-set-server=utf8mb4'
+                );
+                await docker(args);
+                await waitForMysql();
               }
-              const args = ['run'];
-              if (detached) args.push('-d');
-              args.push(
-                '--name','mysql',
-                '--network','tsbx_network',
-                '-p', `${String(options.mysqlPort || '3307')}:3306`,
-                '-v','mysql_data:/var/lib/mysql',
-                '-e',`MYSQL_ROOT_PASSWORD=${options.mysqlRootPassword || 'root'}`,
-                '-e',`MYSQL_DATABASE=${options.mysqlDatabase || 'tsbx'}`,
-                '-e',`MYSQL_USER=${options.mysqlUser || 'tsbx'}`,
-                '-e',`MYSQL_PASSWORD=${options.mysqlPassword || 'tsbx'}`,
-                '--health-cmd','mysqladmin ping -h localhost -u root -proot',
-                '--health-interval','10s',
-                '--health-timeout','5s',
-                '--health-retries','5',
-                'mysql:8.0',
-                // Persist logs into data volume
-                '--log-error=/var/lib/mysql/mysql-error.log',
-                '--slow_query_log=ON',
-                '--long_query_time=2',
-                '--slow_query_log_file=/var/lib/mysql/mysql-slow.log',
-                '--default-authentication-plugin=mysql_native_password',
-                '--collation-server=utf8mb4_unicode_ci',
-                '--character-set-server=utf8mb4'
-              );
-              await docker(args);
-              await waitForMysql();
+              await applyMysqlMigrations(options);
               console.log();
               break;
             }
