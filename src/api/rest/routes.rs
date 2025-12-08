@@ -172,7 +172,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         )
         .route(
             "/sandboxes/{id}/repo",
-            post(handlers::sandboxes::clone_sandbox_repo),
+            get(handlers::sandboxes::list_sandbox_repos)
+                .post(handlers::sandboxes::clone_sandbox_repo),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

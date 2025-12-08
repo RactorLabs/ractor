@@ -524,6 +524,7 @@ impl SandboxManager {
             "file_delete" => self.handle_file_delete(request.clone()).await,
             "file_upload" => self.handle_file_upload(request.clone()).await,
             "secret_add" => self.handle_secret_add(request.clone()).await,
+            "repo_list" => self.handle_repo_list(request.clone()).await,
             "repo_clone" => self.handle_repo_clone(request.clone()).await,
             _ => {
                 warn!("Unknown request type: {}", request.request_type);
@@ -2101,6 +2102,91 @@ impl SandboxManager {
         }
 
         self.complete_request_with_payload(&request.id, payload, result)
+            .await
+    }
+
+    pub async fn handle_repo_list(&self, request: SandboxRequest) -> Result<()> {
+        match self
+            .docker_manager
+            .is_container_healthy(&request.sandbox_id)
+            .await
+        {
+            Ok(true) => {}
+            _ => {
+                return self
+                    .fail_request(&request.id, "sandbox not available".to_string())
+                    .await;
+            }
+        }
+
+        let script = r#"set -euo pipefail
+find /sandbox -maxdepth 2 -type d -name .git -print0 | while IFS= read -r -d '' gitdir; do
+  repo_dir=$(dirname "$gitdir")
+  rel=${repo_dir#/sandbox/}
+  if [ "$rel" = "$repo_dir" ]; then
+    rel="."
+  fi
+  cd "$repo_dir"
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+  commit=$(git rev-parse HEAD 2>/dev/null || true)
+  remote=$(git remote get-url origin 2>/dev/null || true)
+  printf '%s\t%s\t%s\t%s\n' "$rel" "$branch" "$commit" "$remote"
+done"#;
+
+        let (code, stdout, stderr) = self
+            .docker_manager
+            .exec_collect(
+                &request.sandbox_id,
+                vec!["/bin/bash".into(), "-lc".into(), script.to_string()],
+            )
+            .await?;
+        if code != 0 {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!(
+                        "failed to enumerate repository directories: {}",
+                        String::from_utf8_lossy(&stderr)
+                    ),
+                )
+                .await;
+        }
+
+        let mut repos = Vec::new();
+        for line in stdout.split(|b| *b == b'\n') {
+            if line.is_empty() {
+                continue;
+            }
+            let parts: Vec<_> = line.splitn(4, |b| *b == b'\t').collect();
+            if parts.is_empty() {
+                continue;
+            }
+            let path = String::from_utf8_lossy(parts[0]).trim().to_string();
+            let branch = parts
+                .get(1)
+                .map(|v| String::from_utf8_lossy(v).trim().to_string())
+                .filter(|s| !s.is_empty());
+            let commit = parts
+                .get(2)
+                .map(|v| String::from_utf8_lossy(v).trim().to_string())
+                .filter(|s| !s.is_empty());
+            let repo_url = parts
+                .get(3)
+                .map(|v| String::from_utf8_lossy(v).trim().to_string())
+                .filter(|s| !s.is_empty());
+
+            repos.push(serde_json::json!({
+                "path": path,
+                "branch": branch,
+                "commit": commit,
+                "repo_url": repo_url,
+            }));
+        }
+
+        let result = serde_json::json!({
+            "repos": repos
+        });
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }
 

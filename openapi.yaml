@@ -1067,6 +1067,32 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /sandboxes/{id}/repo:
+    get:
+      tags:
+      - Sandboxes
+      summary: List git repositories detected inside /sandbox
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      responses:
+        '200':
+          description: Repository metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SandboxRepoListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - Sandboxes
@@ -1090,18 +1116,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  path:
-                    type: string
-                  repo_url:
-                    type: string
-                  branch:
-                    type: string
-                    nullable: true
-                  commit:
-                    type: string
-                    nullable: true
+                $ref: '#/components/schemas/SandboxRepoInfo'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -1836,3 +1851,28 @@ components:
           nullable: true
         total:
           type: integer
+    SandboxRepoInfo:
+      type: object
+      required:
+      - path
+      properties:
+        path:
+          type: string
+          description: Relative path within /sandbox containing the repository
+        branch:
+          type: string
+          nullable: true
+        commit:
+          type: string
+          nullable: true
+        repo_url:
+          type: string
+          nullable: true
+          description: Origin remote URL if available
+    SandboxRepoListResponse:
+      type: object
+      properties:
+        repos:
+          type: array
+          items:
+            $ref: '#/components/schemas/SandboxRepoInfo'

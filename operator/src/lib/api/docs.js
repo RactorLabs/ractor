@@ -476,6 +476,19 @@ export function getApiDocs(base) {
         },
         {
           method: 'GET',
+          path: '/api/v0/sandboxes/{id}/repo',
+          auth: 'bearer',
+          desc: 'List git repositories detected in the sandbox (currently /sandbox/repo).',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' }
+          ],
+          example: `curl -s ${BASE}/api/v0/sandboxes/<id>/repo -H "Authorization: Bearer <token>"`,
+          responses: [
+            { status: 200, body: `{"repos":[{"path":"repo","branch":"main","commit":"<sha>","repo_url":"https://github.com/octocat/Hello-World.git"}]}` }
+          ]
+        },
+        {
+          method: 'GET',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
           desc: 'List tasks for a sandbox in chronological order. Inputs include `file_reference` items when a request mentions files with `@path/to/file`.',

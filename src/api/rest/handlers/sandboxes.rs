@@ -294,6 +294,23 @@ pub struct CloneRepoRequest {
     pub auth: Option<RepoAuthRequest>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SandboxRepoInfo {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "repo_url")]
+    pub repo_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SandboxRepoListResponse {
+    pub repos: Vec<SandboxRepoInfo>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RepoAuthRequest {
@@ -1372,6 +1389,84 @@ pub async fn clone_sandbox_repo(
         if start.elapsed().as_secs() >= 120 {
             return Err(ApiError::Timeout(
                 "Timed out waiting for repository clone".to_string(),
+            ));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+}
+
+pub async fn list_sandbox_repos(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to list repositories".to_string())
+            })?;
+    }
+
+    let principal = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let sandbox = find_sandbox_by_id(&state, &id, principal, is_admin).await?;
+    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
+
+    let payload = serde_json::json!({
+        "path": "repo"
+    });
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+            VALUES (?, ?, 'repo_list', ?, ?, 'pending')"#,
+    )
+    .bind(&request_id)
+    .bind(&sandbox.id)
+    .bind(principal)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to enqueue repo_list request: {}",
+            e
+        ))
+    })?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({"repos": []}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "repo list failed".to_string());
+                return Err(map_repo_request_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 30 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for repository list".to_string(),
             ));
         }
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
