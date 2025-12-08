@@ -1928,7 +1928,12 @@ impl SandboxManager {
             Ok(_) => "repo".to_string(),
             Err(e) => return self.fail_request(&request.id, e.to_string()).await,
         };
-        let dest_abs = format!("/sandbox/{}", safe_rel);
+        let normalized_rel = if safe_rel == "repo" || safe_rel.starts_with("repo/") {
+            safe_rel
+        } else {
+            format!("repo/{}", safe_rel)
+        };
+        let dest_abs = format!("/sandbox/{}", normalized_rel);
         let dest_parent = Path::new(&dest_abs)
             .parent()
             .map(|p| p.to_string_lossy().to_string())
@@ -2085,7 +2090,7 @@ impl SandboxManager {
         let mut payload = request.payload.clone();
         scrub_repo_auth_fields(&mut payload);
         let mut result = serde_json::json!({
-            "path": "repo",
+            "path": normalized_rel,
             "repo_url": repo_url,
         });
         if let Some(branch) = branch {
@@ -2120,7 +2125,11 @@ impl SandboxManager {
         }
 
         let script = r#"set -euo pipefail
-find /sandbox -maxdepth 2 -type d -name .git -print0 | while IFS= read -r -d '' gitdir; do
+BASE_DIR=/sandbox/repo
+if [ ! -d "$BASE_DIR" ]; then
+  exit 0
+fi
+find "$BASE_DIR" -type d -name .git -print0 | while IFS= read -r -d '' gitdir; do
   repo_dir=$(dirname "$gitdir")
   rel=${repo_dir#/sandbox/}
   if [ "$rel" = "$repo_dir" ]; then

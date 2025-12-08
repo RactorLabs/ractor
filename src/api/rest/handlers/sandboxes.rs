@@ -17,6 +17,7 @@ use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::warn;
+use url::Url;
 
 use bollard::container::{InspectContainerOptions, MemoryStatsStats, Stats, StatsOptions};
 use bollard::errors::Error as BollardError;
@@ -292,6 +293,8 @@ pub struct CloneRepoRequest {
     pub branch: Option<String>,
     #[serde(default)]
     pub auth: Option<RepoAuthRequest>,
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -567,6 +570,39 @@ fn repo_url_is_https(url: &str) -> bool {
 
 fn repo_url_is_ssh(url: &str) -> bool {
     url.starts_with("git@") || url.starts_with("ssh://")
+}
+
+fn derive_repo_dir_name(url: &str) -> String {
+    if let Ok(parsed) = Url::parse(url) {
+        if let Some(segment) = parsed.path_segments().and_then(|mut segs| segs.next_back()) {
+            return sanitize_repo_name_segment(segment);
+        }
+    }
+    if let Some(idx) = url.rsplit(&['/', ':'][..]).next() {
+        return sanitize_repo_name_segment(idx);
+    }
+    "repo".to_string()
+}
+
+fn sanitize_repo_name_segment(segment: &str) -> String {
+    let mut name = segment.trim().trim_end_matches(".git").to_string();
+    if name.is_empty() {
+        name = "repo".to_string();
+    }
+    name
+}
+
+fn sanitize_repo_subpath(raw: &str) -> Result<String, ApiError> {
+    let trimmed = raw.trim().trim_start_matches('/');
+    if trimmed.is_empty() {
+        return Err(ApiError::BadRequest("path cannot be empty".to_string()));
+    }
+    if !is_safe_relative_path(trimmed) {
+        return Err(ApiError::BadRequest(
+            "path contains invalid segments".to_string(),
+        ));
+    }
+    Ok(trimmed.to_string())
 }
 
 fn map_file_request_error(err: &str) -> ApiError {
@@ -1252,6 +1288,7 @@ pub async fn clone_sandbox_repo(
         repo_url,
         branch,
         auth,
+        path,
     } = req;
 
     let repo_url = repo_url.trim().to_string();
@@ -1326,9 +1363,25 @@ pub async fn clone_sandbox_repo(
         })
         .transpose()?;
 
+    let sub_path = path
+        .and_then(|p| {
+            let trimmed = p.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .map(|value| sanitize_repo_subpath(&value))
+        .transpose()?;
+
+    let resolved_subdir = sub_path.unwrap_or_else(|| derive_repo_dir_name(&repo_url));
+    let sanitized_subdir = sanitize_repo_subpath(&resolved_subdir)?;
+    let full_path = format!("repo/{}", sanitized_subdir);
+
     let mut payload = serde_json::json!({
         "repo_url": repo_url,
-        "path": "repo",
+        "path": full_path,
     });
     if let Some(branch) = branch {
         payload
