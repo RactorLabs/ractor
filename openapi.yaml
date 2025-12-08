@@ -964,6 +964,70 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sandboxes/{id}/files/upload:
+    post:
+      tags:
+      - Files
+      summary: Upload or overwrite a file inside a sandbox
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - path
+              - content_base64
+              properties:
+                path:
+                  type: string
+                  description: Relative path under /sandbox (no leading slash)
+                content_base64:
+                  type: string
+                  format: byte
+                  description: Base64-encoded file contents (limit 5MB decoded)
+                overwrite:
+                  type: boolean
+                  description: Overwrite existing file if true
+                  default: true
+                executable:
+                  type: boolean
+                  description: Mark uploaded file as executable (chmod 755)
+                  default: false
+      responses:
+        '200':
+          description: Upload result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  bytes_written:
+                    type: integer
+                    format: int64
+                  executable:
+                    type: boolean
+                  overwrite:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /inference/providers:
     get:
       tags:

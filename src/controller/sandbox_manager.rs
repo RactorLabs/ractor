@@ -7,6 +7,7 @@ use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
 use std::convert::TryFrom;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
@@ -15,7 +16,7 @@ use tracing::{error, info, warn};
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
 pub mod constants;
-pub use constants::SANDBOX_STATE_INITIALIZING;
+pub use constants::{MAX_SANDBOX_FILE_BYTES, SANDBOX_STATE_INITIALIZING};
 
 // Inference providers are resolved from the shared configuration file
 
@@ -505,6 +506,7 @@ impl SandboxManager {
             "file_metadata" => self.handle_file_metadata(request.clone()).await,
             "file_list" => self.handle_file_list(request.clone()).await,
             "file_delete" => self.handle_file_delete(request.clone()).await,
+            "file_upload" => self.handle_file_upload(request.clone()).await,
             _ => {
                 warn!("Unknown request type: {}", request.request_type);
                 Err(anyhow::anyhow!("Unknown request type"))
@@ -1621,6 +1623,156 @@ impl SandboxManager {
                 .await;
         }
         let result = serde_json::json!({ "terminated": true, "path": safe });
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
+            .await
+    }
+
+    pub async fn handle_file_upload(&self, request: SandboxRequest) -> Result<()> {
+        let path_raw = request
+            .payload
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if path_raw.is_empty() {
+            return self
+                .fail_request(&request.id, "path is required".to_string())
+                .await;
+        }
+        let safe = match self.sanitize_relative_path(&path_raw) {
+            Ok(p) if !p.is_empty() => p,
+            Ok(_) => {
+                return self
+                    .fail_request(&request.id, "path cannot be empty".to_string())
+                    .await
+            }
+            Err(e) => return self.fail_request(&request.id, e.to_string()).await,
+        };
+
+        let encoded = match request
+            .payload
+            .get("content_base64")
+            .and_then(|v| v.as_str())
+        {
+            Some(s) if !s.trim().is_empty() => s.trim(),
+            _ => {
+                return self
+                    .fail_request(&request.id, "content_base64 is required".to_string())
+                    .await
+            }
+        };
+        let overwrite = request
+            .payload
+            .get("overwrite")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let executable = request
+            .payload
+            .get("executable")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let data = match BASE64_STANDARD.decode(encoded) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return self
+                    .fail_request(
+                        &request.id,
+                        "content_base64 must be valid base64".to_string(),
+                    )
+                    .await
+            }
+        };
+        if data.is_empty() {
+            return self
+                .fail_request(&request.id, "File content cannot be empty".to_string())
+                .await;
+        }
+        if data.len() > MAX_SANDBOX_FILE_BYTES {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!(
+                        "File too large ({} bytes > {} bytes)",
+                        data.len(),
+                        MAX_SANDBOX_FILE_BYTES
+                    ),
+                )
+                .await;
+        }
+
+        match self
+            .docker_manager
+            .is_container_healthy(&request.sandbox_id)
+            .await
+        {
+            Ok(true) => {}
+            _ => {
+                return self
+                    .fail_request(&request.id, "sandbox not available".to_string())
+                    .await;
+            }
+        }
+
+        let full_path = format!("/sandbox/{}", safe);
+        if !overwrite {
+            let (code, _out, _err) = self
+                .docker_manager
+                .exec_collect(
+                    &request.sandbox_id,
+                    vec!["/usr/bin/test".into(), "-e".into(), full_path.clone()],
+                )
+                .await?;
+            if code == 0 {
+                return self
+                    .fail_request(&request.id, "File already exists".to_string())
+                    .await;
+            }
+        }
+
+        if let Some(parent) = Path::new(&safe).parent() {
+            if !parent.as_os_str().is_empty() {
+                let parent_abs = format!("/sandbox/{}", parent.to_string_lossy());
+                let (code, _out, err) = self
+                    .docker_manager
+                    .exec_collect(
+                        &request.sandbox_id,
+                        vec!["/bin/mkdir".into(), "-p".into(), parent_abs],
+                    )
+                    .await?;
+                if code != 0 {
+                    return self
+                        .fail_request(&request.id, String::from_utf8_lossy(&err).to_string())
+                        .await;
+                }
+            }
+        }
+
+        if let Err(e) = self
+            .docker_manager
+            .write_file_to_sandbox(
+                &request.sandbox_id,
+                &safe,
+                &data,
+                if executable { 0o755 } else { 0o644 },
+            )
+            .await
+        {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!("Failed to upload file: {}", e.to_string()),
+                )
+                .await;
+        }
+
+        let result = serde_json::json!({
+            "path": safe,
+            "bytes_written": data.len(),
+            "executable": executable,
+            "overwrite": overwrite
+        });
         self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }

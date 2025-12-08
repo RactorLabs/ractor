@@ -361,11 +361,11 @@ export function getApiDocs(base) {
           method: 'GET',
           path: '/api/v0/stats',
           auth: 'bearer',
-          desc: 'Global stats across sandboxes including inference configuration.',
+          desc: 'Global stats across sandboxes including inference configuration and host metrics.',
           example: `curl -s ${BASE}/api/v0/stats -H "Authorization: Bearer <token>"`,
           resp: { schema: 'GlobalStats' },
           responses: [
-            { status: 200, body: `{"sandboxes_total":14,"sandboxes_active":12,"sandboxes_terminated":2,"sandboxes_by_state":{"idle":5,"busy":3,"terminating":1,"terminated":2,"initializing":3},"inference_name":"Positron","inference_url":"https://api.positron.ai/v1/chat/completions","inference_models":["llama-3.2-3b-instruct-fast-tp2","llama-3.2-405b"],"default_inference_model":"llama-3.2-3b-instruct-fast-tp2","captured_at":"2025-01-01T15:04:32Z"}` }
+            { status: 200, body: `{"sandboxes_total":14,"sandboxes_active":12,"sandboxes_terminated":2,"sandboxes_by_state":{"idle":5,"busy":3,"terminating":1,"terminated":2,"initializing":3},"sandbox_tasks_total":240,"sandbox_tasks_active":7,"inference_name":"Positron","inference_url":"https://api.positron.ai/v1/chat/completions","inference_models":["llama-3.2-3b-instruct-fast-tp2","llama-3.2-405b"],"default_inference_model":"llama-3.2-3b-instruct-fast-tp2","captured_at":"2025-01-01T15:04:32Z","host":{"hostname":"tsbx-dev","uptime_seconds":86400,"cpu_cores":16,"cpu_percent":21.4,"load_avg_1m":0.42,"load_avg_5m":0.38,"load_avg_15m":0.33,"memory_total_bytes":33554432000,"memory_used_bytes":21474836480,"memory_used_percent":64.0}}` }
           ]
         },
         {
@@ -420,6 +420,24 @@ export function getApiDocs(base) {
           resp: { schema: 'Empty' },
           responses: [
             { status: 200 }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/files/upload',
+          auth: 'bearer',
+          desc: 'Upload or overwrite a file inside /sandbox using a base64-encoded payload (5MB decoded limit).',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'path', type: 'string', required: true, desc: 'Relative path under /sandbox (for example src/main.rs).' },
+            { in: 'body', name: 'content_base64', type: 'string', required: true, desc: 'File contents encoded as base64 (decoded max 5MB).' },
+            { in: 'body', name: 'overwrite', type: 'boolean', required: false, desc: 'Defaults to true; set false to fail when the file already exists.' },
+            { in: 'body', name: 'executable', type: 'boolean', required: false, desc: 'Set true to chmod 755 after upload (default 644).' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/files/upload -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"path":"scripts/setup.sh","content_base64":"$(base64 -w0 setup.sh)","executable":true}'`,
+          responses: [
+            { status: 200, body: `{"path":"scripts/setup.sh","bytes_written":128,"executable":true,"overwrite":true}` },
+            { status: 409, body: `{"message":"File already exists."}` }
           ]
         },
         {

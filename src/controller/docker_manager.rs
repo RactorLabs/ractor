@@ -13,6 +13,8 @@ use futures::StreamExt;
 use sqlx::MySqlPool;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tar::{Builder, Header};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use tracing::{error, info, warn};
@@ -1435,6 +1437,43 @@ echo 'Session directories created (.env, logs)'
             snapshot_id, sandbox_id
         );
 
+        Ok(())
+    }
+
+    pub async fn write_file_to_sandbox(
+        &self,
+        sandbox_id: &str,
+        relative_path: &str,
+        data: &[u8],
+        mode: u32,
+    ) -> Result<()> {
+        let container_name = format!("tsbx_sandbox_{}", sandbox_id);
+        let mut tar_buf: Vec<u8> = Vec::new();
+        {
+            let mut builder = Builder::new(&mut tar_buf);
+            let mut header = Header::new_gnu();
+            header.set_size(data.len() as u64);
+            header.set_mode(mode);
+            let mtime = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+                .as_secs();
+            header.set_mtime(mtime);
+            header.set_path(relative_path)?;
+            header.set_cksum();
+            builder.append(&header, data)?;
+            builder.finish()?;
+        }
+
+        let tar_bytes = Bytes::from(tar_buf);
+        let upload_opts = UploadToContainerOptions::<&str> {
+            path: "/sandbox",
+            no_overwrite_dir_non_dir: "false",
+        };
+
+        self.docker
+            .upload_to_container(&container_name, Some(upload_opts), tar_bytes)
+            .await?;
         Ok(())
     }
 

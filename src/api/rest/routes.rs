@@ -162,6 +162,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/sandboxes/{id}/files/delete/{*path}",
             delete(handlers::sandboxes::delete_sandbox_file),
         )
+        .route(
+            "/sandboxes/{id}/files/upload",
+            post(handlers::sandboxes::upload_sandbox_file),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

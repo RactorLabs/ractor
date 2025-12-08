@@ -24,6 +24,7 @@ use tokio::time::timeout;
 use crate::api::rest::error::{ApiError, ApiResult};
 use crate::api::rest::middleware::AuthContext;
 use crate::api::rest::rbac_enforcement::{check_api_permission, permissions};
+use crate::shared::models::constants::MAX_SANDBOX_FILE_BYTES;
 use crate::shared::models::task::{extract_output_items, extract_steps, TaskOutput};
 use crate::shared::models::{
     AppState, CreateSandboxRequest, CreateTaskRequest, Sandbox, SandboxTask, TaskSummary, TaskType,
@@ -260,6 +261,20 @@ pub struct ListFilesQuery {
     pub limit: Option<u64>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UploadFileRequest {
+    pub path: String,
+    pub content_base64: String,
+    #[serde(default = "default_true")]
+    pub overwrite: bool,
+    #[serde(default)]
+    pub executable: bool,
+}
+
 fn is_safe_relative_path(p: &str) -> bool {
     if p.is_empty() {
         return true;
@@ -289,6 +304,8 @@ fn map_file_request_error(err: &str) -> ApiError {
         || lower.contains("container does not exist")
     {
         ApiError::Conflict("Sandbox not available.".to_string())
+    } else if lower.contains("already exists") {
+        ApiError::Conflict("File already exists.".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
     } else {
@@ -708,6 +725,114 @@ pub async fn delete_sandbox_file(
         if start.elapsed().as_secs() >= 15 {
             return Err(ApiError::Timeout(
                 "Timed out waiting for file delete".to_string(),
+            ));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn upload_sandbox_file(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<UploadFileRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_GET)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to write files".to_string())
+            })?;
+    }
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
+
+    if req.path.trim().is_empty() {
+        return Err(ApiError::BadRequest("path is required".to_string()));
+    }
+    if !is_safe_relative_path(&req.path) {
+        return Err(ApiError::BadRequest("Invalid path".to_string()));
+    }
+    let encoded = req.content_base64.trim();
+    if encoded.is_empty() {
+        return Err(ApiError::BadRequest(
+            "content_base64 is required".to_string(),
+        ));
+    }
+    let decoded = BASE64_STANDARD
+        .decode(encoded.as_bytes())
+        .map_err(|_| ApiError::BadRequest("content_base64 must be valid base64".to_string()))?;
+    if decoded.is_empty() {
+        return Err(ApiError::BadRequest(
+            "content_base64 decodes to empty payload".to_string(),
+        ));
+    }
+    if decoded.len() > MAX_SANDBOX_FILE_BYTES {
+        return Err(ApiError::PayloadTooLarge(format!(
+            "File exceeds {} bytes",
+            MAX_SANDBOX_FILE_BYTES
+        )));
+    }
+    drop(decoded);
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "path": req.path,
+        "content_base64": encoded,
+        "overwrite": req.overwrite,
+        "executable": req.executable,
+    });
+    sqlx::query(
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+            VALUES (?, ?, 'file_upload', ?, ?, 'pending')"#,
+    )
+    .bind(&request_id)
+    .bind(&sandbox.id)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to create file_upload request: {}",
+            e
+        ))
+    })?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "upload failed".to_string());
+                return Err(map_file_request_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 30 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for file upload".to_string(),
             ));
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
