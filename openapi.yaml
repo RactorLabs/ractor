@@ -1066,6 +1066,52 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+  /sandboxes/{id}/repo:
+    post:
+      tags:
+      - Sandboxes
+      summary: Clone a git repository into /sandbox/repo
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneSandboxRepoRequest'
+      responses:
+        '200':
+          description: Repository cloned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  repo_url:
+                    type: string
+                  branch:
+                    type: string
+                    nullable: true
+                  commit:
+                    type: string
+                    nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '408':
+          $ref: '#/components/responses/Timeout'
   /inference/providers:
     get:
       tags:
@@ -1646,6 +1692,62 @@ components:
           type: boolean
           default: false
           description: When false, the API fails if the key already exists
+    CloneSandboxRepoRequest:
+      type: object
+      required:
+      - repo_url
+      properties:
+        repo_url:
+          type: string
+          description: Git repository URL (http(s) or ssh)
+        branch:
+          type: string
+          nullable: true
+          description: Optional branch or ref to checkout
+        auth:
+          $ref: '#/components/schemas/SandboxRepoAuth'
+    SandboxRepoAuth:
+      oneOf:
+      - $ref: '#/components/schemas/SandboxRepoAuthHttpsToken'
+      - $ref: '#/components/schemas/SandboxRepoAuthSshKey'
+      discriminator:
+        propertyName: type
+        mapping:
+          https_token: '#/components/schemas/SandboxRepoAuthHttpsToken'
+          ssh_key: '#/components/schemas/SandboxRepoAuthSshKey'
+    SandboxRepoAuthHttpsToken:
+      type: object
+      required:
+      - type
+      - token
+      properties:
+        type:
+          type: string
+          enum:
+          - https_token
+        token:
+          type: string
+          description: Personal access token with read access to the repository
+        username:
+          type: string
+          description: Username for the token (defaults to `git`)
+    SandboxRepoAuthSshKey:
+      type: object
+      required:
+      - type
+      - private_key
+      properties:
+        type:
+          type: string
+          enum:
+          - ssh_key
+        private_key:
+          type: string
+          description: PEM-formatted private key without a passphrase
+        known_hosts:
+          type: string
+          nullable: true
+          description: Optional known_hosts entry to enforce host verification
     TaskType:
       type: string
       description: Task execution mode

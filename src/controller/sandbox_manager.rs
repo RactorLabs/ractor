@@ -13,6 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
+use url::Url;
 
 // Import constants from shared module
 #[path = "../shared/models/constants.rs"]
@@ -54,6 +55,20 @@ pub struct SandboxRequest {
     started_at: Option<DateTime<Utc>>,
     completed_at: Option<DateTime<Utc>>,
     error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum RepoAuthPayload {
+    HttpsToken {
+        token: String,
+        username: String,
+    },
+    SshKey {
+        private_key: String,
+        #[serde(default)]
+        known_hosts: Option<String>,
+    },
 }
 
 pub struct SandboxManager {
@@ -509,6 +524,7 @@ impl SandboxManager {
             "file_delete" => self.handle_file_delete(request.clone()).await,
             "file_upload" => self.handle_file_upload(request.clone()).await,
             "secret_add" => self.handle_secret_add(request.clone()).await,
+            "repo_clone" => self.handle_repo_clone(request.clone()).await,
             _ => {
                 warn!("Unknown request type: {}", request.request_type);
                 Err(anyhow::anyhow!("Unknown request type"))
@@ -1296,6 +1312,23 @@ impl SandboxManager {
         Err(anyhow::anyhow!(msg))
     }
 
+    async fn fail_request_with_payload(
+        &self,
+        request_id: &str,
+        payload: serde_json::Value,
+        msg: String,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"UPDATE sandbox_requests SET status='failed', payload=?, updated_at=NOW(), completed_at=NOW(), error=? WHERE id = ?"#
+        )
+        .bind(&payload)
+        .bind(&msg)
+        .bind(request_id)
+        .execute(&self.pool)
+        .await?;
+        Err(anyhow::anyhow!(msg))
+    }
+
     pub async fn handle_file_read(&self, request: SandboxRequest) -> Result<()> {
         let path = request
             .payload
@@ -1870,6 +1903,234 @@ impl SandboxManager {
         self.complete_request_with_payload(&request.id, request.payload.clone(), result)
             .await
     }
+
+    pub async fn handle_repo_clone(&self, request: SandboxRequest) -> Result<()> {
+        let repo_url = request
+            .payload
+            .get("repo_url")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        if repo_url.is_empty() {
+            return self
+                .fail_request(&request.id, "repo_url is required".to_string())
+                .await;
+        }
+
+        let path_raw = request
+            .payload
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("repo");
+        let safe_rel = match self.sanitize_relative_path(path_raw) {
+            Ok(p) if !p.is_empty() => p,
+            Ok(_) => "repo".to_string(),
+            Err(e) => return self.fail_request(&request.id, e.to_string()).await,
+        };
+        let dest_abs = format!("/sandbox/{}", safe_rel);
+        let dest_parent = Path::new(&dest_abs)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/sandbox".to_string());
+
+        let branch = request
+            .payload
+            .get("branch")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        match self
+            .docker_manager
+            .is_container_healthy(&request.sandbox_id)
+            .await
+        {
+            Ok(true) => {}
+            _ => {
+                return self
+                    .fail_request(&request.id, "sandbox not available".to_string())
+                    .await;
+            }
+        }
+
+        let mut clone_url = repo_url.clone();
+        let mut git_ssh_command: Option<String> = None;
+        let mut cleanup_paths: Vec<String> = Vec::new();
+
+        if let Some(auth_value) = request.payload.get("auth") {
+            let auth: RepoAuthPayload =
+                serde_json::from_value(auth_value.clone()).map_err(|e| {
+                    anyhow!(
+                        "Invalid repo auth payload for sandbox {}: {}",
+                        &request.sandbox_id,
+                        e
+                    )
+                })?;
+            match auth {
+                RepoAuthPayload::HttpsToken { token, username } => {
+                    let mut parsed = Url::parse(&repo_url).map_err(|e| {
+                        anyhow!("Invalid repo_url for HTTPS auth {}: {}", &repo_url, e)
+                    })?;
+                    parsed
+                        .set_username(&username)
+                        .map_err(|_| anyhow!("Invalid username for repo auth"))?;
+                    parsed
+                        .set_password(Some(&token))
+                        .map_err(|_| anyhow!("Invalid token for repo auth"))?;
+                    clone_url = parsed.to_string();
+                }
+                RepoAuthPayload::SshKey {
+                    private_key,
+                    known_hosts,
+                } => {
+                    self.ensure_internal_dir(&request.sandbox_id).await?;
+                    self.docker_manager
+                        .write_file_to_sandbox(
+                            &request.sandbox_id,
+                            ".tsbx/git_key",
+                            private_key.as_bytes(),
+                            0o600,
+                        )
+                        .await?;
+                    cleanup_paths.push(".tsbx/git_key".to_string());
+                    if let Some(hosts) = known_hosts {
+                        self.docker_manager
+                            .write_file_to_sandbox(
+                                &request.sandbox_id,
+                                ".tsbx/git_known_hosts",
+                                hosts.as_bytes(),
+                                0o600,
+                            )
+                            .await?;
+                        cleanup_paths.push(".tsbx/git_known_hosts".to_string());
+                        git_ssh_command = Some(
+                            "ssh -i /sandbox/.tsbx/git_key -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/sandbox/.tsbx/git_known_hosts".to_string(),
+                        );
+                    } else {
+                        git_ssh_command = Some(
+                            "ssh -i /sandbox/.tsbx/git_key -o StrictHostKeyChecking=no".to_string(),
+                        );
+                    }
+                }
+            }
+        }
+
+        let mut script = String::from("set -euo pipefail\n");
+        script.push_str(&format!("rm -rf {}\n", shell_quote(&dest_abs)));
+        script.push_str(&format!("mkdir -p {}\n", shell_quote(&dest_parent)));
+        script.push_str("export GIT_TERMINAL_PROMPT=0\n");
+        if let Some(cmd) = &git_ssh_command {
+            script.push_str(&format!("export GIT_SSH_COMMAND={}\n", shell_quote(cmd)));
+        }
+        script.push_str("cd /sandbox\n");
+        let mut clone_cmd = String::from("git clone --depth 1 --single-branch");
+        if let Some(branch) = &branch {
+            clone_cmd.push_str(&format!(" -b {}", shell_quote(branch)));
+        }
+        clone_cmd.push(' ');
+        clone_cmd.push_str(&shell_quote(&clone_url));
+        clone_cmd.push(' ');
+        clone_cmd.push_str(&shell_quote(&dest_abs));
+        script.push_str(&clone_cmd);
+        script.push('\n');
+
+        let (code, _stdout, stderr) = self
+            .docker_manager
+            .exec_collect(
+                &request.sandbox_id,
+                vec!["/bin/bash".into(), "-lc".into(), script],
+            )
+            .await?;
+
+        if code != 0 {
+            self.cleanup_repo_auth_files(&request.sandbox_id, &cleanup_paths)
+                .await;
+            let err_msg = String::from_utf8_lossy(&stderr)
+                .trim()
+                .to_string()
+                .chars()
+                .take(512)
+                .collect::<String>();
+            let mut payload = request.payload.clone();
+            scrub_repo_auth_fields(&mut payload);
+            return self
+                .fail_request_with_payload(
+                    &request.id,
+                    payload,
+                    format!("git clone failed: {}", err_msg),
+                )
+                .await;
+        }
+
+        self.cleanup_repo_auth_files(&request.sandbox_id, &cleanup_paths)
+            .await;
+
+        let (rev_code, rev_stdout, _rev_stderr) = self
+            .docker_manager
+            .exec_collect(
+                &request.sandbox_id,
+                vec![
+                    "/bin/bash".into(),
+                    "-lc".into(),
+                    format!("cd {} && git rev-parse HEAD", shell_quote(&dest_abs)),
+                ],
+            )
+            .await?;
+        let commit = if rev_code == 0 {
+            String::from_utf8_lossy(&rev_stdout).trim().to_string()
+        } else {
+            String::new()
+        };
+
+        let mut payload = request.payload.clone();
+        scrub_repo_auth_fields(&mut payload);
+        let mut result = serde_json::json!({
+            "path": "repo",
+            "repo_url": repo_url,
+        });
+        if let Some(branch) = branch {
+            result
+                .as_object_mut()
+                .expect("result object")
+                .insert("branch".to_string(), serde_json::json!(branch));
+        }
+        if !commit.is_empty() {
+            result
+                .as_object_mut()
+                .expect("result object")
+                .insert("commit".to_string(), serde_json::json!(commit));
+        }
+
+        self.complete_request_with_payload(&request.id, payload, result)
+            .await
+    }
+
+    async fn ensure_internal_dir(&self, sandbox_id: &str) -> Result<()> {
+        let cmd = "mkdir -p /sandbox/.tsbx && chmod 700 /sandbox/.tsbx";
+        let (code, _out, err) = self
+            .docker_manager
+            .exec_collect(
+                sandbox_id,
+                vec!["/bin/bash".into(), "-lc".into(), cmd.to_string()],
+            )
+            .await?;
+        if code != 0 {
+            return Err(anyhow!(
+                "Failed to prepare sandbox internal directory: {}",
+                String::from_utf8_lossy(&err)
+            ));
+        }
+        Ok(())
+    }
+
+    async fn cleanup_repo_auth_files(&self, sandbox_id: &str, paths: &[String]) {
+        for rel in paths {
+            let cmd = format!("rm -f /sandbox/{}", rel);
+            let _ = self
+                .docker_manager
+                .exec_collect(sandbox_id, vec!["/bin/bash".into(), "-lc".into(), cmd])
+                .await;
+        }
+    }
 }
 
 fn guess_content_type(path: &str) -> &'static str {
@@ -1904,4 +2165,33 @@ fn guess_content_type(path: &str) -> &'static str {
     } else {
         "application/octet-stream"
     }
+}
+
+fn scrub_repo_auth_fields(payload: &mut serde_json::Value) {
+    if let Some(obj) = payload.as_object_mut() {
+        if let Some(auth) = obj.get_mut("auth") {
+            if let Some(auth_obj) = auth.as_object_mut() {
+                if auth_obj.get("token").is_some() {
+                    auth_obj.insert(
+                        "token".to_string(),
+                        serde_json::Value::String("[redacted]".to_string()),
+                    );
+                }
+                if auth_obj.get("private_key").is_some() {
+                    auth_obj.insert(
+                        "private_key".to_string(),
+                        serde_json::Value::String("[redacted]".to_string()),
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn shell_quote(value: &str) -> String {
+    if value.is_empty() {
+        return "''".to_string();
+    }
+    let escaped = value.replace('\'', "'\"'\"'");
+    format!("'{}'", escaped)
 }

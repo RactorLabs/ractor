@@ -458,6 +458,23 @@ export function getApiDocs(base) {
           ]
         },
         {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/repo',
+          auth: 'bearer',
+          desc: 'Clone a git repository (public or private) into /sandbox/repo, replacing any existing checkout.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'repo_url', type: 'string', required: true, desc: 'Git remote (https://... or git@...)' },
+            { in: 'body', name: 'branch', type: 'string', required: false, desc: 'Optional branch/ref (defaults to remote HEAD).' },
+            { in: 'body', name: 'auth', type: 'object', required: false, desc: 'Either `{ "type":"https_token","token":"..." }` or `{ "type":"ssh_key","private_key":"..." }`.' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/repo -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"repo_url":"https://github.com/octocat/Hello-World.git","branch":"main"}'`,
+          responses: [
+            { status: 200, body: `{"path":"repo","repo_url":"https://github.com/octocat/Hello-World.git","branch":"main","commit":"<sha>"}` },
+            { status: 403, body: `{"message":"Authentication failed while cloning repository"}` }
+          ]
+        },
+        {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',

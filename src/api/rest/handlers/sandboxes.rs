@@ -285,10 +285,36 @@ pub struct AddSecretRequest {
     pub overwrite: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CloneRepoRequest {
+    pub repo_url: String,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub auth: Option<RepoAuthRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RepoAuthRequest {
+    HttpsToken {
+        token: String,
+        #[serde(default = "default_git_username")]
+        username: String,
+    },
+    SshKey {
+        private_key: String,
+        #[serde(default)]
+        known_hosts: Option<String>,
+    },
+}
+
 static FILE_MENTION_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"@([A-Za-z0-9_\-./]+)").expect("invalid mention regex"));
 static SECRET_KEY_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[A-Z][A-Z0-9_]{1,63}$").expect("invalid secret key regex"));
+static BRANCH_NAME_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[A-Za-z0-9._/\-]{1,128}$").expect("invalid branch regex"));
 
 fn normalize_file_reference_path(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
@@ -490,6 +516,42 @@ fn validate_secret_value(value: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn default_git_username() -> String {
+    "git".to_string()
+}
+
+fn validate_repo_url(url: &str) -> Result<(), ApiError> {
+    if url.is_empty() {
+        return Err(ApiError::BadRequest("repo_url is required".to_string()));
+    }
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return Ok(());
+    }
+    if url.starts_with("git@") || url.starts_with("ssh://") {
+        return Ok(());
+    }
+    Err(ApiError::BadRequest(
+        "repo_url must start with http(s):// or git@".to_string(),
+    ))
+}
+
+fn validate_branch_name(branch: &str) -> Result<(), ApiError> {
+    if !BRANCH_NAME_RE.is_match(branch) {
+        return Err(ApiError::BadRequest(
+            "branch may only contain letters, numbers, ., _, /, or - (max 128 chars)".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn repo_url_is_https(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+fn repo_url_is_ssh(url: &str) -> bool {
+    url.starts_with("git@") || url.starts_with("ssh://")
+}
+
 fn map_file_request_error(err: &str) -> ApiError {
     let lower = err.to_ascii_lowercase();
     if lower.contains("too large") {
@@ -515,6 +577,21 @@ fn map_file_request_error(err: &str) -> ApiError {
         ApiError::Conflict("File already exists.".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
         ApiError::Forbidden(err.to_string())
+    } else {
+        ApiError::Internal(anyhow::anyhow!(err.to_string()))
+    }
+}
+
+fn map_repo_request_error(err: &str) -> ApiError {
+    let lower = err.to_ascii_lowercase();
+    if lower.contains("authentication failed") || lower.contains("permission denied") {
+        ApiError::Forbidden("Authentication failed while cloning repository".to_string())
+    } else if lower.contains("not found") || lower.contains("repository does not exist") {
+        ApiError::NotFound("Repository not found".to_string())
+    } else if lower.contains("timeout") {
+        ApiError::Timeout("Timed out cloning repository".to_string())
+    } else if lower.contains("invalid url") || lower.contains("unknown transport") {
+        ApiError::BadRequest("repo_url is not a supported git endpoint".to_string())
     } else {
         ApiError::Internal(anyhow::anyhow!(err.to_string()))
     }
@@ -1128,6 +1205,176 @@ pub async fn add_sandbox_secret(
             ));
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn clone_sandbox_repo(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<CloneRepoRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to manage repositories".to_string())
+            })?;
+    }
+
+    let principal = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let sandbox = find_sandbox_by_id(&state, &id, principal, is_admin).await?;
+    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
+
+    let CloneRepoRequest {
+        repo_url,
+        branch,
+        auth,
+    } = req;
+
+    let repo_url = repo_url.trim().to_string();
+    validate_repo_url(&repo_url)?;
+
+    let branch = branch
+        .and_then(|b| {
+            let trimmed = b.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .map(|value| {
+            validate_branch_name(&value)?;
+            Ok::<String, ApiError>(value)
+        })
+        .transpose()?;
+
+    let auth_payload = auth
+        .map(|auth| match auth {
+            RepoAuthRequest::HttpsToken { token, username } => {
+                if !repo_url_is_https(&repo_url) {
+                    return Err(ApiError::BadRequest(
+                        "HTTPS token auth requires an http(s) repo_url".to_string(),
+                    ));
+                }
+                let token = token.trim().to_string();
+                if token.is_empty() {
+                    return Err(ApiError::BadRequest("token is required".to_string()));
+                }
+                let user = username.trim();
+                let username = if user.is_empty() {
+                    default_git_username()
+                } else {
+                    user.to_string()
+                };
+                Ok(serde_json::json!({
+                    "type": "https_token",
+                    "token": token,
+                    "username": username
+                }))
+            }
+            RepoAuthRequest::SshKey {
+                private_key,
+                known_hosts,
+            } => {
+                if !repo_url_is_ssh(&repo_url) {
+                    return Err(ApiError::BadRequest(
+                        "SSH key auth requires a git@ or ssh:// repo_url".to_string(),
+                    ));
+                }
+                let key = private_key.trim();
+                if key.is_empty() {
+                    return Err(ApiError::BadRequest("private_key is required".to_string()));
+                }
+                let known_hosts = known_hosts.and_then(|v| {
+                    let trimmed = v.trim().to_string();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed)
+                    }
+                });
+                Ok(serde_json::json!({
+                    "type": "ssh_key",
+                    "private_key": key,
+                    "known_hosts": known_hosts
+                }))
+            }
+        })
+        .transpose()?;
+
+    let mut payload = serde_json::json!({
+        "repo_url": repo_url,
+        "path": "repo",
+    });
+    if let Some(branch) = branch {
+        payload
+            .as_object_mut()
+            .expect("payload object")
+            .insert("branch".to_string(), serde_json::json!(branch));
+    }
+    if let Some(auth_obj) = auth_payload {
+        payload
+            .as_object_mut()
+            .expect("payload object")
+            .insert("auth".to_string(), auth_obj);
+    }
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+            VALUES (?, ?, 'repo_clone', ?, ?, 'pending')"#,
+    )
+    .bind(&request_id)
+    .bind(&sandbox.id)
+    .bind(principal)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to enqueue repo_clone request: {}",
+            e
+        ))
+    })?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "repo clone failed".to_string());
+                return Err(map_repo_request_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 120 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for repository clone".to_string(),
+            ));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     }
 }
 
