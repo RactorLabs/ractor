@@ -1028,6 +1028,44 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+  /sandboxes/{id}/secrets:
+    post:
+      tags:
+      - Sandboxes
+      summary: Add or update a secret entry in /sandbox/.env
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Sandbox ID (UUID)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddSandboxSecretRequest'
+      responses:
+        '200':
+          description: Secret applied
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  overwrite:
+                    type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /inference/providers:
     get:
       tags:
@@ -1592,6 +1630,22 @@ components:
         display:
           type: string
           description: Optional mention label shown in clients (defaults to `@{path}`)
+    AddSandboxSecretRequest:
+      type: object
+      required:
+      - key
+      - value
+      properties:
+        key:
+          type: string
+          description: Uppercase environment variable name (A-Z, 0-9, _; must not start with TSBX_)
+        value:
+          type: string
+          description: Secret value stored in /sandbox/.env (single line, max 8KB)
+        overwrite:
+          type: boolean
+          default: false
+          description: When false, the API fails if the key already exists
     TaskType:
       type: string
       description: Task execution mode

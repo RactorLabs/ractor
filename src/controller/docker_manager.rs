@@ -119,6 +119,44 @@ impl DockerManager {
         format!("tsbx_sandbox_{}", sandbox_id)
     }
 
+    pub async fn read_user_env_map(&self, sandbox_id: &str) -> Result<HashMap<String, String>> {
+        let script = "if [ -f /sandbox/.env ]; then cat /sandbox/.env; fi";
+        let (code, stdout, stderr) = self
+            .exec_collect(
+                sandbox_id,
+                vec!["/bin/bash".into(), "-lc".into(), script.to_string()],
+            )
+            .await?;
+        if code != 0 {
+            warn!(
+                "Failed to read .env for sandbox {}: {}",
+                sandbox_id,
+                String::from_utf8_lossy(&stderr)
+            );
+            return Ok(HashMap::new());
+        }
+        let content = String::from_utf8_lossy(&stdout).to_string();
+        Ok(parse_env_content(&content))
+    }
+
+    pub async fn write_user_env_map(
+        &self,
+        sandbox_id: &str,
+        env_map: &HashMap<String, String>,
+    ) -> Result<()> {
+        let content = render_env_file(env_map);
+        self.write_file_to_sandbox(sandbox_id, ".env", content.as_bytes(), 0o600)
+            .await?;
+        // Ensure sandbox user owns the file
+        let _ = self
+            .execute_command(
+                sandbox_id,
+                "sudo chown sandbox:sandbox /sandbox/.env && sudo chmod 600 /sandbox/.env",
+            )
+            .await?;
+        Ok(())
+    }
+
     async fn resolve_inference_target(
         &self,
         sandbox_id: &str,

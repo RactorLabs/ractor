@@ -441,6 +441,23 @@ export function getApiDocs(base) {
           ]
         },
         {
+          method: 'POST',
+          path: '/api/v0/sandboxes/{id}/secrets',
+          auth: 'bearer',
+          desc: 'Add or update a secret in /sandbox/.env. Secrets are sourced before every bash/python/js task.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
+            { in: 'body', name: 'key', type: 'string', required: true, desc: 'Env var name (A-Z0-9_, not starting with TSBX_)' },
+            { in: 'body', name: 'value', type: 'string', required: true, desc: 'Secret value (single line, <=8KB)' },
+            { in: 'body', name: 'overwrite', type: 'boolean', required: false, desc: 'Defaults to false; set true to replace existing entries.' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/secrets -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"key":"OPENAI_API_KEY","value":"sk-***","overwrite":true}'`,
+          responses: [
+            { status: 200, body: `{"key":"OPENAI_API_KEY","overwrite":true}` },
+            { status: 409, body: `{"message":"Secret OPENAI_API_KEY already exists (set overwrite=true to replace)"}` }
+          ]
+        },
+        {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',

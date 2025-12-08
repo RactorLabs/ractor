@@ -3071,6 +3071,7 @@ dependencies = [
  "globset",
  "hyper 0.14.32",
  "jsonwebtoken",
+ "once_cell",
  "quick-xml",
  "rand",
  "regex",

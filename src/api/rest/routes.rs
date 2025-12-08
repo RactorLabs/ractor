@@ -166,6 +166,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
             "/sandboxes/{id}/files/upload",
             post(handlers::sandboxes::upload_sandbox_file),
         )
+        .route(
+            "/sandboxes/{id}/secrets",
+            post(handlers::sandboxes::add_sandbox_secret),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,

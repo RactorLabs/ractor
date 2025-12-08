@@ -8,9 +8,11 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
+use serde_json::{Map, Value as JsonValue};
 use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
@@ -275,6 +277,166 @@ pub struct UploadFileRequest {
     pub executable: bool,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct AddSecretRequest {
+    pub key: String,
+    pub value: String,
+    #[serde(default)]
+    pub overwrite: bool,
+}
+
+static FILE_MENTION_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"@([A-Za-z0-9_\-./]+)").expect("invalid mention regex"));
+static SECRET_KEY_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^[A-Z][A-Z0-9_]{1,63}$").expect("invalid secret key regex"));
+
+fn normalize_file_reference_path(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let without_prefix = trimmed.trim_start_matches('/');
+    if without_prefix.is_empty() || !is_safe_relative_path(without_prefix) {
+        return None;
+    }
+    Some(without_prefix.to_string())
+}
+
+fn text_input_item(content: &str) -> JsonValue {
+    let mut obj = Map::new();
+    obj.insert("type".to_string(), JsonValue::String("text".to_string()));
+    obj.insert(
+        "content".to_string(),
+        JsonValue::String(content.to_string()),
+    );
+    JsonValue::Object(obj)
+}
+
+fn file_reference_item(path: &str) -> JsonValue {
+    let mut obj = Map::new();
+    obj.insert(
+        "type".to_string(),
+        JsonValue::String("file_reference".to_string()),
+    );
+    obj.insert("path".to_string(), JsonValue::String(path.to_string()));
+    obj.insert(
+        "display".to_string(),
+        JsonValue::String(format!("@{}", path)),
+    );
+    JsonValue::Object(obj)
+}
+
+fn split_text_with_mentions(content: &str) -> Vec<JsonValue> {
+    if content.is_empty() {
+        return Vec::new();
+    }
+    let mut items = Vec::new();
+    let mut last = 0;
+    for caps in FILE_MENTION_RE.captures_iter(content) {
+        let mat = match caps.get(0) {
+            Some(m) => m,
+            None => continue,
+        };
+        if mat.start() > last {
+            items.push(text_input_item(&content[last..mat.start()]));
+        }
+        if let Some(path_match) = caps.get(1) {
+            if let Some(clean_path) = normalize_file_reference_path(path_match.as_str()) {
+                items.push(file_reference_item(&clean_path));
+            } else {
+                items.push(text_input_item(&content[mat.start()..mat.end()]));
+            }
+        } else {
+            items.push(text_input_item(&content[mat.start()..mat.end()]));
+        }
+        last = mat.end();
+    }
+    if last < content.len() {
+        items.push(text_input_item(&content[last..]));
+    }
+    items
+}
+
+fn normalize_input_items(items: &[JsonValue]) -> Vec<JsonValue> {
+    let mut normalized = Vec::new();
+    for item in items {
+        match item {
+            JsonValue::Object(obj) => {
+                let typ = obj
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("text")
+                    .to_ascii_lowercase();
+                match typ.as_str() {
+                    "text" => {
+                        let text = obj.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                        normalized.extend(split_text_with_mentions(text));
+                    }
+                    "file_reference" => {
+                        if let Some(path) = obj.get("path").and_then(|v| v.as_str()) {
+                            if let Some(clean_path) = normalize_file_reference_path(path) {
+                                normalized.push(file_reference_item(&clean_path));
+                            } else if let Some(display) =
+                                obj.get("display").and_then(|v| v.as_str())
+                            {
+                                normalized.extend(split_text_with_mentions(display));
+                            } else {
+                                normalized.extend(split_text_with_mentions(&format!("@{}", path)));
+                            }
+                        }
+                    }
+                    _ => normalized.push(JsonValue::Object(obj.clone())),
+                }
+            }
+            JsonValue::String(text) => {
+                normalized.extend(split_text_with_mentions(text));
+            }
+            _ => {}
+        }
+    }
+    normalized
+}
+
+fn normalize_task_input_payload(
+    raw: &serde_json::Value,
+) -> Result<(Vec<JsonValue>, JsonValue), ApiError> {
+    let candidate_items = if raw.is_array() {
+        raw.as_array().cloned().unwrap_or_default()
+    } else if let Some(arr) = raw.get("content").and_then(|v| v.as_array()).cloned() {
+        arr
+    } else if raw.get("type").is_some() {
+        vec![raw.clone()]
+    } else if let Some(text) = raw.get("text").and_then(|v| v.as_str()) {
+        split_text_with_mentions(text)
+    } else if let Some(text) = raw.as_str() {
+        split_text_with_mentions(text)
+    } else {
+        Vec::new()
+    };
+
+    let normalized = if candidate_items.is_empty() {
+        Vec::new()
+    } else if raw.get("text").is_some() || raw.is_string() {
+        candidate_items
+    } else {
+        normalize_input_items(&candidate_items)
+    };
+
+    if normalized.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Task input cannot be empty".to_string(),
+        ));
+    }
+
+    let stored_value = {
+        let mut map = Map::new();
+        map.insert("content".to_string(), JsonValue::Array(normalized.clone()));
+        JsonValue::Object(map)
+    };
+
+    Ok((normalized, stored_value))
+}
+
 fn is_safe_relative_path(p: &str) -> bool {
     if p.is_empty() {
         return true;
@@ -283,6 +445,49 @@ fn is_safe_relative_path(p: &str) -> bool {
         return false;
     }
     !p.split('/').any(|seg| seg == ".." || seg.is_empty())
+}
+
+fn normalize_secret_key(raw: &str) -> String {
+    raw.trim().to_ascii_uppercase()
+}
+
+fn validate_secret_key(key: &str) -> Result<(), ApiError> {
+    if key.is_empty() {
+        return Err(ApiError::BadRequest("key is required".to_string()));
+    }
+    if key.len() > 64 {
+        return Err(ApiError::BadRequest(
+            "key must be 64 characters or fewer".to_string(),
+        ));
+    }
+    if !SECRET_KEY_RE.is_match(key) {
+        return Err(ApiError::BadRequest(
+            "key must start with a letter and contain only A-Z, 0-9, or _".to_string(),
+        ));
+    }
+    if key.starts_with("TSBX_") {
+        return Err(ApiError::BadRequest(
+            "key cannot start with reserved prefix TSBX_".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_secret_value(value: &str) -> Result<(), ApiError> {
+    if value.is_empty() {
+        return Err(ApiError::BadRequest("value is required".to_string()));
+    }
+    if value.len() > 8 * 1024 {
+        return Err(ApiError::BadRequest(
+            "value must be 8KB or smaller".to_string(),
+        ));
+    }
+    if value.contains('\0') || value.contains('\r') || value.contains('\n') {
+        return Err(ApiError::BadRequest(
+            "value must be a single line without control characters".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn map_file_request_error(err: &str) -> ApiError {
@@ -304,6 +509,8 @@ fn map_file_request_error(err: &str) -> ApiError {
         || lower.contains("container does not exist")
     {
         ApiError::Conflict("Sandbox not available.".to_string())
+    } else if lower.contains("secret") && lower.contains("already exists") {
+        ApiError::Conflict(err.to_string())
     } else if lower.contains("already exists") {
         ApiError::Conflict("File already exists.".to_string())
     } else if lower.contains("forbidden") || lower.contains("outside") {
@@ -833,6 +1040,91 @@ pub async fn upload_sandbox_file(
         if start.elapsed().as_secs() >= 30 {
             return Err(ApiError::Timeout(
                 "Timed out waiting for file upload".to_string(),
+            ));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    }
+}
+
+pub async fn add_sandbox_secret(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Extension(auth): Extension<AuthContext>,
+    Json(req): Json<AddSecretRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let is_admin = is_admin_principal(&auth, &state).await;
+    if is_admin {
+        check_api_permission(&auth, &state, &permissions::SANDBOX_UPDATE)
+            .await
+            .map_err(|_| {
+                ApiError::Forbidden("Insufficient permissions to manage secrets".to_string())
+            })?;
+    }
+
+    let username = match &auth.principal {
+        crate::shared::rbac::AuthPrincipal::Subject(s) => &s.name,
+        crate::shared::rbac::AuthPrincipal::Operator(op) => &op.user,
+    };
+    let sandbox = find_sandbox_by_id(&state, &id, username, is_admin).await?;
+    check_not_deleted(&sandbox)?;
+    check_not_terminated(&sandbox)?;
+
+    let normalized_key = normalize_secret_key(&req.key);
+    validate_secret_key(&normalized_key)?;
+    validate_secret_value(&req.value)?;
+
+    let request_id = uuid::Uuid::new_v4().to_string();
+    let payload = serde_json::json!({
+        "key": normalized_key,
+        "value": req.value,
+        "overwrite": req.overwrite,
+    });
+
+    sqlx::query(
+        r#"INSERT INTO sandbox_requests (id, sandbox_id, request_type, created_by, payload, status)
+            VALUES (?, ?, 'secret_add', ?, ?, 'pending')"#,
+    )
+    .bind(&request_id)
+    .bind(&sandbox.id)
+    .bind(username)
+    .bind(&payload)
+    .execute(&*state.db)
+    .await
+    .map_err(|e| {
+        ApiError::Internal(anyhow::anyhow!(
+            "Failed to enqueue secret_add request: {}",
+            e
+        ))
+    })?;
+
+    let start = std::time::Instant::now();
+    loop {
+        let row =
+            sqlx::query(r#"SELECT status, payload, error FROM sandbox_requests WHERE id = ?"#)
+                .bind(&request_id)
+                .fetch_optional(&*state.db)
+                .await
+                .map_err(|e| ApiError::Internal(anyhow::anyhow!("DB error: {}", e)))?;
+        if let Some(row) = row {
+            let status: String = row.try_get("status").unwrap_or_default();
+            if status == "completed" {
+                let payload_val: serde_json::Value =
+                    row.try_get("payload").unwrap_or(serde_json::json!({}));
+                let res = payload_val
+                    .get("result")
+                    .cloned()
+                    .unwrap_or(serde_json::json!({}));
+                return Ok(Json(res));
+            } else if status == "failed" {
+                let err: String = row
+                    .try_get("error")
+                    .unwrap_or_else(|_| "secret add failed".to_string());
+                return Err(map_file_request_error(&err));
+            }
+        }
+        if start.elapsed().as_secs() >= 30 {
+            return Err(ApiError::Timeout(
+                "Timed out waiting for secret to be applied".to_string(),
             ));
         }
         tokio::time::sleep(std::time::Duration::from_millis(150)).await;
@@ -1958,6 +2250,13 @@ pub async fn create_task(
 ) -> ApiResult<Json<TaskView>> {
     use tokio::time::{sleep, Duration, Instant};
 
+    let CreateTaskRequest {
+        input,
+        background,
+        timeout_seconds,
+        task_type,
+    } = req;
+
     let sandbox = crate::shared::models::Sandbox::find_by_id(&state.db, &id)
         .await
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Database error: {}", e)))?
@@ -1980,14 +2279,14 @@ pub async fn create_task(
 
     // Allow task creation even if sandbox is busy - tasks will be queued
 
-    if let Some(timeout) = req.timeout_seconds {
+    if let Some(timeout) = timeout_seconds {
         if timeout < 0 {
             return Err(ApiError::BadRequest(
                 "timeout_seconds must be a non-negative integer".to_string(),
             ));
         }
     }
-    let task_type = req.task_type.unwrap_or(TaskType::NL);
+    let task_type = task_type.unwrap_or(TaskType::NL);
     if task_type == TaskType::NL && !sandbox.nl_task_enabled {
         return Err(ApiError::BadRequest(
             "This task type is not supported for this sandbox. Create a new sandbox with an inference key to use NL tasks.".to_string(),
@@ -2011,14 +2310,17 @@ pub async fn create_task(
         .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update sandbox state: {}", e)))?;
     }
 
+    let (normalized_input_items, normalized_input_payload) = normalize_task_input_payload(&input)?;
+
     let task_id = uuid::Uuid::new_v4().to_string();
-    let timeout_seconds = req.timeout_seconds.or(Some(300));
+    let effective_timeout_seconds = timeout_seconds.or(Some(300));
+    let background_flag = background.unwrap_or(true);
 
     let payload = serde_json::json!({
         "task_id": task_id,
-        "input": req.input.clone(),
-        "background": req.background.unwrap_or(true),
-        "timeout_seconds": timeout_seconds,
+        "input": normalized_input_payload,
+        "background": background_flag,
+        "timeout_seconds": effective_timeout_seconds,
         "task_type": task_type.as_str(),
     });
     sqlx::query(
@@ -2034,8 +2336,7 @@ pub async fn create_task(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to create task request: {}", e)))?;
 
-    let background = req.background.unwrap_or(true);
-    if !background {
+    if !background_flag {
         let start = Instant::now();
         let timeout = Duration::from_secs(15 * 60);
         let poll_interval = Duration::from_millis(500);
@@ -2081,7 +2382,7 @@ pub async fn create_task(
     }
 
     let now = Utc::now();
-    let timeout_seconds_value = req.timeout_seconds.or(Some(300)).filter(|v| *v > 0);
+    let timeout_seconds_value = effective_timeout_seconds.filter(|v| *v > 0);
     let timeout_at = timeout_seconds_value.and_then(|secs| {
         now.checked_add_signed(chrono::Duration::seconds(secs as i64))
             .map(|dt| dt.to_rfc3339())
@@ -2092,7 +2393,7 @@ pub async fn create_task(
         sandbox_id: sandbox.id.clone(),
         status: "pending".to_string(),
         task_type,
-        input: extract_input(&req.input),
+        input: normalized_input_items,
         steps: vec![],
         output: TaskOutput {
             commentary: None,
@@ -2268,6 +2569,9 @@ pub async fn update_task(
 }
 
 fn extract_input(input: &serde_json::Value) -> Vec<serde_json::Value> {
+    if let Some(arr) = input.as_array() {
+        return arr.clone();
+    }
     input
         .get("content")
         .and_then(|v| v.as_array())

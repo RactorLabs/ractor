@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use bollard::Docker;
@@ -6,6 +6,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use jsonwebtoken::{encode, EncodingKey, Header};
 use serde::{Deserialize, Serialize};
 use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
@@ -507,6 +508,7 @@ impl SandboxManager {
             "file_list" => self.handle_file_list(request.clone()).await,
             "file_delete" => self.handle_file_delete(request.clone()).await,
             "file_upload" => self.handle_file_upload(request.clone()).await,
+            "secret_add" => self.handle_secret_add(request.clone()).await,
             _ => {
                 warn!("Unknown request type: {}", request.request_type);
                 Err(anyhow::anyhow!("Unknown request type"))
@@ -1291,7 +1293,7 @@ impl SandboxManager {
         .bind(request_id)
         .execute(&self.pool)
         .await?;
-        Ok(())
+        Err(anyhow::anyhow!(msg))
     }
 
     pub async fn handle_file_read(&self, request: SandboxRequest) -> Result<()> {
@@ -1771,6 +1773,98 @@ impl SandboxManager {
             "path": safe,
             "bytes_written": data.len(),
             "executable": executable,
+            "overwrite": overwrite
+        });
+        self.complete_request_with_payload(&request.id, request.payload.clone(), result)
+            .await
+    }
+
+    pub async fn handle_secret_add(&self, request: SandboxRequest) -> Result<()> {
+        let key = request
+            .payload
+            .get("key")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default();
+        if key.is_empty() {
+            return self
+                .fail_request(&request.id, "key is required".to_string())
+                .await;
+        }
+        let value = request
+            .payload
+            .get("value")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        if value.is_empty() {
+            return self
+                .fail_request(&request.id, "value is required".to_string())
+                .await;
+        }
+        let overwrite = request
+            .payload
+            .get("overwrite")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        match self
+            .docker_manager
+            .is_container_healthy(&request.sandbox_id)
+            .await
+        {
+            Ok(true) => {}
+            _ => {
+                return self
+                    .fail_request(&request.id, "sandbox not available".to_string())
+                    .await;
+            }
+        }
+
+        let mut env_map = match self
+            .docker_manager
+            .read_user_env_map(&request.sandbox_id)
+            .await
+        {
+            Ok(map) => map,
+            Err(e) => {
+                warn!(
+                    "Failed to read env map for sandbox {}: {}",
+                    &request.sandbox_id, e
+                );
+                HashMap::new()
+            }
+        };
+
+        if env_map.contains_key(&key) && !overwrite {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!(
+                        "Secret {} already exists (set overwrite=true to replace)",
+                        key
+                    ),
+                )
+                .await;
+        }
+
+        env_map.insert(key.clone(), value);
+
+        if let Err(e) = self
+            .docker_manager
+            .write_user_env_map(&request.sandbox_id, &env_map)
+            .await
+        {
+            return self
+                .fail_request(
+                    &request.id,
+                    format!("Failed to write sandbox secret: {}", e.to_string()),
+                )
+                .await;
+        }
+
+        let result = serde_json::json!({
+            "key": key,
             "overwrite": overwrite
         });
         self.complete_request_with_payload(&request.id, request.payload.clone(), result)

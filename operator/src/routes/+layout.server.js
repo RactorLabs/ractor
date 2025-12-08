@@ -45,11 +45,14 @@ export async function load({ fetch, cookies }) {
       sandboxes_active: 0,
       sandboxes_terminated: 0,
       sandboxes_by_state: {},
+      sandbox_tasks_total: 0,
+      sandbox_tasks_active: 0,
       inference_name: defaultProvider?.display_name || null,
       inference_url: defaultProvider?.url || null,
       inference_models: defaultProvider ? defaultProvider.models.map((m) => m.name) : [],
       default_inference_model: defaultProvider?.default_model || null,
-      captured_at: new Date().toISOString()
+      captured_at: new Date().toISOString(),
+      host: null
     };
   }
 
