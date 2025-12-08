@@ -507,15 +507,15 @@ export function getApiDocs(base) {
           method: 'POST',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'Create a task (enqueue user input). Optional background=false blocks until completion or 15-minute timeout. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files you uploaded via the Files API.',
+          desc: 'Create a task (enqueue user input). Calls block until completion by default; set background=true to return immediately. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files you uploaded via the Files API.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }. Use @relative/path in the text to automatically attach file_reference items or send { type: 'file_reference', path: 'docs/plan.md' } yourself." },
             { in: 'body', name: 'task_type', type: "'NL'|'SH'|'PY'|'JS'", required: false, desc: "Task type: 'NL' (natural language/inference, default), 'SH' (shell), 'PY' (Python), 'JS' (JavaScript)." },
-            { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to true (non-blocking). Set false to wait for completion.' },
+            { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to false (blocking). Set true to enqueue asynchronously.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 300, 0 to disable).' }
           ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"task_type":"NL","background":false}'`,
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"task_type":"NL"}'`,
           resp: { schema: 'TaskObject' },
           responses: [
             { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the uploaded log "},{"type":"file_reference","path":"logs/build.log","display":"@logs/build.log"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },

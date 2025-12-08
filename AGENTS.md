@@ -83,7 +83,7 @@ Note on commit message formatting:
   - `POST /sandboxes/{id}/restart` restarts container and transitions via `initializing`.
 - Tasks: `GET/POST /sandboxes/{id}/tasks` for user↔sandbox exchanges, stored in `sandbox_tasks`.
   - `POST` body accepts `{ input: { text: string }, background?: boolean }`.
-- `background` defaults to `true`. When set to `false`, the API call blocks up to 15 minutes until the task reaches a terminal status (`completed` or `failed`). If it times out, the server returns HTTP `504`.
+- `background` defaults to `false` (blocking call). Set it to `true` to enqueue the task asynchronously; blocking requests wait up to 15 minutes for a terminal status before returning HTTP `504`.
 - All API routes and Docker operations use sandbox UUID `id` exclusively.
 
 ## Operator UI

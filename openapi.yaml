@@ -1573,7 +1573,7 @@ components:
             Advanced clients may also send normalized items directly, e.g. `{ content: [{ type: 'file_reference', path: 'docs/plan.md' }] }`.
         background:
           type: boolean
-          default: true
+          default: false
         timeout_seconds:
           type: integer
           nullable: true

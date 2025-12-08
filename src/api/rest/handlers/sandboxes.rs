@@ -2709,7 +2709,7 @@ pub async fn create_task(
 
     let task_id = uuid::Uuid::new_v4().to_string();
     let effective_timeout_seconds = timeout_seconds.or(Some(300));
-    let background_flag = background.unwrap_or(true);
+    let background_flag = background.unwrap_or(false);
 
     let payload = serde_json::json!({
         "task_id": task_id,
