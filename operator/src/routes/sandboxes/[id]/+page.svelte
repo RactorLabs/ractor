@@ -106,6 +106,8 @@ export let data;
   $: hasTaskOutputText = selectedTaskDetail ? hasOutputText(selectedTaskDetail) : false;
   $: hasAnyTaskOutput = hasTaskOutputText || taskOutputItemsList.length > 0;
   const FM_AUTO_REFRESH_COOKIE = 'tsbx_filesAutoRefresh';
+  const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+  const MAX_UPLOAD_MB = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024));
   function getCookie(name) {
     try {
       const value = `; ${document.cookie}`;
@@ -226,6 +228,9 @@ export let data;
   let fmLoading = false;
   let fmError = null;
   let fmErrorNotAvailable = false;
+  let fmUploading = false;
+  let fmUploadError = '';
+  let fileUploadInput;
   let fmEntries = [];
   let fmOffset = 0;
   let fmLimit = 100;
@@ -260,6 +265,18 @@ export let data;
       deleteFileError = e.message || String(e);
     }
   }
+  function sanitizeRelativePathInput(raw) {
+    try {
+      const trimmed = String(raw || '').trim().replace(/^\/+/g, '');
+      if (!trimmed) return '';
+      const parts = trimmed.split('/').filter(Boolean);
+      if (!parts.length) return '';
+      if (parts.some((seg) => seg === '.' || seg === '..')) return '';
+      return parts.join('/');
+    } catch (_) {
+      return '';
+    }
+  }
   function fmPathStr() {
     try { return (fmSegments || []).map(encodeURIComponent).join('/'); } catch (_) { return ''; }
   }
@@ -277,6 +294,13 @@ export let data;
     } catch (_) { return fmDisplayPath(); }
   }
   $: currentFullPath = fmCurrentFullPath(fmSegments, fmPreviewName);
+  function fmEntryPath(entry) {
+    try {
+      return [...fmSegments, entry?.name].filter(Boolean).join('/');
+    } catch (_) {
+      return '';
+    }
+  }
   function fmIconFor(entry) {
     const k = String(entry?.kind || '').toLowerCase();
     if (k === 'dir' || k === 'directory') return 'bi bi-folder text-warning';
@@ -478,6 +502,138 @@ export let data;
       fmShowPreview({ name: fmPreviewName, kind: 'file' });
     } else {
       refreshFilesPanel({ reset: true });
+    }
+  }
+
+  function triggerFileUploadPicker() {
+    try {
+      if (fileUploadInput) {
+        fileUploadInput.value = '';
+        fileUploadInput.click();
+      }
+    } catch (_) {}
+  }
+
+  function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+      try {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const result = reader.result;
+            if (typeof result === 'string') {
+              const comma = result.indexOf(',');
+              resolve(comma >= 0 ? result.slice(comma + 1) : result);
+              return;
+            }
+            if (result instanceof ArrayBuffer) {
+              const bytes = new Uint8Array(result);
+              let binary = '';
+              bytes.forEach((b) => { binary += String.fromCharCode(b); });
+              resolve(btoa(binary));
+              return;
+            }
+            reject(new Error('Unsupported file payload'));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  async function handleFileUploadChange(event) {
+    fmUploadError = '';
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      fmUploadError = `File exceeds ${MAX_UPLOAD_MB}MB limit`;
+      event.target.value = '';
+      return;
+    }
+    const relPath = [...fmSegments, file.name].filter(Boolean).join('/');
+    if (!relPath) {
+      fmUploadError = 'Invalid target path';
+      event.target.value = '';
+      return;
+    }
+    fmUploading = true;
+    try {
+      const base64 = await readFileAsBase64(file);
+      const res = await apiFetch(
+        `/sandboxes/${encodeURIComponent(sandboxId)}/files/upload`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            path: relPath,
+            content_base64: base64,
+            overwrite: true
+          })
+        }
+      );
+      if (!res.ok) {
+        throw new Error(res?.data?.message || res?.data?.error || `Upload failed (HTTP ${res.status})`);
+      }
+      fmUploadError = '';
+      await refreshFilesPanel({ reset: true });
+    } catch (err) {
+      fmUploadError = err?.message || String(err);
+    } finally {
+      fmUploading = false;
+      if (event?.target) event.target.value = '';
+    }
+  }
+
+  async function openFileReference(path) {
+    const clean = sanitizeRelativePathInput(path);
+    if (!clean) return;
+    const parts = clean.split('/').filter(Boolean);
+    if (!parts.length) return;
+    const fileName = parts.pop();
+    fmPreviewReset();
+    fmSegments = parts;
+    fmPendingOpenFile = fileName || '';
+    fmOffset = 0;
+    try {
+      await refreshFilesPanel({ reset: true });
+      if (fileName) {
+        fmShowPreview({ name: fileName, kind: 'file' });
+      }
+    } catch (err) {
+      fmError = err?.message || String(err);
+    } finally {
+      fmPendingOpenFile = '';
+    }
+  }
+
+  function insertTaskMentionFromPath(path) {
+    const clean = sanitizeRelativePathInput(path);
+    if (!clean) return;
+    const mention = `@${clean}`;
+    const el = inputEl;
+    const current = input || '';
+    if (el && typeof el.selectionStart === 'number') {
+      const start = el.selectionStart;
+      const end = el.selectionEnd ?? start;
+      const needsSpaceBefore = start > 0 && !/\s/.test(current.charAt(start - 1));
+      const needsSpaceAfter = end < current.length && !/\s/.test(current.charAt(end));
+      const insertValue = `${needsSpaceBefore ? ' ' : ''}${mention}${needsSpaceAfter ? ' ' : ''}`;
+      input = current.slice(0, start) + insertValue + current.slice(end);
+      tick().then(() => {
+        try {
+          if (inputEl) {
+            const caret = start + insertValue.length;
+            inputEl.focus();
+            inputEl.setSelectionRange(caret, caret);
+          }
+        } catch (_) {}
+      });
+    } else {
+      input = current ? `${current.trimEnd()} ${mention} ` : `${mention} `;
     }
   }
 
@@ -1005,6 +1161,59 @@ export let data;
       return [];
     } catch (_) { return []; }
   }
+
+  function mergeTaskInputTextSegments(items) {
+    try {
+      if (!Array.isArray(items) || !items.length) return [];
+      const merged = [];
+      let buffer = '';
+      const flush = () => {
+        if (buffer && buffer.trim()) {
+          merged.push({ type: 'text', content: buffer });
+        }
+        buffer = '';
+      };
+      for (const item of items) {
+        const typ = String(item?.type || '').toLowerCase();
+        if (typ === 'text') {
+          const chunk = typeof item?.content === 'string' ? item.content : '';
+          buffer += chunk || '';
+        } else {
+          flush();
+          merged.push(item);
+        }
+      }
+      flush();
+      return merged;
+    } catch (_) {
+      return items || [];
+    }
+  }
+
+  function viewableTaskInputItems(task) {
+    const raw = taskInputItems(task);
+    return mergeTaskInputTextSegments(raw);
+  }
+
+  function isFileReferenceItem(item) {
+    return (
+      String(item?.type || '').toLowerCase() === 'file_reference'
+    );
+  }
+
+  function fileReferencePath(item) {
+    const direct = sanitizeRelativePathInput(item?.path || '');
+    if (direct) return direct;
+    const display = typeof item?.display === 'string' ? item.display.replace(/^@+/, '') : '';
+    return sanitizeRelativePathInput(display);
+  }
+
+  function fileReferenceLabel(item) {
+    const display = typeof item?.display === 'string' ? item.display.trim() : '';
+    if (display) return display;
+    const path = fileReferencePath(item);
+    return path ? `@${path}` : '@file';
+  }
   function taskSteps(task) {
     try {
       if (Array.isArray(task?.steps)) return task.steps;
@@ -1136,12 +1345,36 @@ export let data;
 
   function taskPreview(task) {
     try {
-      const items = taskInputItems(task);
-      const textItem = items.find((i) => String(i?.type || '').toLowerCase() === 'text');
-      const value = textItem ? String(textItem.content || '') : '';
-      const normalized = value.replace(/\s+/g, ' ').trim();
-      if (!normalized) return '';
-      return normalized.length > 120 ? `${normalized.slice(0, 117)}…` : normalized;
+      const items = viewableTaskInputItems(task);
+      if (!items.length) return '';
+      const mentions = [];
+      let textPreview = '';
+      for (const item of items) {
+        const typ = String(item?.type || '').toLowerCase();
+        if (typ === 'text') {
+          const raw = typeof item?.content === 'string' ? item.content : '';
+          if (raw && raw.trim()) {
+            const fragment = raw.replace(/\s+/g, ' ').trim();
+            if (fragment) {
+              textPreview = textPreview ? `${textPreview} ${fragment}` : fragment;
+            }
+          }
+        } else if (typ === 'file_reference') {
+          const label = fileReferenceLabel(item);
+          if (label) mentions.push(label);
+        }
+      }
+      const sections = [];
+      if (textPreview) {
+        sections.push(textPreview.length > 120 ? `${textPreview.slice(0, 117)}…` : textPreview);
+      }
+      if (mentions.length) {
+        sections.push(mentions.join(' '));
+      }
+      if (!sections.length && items.length) {
+        return '[input attached]';
+      }
+      return sections.join('  ').trim();
     } catch (_) {
       return '';
     }
@@ -1782,10 +2015,21 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 </div>
                 <section class="mb-3">
                   <h6 class="fw-semibold fs-6 mb-2">Input</h6>
-                  {#if taskInputItems(displayTask).length}
-                    {#each taskInputItems(displayTask) as item}
+                  {#if viewableTaskInputItems(displayTask).length}
+                    {#each viewableTaskInputItems(displayTask) as item}
                       {#if String(item?.type || '').toLowerCase() === 'text'}
                         <div class="markdown-body mb-2">{@html renderMarkdown(item.content || '')}</div>
+                      {:else if isFileReferenceItem(item)}
+                        <div class="mb-2">
+                          <button
+                            type="button"
+                            class="btn btn-sm btn-outline-secondary file-mention-chip"
+                            on:click={() => openFileReference(fileReferencePath(item))}
+                            aria-label="Open referenced file"
+                          >
+                            <i class="bi bi-at me-1"></i>{fileReferenceLabel(item)}
+                          </button>
+                        </div>
                       {:else}
                         <pre class="small bg-dark text-white p-2 rounded code-wrap mb-2"><code>{JSON.stringify(item, null, 2)}</code></pre>
                       {/if}
@@ -1996,6 +2240,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   {/if}
                 </button>
               </div>
+              <div class="form-text small text-body-secondary mt-2">
+                Tip: type <code>@path/to/file</code> or use the @ buttons in the Files panel to reference uploaded files (max {MAX_UPLOAD_MB}MB per upload).
+              </div>
             </form>
           </div>
           {/if}
@@ -2064,6 +2311,14 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   <button class="btn btn-sm border-0" aria-label="Refresh files" title="Refresh files" on:click={fmRefresh}>
                     <i class="bi bi-arrow-clockwise"></i>
                   </button>
+                  <button class="btn btn-sm border-0" aria-label="Upload file" title="Upload file" on:click={triggerFileUploadPicker} disabled={fmUploading}>
+                    {#if fmUploading}
+                      <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    {:else}
+                      <i class="bi bi-upload"></i>
+                    {/if}
+                  </button>
+                  <input type="file" class="d-none" bind:this={fileUploadInput} on:change={handleFileUploadChange} />
                   <div class="form-check form-switch form-switch-sm m-0 d-flex align-items-center text-body-secondary">
                     <input
                       class="form-check-input"
@@ -2078,7 +2333,19 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   <!-- Move items count and download/delete to the right side -->
                   {#if fmPreviewName}
                     <span class="vr"></span>
-                    <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}><i class="bi bi-download"></i></button>
+                    <button class="btn btn-sm border-0" aria-label="Download" title="Download" on:click={() => fmDownloadEntry({ name: fmPreviewName, kind: 'file' })}>
+                      <i class="bi bi-download"></i>
+                    </button>
+                    <button
+                      class="btn btn-sm border-0"
+                      type="button"
+                      aria-label="Insert @ mention"
+                      title="Insert @ mention"
+                      on:click={() => insertTaskMentionFromPath([...fmSegments, fmPreviewName].filter(Boolean).join('/'))}
+                      disabled={taskInputDisabled}
+                    >
+                      <i class="bi bi-at"></i>
+                    </button>
                   {:else}
                     <span class="vr"></span>
                     <div class="small text-body text-opacity-75">
@@ -2102,6 +2369,9 @@ onDestroy(() => { fmRevokePreviewUrl(); });
               {:else}
                 {#if fmError}
                   <div class="alert alert-danger small m-2 py-1">{fmError}</div>
+                {/if}
+                {#if fmUploadError}
+                  <div class="alert alert-warning small m-2 py-1">{fmUploadError}</div>
                 {/if}
                 <div class="d-flex flex-column flex-fill" style="min-height: 0;">
                   {#key fmListKey}
@@ -2140,6 +2410,16 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                                   <i class="bi bi-download"></i>
                                 </button>
                               {/if}
+                              <button
+                                class="btn btn-sm btn-link text-body ms-2 p-0"
+                                type="button"
+                                title="Insert @ mention"
+                                aria-label="Insert @ mention"
+                                on:click|stopPropagation={() => insertTaskMentionFromPath(fmEntryPath(e))}
+                                disabled={taskInputDisabled}
+                              >
+                                <i class="bi bi-at"></i>
+                              </button>
                               <button class="btn btn-sm btn-link text-danger ms-2 p-0" title="Delete" aria-label="Delete" on:click|stopPropagation={() => openDeleteEntry(e)}>
                                 <i class="bi bi-trash"></i>
                               </button>
@@ -2224,6 +2504,13 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  :global(.file-mention-chip) {
+    font-family: var(--bs-font-monospace, ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
   }
   :global(.task-pane .task-detail section + section) {
     border-top: 1px solid rgba(var(--bs-border-color-rgb), .4);

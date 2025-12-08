@@ -788,21 +788,52 @@ fn extract_first_text(items: &[Value]) -> String {
             }
         }
     }
+
+    for item in items {
+        if item
+            .get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t.eq_ignore_ascii_case("file_reference"))
+            .unwrap_or(false)
+        {
+            if let Some(path) = item.get("path").and_then(|c| c.as_str()) {
+                return format!("@{}", path);
+            }
+            if let Some(display) = item.get("display").and_then(|c| c.as_str()) {
+                return display.to_string();
+            }
+        }
+    }
+
     String::new()
 }
 
 fn render_task_input(task: &TaskSummary) -> Option<ChatMessage> {
     let mut parts = Vec::new();
     for item in &task.input {
-        if item
+        let kind = item
             .get("type")
             .and_then(|t| t.as_str())
-            .map(|t| t.eq_ignore_ascii_case("text"))
-            .unwrap_or(false)
-        {
-            if let Some(content) = item.get("content").and_then(|c| c.as_str()) {
-                parts.push(content.trim().to_string());
+            .unwrap_or("text")
+            .to_ascii_lowercase();
+        match kind.as_str() {
+            "text" => {
+                if let Some(content) = item.get("content").and_then(|c| c.as_str()) {
+                    let trimmed = content.trim();
+                    if !trimmed.is_empty() {
+                        parts.push(trimmed.to_string());
+                    }
+                }
             }
+            "file_reference" => {
+                if let Some(path) = item.get("path").and_then(|p| p.as_str()) {
+                    parts.push(format!(
+                        "User referenced the file /sandbox/{}. Inspect this file if it is relevant.",
+                        path
+                    ));
+                }
+            }
+            _ => {}
         }
     }
     if parts.is_empty() {

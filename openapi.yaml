@@ -1468,8 +1468,10 @@ components:
       properties:
         input:
           type: object
-          description: 'Recommended: { content: [{ type: ''text'', content: string
-            }] }'
+          description: |
+            Task input payload. Recommended shape: `{ content: [{ type: 'text', content: string }] }`.
+            Include `@relative/path` mentions inside the text (for example `@notes/todo.md`) to automatically attach `file_reference` entries.
+            Advanced clients may also send normalized items directly, e.g. `{ content: [{ type: 'file_reference', path: 'docs/plan.md' }] }`.
         background:
           type: boolean
           default: true
@@ -1539,8 +1541,9 @@ components:
           $ref: '#/components/schemas/TaskType'
         input:
           type: array
+          description: Ordered task input items (`text` and `file_reference`)
           items:
-            type: object
+            $ref: '#/components/schemas/TaskInputItem'
         steps:
           type: array
           items:
@@ -1567,6 +1570,28 @@ components:
         context_length:
           type: integer
           description: Total context length in tokens for the latest inference cycle
+    TaskInputItem:
+      type: object
+      description: |
+        Structured task input entry. Text entries capture user instructions while `file_reference`
+        entries are created when a request includes `@relative/path` mentions or explicitly supplies one.
+      required:
+      - type
+      properties:
+        type:
+          type: string
+          enum:
+          - text
+          - file_reference
+        content:
+          type: string
+          description: Text content (present when `type` is `text`)
+        path:
+          type: string
+          description: Relative path under /sandbox (present when `type` is `file_reference`)
+        display:
+          type: string
+          description: Optional mention label shown in clients (defaults to `@{path}`)
     TaskType:
       type: string
       description: Task execution mode

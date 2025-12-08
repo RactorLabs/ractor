@@ -444,7 +444,7 @@ export function getApiDocs(base) {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'List tasks for a sandbox in chronological order.',
+          desc: 'List tasks for a sandbox in chronological order. Inputs include `file_reference` items when a request mentions files with `@path/to/file`.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max records (default 100, max 1000).' },
@@ -453,17 +453,17 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hi"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the attached notes "},{"type":"file_reference","path":"docs/notes.md","display":"@docs/notes.md"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
           method: 'POST',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'Create a task (enqueue user input). Optional background=false blocks until completion or 15-minute timeout.',
+          desc: 'Create a task (enqueue user input). Optional background=false blocks until completion or 15-minute timeout. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files you uploaded via the Files API.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }." },
+            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }. Use @relative/path in the text to automatically attach file_reference items or send { type: 'file_reference', path: 'docs/plan.md' } yourself." },
             { in: 'body', name: 'task_type', type: "'NL'|'SH'|'PY'|'JS'", required: false, desc: "Task type: 'NL' (natural language/inference, default), 'SH' (shell), 'PY' (Python), 'JS' (JavaScript)." },
             { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to true (non-blocking). Set false to wait for completion.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 300, 0 to disable).' }
@@ -471,7 +471,7 @@ export function getApiDocs(base) {
           example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"task_type":"NL","background":false}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the uploaded log "},{"type":"file_reference","path":"logs/build.log","display":"@logs/build.log"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
