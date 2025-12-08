@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
+function escapeSqlIdentifier(value) {
+  return String(value || '').replace(/`/g, '``');
+}
+
+function escapeSqlString(value) {
+  return String(value || '').replace(/'/g, "\\'");
+}
+
 function expandHome(p) {
   if (!p) return p;
   if (p.startsWith('~/')) {
@@ -176,6 +184,7 @@ class DockerManager {
         
         // Wait for MySQL to be healthy
         await this.waitForMysql();
+        await this.ensureMysqlSchema();
         break;
 
       case 'operator':
@@ -270,6 +279,35 @@ class DockerManager {
       }
     }
     throw new Error('MySQL failed to become healthy');
+  }
+
+  async ensureMysqlSchema(
+    {
+      database = 'tsbx',
+      user = 'tsbx',
+      password = 'tsbx',
+      rootPassword = 'root',
+    } = {}
+  ) {
+    const statements = [
+      `CREATE DATABASE IF NOT EXISTS \`${escapeSqlIdentifier(database)}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+      `CREATE USER IF NOT EXISTS '${escapeSqlString(user)}'@'%' IDENTIFIED BY '${escapeSqlString(password)}'`,
+      `ALTER USER '${escapeSqlString(user)}'@'%' IDENTIFIED BY '${escapeSqlString(password)}'`,
+      `GRANT ALL PRIVILEGES ON \`${escapeSqlIdentifier(database)}\`.* TO '${escapeSqlString(user)}'@'%'`,
+      'FLUSH PRIVILEGES'
+    ].join('; ');
+
+    await this.execDocker([
+      'exec',
+      'mysql',
+      'mysql',
+      '-uroot',
+      `--password=${rootPassword}`,
+      '-e',
+      statements
+    ]);
+
+    console.log('✅ Ensured MySQL schema and user are present');
   }
 
   // Stop services

@@ -1,6 +1,6 @@
 [package]
 name = "tsbx"
-version = "0.11.0"
+version = "0.11.1"
 edition = "2021"
 
 [dependencies]
@@ -39,6 +39,7 @@ globset = "0.4"
 base64 = "0.22"
 bytes = "1"
 quick-xml = "0.31"
+sysinfo = "0.30"
 
 [[bin]]
 name = "tsbx-api"

@@ -90,11 +90,21 @@ async function isDockerAvailable() {
   try { await docker(['--version'], { silent: true }); return true; } catch (_) { return false; }
 }
 
-async function waitForMysql() {
+async function waitForMysql(rootPassword = 'root') {
   process.stdout.write(chalk.blue('[INFO] ') + 'Waiting for MySQL to be ready...\n');
   for (let i = 0; i < 30; i++) {
     try {
-      await docker(['exec', 'mysql', 'mysqladmin', 'ping', '-h', 'localhost', '-u', 'root', '-proot'], { silent: true });
+      await docker([
+        'exec',
+        'mysql',
+        'mysqladmin',
+        'ping',
+        '-h',
+        'localhost',
+        '-u',
+        'root',
+        `--password=${rootPassword}`
+      ], { silent: true });
       console.log(chalk.green('[SUCCESS] ') + 'MySQL is ready');
       return;
     } catch (_) {
@@ -102,6 +112,41 @@ async function waitForMysql() {
     }
   }
   throw new Error('MySQL failed to become healthy');
+}
+
+function escapeSqlIdentifier(value) {
+  return String(value || '').replace(/`/g, '``');
+}
+
+function escapeSqlString(value) {
+  return String(value || '').replace(/'/g, "\\'");
+}
+
+async function ensureMysqlSchema({
+  database = 'tsbx',
+  user = 'tsbx',
+  password = 'tsbx',
+  rootPassword = 'root',
+}) {
+  const statements = [
+    `CREATE DATABASE IF NOT EXISTS \`${escapeSqlIdentifier(database)}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`,
+    `CREATE USER IF NOT EXISTS '${escapeSqlString(user)}'@'%' IDENTIFIED BY '${escapeSqlString(password)}'`,
+    `ALTER USER '${escapeSqlString(user)}'@'%' IDENTIFIED BY '${escapeSqlString(password)}'`,
+    `GRANT ALL PRIVILEGES ON \`${escapeSqlIdentifier(database)}\`.* TO '${escapeSqlString(user)}'@'%'`,
+    'FLUSH PRIVILEGES',
+  ].join('; ');
+
+  await docker([
+    'exec',
+    'mysql',
+    'mysql',
+    '-uroot',
+    `--password=${rootPassword}`,
+    '-e',
+    statements,
+  ]);
+
+  console.log(chalk.green('[SUCCESS] ') + `MySQL schema '${database}' is ready`);
 }
 
 module.exports = (program) => {
@@ -317,10 +362,29 @@ module.exports = (program) => {
           switch (comp) {
             case 'mysql': {
               console.log(chalk.blue('[INFO] ') + 'Ensuring MySQL database is running...');
-              if (await containerRunning('mysql')) { console.log(chalk.green('[SUCCESS] ') + 'MySQL already running'); console.log(); break; }
+              const mysqlRootPassword = options.mysqlRootPassword || 'root';
+              const mysqlDatabase = options.mysqlDatabase || 'tsbx';
+              const mysqlUser = options.mysqlUser || 'tsbx';
+              const mysqlPassword = options.mysqlPassword || 'tsbx';
+              async function ensureReady() {
+                await waitForMysql(mysqlRootPassword);
+                await ensureMysqlSchema({
+                  database: mysqlDatabase,
+                  user: mysqlUser,
+                  password: mysqlPassword,
+                  rootPassword: mysqlRootPassword,
+                });
+              }
+              if (await containerRunning('mysql')) {
+                console.log(chalk.green('[SUCCESS] ') + 'MySQL already running');
+                await ensureReady();
+                console.log();
+                break;
+              }
               if (await containerExists('mysql')) {
                 await docker(['start','mysql']);
                 console.log(chalk.green('[SUCCESS] ') + 'MySQL started');
+                await ensureReady();
                 console.log();
                 break;
               }
@@ -350,7 +414,7 @@ module.exports = (program) => {
                 '--character-set-server=utf8mb4'
               );
               await docker(args);
-              await waitForMysql();
+              await ensureReady();
               console.log();
               break;
             }
