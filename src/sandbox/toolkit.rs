@@ -50,6 +50,7 @@ impl ToolCatalog {
             "remove_str",
             "find_filecontent",
             "find_filename",
+            "web_fetch",
             "output",
         ]
     }
@@ -72,6 +73,31 @@ impl ToolCatalog {
             "- Only call tools that directly satisfy the current step; once the user’s request is complete, stop and respond with `<output>`.\n\n",
         );
         guide.push_str("Every XML snippet below is a TEMPLATE. Replace every placeholder (e.g. `<COMMENTARY_GOES_HERE>`, `<PATH_UNDER_/sandbox>`, `<REPLACE_WITH_CONTENT_OR_LEAVE_EMPTY>`) with task-specific values and never send the template verbatim.\n\n");
+
+        guide.push_str("### Tool: web_fetch\n");
+        guide.push_str(
+            "Example template (only when you must read public web content; never copy verbatim):\n",
+        );
+        guide.push_str(
+            r#"  <web_fetch commentary="<COMMENTARY_GOES_HERE>" url="https://example.com/resource" timeout_seconds="15" max_bytes="200000" segment="head" offset_bytes="0"/>"#,
+        );
+        guide.push_str("\n- Fetch HTTP/HTTPS content without shell access. Use this instead of `run_bash`+`curl` for reads.\n");
+        guide.push_str("- Parameters:\n");
+        guide.push_str(
+            "  - `commentary` (required): Brief reason for the fetch (include the domain or doc you need).\n",
+        );
+        guide.push_str("  - `url` (required): HTTP or HTTPS URL. Redirects are limited.\n");
+        guide.push_str("  - `timeout_seconds` (optional): Defaults to 20s, capped at 60s.\n");
+        guide.push_str("  - `max_bytes` (optional): Defaults to 200kB, hard-capped at 1MB; longer responses are truncated.\n");
+        guide.push_str(
+            "  - `segment` (optional): `head` (default) returns the beginning; `tail` returns the last `max_bytes`.\n",
+        );
+        guide.push_str(
+            "  - `offset_bytes` (optional with `segment=head`): Skip this many bytes before capturing the next `max_bytes`.\n",
+        );
+        guide.push_str(
+            "- The tool returns the response body (UTF-8 when possible, otherwise base64) plus metadata including truncation flags.\n\n",
+        );
 
         guide.push_str("### Tool: run_bash\n");
         guide.push_str("Example template (adapt placeholders; never copy verbatim):\n");
@@ -210,6 +236,7 @@ impl ToolCatalog {
             "remove_str" => builtin_tools::RemoveStrTool.execute(&args).await,
             "find_filecontent" => builtin_tools::FindFilecontentTool.execute(&args).await,
             "find_filename" => builtin_tools::FindFilenameTool.execute(&args).await,
+            "web_fetch" => builtin_tools::WebFetchTool::new().execute(&args).await,
             "output" => builtin_tools::OutputTool.execute(&args).await,
             other => Err(anyhow::anyhow!("unknown tool '{}'", other)),
         };
@@ -333,6 +360,35 @@ impl ToolCatalog {
                         "content": body
                     })]),
                 );
+            }
+            "web_fetch" => {
+                map.insert(
+                    "commentary".into(),
+                    Value::String(require_attr(attrs, "commentary")?),
+                );
+                let url = require_attr(attrs, "url")?;
+                map.insert("url".into(), Value::String(url));
+                if let Some(timeout) = attrs.get("timeout_seconds") {
+                    map.insert(
+                        "timeout_seconds".into(),
+                        Value::Number(parse_u64(timeout)?.into()),
+                    );
+                }
+                if let Some(max_bytes) = attrs.get("max_bytes") {
+                    map.insert(
+                        "max_bytes".into(),
+                        Value::Number(parse_u64(max_bytes)?.into()),
+                    );
+                }
+                if let Some(segment) = attrs.get("segment") {
+                    map.insert("segment".into(), Value::String(segment.to_string()));
+                }
+                if let Some(offset) = attrs.get("offset_bytes") {
+                    map.insert(
+                        "offset_bytes".into(),
+                        Value::Number(parse_u64(offset)?.into()),
+                    );
+                }
             }
             other => return Err(anyhow::anyhow!("unknown tool '{}'", other)),
         }

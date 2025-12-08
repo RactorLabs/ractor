@@ -1,18 +1,31 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use base64::{engine::general_purpose, Engine as _};
+use futures::StreamExt;
 
 use super::toolkit::Tool;
 use super::tools::{run_bash, text_edit, TextEditAction};
 use anyhow::anyhow;
 use globset::{GlobBuilder, GlobSetBuilder};
 use regex::Regex;
+use reqwest::{header::CONTENT_TYPE, redirect::Policy, Client};
 use serde_json::{json, Value};
 use std::path::Path;
+use std::time::Duration;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 use walkdir::WalkDir;
 
 const SESSION_ROOT: &str = "/sandbox";
+const MAX_WEB_FETCH_BYTES_DEFAULT: usize = 200_000;
+const MAX_WEB_FETCH_BYTES_HARD: usize = 1_000_000;
+const MAX_WEB_FETCH_TIMEOUT_SECS: u64 = 60;
+
+#[derive(Clone, Copy)]
+enum FetchSegment {
+    Head { offset: usize },
+    Tail,
+}
 
 fn ensure_under_sandbox(path: &str) -> anyhow::Result<&Path> {
     let p = Path::new(path);
@@ -558,6 +571,240 @@ impl Tool for FindFilenameTool {
     }
 }
 
+/// Fetch remote HTTP/HTTPS content without shelling out.
+pub struct WebFetchTool;
+
+impl WebFetchTool {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl Tool for WebFetchTool {
+    fn name(&self) -> &str {
+        "web_fetch"
+    }
+
+    fn description(&self) -> &str {
+        "Fetch HTTP/HTTPS content (GET) without invoking a shell. Prefer this over run_bash+curl when you need to read web resources."
+    }
+
+    fn parameters(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type":"object",
+            "properties":{
+                "commentary":{"type":"string","description":"Plain-text explanation of why this URL is being fetched."},
+                "url":{"type":"string","description":"HTTP or HTTPS URL to fetch."},
+                "timeout_seconds":{"type":"integer","description":"Optional timeout (1-60 seconds)."},
+                "max_bytes":{"type":"integer","description":"Maximum response bytes to return (1kB-1MB)."},
+                "segment":{"type":"string","enum":["head","tail"],"description":"Which portion of the response to capture (default head)."},
+                "offset_bytes":{"type":"integer","description":"When segment=head, skip this many bytes before capturing the next max_bytes chunk."}
+            },
+            "required":["commentary","url"]
+        })
+    }
+
+    async fn execute(&self, args: &serde_json::Value) -> Result<serde_json::Value> {
+        if args
+            .get("commentary")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .is_none()
+        {
+            return Ok(
+                json!({"status":"error","tool":"web_fetch","error":"commentary is required"}),
+            );
+        }
+        let url = args
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if url.is_empty() {
+            return Ok(json!({"status":"error","tool":"web_fetch","error":"url is required"}));
+        }
+        if !(url.starts_with("http://") || url.starts_with("https://")) {
+            return Ok(
+                json!({"status":"error","tool":"web_fetch","error":"url must start with http:// or https://"}),
+            );
+        }
+        let timeout_secs = args
+            .get("timeout_seconds")
+            .and_then(|v| v.as_u64())
+            .map(|v| v.clamp(1, MAX_WEB_FETCH_TIMEOUT_SECS))
+            .unwrap_or(20);
+        let max_bytes_raw = args
+            .get("max_bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(MAX_WEB_FETCH_BYTES_DEFAULT as u64);
+        let max_bytes = max_bytes_raw.clamp(1024, MAX_WEB_FETCH_BYTES_HARD as u64) as usize;
+        let offset_bytes = args
+            .get("offset_bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            .min(MAX_WEB_FETCH_BYTES_HARD as u64) as usize;
+        let segment_mode = args
+            .get("segment")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_else(|| "head".to_string());
+        let segment = if segment_mode == "tail" {
+            FetchSegment::Tail
+        } else {
+            FetchSegment::Head {
+                offset: offset_bytes,
+            }
+        };
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .redirect(Policy::limited(3))
+            .user_agent("tsbx-web-fetch/1.0 (+https://github.com/RactorLabs/tsbx)")
+            .build()?;
+
+        let response = client.get(&url).send().await;
+        let response = match response {
+            Ok(resp) => resp,
+            Err(err) => {
+                return Ok(
+                    json!({"status":"error","tool":"web_fetch","error":format!("request failed: {}", err)}),
+                );
+            }
+        };
+
+        let status = response.status().as_u16();
+        let final_url = response.url().to_string();
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let mut body: Vec<u8> = Vec::with_capacity(max_bytes.min(8192));
+        let mut stream = response.bytes_stream();
+        let mut truncated_head = matches!(segment, FetchSegment::Head { .. }) && offset_bytes > 0;
+        let mut truncated_tail = false;
+        let mut bytes_skipped_total: usize = 0;
+        let mut total_bytes = 0usize;
+        let mut remaining_offset = offset_bytes;
+
+        match segment {
+            FetchSegment::Head { .. } => {
+                while let Some(chunk) = stream.next().await {
+                    let chunk = match chunk {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            return Ok(
+                                json!({"status":"error","tool":"web_fetch","error":format!("read failed: {}", err)}),
+                            );
+                        }
+                    };
+                    total_bytes += chunk.len();
+                    if remaining_offset > 0 {
+                        if chunk.len() <= remaining_offset {
+                            remaining_offset -= chunk.len();
+                            bytes_skipped_total += chunk.len();
+                            continue;
+                        } else {
+                            bytes_skipped_total += remaining_offset;
+                            let remainder = chunk.len() - remaining_offset;
+                            let start = remaining_offset;
+                            remaining_offset = 0;
+                            let take = remainder.min(max_bytes.saturating_sub(body.len()));
+                            body.extend_from_slice(&chunk[start..start + take]);
+                            if take < remainder {
+                                truncated_tail = true;
+                                break;
+                            }
+                            continue;
+                        }
+                    }
+                    if body.len() >= max_bytes {
+                        truncated_tail = true;
+                        break;
+                    }
+                    let available = max_bytes.saturating_sub(body.len());
+                    if available == 0 {
+                        truncated_tail = true;
+                        break;
+                    }
+                    let take = available.min(chunk.len());
+                    body.extend_from_slice(&chunk[..take]);
+                    if take < chunk.len() {
+                        truncated_tail = true;
+                        break;
+                    }
+                }
+            }
+            FetchSegment::Tail => {
+                while let Some(chunk) = stream.next().await {
+                    let chunk = match chunk {
+                        Ok(bytes) => bytes,
+                        Err(err) => {
+                            return Ok(
+                                json!({"status":"error","tool":"web_fetch","error":format!("read failed: {}", err)}),
+                            );
+                        }
+                    };
+                    total_bytes += chunk.len();
+                    body.extend_from_slice(&chunk);
+                    if body.len() > max_bytes {
+                        let excess = body.len() - max_bytes;
+                        body.drain(0..excess);
+                        bytes_skipped_total += excess;
+                        truncated_head = true;
+                    }
+                }
+            }
+        }
+
+        if matches!(segment, FetchSegment::Head { .. }) && offset_bytes == 0 {
+            truncated_head = false;
+        }
+
+        let applied_offset = if matches!(segment, FetchSegment::Head { .. }) {
+            bytes_skipped_total.min(offset_bytes)
+        } else {
+            0
+        };
+        let truncated = truncated_head || truncated_tail;
+
+        let (encoding, body_value) = match String::from_utf8(body.clone()) {
+            Ok(text) => ("utf-8", Value::String(text)),
+            Err(_) => {
+                let encoded = general_purpose::STANDARD.encode(&body);
+                ("base64", Value::String(encoded))
+            }
+        };
+
+        Ok(json!({
+            "status":"ok",
+            "tool":"web_fetch",
+            "url": url,
+            "final_url": final_url,
+            "http_status": status,
+            "content_type": content_type,
+            "encoding": encoding,
+            "body": body_value,
+            "segment": match segment {
+                FetchSegment::Head { .. } => "head",
+                FetchSegment::Tail => "tail",
+            },
+            "max_bytes": max_bytes,
+            "offset_bytes": applied_offset,
+            "bytes_collected": body.len(),
+            "bytes_skipped": bytes_skipped_total,
+            "truncated_head": truncated_head,
+            "truncated_tail": truncated_tail,
+            "truncated": truncated,
+            "total_bytes_read": total_bytes
+        }))
+    }
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         s.to_string()
@@ -709,6 +956,205 @@ impl Tool for OutputTool {
             "items": items_out,
             "supported_types": ["md","text","json"]
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WebFetchTool;
+    use crate::sandbox::toolkit::Tool;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn web_fetch_reads_example_domain() {
+        let tool = WebFetchTool::new();
+        let args = json!({
+            "commentary": "fetch example domain",
+            "url": "https://example.com",
+            "timeout_seconds": 10,
+            "max_bytes": 5000
+        });
+        let result = tool.execute(&args).await.expect("tool runs");
+        assert_eq!(result.get("status").and_then(|v| v.as_str()), Some("ok"));
+        assert_eq!(
+            result
+                .get("http_status")
+                .and_then(|v| v.as_u64())
+                .unwrap_or_default(),
+            200
+        );
+        assert_eq!(
+            result.get("encoding").and_then(|v| v.as_str()),
+            Some("utf-8")
+        );
+        let body = result
+            .get("body")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            body.contains("Example Domain"),
+            "expected Example Domain in body, got {}",
+            body
+        );
+        assert_eq!(result.get("segment").and_then(|v| v.as_str()), Some("head"));
+        assert_eq!(
+            result
+                .get("bytes_skipped")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0),
+            0
+        );
+        assert_eq!(
+            result.get("truncated_head").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+    }
+
+    #[tokio::test]
+    async fn web_fetch_fetches_multiple_sites() {
+        let tool = WebFetchTool::new();
+        let targets = [
+            ("https://example.com", "Example Domain"),
+            ("https://www.rust-lang.org", "Rust"),
+            ("https://developer.mozilla.org", "MDN"),
+        ];
+        for (url, expected_hint) in targets {
+            let args = json!({
+                "commentary": format!("fetch {}", url),
+                "url": url,
+                "timeout_seconds": 20,
+                "max_bytes": 100_000
+            });
+            let result = tool
+                .execute(&args)
+                .await
+                .unwrap_or_else(|e| panic!("web_fetch failed for {}: {}", url, e));
+            assert_eq!(
+                result.get("status").and_then(|v| v.as_str()),
+                Some("ok"),
+                "status not ok for {}: {:?}",
+                url,
+                result
+            );
+            let http_status = result
+                .get("http_status")
+                .and_then(|v| v.as_u64())
+                .unwrap_or_default();
+            assert!(
+                (200..400).contains(&http_status),
+                "unexpected HTTP status {} for {}",
+                http_status,
+                url
+            );
+            let encoding = result
+                .get("encoding")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            assert!(
+                matches!(encoding, "utf-8" | "base64"),
+                "unexpected encoding {} for {}",
+                encoding,
+                url
+            );
+            let body = result
+                .get("body")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default();
+            assert!(!body.is_empty(), "empty body for {} ({})", url, encoding);
+            if encoding == "utf-8" {
+                assert!(
+                    body.contains(expected_hint),
+                    "body missing hint '{}' for {}",
+                    expected_hint,
+                    url
+                );
+            }
+            assert_eq!(result.get("segment").and_then(|v| v.as_str()), Some("head"));
+        }
+    }
+
+    #[tokio::test]
+    async fn web_fetch_head_with_offset() {
+        let tool = WebFetchTool::new();
+        let offset = 1_000;
+        let args = json!({
+            "commentary": "fetch segment of example domain",
+            "url": "https://example.com",
+            "timeout_seconds": 20,
+            "max_bytes": 2_000,
+            "segment": "head",
+            "offset_bytes": offset
+        });
+        let result = tool.execute(&args).await.expect("tool runs");
+        assert_eq!(result.get("segment").and_then(|v| v.as_str()), Some("head"));
+        let applied_offset = result
+            .get("offset_bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        assert!(
+            applied_offset as usize <= offset,
+            "applied offset should not exceed requested"
+        );
+        assert!(
+            result
+                .get("bytes_collected")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+                <= 2_000,
+            "collected bytes should respect max_bytes"
+        );
+        assert_eq!(result.get("segment").and_then(|v| v.as_str()), Some("head"));
+        assert_eq!(
+            result.get("truncated_head").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[tokio::test]
+    async fn web_fetch_tail_segment() {
+        let tool = WebFetchTool::new();
+        let args = json!({
+            "commentary": "fetch tail of example domain",
+            "url": "https://example.com",
+            "timeout_seconds": 20,
+            "max_bytes": 512,
+            "segment": "tail"
+        });
+        let result = tool.execute(&args).await.expect("tool runs");
+        assert_eq!(result.get("segment").and_then(|v| v.as_str()), Some("tail"));
+        let max_bytes = result
+            .get("max_bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let collected = result
+            .get("bytes_collected")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        assert!(
+            collected <= max_bytes,
+            "collected {} exceeds advertised max {}",
+            collected,
+            max_bytes
+        );
+        assert_eq!(
+            result.get("truncated_tail").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        // Tail mode should report truncated_head true when response exceeds limit.
+        let truncated_head = result
+            .get("truncated_head")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        assert!(
+            truncated_head
+                || result
+                    .get("bytes_skipped")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0)
+                    == 0,
+            "tail mode should either truncate head or indicate no skipped bytes"
+        );
     }
 }
 
