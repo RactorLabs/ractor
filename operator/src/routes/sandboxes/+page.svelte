@@ -1,12 +1,54 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { isAuthenticated } from '$lib/auth.js';
+  import { auth, getOperatorName, isAuthenticated } from '$lib/auth.js';
   import { apiFetch } from '$lib/api/client.js';
   import Card from '/src/components/bootstrap/Card.svelte';
+  import ApexCharts from '/src/components/plugins/ApexCharts.svelte';
   import { setPageTitle } from '$lib/utils.js';
+  import { getHostName as getBrandHostName, getHostUrl as getBrandHostUrl } from '$lib/branding.js';
+
+  export let data;
 
   setPageTitle('Sandboxes');
+
+  const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+  const byteFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 });
+  const historyLimit = 36;
+  const BYTES_IN_GIB = 1024 ** 3;
+
+  let stats = data?.globalStats || null;
+let runtimeHostUrl = null;
+let runtimeHostName = null;
+$: hostDisplayUrl = (() => {
+    if (runtimeHostUrl) return runtimeHostUrl;
+    if (data?.hostUrl) {
+      const fromConfig = String(data.hostUrl).replace(/\/$/, '');
+      if (fromConfig) return fromConfig;
+    }
+    return getBrandHostUrl();
+  })();
+$: hostDisplayName = (() => {
+    const configName = data?.hostName && String(data.hostName).trim();
+    if (configName) return configName;
+    const metricsName = host?.hostname && String(host.hostname).trim();
+    if (metricsName) return metricsName;
+    const runtimeName = runtimeHostName && runtimeHostName !== 'localhost' ? runtimeHostName : null;
+    if (runtimeName) return runtimeName;
+    try {
+      const parsed = new URL(hostDisplayUrl || 'http://localhost');
+      if (parsed.hostname && parsed.hostname !== 'localhost') return parsed.hostname;
+    } catch (_) {}
+    return getBrandHostName();
+  })();
+  let statsError = null;
+  let statsLoading = false;
+  let statsLastUpdated = stats?.captured_at ? new Date(stats.captured_at) : null;
+  let cpuHistory = [];
+  let memoryHistory = [];
+  let statsPollHandle = null;
+  let historySeeded = false;
+  let host = stats?.host || null;
 
   let loading = true;
   let error = null;
@@ -19,6 +61,13 @@
     const state = String(s?.state || '').toLowerCase();
     return state === 'terminated';
   });
+  $: host = stats?.host || null;
+  $: memoryPercent = host ? Math.round((Number(host.memory_used_percent || 0)) * 10) / 10 : 0;
+  $: cpuPercent = host ? Math.round((Number(host.cpu_percent || 0)) * 10) / 10 : 0;
+  $: stateBreakdown = Object.entries(stats?.sandboxes_by_state || {}).map(([state, count]) => ({
+    state,
+    count: Number(count) || 0
+  })).sort((a, b) => b.count - a.count);
   // Filters + pagination
   let q = '';
   let stateFilter = '';
@@ -29,9 +78,233 @@
   let pageNum = 1; // 1-based
   let total = 0;
   let pages = 1;
-  import { auth, getOperatorName } from '$lib/auth.js';
   let operatorName = '';
   $: isAdmin = $auth && String($auth.type || '').toLowerCase() === 'admin';
+
+  function formatNumber(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '0';
+    return numberFormatter.format(Math.round(numeric));
+  }
+
+  function clampPercent(value) {
+    if (!Number.isFinite(value)) return 0;
+    return Math.min(100, Math.max(0, Number(value)));
+  }
+
+  function formatBytes(bytes) {
+    const numeric = Number(bytes);
+    if (!Number.isFinite(numeric) || numeric <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    let idx = 0;
+    let current = numeric;
+    while (current >= 1024 && idx < units.length - 1) {
+      current /= 1024;
+      idx += 1;
+    }
+    return `${byteFormatter.format(current)} ${units[idx]}`;
+  }
+
+  function formatDuration(seconds) {
+    const total = Number(seconds);
+    if (!Number.isFinite(total) || total <= 0) return '—';
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m`;
+    return `${Math.floor(total)}s`;
+  }
+
+  function formatRelativeTime(date) {
+    if (!date) return 'never';
+    const diff = Date.now() - date.getTime();
+    if (diff < 2000) return 'just now';
+    if (diff < 60000) return `${Math.round(diff / 1000)}s ago`;
+    if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+    return date.toLocaleString();
+  }
+
+  function formatPercent(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return '0%';
+    return `${numeric.toFixed(1)}%`;
+  }
+
+  function formatLoadAverages() {
+    if (!host) return '—';
+    const one = (host.load_avg_1m ?? 0).toFixed(2);
+    const five = (host.load_avg_5m ?? 0).toFixed(2);
+    const fifteen = (host.load_avg_15m ?? 0).toFixed(2);
+    return `${one} / ${five} / ${fifteen}`;
+  }
+
+  function formatStateLabel(name) {
+    if (!name) return 'Unknown';
+    const str = String(name);
+    return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  function ensureHistorySeeded(snapshot = stats) {
+    if (historySeeded || !snapshot?.host) return;
+    historySeeded = true;
+    const ts = snapshot?.captured_at ? Date.parse(snapshot.captured_at) : Date.now();
+    cpuHistory = [{
+      x: ts,
+      y: clampPercent(snapshot.host.cpu_percent || 0)
+    }];
+    memoryHistory = [{
+      x: ts,
+      y: Number(snapshot.host.memory_used_bytes || 0)
+    }];
+  }
+
+  function recordCpuSample(value, timestamp = Date.now()) {
+    if (!Number.isFinite(value)) return;
+    const clamped = clampPercent(value);
+    cpuHistory = [
+      ...cpuHistory.slice(-(historyLimit - 1)),
+      { x: timestamp, y: Number(clamped.toFixed(2)) }
+    ];
+  }
+
+  function recordMemorySample(bytesUsed, timestamp = Date.now()) {
+    if (!Number.isFinite(bytesUsed)) return;
+    const normalized = Math.max(0, Number(bytesUsed));
+    memoryHistory = [
+      ...memoryHistory.slice(-(historyLimit - 1)),
+      { x: timestamp, y: normalized }
+    ];
+  }
+
+  function applyStatsSnapshot(snapshot, trackHistory = true) {
+    if (!snapshot) return;
+    stats = snapshot;
+    statsLastUpdated = snapshot?.captured_at ? new Date(snapshot.captured_at) : new Date();
+    if (!snapshot.host) return;
+    const seededBefore = historySeeded;
+    ensureHistorySeeded(snapshot);
+    if (!trackHistory || !seededBefore) return;
+    const ts = statsLastUpdated ? statsLastUpdated.getTime() : Date.now();
+    recordCpuSample(snapshot.host.cpu_percent, ts);
+    recordMemorySample(snapshot.host.memory_used_bytes, ts);
+  }
+
+  async function refreshStats(trackHistory = true) {
+    try {
+      statsLoading = true;
+      const res = await apiFetch('/stats');
+      if (!res.ok) {
+        statsError = res?.data?.message || `Failed to load host stats (HTTP ${res.status})`;
+        return;
+      }
+      statsError = null;
+      applyStatsSnapshot(res.data, trackHistory);
+    } catch (e) {
+      statsError = e?.message || String(e);
+    } finally {
+      statsLoading = false;
+    }
+  }
+
+  function startStatsPolling() {
+    stopStatsPolling();
+    statsPollHandle = setInterval(async () => {
+      try { await refreshStats(true); } catch (_) {}
+    }, 8000);
+  }
+
+  function stopStatsPolling() {
+    if (statsPollHandle) {
+      clearInterval(statsPollHandle);
+      statsPollHandle = null;
+    }
+  }
+
+  ensureHistorySeeded(stats);
+
+  $: cpuChartOptions = {
+    chart: {
+      type: 'area',
+      toolbar: { show: false },
+      animations: { easing: 'easeinout', speed: 250 }
+    },
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 0.35, opacityFrom: 0.45, opacityTo: 0.05 } },
+    series: [
+      {
+        name: 'CPU %',
+        data: cpuHistory.map((point) => [point.x, Number(point.y.toFixed(2))])
+      }
+    ],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+    yaxis: {
+      min: 0,
+      max: 100,
+      tickAmount: 5,
+      labels: {
+        formatter: (val) => {
+          const numeric = Number(val);
+          return Number.isFinite(numeric) ? `${Math.round(numeric)}%` : '-';
+        }
+      }
+    },
+    tooltip: {
+      x: { format: 'HH:mm:ss' },
+      y: {
+        formatter: (val) => {
+          const numeric = Number(val);
+          return Number.isFinite(numeric) ? `${numeric.toFixed(1)}%` : '-';
+        }
+      }
+    },
+    colors: ['#0d6efd']
+  };
+
+  $: memoryChartMax = host?.memory_total_bytes ? host.memory_total_bytes / BYTES_IN_GIB : null;
+  $: memoryChartOptions = {
+    chart: {
+      type: 'area',
+      toolbar: { show: false },
+      animations: { easing: 'easeinout', speed: 250 }
+    },
+    dataLabels: { enabled: false },
+    stroke: { curve: 'smooth', width: 2 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 0.25, opacityFrom: 0.45, opacityTo: 0.05 } },
+    series: [
+      {
+        name: 'Used (GiB)',
+        data: memoryHistory.map((point) => [
+          point.x,
+          Number(((point.y || 0) / BYTES_IN_GIB).toFixed(2))
+        ])
+      }
+    ],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+    yaxis: {
+      min: 0,
+      max: memoryChartMax ? Number((memoryChartMax * 1.05).toFixed(2)) : undefined,
+      labels: {
+        formatter: (val) => {
+          const numeric = Number(val);
+          return Number.isFinite(numeric) ? `${numeric.toFixed(1)} GiB` : '-';
+        }
+      }
+    },
+    tooltip: {
+      x: { format: 'HH:mm:ss' },
+      y: {
+        formatter: (val) => {
+          const numeric = Number(val);
+          return Number.isFinite(numeric) ? `${numeric.toFixed(2)} GiB` : '-';
+        }
+      }
+    },
+    colors: ['#20c997']
+  };
 
   function stateIconClass(state) {
     const s = String(state || '').toLowerCase();
@@ -195,6 +468,13 @@
       goto('/login');
       return;
     }
+    try {
+      runtimeHostUrl = window?.location?.origin?.replace(/\/$/, '') || null;
+      runtimeHostName = window?.location?.hostname || null;
+    } catch (_) {
+      runtimeHostUrl = null;
+      runtimeHostName = null;
+    }
     try { operatorName = getOperatorName() || ''; } catch (_) { operatorName = ''; }
     // Seed from URL
     try {
@@ -206,17 +486,142 @@
       limit = Number(sp.get('limit') || 30);
       pageNum = Number(sp.get('page') || 1);
     } catch (_) {}
-    await fetchSandboxes();
+    await Promise.all([fetchSandboxes(), refreshStats(true)]);
     loading = false;
     startPolling();
+    startStatsPolling();
   });
 
-  onDestroy(() => { stopPolling(); });
+  onDestroy(() => { stopPolling(); stopStatsPolling(); });
 </script>
 
 <div class="container-xxl">
   <div class="row justify-content-center">
     <div class="col-12 col-xxl-10">
+      {#if isAdmin}
+      <div class="mb-4">
+        <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+          <div>
+            <div class="fw-bold fs-20px">Host Overview</div>
+            <div class="text-body text-opacity-75 small">
+              Last updated {statsLastUpdated ? formatRelativeTime(statsLastUpdated) : 'never'}
+            </div>
+          </div>
+          <div class="ms-auto d-flex align-items-center flex-wrap gap-2">
+            {#if statsError}
+              <div class="text-danger small">{statsError}</div>
+            {/if}
+            <button class="btn btn-outline-secondary btn-sm" type="button" disabled={statsLoading} on:click={() => refreshStats(true)}>
+              {#if statsLoading}
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+              {:else}
+                <i class="bi bi-arrow-repeat me-1"></i>
+              {/if}
+              Refresh
+            </button>
+          </div>
+        </div>
+        <div class="row g-3">
+          <div class="col-12 col-xl-4">
+            <Card class="h-100">
+              <div class="card-body">
+                <div class="stat-label mb-1">Host</div>
+                <div class="fs-24px fw-bold">{hostDisplayName}</div>
+                <div class="text-body text-opacity-75 small">{hostDisplayUrl}</div>
+                <div class="text-body text-opacity-75 small mb-3">Uptime {formatDuration(host?.uptime_seconds)}</div>
+                <div class="d-flex justify-content-between small text-body text-opacity-75 mb-1">
+                  <span>Load (1/5/15m)</span>
+                  <span class="fw-semibold">{formatLoadAverages()}</span>
+                </div>
+                <div class="d-flex justify-content-between small text-body text-opacity-75">
+                  <span>CPU Cores</span>
+                  <span class="fw-semibold">{host?.cpu_cores ?? '—'}</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+          <div class="col-12 col-xl-4">
+                <Card class="h-100">
+                  <div class="card-body">
+                    <div class="stat-label mb-1">Sandboxes</div>
+                    <div class="d-flex align-items-baseline gap-2">
+                      <div class="fs-32px fw-bold">{formatNumber(stats?.sandboxes_active || 0)}</div>
+                      <div class="text-body text-opacity-75">active</div>
+                    </div>
+                    <div class="text-body text-opacity-75 small mb-3">
+                      {formatNumber(stats?.sandboxes_total || 0)} total • {formatNumber(stats?.sandboxes_terminated || 0)} terminated
+                    </div>
+                    <div class="d-flex flex-column gap-1">
+                      {#if stateBreakdown.length}
+                        {#each stateBreakdown.slice(0,4) as sb}
+                          <div class="d-flex justify-content-between small text-body text-opacity-75">
+                            <span>{formatStateLabel(sb.state)}</span>
+                            <span class="fw-semibold">{formatNumber(sb.count)}</span>
+                          </div>
+                        {/each}
+                      {:else}
+                        <div class="small text-body text-opacity-75">No sandboxes yet.</div>
+                      {/if}
+                    </div>
+                  </div>
+                </Card>
+          </div>
+          <div class="col-12 col-xl-4">
+            <Card class="h-100">
+              <div class="card-body">
+                <div class="stat-label mb-1">Tasks &amp; Memory</div>
+                <div class="d-flex align-items-baseline gap-2">
+                  <div class="fs-32px fw-bold">{formatNumber(stats?.sandbox_tasks_active || 0)}</div>
+                  <div class="text-body text-opacity-75">in flight</div>
+                </div>
+                <div class="text-body text-opacity-75 small mb-3">{formatNumber(stats?.sandbox_tasks_total || 0)} total tasks</div>
+                <div class="d-flex justify-content-between small text-body text-opacity-75 mb-1">
+                  <span>Memory</span>
+                  <span class="fw-semibold">{formatPercent(memoryPercent)}</span>
+                </div>
+                <div class="progress memory-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={memoryPercent || 0}>
+                  <div class="progress-bar bg-theme" style={`width: ${Math.min(100, memoryPercent || 0)}%`}></div>
+                </div>
+                <div class="d-flex justify-content-between text-body-secondary small mt-1">
+                  <span>{formatBytes(host?.memory_used_bytes || 0)} used</span>
+                  <span>{formatBytes(host?.memory_total_bytes || 0)} total</span>
+                </div>
+              </div>
+            </Card>
+          </div>
+        </div>
+        <div class="row g-3 mt-1">
+          <div class="col-12 col-xl-6">
+            <Card class="h-100 chart-card">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div>
+                    <div class="stat-label mb-1">CPU Utilization</div>
+                    <div class="fs-24px fw-bold">{formatPercent(cpuPercent)}</div>
+                  </div>
+                  <div class="text-body text-opacity-75 small">{host?.cpu_cores ?? '—'} cores</div>
+                </div>
+                <ApexCharts height="180px" options={cpuChartOptions} />
+              </div>
+            </Card>
+          </div>
+          <div class="col-12 col-xl-6">
+            <Card class="h-100 chart-card">
+              <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div>
+                    <div class="stat-label mb-1">Memory Usage</div>
+                    <div class="fs-24px fw-bold">{formatBytes(host?.memory_used_bytes || 0)}</div>
+                  </div>
+                  <div class="text-body text-opacity-75 small">{formatBytes(host?.memory_total_bytes || 0)} total</div>
+                </div>
+                <ApexCharts height="180px" options={memoryChartOptions} />
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+      {/if}
 {#if isAdmin}
   <div class="alert alert-info d-flex align-items-center" role="alert">
     <div>
@@ -511,5 +916,17 @@
   :global(.muted-card .state-label) {
     color: var(--bs-secondary-color) !important;
     font-weight: 600;
+  }
+  .stat-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bs-secondary-color);
+  }
+  .memory-progress {
+    height: 8px;
+  }
+  :global(.chart-card .card-body) {
+    min-height: 260px;
   }
 </style>
