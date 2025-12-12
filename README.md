@@ -62,6 +62,17 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
         ]
       }
     ]
+  },
+  "mcp": {
+    "providers": [
+      {
+        "name": "github",
+        "display_name": "GitHub MCP",
+        "description": "Remote GitHub MCP server",
+        "endpoint": "https://api.githubcopilot.com/mcp/",
+        "auth_token": "<GITHUB_PAT>"
+      }
+    ]
   }
 }
 ```
@@ -69,3 +80,4 @@ TSBX reads all branding + inference metadata from a single JSON file (default `~
 - `host.name` / `host.url` drive Operator UI branding and task links.
 - Each provider must define at least one model. The first entry is treated as that provider’s default model.
 - The Controller injects provider URL/model into each sandbox; Operator UI fetches the list via `GET /api/v0/inference/providers`.
+- Optional: add MCP providers to pre-register external MCP servers. Each provider entry is synced into the MCP registry on start and made available to sandboxes as `mcp_<provider>_<tool>` aliases.
