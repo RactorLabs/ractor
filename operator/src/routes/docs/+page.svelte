@@ -139,13 +139,13 @@
         <div id={section.id} class="mb-3">
           <div class="mb-2">
             <div class="fw-bold fs-20px">{section.title}</div>
-            <div class="text-body text-opacity-75 small">{section.description}</div>
-          </div>
-          <div>
-            <div class="row g-3">
-              {#each section.endpoints as ep}
-                <div class="col-12">
-                  <details class="api-details" id={endpointId(section, ep)}>
+              <div class="text-body text-opacity-75 small">{section.description}</div>
+            </div>
+            <div>
+              <div class="row g-3">
+                {#each section.endpoints as ep}
+                  <div class="col-12">
+                    <details class="api-details" id={endpointId(section, ep)}>
                     <summary class="summary-row d-flex align-items-center gap-2 text-break" aria-label="Toggle endpoint details">
                       <span class={methodClass(ep.method)}>{ep.method}</span>
                       <span class="font-monospace flex-grow-1 text-break">{ep.path}</span>

@@ -1,10 +1,12 @@
-use anyhow::{Error as AnyError, Result};
+use anyhow::{anyhow, Context, Error as AnyError, Result};
 use async_trait::async_trait;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use super::builtin_tools;
 use super::command::{CommandChild, CommandInvocation};
+use super::mcp::{McpClient, McpTool};
 
 #[async_trait]
 pub trait Tool: Send + Sync {
@@ -19,9 +21,47 @@ pub struct ExecutionResult {
     pub output: Value,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct McpRouting {
+    pub server_name: Option<String>,
+    pub tool_name: String,
+}
+
 pub struct ExecutionError {
     pub args: Value,
     pub message: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum IntentRouterHint {
+    Direct {
+        alias: String,
+        server_name: String,
+        tool_name: String,
+    },
+    Ambiguous {
+        tool_name: String,
+        servers: Vec<String>,
+    },
+}
+
+impl IntentRouterHint {
+    pub fn to_prompt(&self) -> String {
+        match self {
+            IntentRouterHint::Direct {
+                alias,
+                server_name,
+                tool_name,
+            } => format!("Router hint: This request matches MCP tool `{alias}` (server `{server_name}`, tool `{tool_name}`). Call that MCP alias directly, or use <mcp_call server=\"{server_name}\" tool=\"{tool_name}\"> with the registry tool name (not the alias)."),
+            IntentRouterHint::Ambiguous {
+                tool_name,
+                servers,
+            } => {
+                let options = servers.join(", ");
+                format!("Router hint: This request maps to MCP tool `{tool_name}` exposed by multiple servers ({options}). Ask which server to use, then call the matching MCP alias.")
+            }
+        }
+    }
 }
 
 impl ExecutionError {
@@ -33,14 +73,56 @@ impl ExecutionError {
     }
 }
 
-pub struct ToolCatalog;
+#[derive(Clone, Debug)]
+pub struct McpToolAlias {
+    pub alias: String,
+    pub server_id: String,
+    pub server_name: String,
+    pub tool_name: String,
+    pub description: Option<String>,
+}
+
+pub struct ToolCatalog {
+    mcp_client: Option<Arc<McpClient>>,
+    mcp_tools: HashMap<String, McpToolAlias>,
+    server_tool_index: HashMap<String, HashSet<String>>,
+    sandbox_id: String,
+}
 
 impl ToolCatalog {
-    pub fn new() -> Self {
-        Self
+    pub fn new(
+        sandbox_id: String,
+        mcp_client: Option<Arc<McpClient>>,
+        mcp_tool_inventory: Vec<McpTool>,
+    ) -> Self {
+        let mut mcp_tools = HashMap::new();
+        let mut server_tool_index: HashMap<String, HashSet<String>> = HashMap::new();
+        for tool in mcp_tool_inventory {
+            let alias = format!("mcp_{}_{}", slugify(&tool.server_name), slugify(&tool.name));
+            mcp_tools.insert(
+                alias.clone(),
+                McpToolAlias {
+                    alias,
+                    server_id: tool.server_id.clone(),
+                    server_name: tool.server_name.clone(),
+                    tool_name: tool.name.clone(),
+                    description: tool.description.clone(),
+                },
+            );
+            server_tool_index
+                .entry(tool.server_name.clone())
+                .or_default()
+                .insert(tool.name.clone());
+        }
+        Self {
+            mcp_client,
+            mcp_tools,
+            server_tool_index,
+            sandbox_id,
+        }
     }
 
-    pub fn known_tools(&self) -> Vec<&'static str> {
+    fn base_tools() -> Vec<&'static str> {
         vec![
             "run_bash",
             "open_file",
@@ -55,8 +137,163 @@ impl ToolCatalog {
         ]
     }
 
+    pub fn known_tools(&self) -> Vec<String> {
+        let mut list: Vec<String> = Self::base_tools()
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
+        if !self.mcp_tools.is_empty() {
+            list.push("mcp_call".to_string());
+            list.extend(self.mcp_tools.keys().cloned());
+        }
+        list
+    }
+
+    pub fn intent_router_hint(
+        &self,
+        user_text: &str,
+        preferred_servers: Option<&HashMap<String, String>>,
+    ) -> Option<IntentRouterHint> {
+        if self.mcp_tools.is_empty() {
+            return None;
+        }
+
+        let trimmed = user_text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        let user_tokens = tokenize(trimmed);
+        if user_tokens.is_empty() {
+            return None;
+        }
+
+        if let Some(target_tool) = self.canonical_tool_from_text(trimmed) {
+            let mut matches: Vec<&McpToolAlias> = self
+                .mcp_tools
+                .values()
+                .filter(|alias| alias.tool_name.eq_ignore_ascii_case(&target_tool))
+                .collect();
+
+            if !matches.is_empty() {
+                matches.sort_by(|a, b| a.server_name.cmp(&b.server_name));
+
+                if let Some(pref) = preferred_servers {
+                    if let Some(server) = pref.get(&target_tool) {
+                        if let Some(alias) = matches
+                            .iter()
+                            .find(|a| a.server_name.eq_ignore_ascii_case(server))
+                        {
+                            return Some(IntentRouterHint::Direct {
+                                alias: alias.alias.clone(),
+                                server_name: alias.server_name.clone(),
+                                tool_name: alias.tool_name.clone(),
+                            });
+                        }
+                    }
+                }
+
+                if matches.len() == 1 {
+                    let alias = matches[0];
+                    return Some(IntentRouterHint::Direct {
+                        alias: alias.alias.clone(),
+                        server_name: alias.server_name.clone(),
+                        tool_name: alias.tool_name.clone(),
+                    });
+                }
+
+                let servers: Vec<String> = matches.iter().map(|a| a.server_name.clone()).collect();
+                return Some(IntentRouterHint::Ambiguous {
+                    tool_name: target_tool,
+                    servers,
+                });
+            }
+        }
+
+        let mut scored: Vec<(usize, &McpToolAlias)> = Vec::new();
+        for alias in self.mcp_tools.values() {
+            if let Some(score) = intent_match_score(trimmed, &user_tokens, alias) {
+                scored.push((score, alias));
+            }
+        }
+        if scored.is_empty() {
+            return None;
+        }
+
+        scored.sort_by(|a, b| b.0.cmp(&a.0));
+        let top_score = scored[0].0;
+        if top_score < 2 {
+            return None;
+        }
+
+        let top: Vec<_> = scored
+            .into_iter()
+            .filter(|(score, _)| *score == top_score)
+            .collect();
+
+        if top.len() == 1 {
+            let alias = top[0].1;
+            return Some(IntentRouterHint::Direct {
+                alias: alias.alias.clone(),
+                server_name: alias.server_name.clone(),
+                tool_name: alias.tool_name.clone(),
+            });
+        }
+
+        let first_tool = top[0].1.tool_name.clone();
+        if top.iter().all(|(_, alias)| alias.tool_name == first_tool) {
+            let mut servers: Vec<String> = top
+                .iter()
+                .map(|(_, alias)| alias.server_name.clone())
+                .collect();
+            servers.sort();
+            servers.dedup();
+
+            if let Some(pref) = preferred_servers {
+                if let Some(server) = pref.get(&first_tool) {
+                    if let Some(alias) = self.mcp_tools.values().find(|a| {
+                        a.tool_name == first_tool && a.server_name.eq_ignore_ascii_case(server)
+                    }) {
+                        return Some(IntentRouterHint::Direct {
+                            alias: alias.alias.clone(),
+                            server_name: alias.server_name.clone(),
+                            tool_name: alias.tool_name.clone(),
+                        });
+                    }
+                }
+            }
+
+            if servers.len() == 1 {
+                if let Some(alias) = self
+                    .mcp_tools
+                    .values()
+                    .find(|a| a.tool_name == first_tool && a.server_name == servers[0])
+                {
+                    return Some(IntentRouterHint::Direct {
+                        alias: alias.alias.clone(),
+                        server_name: alias.server_name.clone(),
+                        tool_name: alias.tool_name.clone(),
+                    });
+                }
+            }
+
+            return Some(IntentRouterHint::Ambiguous {
+                tool_name: first_tool,
+                servers,
+            });
+        }
+
+        None
+    }
+
     pub fn has(&self, name: &str) -> bool {
-        self.known_tools().iter().any(|n| *n == name)
+        if Self::base_tools().iter().any(|n| *n == name) {
+            return true;
+        }
+        if name == "mcp_call" && self.mcp_client.is_some() {
+            return true;
+        }
+        self.mcp_tools.contains_key(name)
     }
 
     pub fn command_catalog_prompt(&self) -> String {
@@ -216,6 +453,27 @@ impl ToolCatalog {
         );
         guide.push_str("- Each entry in `content` must include `type` (`md`, `text`, or `json`) plus a matching `content` payload.\n");
         guide.push_str("- Use `md` for markdown summaries, `text` for short plaintext snippets, and `json` when returning structured data verbatim.\n");
+
+        if !self.mcp_tools.is_empty() {
+            guide.push_str("\n### Tool: mcp_call (plus MCP aliases)\n");
+            guide.push_str("Dynamic tools are provided by the MCP registry. Prefer these for external APIs/data and CRUD over free-form answers. Use the generic dispatcher when uncertain, or call a specific alias directly.\n");
+            guide.push_str("- Generic template:\n");
+            guide.push_str(
+                r#"  <mcp_call commentary="run MCP tool" server="SERVER_NAME" tool="tool_name"><![CDATA[{"arg":"value"}]]></mcp_call>"#,
+            );
+            guide.push_str("\n- MCP aliases you can call directly:\n  ");
+            let aliases = self
+                .mcp_tools
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ");
+            guide.push_str(&aliases);
+            guide.push('\n');
+            guide.push_str("- For aliases, include arguments as attributes or JSON in the body; do not invent tool names beyond this list.\n");
+            guide.push_str("- When a router hint or clear match exists, call the hinted MCP tool/alias before trying web_fetch/run_bash for the same data. If an MCP call fails with unknown tool, retry once using the registry tool name (not the alias) before giving up.\n");
+            guide.push_str("- Wrap JSON payloads in CDATA inside the element body to avoid malformed JSON errors (e.g., <![CDATA[{\"query\":\"...\"}]]>).\n");
+        }
         guide
     }
 
@@ -223,6 +481,10 @@ impl ToolCatalog {
         &self,
         cmd: &CommandInvocation,
     ) -> std::result::Result<ExecutionResult, ExecutionError> {
+        if self.is_mcp_tool(cmd) {
+            return self.execute_mcp(cmd).await;
+        }
+
         let args = match self.build_args(cmd) {
             Ok(value) => value,
             Err(err) => return Err(ExecutionError::from_error(Value::Null, err)),
@@ -238,12 +500,142 @@ impl ToolCatalog {
             "find_filename" => builtin_tools::FindFilenameTool.execute(&args).await,
             "web_fetch" => builtin_tools::WebFetchTool::new().execute(&args).await,
             "output" => builtin_tools::OutputTool.execute(&args).await,
-            other => Err(anyhow::anyhow!("unknown tool '{}'", other)),
+            other => Err(anyhow!("unknown tool '{}'", other)),
         };
         match output {
             Ok(output) => Ok(ExecutionResult { args, output }),
             Err(err) => Err(ExecutionError::from_error(args, err)),
         }
+    }
+
+    fn is_mcp_tool(&self, cmd: &CommandInvocation) -> bool {
+        cmd.name == "mcp_call" || self.mcp_tools.contains_key(&cmd.name)
+    }
+
+    pub fn resolve_mcp_metadata(&self, cmd: &CommandInvocation) -> Option<McpRouting> {
+        if let Some(alias) = self.mcp_tools.get(&cmd.name) {
+            return Some(McpRouting {
+                server_name: Some(alias.server_name.clone()),
+                tool_name: alias.tool_name.clone(),
+            });
+        }
+        if cmd.name == "mcp_call" {
+            let tool_name = cmd.attributes.get("tool")?.to_string();
+            let server_name = cmd
+                .attributes
+                .get("server")
+                .cloned()
+                .or_else(|| cmd.attributes.get("server_id").cloned());
+            return Some(McpRouting {
+                server_name,
+                tool_name,
+            });
+        }
+        None
+    }
+
+    async fn execute_mcp(
+        &self,
+        cmd: &CommandInvocation,
+    ) -> std::result::Result<ExecutionResult, ExecutionError> {
+        let client = match &self.mcp_client {
+            Some(c) => c.clone(),
+            None => {
+                return Err(ExecutionError::from_error(
+                    Value::Null,
+                    anyhow!("MCP is not configured for this sandbox"),
+                ))
+            }
+        };
+
+        let (server_id, server_name, mut tool_name, args) = match self.resolve_mcp_call(cmd) {
+            Ok(v) => v,
+            Err(err) => return Err(ExecutionError::from_error(Value::Null, err)),
+        };
+
+        let mut tried_alt = false;
+        let args_for_call = args.clone();
+
+        loop {
+            match client
+                .invoke(
+                    server_id.as_deref(),
+                    server_name.as_deref(),
+                    &tool_name,
+                    args_for_call.clone(),
+                    &self.sandbox_id,
+                )
+                .await
+            {
+                Ok(output) => {
+                    return Ok(ExecutionResult {
+                        args: args_for_call,
+                        output,
+                    })
+                }
+                Err(err) => {
+                    if !tried_alt {
+                        if let Some(server) = server_name.clone() {
+                            if let Some(alternate) =
+                                self.preferred_tool_for_server(&server, &tool_name)
+                            {
+                                if alternate != tool_name {
+                                    tried_alt = true;
+                                    tool_name = alternate;
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                    return Err(ExecutionError::from_error(args.clone(), err));
+                }
+            }
+        }
+    }
+
+    fn resolve_mcp_call(
+        &self,
+        cmd: &CommandInvocation,
+    ) -> Result<(Option<String>, Option<String>, String, Value)> {
+        if let Some(alias) = self.mcp_tools.get(&cmd.name) {
+            let args = build_mcp_args(cmd, &["commentary"])?;
+            return Ok((
+                Some(alias.server_id.clone()),
+                Some(alias.server_name.clone()),
+                alias.tool_name.clone(),
+                args,
+            ));
+        }
+
+        if cmd.name == "mcp_call" {
+            let server_id = cmd.attributes.get("server_id").cloned();
+            let server_name = cmd.attributes.get("server").cloned();
+            if server_id.is_none() && server_name.is_none() {
+                return Err(anyhow!(
+                    "mcp_call requires either 'server_id' or 'server' attribute"
+                ));
+            }
+            let mut tool_name = require_attr(&cmd.attributes, "tool")?;
+
+            if let Some(alias) = self.mcp_tools.get(&tool_name) {
+                let args = build_mcp_args(cmd, &["server", "server_id", "tool", "commentary"])?;
+                return Ok((
+                    Some(alias.server_id.clone()),
+                    Some(alias.server_name.clone()),
+                    alias.tool_name.clone(),
+                    args,
+                ));
+            }
+            let args = build_mcp_args(cmd, &["server", "server_id", "tool", "commentary"])?;
+            if let Some(server) = server_name.as_ref().or_else(|| server_id.as_ref()).cloned() {
+                if let Some(alternate) = self.preferred_tool_for_server(&server, &tool_name) {
+                    tool_name = alternate;
+                }
+            }
+            return Ok((server_id, server_name, tool_name, args));
+        }
+
+        Err(anyhow!("unknown MCP tool '{}'", cmd.name))
     }
 
     fn build_args(&self, cmd: &CommandInvocation) -> Result<Value> {
@@ -261,9 +653,7 @@ impl ToolCatalog {
                     .filter(|s| !s.is_empty())
                     .unwrap_or_else(|| "/sandbox".to_string());
                 if !exec_dir.starts_with("/sandbox") {
-                    return Err(anyhow::anyhow!(
-                        "run_bash exec_dir must start with /sandbox"
-                    ));
+                    return Err(anyhow!("run_bash exec_dir must start with /sandbox"));
                 }
                 let commands = require_attr(attrs, "commands")?;
                 map.insert("commentary".into(), Value::String(commentary));
@@ -290,7 +680,7 @@ impl ToolCatalog {
                 );
                 map.insert("path".into(), Value::String(require_attr(attrs, "path")?));
                 if attrs.contains_key("body") {
-                    return Err(anyhow::anyhow!(
+                    return Err(anyhow!(
                         "create_file content must be provided in the element body (<![CDATA[...]]>), not a 'body' attribute"
                     ));
                 }
@@ -390,7 +780,7 @@ impl ToolCatalog {
                     );
                 }
             }
-            other => return Err(anyhow::anyhow!("unknown tool '{}'", other)),
+            other => return Err(anyhow!("unknown tool '{}'", other)),
         }
 
         Ok(Value::Object(map))
@@ -402,21 +792,21 @@ fn require_attr(attrs: &HashMap<String, String>, key: &str) -> Result<String> {
         .get(key)
         .cloned()
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("missing '{}' attribute", key))
+        .ok_or_else(|| anyhow!("missing '{}' attribute", key))
 }
 
 fn parse_u64(value: &str) -> Result<u64> {
     value
         .trim()
         .parse::<u64>()
-        .map_err(|_| anyhow::anyhow!("invalid integer '{}'", value))
+        .map_err(|_| anyhow!("invalid integer '{}'", value))
 }
 
 fn parse_bool(value: &str) -> Result<bool> {
     match value.trim().to_lowercase().as_str() {
         "true" | "1" | "yes" => Ok(true),
         "false" | "0" | "no" => Ok(false),
-        other => Err(anyhow::anyhow!("invalid boolean '{}'", other)),
+        other => Err(anyhow!("invalid boolean '{}'", other)),
     }
 }
 
@@ -435,5 +825,327 @@ fn require_child(children: &HashMap<String, Vec<String>>, key: &str) -> Result<S
         .get(key)
         .and_then(|vals| vals.first().cloned())
         .filter(|s| !s.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("missing <{}>...</{}> block", key, key))
+        .ok_or_else(|| anyhow!("missing <{}>...</{}> block", key, key))
+}
+
+fn build_mcp_args(cmd: &CommandInvocation, skip_keys: &[&str]) -> Result<Value> {
+    if let Some(body) = cmd.body.as_ref() {
+        let trimmed = body.trim();
+        if !trimmed.is_empty() {
+            let parsed: Value = serde_json::from_str(trimmed)
+                .context("invalid JSON body for MCP tool (wrap in CDATA)")?;
+            return Ok(parsed);
+        }
+    }
+
+    let mut map = Map::new();
+    let skip: HashSet<&str> = skip_keys.iter().copied().collect();
+    for (k, v) in &cmd.attributes {
+        if skip.contains(k.as_str()) {
+            continue;
+        }
+        map.insert(k.clone(), Value::String(v.clone()));
+    }
+    for child in &cmd.children {
+        if skip.contains(child.name.as_str()) {
+            continue;
+        }
+        if !child.content.trim().is_empty() {
+            map.insert(child.name.clone(), Value::String(child.content.clone()));
+        }
+    }
+    Ok(Value::Object(map))
+}
+
+fn slugify(input: &str) -> String {
+    let mut out = input
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect::<String>();
+    while out.contains("__") {
+        out = out.replace("__", "_");
+    }
+    out.trim_matches('_').to_string()
+}
+
+fn intent_match_score(
+    raw_text: &str,
+    user_tokens: &[String],
+    alias: &McpToolAlias,
+) -> Option<usize> {
+    let mut score: usize = 0;
+    let lower_text = raw_text.to_lowercase();
+    let alias_phrase = alias.alias.replace('_', " ").to_lowercase();
+    let tool_phrase = alias.tool_name.replace('_', " ").to_lowercase();
+
+    if !alias_phrase.is_empty() && lower_text.contains(&alias_phrase) {
+        score += 2;
+    }
+    if !tool_phrase.is_empty() && lower_text.contains(&tool_phrase) {
+        score += 2;
+    }
+
+    let mut corpus = tokenize(&alias.tool_name);
+    corpus.extend(tokenize(&alias.server_name));
+    if let Some(desc) = &alias.description {
+        corpus.extend(tokenize(desc));
+    }
+
+    let filtered_user_tokens: Vec<&String> = user_tokens
+        .iter()
+        .filter(|t| !STOPWORDS.contains(&t.as_str()))
+        .collect();
+
+    let matched_tokens = filtered_user_tokens
+        .iter()
+        .filter(|token| corpus.iter().any(|c| token_match(token, &c)))
+        .count();
+
+    score += matched_tokens;
+
+    if score == 0 {
+        None
+    } else {
+        Some(score)
+    }
+}
+
+fn tokenize(input: &str) -> Vec<String> {
+    input
+        .to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter_map(|token| {
+            let normalized = normalize_token(token);
+            if normalized.is_empty() {
+                None
+            } else {
+                Some(normalized)
+            }
+        })
+        .collect()
+}
+
+fn normalize_token(token: &str) -> String {
+    let trimmed = token.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let lower = trimmed.to_lowercase();
+    if lower.ends_with("ies") && lower.len() > 3 {
+        format!("{}y", &lower[..lower.len() - 3])
+    } else if lower.ends_with('s') && lower.len() > 3 {
+        lower[..lower.len() - 1].to_string()
+    } else {
+        lower
+    }
+}
+
+fn token_match(a: &str, b: &str) -> bool {
+    a == b || a.starts_with(b) || b.starts_with(a)
+}
+
+const STOPWORDS: &[&str] = &[
+    "a", "an", "and", "are", "can", "for", "give", "how", "i", "in", "is", "it", "me", "my", "of",
+    "on", "please", "show", "some", "tell", "that", "the", "this", "to", "what", "with", "you",
+];
+
+fn lower_contains_all(text: &str, phrases: &[&str]) -> bool {
+    let lower = text.to_lowercase();
+    phrases.iter().all(|p| lower.contains(p))
+}
+
+const MCP_SYNONYMS: &[(&[&str], &str)] = &[
+    (&["list repos"], "search_repositories"),
+    (&["list repositories"], "search_repositories"),
+    (&["my repos"], "search_repositories"),
+    (&["github repos"], "search_repositories"),
+    (&["github repositories"], "search_repositories"),
+    (&["list github repos"], "search_repositories"),
+    (&["list github repositories"], "search_repositories"),
+    (&["who am i"], "get_me"),
+    (&["whoami"], "get_me"),
+    (&["my profile"], "get_me"),
+    (&["my user"], "get_me"),
+    (&["list issues"], "search_issues"),
+    (&["search issues"], "search_issues"),
+    (&["my prs"], "search_pull_requests"),
+    (&["my pull requests"], "search_pull_requests"),
+];
+
+impl ToolCatalog {
+    fn canonical_tool_from_text(&self, text: &str) -> Option<String> {
+        for (phrases, tool) in MCP_SYNONYMS {
+            if lower_contains_all(text, phrases) && self.any_server_has_tool(tool) {
+                return Some(tool.to_string());
+            }
+        }
+
+        // Token-based fallback for common repo listing asks (e.g., "list my GitHub repos")
+        let tokens = tokenize(text);
+        if self.any_server_has_tool("search_repositories") {
+            let mentions_repo = tokens.iter().any(|t| t.starts_with("repo"));
+            let mentions_list = tokens
+                .iter()
+                .any(|t| matches!(t.as_str(), "list" | "fetch" | "get" | "show"));
+            if mentions_repo && mentions_list {
+                return Some("search_repositories".to_string());
+            }
+        }
+        None
+    }
+
+    fn any_server_has_tool(&self, tool: &str) -> bool {
+        self.server_tool_index
+            .values()
+            .any(|tools| tools.iter().any(|t| t.eq_ignore_ascii_case(tool)))
+    }
+
+    fn server_has_tool(&self, server: &str, tool: &str) -> bool {
+        self.server_tool_index
+            .get(server)
+            .map(|tools| tools.iter().any(|t| t.eq_ignore_ascii_case(tool)))
+            .unwrap_or(false)
+    }
+
+    fn preferred_tool_for_server(&self, server: &str, tool: &str) -> Option<String> {
+        // Strip server prefix if present (e.g., github_get_me -> get_me)
+        let lower_tool = tool.to_lowercase();
+        let server_prefix = format!("{}_", server.to_lowercase());
+        let stripped = if lower_tool.starts_with(&server_prefix) {
+            lower_tool.trim_start_matches(&server_prefix).to_string()
+        } else {
+            tool.to_string()
+        };
+
+        if self.server_has_tool(server, &stripped) {
+            return Some(stripped);
+        }
+        if self.server_has_tool(server, tool) {
+            return Some(tool.to_string());
+        }
+        let lower = tool.to_lowercase();
+        for (phrases, canonical) in MCP_SYNONYMS {
+            if canonical.eq_ignore_ascii_case(tool) {
+                continue;
+            }
+            if phrases.iter().any(|p| lower.contains(p)) && self.server_has_tool(server, canonical)
+            {
+                return Some(canonical.to_string());
+            }
+        }
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sandbox::mcp::McpTool;
+    use std::collections::HashMap;
+
+    fn sample_tool(server: &str, name: &str, desc: &str) -> McpTool {
+        McpTool {
+            id: format!("{}_{}", server, name),
+            server_id: format!("{}-id", server.to_lowercase()),
+            server_name: server.to_string(),
+            name: name.to_string(),
+            description: Some(desc.to_string()),
+            input_schema: None,
+            output_schema: None,
+            metadata: None,
+            version: None,
+        }
+    }
+
+    #[test]
+    fn routes_direct_match() {
+        let tools = vec![sample_tool(
+            "GitHub",
+            "list_repositories",
+            "List repositories for the current user",
+        )];
+        let catalog = ToolCatalog::new("sandbox".into(), None, tools);
+        let hint = catalog
+            .intent_router_hint("can you list my repos?", None)
+            .expect("expected a router hint");
+
+        assert_eq!(
+            hint,
+            IntentRouterHint::Direct {
+                alias: "mcp_github_list_repositories".into(),
+                server_name: "GitHub".into(),
+                tool_name: "list_repositories".into()
+            }
+        );
+    }
+
+    #[test]
+    fn routes_ambiguous_server() {
+        let tools = vec![
+            sample_tool(
+                "GitHub",
+                "list_repositories",
+                "List repositories for the current user",
+            ),
+            sample_tool(
+                "GitLab",
+                "list_repositories",
+                "List repositories for the current user",
+            ),
+        ];
+        let catalog = ToolCatalog::new("sandbox".into(), None, tools);
+        let hint = catalog
+            .intent_router_hint("list my repositories", None)
+            .expect("expected an ambiguous router hint");
+
+        assert_eq!(
+            hint,
+            IntentRouterHint::Ambiguous {
+                tool_name: "list_repositories".into(),
+                servers: vec!["GitHub".into(), "GitLab".into()]
+            }
+        );
+    }
+
+    #[test]
+    fn ignores_irrelevant_requests() {
+        let tools = vec![sample_tool(
+            "GitHub",
+            "list_repositories",
+            "List repositories for the current user",
+        )];
+        let catalog = ToolCatalog::new("sandbox".into(), None, tools);
+        assert!(catalog.intent_router_hint("hello there", None).is_none());
+    }
+
+    #[tokio::test]
+    async fn mcp_call_accepts_alias_in_tool_attribute() {
+        let tools = vec![sample_tool(
+            "GitHub",
+            "search_repositories",
+            "Search repositories",
+        )];
+        let catalog = ToolCatalog::new("sandbox".into(), None, tools);
+
+        let cmd = CommandInvocation {
+            name: "mcp_call".into(),
+            attributes: HashMap::from([
+                ("tool".into(), "mcp_github_search_repositories".into()),
+                ("server".into(), "github".into()),
+            ]),
+            body: None,
+            children: vec![],
+        };
+
+        let (server_id, server_name, tool_name, args) = catalog
+            .resolve_mcp_call(&cmd)
+            .expect("expected alias resolution");
+
+        assert_eq!(server_id.unwrap(), "github-id");
+        assert_eq!(server_name.unwrap(), "GitHub");
+        assert_eq!(tool_name, "search_repositories");
+        assert_eq!(args, serde_json::json!({}));
+    }
 }

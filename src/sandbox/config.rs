@@ -6,4 +6,5 @@ pub struct Config {
     pub api_url: String,
     pub api_token: String,
     pub polling_interval: Duration,
+    pub mcp_url: Option<String>,
 }

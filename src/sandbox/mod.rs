@@ -7,6 +7,7 @@ mod error;
 mod executors;
 mod guardrails;
 mod inference;
+mod mcp;
 #[path = "../shared/models/task.rs"]
 pub mod shared_task;
 mod task_handler;
@@ -76,6 +77,10 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
         api_url: api_url.to_string(),
         api_token,
         polling_interval: std::time::Duration::from_secs(2),
+        mcp_url: std::env::var("TSBX_MCP_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
     });
 
     // Initialize API client
@@ -96,6 +101,32 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
 
     // Initialize guardrails
     let guardrails = Arc::new(guardrails::Guardrails::new());
+
+    // Initialize MCP tools (optional)
+    let mut mcp_tools = Vec::new();
+    let mut mcp_client = None;
+    if let Some(mcp_url) = &config.mcp_url {
+        match mcp::McpClient::new(mcp_url.clone()) {
+            Ok(client) => {
+                let client = Arc::new(client);
+                match client.list_tools().await {
+                    Ok(tools) => {
+                        info!("Loaded {} MCP tools from {}", tools.len(), mcp_url);
+                        mcp_tools = tools;
+                    }
+                    Err(e) => warn!("Failed to load MCP tools from {}: {}", mcp_url, e),
+                }
+                mcp_client = Some(client);
+            }
+            Err(e) => warn!("Failed to initialize MCP client for {}: {}", mcp_url, e),
+        }
+    }
+
+    let toolkit = Arc::new(toolkit::ToolCatalog::new(
+        sandbox_id.to_string(),
+        mcp_client,
+        mcp_tools,
+    ));
 
     // Initialize sandbox directories
     let sandbox_dirs = ["/sandbox", "/sandbox/logs"];
@@ -211,6 +242,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
         api_client.clone(),
         inference_client.clone(),
         guardrails.clone(),
+        toolkit.clone(),
     );
 
     // Initialize processed task tracking to prevent reprocessing on restore

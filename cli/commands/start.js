@@ -8,6 +8,7 @@ const COMPONENT_ALIASES = {
   a: 'api',
   c: 'controller',
   o: 'operator',
+  m: 'mcp',
 };
 
 function resolveComponentAliases(list = []) {
@@ -175,6 +176,10 @@ module.exports = (program) => {
     .option('--controller-database-url <url>', 'Controller DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
     .option('--controller-jwt-secret <secret>', 'Controller JWT_SECRET')
     .option('--controller-rust-log <level>', 'Controller RUST_LOG', 'info')
+    // MCP options
+    .option('--mcp-database-url <url>', 'MCP DATABASE_URL', 'mysql://tsbx:tsbx@mysql:3306/tsbx')
+    .option('--mcp-port <port>', 'Host port for MCP (maps to 9400)', '9400')
+    .option('--mcp-rust-log <level>', 'MCP RUST_LOG', 'info')
     .addHelpText('after', '\n' +
       'Notes:\n' +
       '  • Starts each component if stopped, or creates it if missing.\n' +
@@ -249,11 +254,11 @@ module.exports = (program) => {
         console.log(chalk.blue('[INFO] ') + `Detached mode: ${detached}`);
 
         if (!components || components.length === 0) {
-          components = ['mysql', 'api', 'controller', 'operator', 'gateway'];
+          components = ['mysql', 'api', 'controller', 'mcp', 'operator', 'gateway'];
         }
 
         // Enforce startup order: mysql → api → controller
-        const desiredOrder = ['mysql', 'api', 'controller', 'operator', 'gateway'];
+        const desiredOrder = ['mysql', 'api', 'controller', 'mcp', 'operator', 'gateway'];
         const unique = Array.from(new Set(components));
         const ordered = [];
         for (const name of desiredOrder) {
@@ -509,6 +514,48 @@ module.exports = (program) => {
               args.push(await resolveTSBXImage('controller','tsbx_controller','registry.digitalocean.com/tsbx/tsbx_controller', tag));
               await docker(args);
               console.log(chalk.green('[SUCCESS] ') + 'Controller service container started');
+              console.log();
+              break;
+            }
+
+            case 'mcp': {
+              console.log(chalk.blue('[INFO] ') + 'Ensuring MCP registry is running...');
+
+              if (await containerExists('tsbx_mcp')) {
+                if (await containerRunning('tsbx_mcp')) {
+                  console.log(chalk.green('[SUCCESS] ') + 'MCP already running');
+                  console.log();
+                  break;
+                }
+                await docker(['start', 'tsbx_mcp']);
+                console.log(chalk.green('[SUCCESS] ') + 'MCP started');
+                console.log();
+                break;
+              }
+
+              const mcpDbUrl = options.mcpDatabaseUrl || 'mysql://tsbx:tsbx@mysql:3306/tsbx';
+              const mcpPort = String(options.mcpPort || '9400');
+              const mcpRustLog = options.mcpRustLog || 'info';
+
+              const args = ['run'];
+              if (detached) args.push('-d');
+              args.push(
+                '--name',
+                'tsbx_mcp',
+                '--network',
+                'tsbx_network',
+                '-p',
+                `${mcpPort}:9400`,
+                '-e',
+                `MCP_DATABASE_URL=${mcpDbUrl}`,
+                '-e',
+                `MCP_PORT=9400`,
+                '-e',
+                `RUST_LOG=${mcpRustLog}`,
+                await resolveTSBXImage('mcp', 'tsbx_mcp', 'registry.digitalocean.com/tsbx/tsbx_mcp', tag)
+              );
+              await docker(args);
+              console.log(chalk.green('[SUCCESS] ') + 'MCP service container started');
               console.log();
               break;
             }

@@ -1,0 +1,21 @@
+FROM debian:trixie-slim
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Create directories
+RUN mkdir -p /app/logs
+
+# Copy DB migrations (for reference) and binary
+COPY db ./db
+COPY target/release/tsbx-mcp /usr/local/bin/tsbx-mcp
+
+EXPOSE 9400
+
+CMD ["tsbx-mcp"]

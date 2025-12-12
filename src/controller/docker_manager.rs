@@ -37,7 +37,17 @@ fn render_env_file(env: &HashMap<String, String>) -> String {
     let mut lines = String::from(
         "# TSBX sandbox environment\n# Managed by TSBX controller; do not modify without explicit approval.\n",
     );
-    let mut entries: Vec<_> = env.iter().collect();
+
+    // Ensure required defaults are present
+    let mut merged = env.clone();
+    merged
+        .entry("TSBX_MCP_URL".to_string())
+        .or_insert_with(|| "http://tsbx_mcp:9400".to_string());
+    merged
+        .entry("TSBX_SANDBOX_DIR".to_string())
+        .or_insert_with(|| "/sandbox".to_string());
+
+    let mut entries: Vec<_> = merged.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
     for (key, value) in entries {
         lines.push_str(&format!("{}={}\n", key, value));
@@ -921,6 +931,8 @@ echo 'Session directories created (.env, logs)'
             format!("TSBX_API_URL=http://tsbx_api:9000"),
             format!("SANDBOX_ID={}", sandbox_id),
             format!("TSBX_SANDBOX_DIR=/sandbox"),
+            // Expose MCP registry endpoint directly to the sandbox process so the toolkit can load MCP tools
+            format!("TSBX_MCP_URL=http://tsbx_mcp:9400"),
         ];
 
         // Propagate host branding and URL to sandboxes (provided by start script)
@@ -1107,6 +1119,8 @@ echo 'Session directories created (.env, logs)'
             format!("TSBX_API_URL=http://tsbx_api:9000"),
             format!("SANDBOX_ID={}", sandbox_id),
             format!("TSBX_SANDBOX_DIR=/sandbox"),
+            // Expose MCP registry endpoint directly to the sandbox process so the toolkit can load MCP tools
+            format!("TSBX_MCP_URL=http://tsbx_mcp:9400"),
             // Set the generated system tokens directly as environment variables
             format!("TSBX_TOKEN={}", tsbx_token),
             format!("TSBX_PRINCIPAL={}", principal),

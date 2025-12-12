@@ -4,17 +4,18 @@ use super::error::{HostError, Result};
 use super::executors::{run_javascript_task, run_python_task, run_shell_task, TaskExecutorContext};
 use super::guardrails::Guardrails;
 use super::inference::{ChatMessage, InferenceClient, ModelResponse};
-use super::toolkit::{ExecutionResult, ToolCatalog};
+use super::toolkit::{ExecutionResult, IntentRouterHint, ToolCatalog};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::shared_task::{normalize_output_items, TaskType};
 
-const MAX_TOOL_OUTPUT_CHARS: usize = 1_000;
+// Allow larger tool payloads (e.g., MCP search results) to avoid truncating useful JSON.
+const MAX_TOOL_OUTPUT_CHARS: usize = 20_000;
 
 /// Extract content from channel-based model responses.
 /// Some models use format: `<|channel|>final<|message|>actual_xml_content`
@@ -35,6 +36,7 @@ pub struct TaskHandler {
     guardrails: Arc<Guardrails>,
     toolkit: Arc<ToolCatalog>,
     processed_task_ids: Arc<Mutex<HashSet<String>>>,
+    mcp_success: Arc<Mutex<HashMap<String, String>>>,
     request_created_at: DateTime<Utc>,
 }
 
@@ -60,6 +62,7 @@ impl TaskHandler {
         api_client: Arc<TSBXClient>,
         inference_client: Arc<InferenceClient>,
         guardrails: Arc<Guardrails>,
+        toolkit: Arc<ToolCatalog>,
     ) -> Self {
         let request_created_at = std::env::var("TSBX_REQUEST_CREATED_AT")
             .ok()
@@ -74,8 +77,9 @@ impl TaskHandler {
             api_client,
             inference_client,
             guardrails,
-            toolkit: Arc::new(ToolCatalog::new()),
+            toolkit,
             processed_task_ids: Arc::new(Mutex::new(HashSet::new())),
+            mcp_success: Arc::new(Mutex::new(HashMap::new())),
             request_created_at,
         }
     }
@@ -193,7 +197,7 @@ impl TaskHandler {
         self.guardrails.validate_input(&input_text)?;
 
         match task.task_type {
-            TaskType::NL => self.process_nl_task(task).await,
+            TaskType::NL => self.process_nl_task(task, &input_text).await,
             TaskType::SH => {
                 let ctx = TaskExecutorContext::new(&self.api_client);
                 run_shell_task(&ctx, task).await
@@ -209,10 +213,24 @@ impl TaskHandler {
         }
     }
 
-    async fn process_nl_task(&self, task: &TaskSummary) -> Result<()> {
+    async fn process_nl_task(&self, task: &TaskSummary, input_text: &str) -> Result<()> {
         let mut conversation = Vec::new();
         if let Some(msg) = render_task_input(task) {
             conversation.push(msg);
+        }
+
+        let router_hint = {
+            let pref = self.mcp_success.lock().await;
+            self.toolkit.intent_router_hint(input_text, Some(&*pref))
+        };
+
+        if let Some(ref hint) = router_hint {
+            conversation.push(ChatMessage {
+                role: "user".to_string(),
+                content: hint.to_prompt(),
+                name: None,
+                tool_call_id: None,
+            });
         }
 
         let mut finalize_hint_pending = false;
@@ -358,6 +376,23 @@ impl TaskHandler {
             let command_name = command.name.to_lowercase();
 
             if command_name == "output" {
+                if let Some(IntentRouterHint::Direct { tool_name, .. }) = router_hint.as_ref() {
+                    let pref = self.mcp_success.lock().await;
+                    if !pref.contains_key(tool_name) {
+                        conversation.pop();
+                        conversation.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: format!(
+                                "Do not finalize yet. Call the hinted MCP tool (tool name `{}`) with a JSON body using `query`, not `q` (e.g., <mcp_call server=\"github\" tool=\"{}\"><![CDATA[{{\"query\":\"user:harshapalnati\",\"per_page\":100}}]]></mcp_call>) and write the results. Finish only after that succeeds.",
+                                tool_name, tool_name
+                            ),
+                            name: None,
+                            tool_call_id: None,
+                        });
+                        continue;
+                    }
+                }
+
                 let final_text = command.body.unwrap_or_default();
                 if final_text.trim().is_empty() {
                     warn!("Model emitted empty <output>; requesting a concrete summary");
@@ -418,6 +453,29 @@ impl TaskHandler {
                 continue;
             }
 
+            if matches!(command_name.as_str(), "web_fetch" | "run_bash") {
+                if self.toolkit.has("mcp_call") {
+                    if let Some(IntentRouterHint::Direct {
+                        alias,
+                        server_name,
+                        tool_name,
+                    }) = router_hint.as_ref()
+                    {
+                        // Prevent non-MCP fetch when a matching MCP tool exists
+                        conversation.pop();
+                        conversation.push(ChatMessage {
+                            role: "user".to_string(),
+                            content: format!(
+                                "Use the MCP tool instead of web_fetch/run_bash. Call the hinted MCP alias `{alias}` (server `{server_name}`, tool `{tool_name}`) with a proper JSON body using `query`, not `q` (e.g., <mcp_call server=\"{server_name}\" tool=\"{tool_name}\"><![CDATA[{{\"query\":\"user:...\",\"per_page\":100}}]]></mcp_call>)."
+                            ),
+                            name: None,
+                            tool_call_id: None,
+                        });
+                        continue;
+                    }
+                }
+            }
+
             // Add tool call to steps before execution
             let tool_call_segment = json!({
                 "type": "tool_call",
@@ -438,7 +496,14 @@ impl TaskHandler {
                 .await;
 
             match self.toolkit.execute_invocation(&command).await {
-                Ok(ExecutionResult { args, output }) => {
+                Ok(ExecutionResult { args: _, output }) => {
+                    if let Some(meta) = self.toolkit.resolve_mcp_metadata(&command) {
+                        if let Some(server) = meta.server_name {
+                            let mut pref = self.mcp_success.lock().await;
+                            pref.insert(meta.tool_name, server);
+                        }
+                    }
+
                     // Check if task was cancelled during tool execution
                     if !self.is_task_active(&task.id).await? {
                         return Ok(());
@@ -687,6 +752,10 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("Approach to Work:\n");
         prompt.push_str("- Fulfill the user's request using all the tools available to you.\n");
         prompt.push_str("- Your job is to plan, run safe bash commands, verify outcomes, and report concise results.\n");
+        prompt.push_str("- Prefer MCP tools for any external data, API fetches, or CRUD. When a request matches an MCP tool (including aliases like mcp_<server>_<tool>), call it immediately instead of replying in free text.\n");
+        prompt.push_str("- When a router hint or registry match exists, call that MCP alias (or use <mcp_call server=\"...\" tool=\"<registry_tool_name>\">) before trying web_fetch/run_bash or probing unknown tool names. Only fall back if the MCP tool is missing or returns an unknown-tool error.\n");
+        prompt.push_str("- For MCP JSON bodies, wrap the payload in CDATA within the XML element; avoid malformed JSON errors.\n");
+        prompt.push_str("- When an MCP call succeeds with the needed data, use that data directly—do NOT fabricate sample JSON or switch to web_fetch/run_bash for the same data. Parse the MCP result and persist it with create_file/open_file/etc.\n");
         prompt.push_str("- Stick to the user's instructions. Do not perform extra work unless it is clearly required to complete the request.\n");
         prompt.push_str("- When encountering difficulties, take time to gather information before concluding a root cause and acting upon it.\n");
         prompt.push_str("- If a tool call (including shell commands) fails, inspect the output, determine the cause, and rerun it with corrected parameters before moving on.\n");
@@ -713,6 +782,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- Keep attribute values short (for example, `commentary` should be a brief gerund like \"Inspecting\") and avoid ellipses (`...`).\n");
         prompt.push_str("- Do not batch multiple tool invocations inside one message. If you need another action after a tool result, wait for the next turn and send a new tool call.\n");
         prompt.push_str("- Communicate final answers via a single `<output>` element once the task is complete. Do not use `<output>` for intermediate updates.\n");
+        prompt.push_str("- Router hints may appear as user messages starting with `Router hint:`. Follow them before improvising, and if multiple servers are listed ask which server to use, then call the matching MCP alias.\n");
         prompt.push_str("- Use only the tools listed below; do not invent new tool names.\n");
         prompt.push_str("- Continue issuing tool calls until the task is complete, then send the final result as described above.\n");
         prompt.push_str(

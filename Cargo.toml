@@ -53,3 +53,7 @@ path = "src/controller/main.rs"
 [[bin]]
 name = "tsbx-sandbox"
 path = "src/sandbox/main.rs"
+
+[[bin]]
+name = "tsbx-mcp"
+path = "src/mcp/main.rs"

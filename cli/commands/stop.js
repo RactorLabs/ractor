@@ -5,6 +5,7 @@ const COMPONENT_ALIASES = {
   a: 'api',
   c: 'controller',
   o: 'operator',
+  m: 'mcp',
   s: 'sandboxes',
 };
 
@@ -59,10 +60,10 @@ module.exports = (program) => {
           ? resolveComponentAliases(inputComponents)
           : [];
         if (!components || components.length === 0) {
-          components = ['gateway','controller','operator','api'];
+          components = ['gateway','controller','operator','mcp','api'];
         }
         // Validate component names (only TSBX components)
-        const allowed = new Set(['api','controller','operator','gateway','sandboxes']);
+        const allowed = new Set(['api','controller','operator','gateway','mcp','sandboxes']);
         const invalid = components.filter(c => !allowed.has(c));
         if (invalid.length) {
           console.log(chalk.red('[ERROR] ') + `Invalid component(s): ${invalid.join(', ')}. Allowed: api, controller, operator, gateway, sandboxes`);
@@ -74,9 +75,9 @@ module.exports = (program) => {
 
         console.log();
 
-        const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', gateway: 'tsbx_gateway' };
+        const map = { api: 'tsbx_api', controller: 'tsbx_controller', operator: 'tsbx_operator', gateway: 'tsbx_gateway', mcp: 'tsbx_mcp' };
         const includeSandboxes = components.includes('sandboxes');
-        const order = ['gateway','controller','operator','api'];
+        const order = ['gateway','controller','operator','mcp','api'];
         const toStop = components.filter(c => c !== 'sandboxes');
         const ordered = order.filter((c) => toStop.includes(c));
 

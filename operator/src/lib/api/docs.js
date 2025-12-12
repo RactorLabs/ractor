@@ -26,6 +26,98 @@ export function getApiDocs(base) {
       ]
     },
     {
+      id: 'mcp',
+      title: 'MCP Registry',
+      description: 'Manage MCP servers/tools and invoke MCP calls.',
+      endpoints: [
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/servers',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'List registered MCP servers.',
+          params: [],
+          example: `curl -s ${BASE}/api/v0/mcp/servers -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpServer', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","name":"github","base_url":"https://api.githubcopilot.com/mcp","auth_type":"bearer","status":"synced","last_seen_at":"2025-01-01T00:00:00Z","created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}]` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/mcp/servers',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Upsert an MCP server (optionally sync tools immediately).',
+          params: [
+            { in: 'body', name: 'name', type: 'string', required: true, desc: 'Registry name (unique)' },
+            { in: 'body', name: 'base_url', type: 'string', required: true, desc: 'Server MCP base (e.g., https://host/api/v0/mcp)' },
+            { in: 'body', name: 'auth_type', type: 'string|null', required: false, desc: "Optional auth type (e.g., 'bearer')" },
+            { in: 'body', name: 'auth_payload', type: 'object|null', required: false, desc: 'Auth payload (e.g., {"bearer_token":"<token>"} )' },
+            { in: 'body', name: 'sync', type: 'boolean', required: false, desc: 'If true, fetch tools immediately' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/mcp/servers \\
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \\
+  -d '{"name":"github","base_url":"https://api.githubcopilot.com/mcp","auth_type":"bearer","auth_payload":{"bearer_token":"<token>"},"sync":true}'`,
+          resp: { schema: 'McpServer' },
+          responses: [
+            { status: 201, body: `{"id":"<uuid>","name":"github","base_url":"https://api.githubcopilot.com/mcp","auth_type":"bearer","status":"synced","last_seen_at":null,"created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z"}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/mcp/servers/{id}/sync',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Refresh tools for a server.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Server UUID' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/mcp/servers/<id>/sync -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpTool', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"github","name":"search_repositories","description":"Find GitHub repositories..."}]` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/tools',
+          auth: 'bearer',
+          desc: 'List MCP tools (filter by server or server_id).',
+          params: [
+            { in: 'query', name: 'server', type: 'string', required: false, desc: 'Server name' },
+            { in: 'query', name: 'server_id', type: 'string', required: false, desc: 'Server UUID' }
+          ],
+          example: `curl -s "${BASE}/api/v0/mcp/tools?server=github" -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpTool', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"github","name":"search_repositories","description":"Find GitHub repositories..."}]` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/mcp/invoke',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Invoke a registered MCP tool via the registry.',
+          params: [
+            { in: 'body', name: 'server', type: 'string', required: false, desc: 'Server name (or use server_id)' },
+            { in: 'body', name: 'server_id', type: 'string', required: false, desc: 'Server UUID' },
+            { in: 'body', name: 'tool', type: 'string', required: true, desc: 'Tool name' },
+            { in: 'body', name: 'arguments', type: 'object', required: false, desc: 'Tool arguments' },
+            { in: 'body', name: 'sandbox_id', type: 'string', required: false, desc: 'Optional sandbox UUID for auditing' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/mcp/invoke \\
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \\
+  -d '{"server":"github","tool":"search_repositories","arguments":{"query":"user:octocat","per_page":5}}'`,
+          resp: { schema: 'Invocation' },
+          responses: [
+            { status: 200, body: `{"id":"<uuid>","status":"ok","result":{"content":[{"text":"..."}]}}` }
+          ]
+        }
+      ]
+    },
+    {
       id: 'auth',
       title: 'Authentication',
       description: 'Token validation and blocklist management.',
