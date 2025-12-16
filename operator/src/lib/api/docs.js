@@ -83,15 +83,81 @@ export function getApiDocs(base) {
           method: 'GET',
           path: '/api/v0/mcp/tools',
           auth: 'bearer',
-          desc: 'List MCP tools (filter by server or server_id).',
+          desc: 'List cached MCP tools (filter by server/server_id, search text, or include stored examples).',
           params: [
             { in: 'query', name: 'server', type: 'string', required: false, desc: 'Server name' },
-            { in: 'query', name: 'server_id', type: 'string', required: false, desc: 'Server UUID' }
+            { in: 'query', name: 'server_id', type: 'string', required: false, desc: 'Server UUID' },
+            { in: 'query', name: 'q', type: 'string', required: false, desc: 'Case-insensitive search against tool name/description.' },
+            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max rows (default 50, max 200).' },
+            { in: 'query', name: 'include_examples', type: 'boolean', required: false, desc: 'If true, join saved tool examples.' }
           ],
-          example: `curl -s "${BASE}/api/v0/mcp/tools?server=github" -H "Authorization: Bearer <token>"`,
+          example: `curl -s "${BASE}/api/v0/mcp/tools?server=github&q=issue&include_examples=true" -H "Authorization: Bearer <token>"`,
           resp: { schema: 'McpTool', array: true },
           responses: [
-            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"github","name":"search_repositories","description":"Find GitHub repositories..."}]` }
+            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"github","name":"search_repositories","description":"Find GitHub repositories...","input_schema":{"type":"object","properties":{"query":{"type":"string"}}},"output_schema":null,"metadata":{"alias":"gh_search"},"version":"1.0.0","created_at":"2025-01-01T00:00:00Z","examples":[{"id":"<uuid>","tool_id":"<uuid>","title":"Search org repos","body":{"arguments":{"query":"org:octocat"}},"created_at":"2025-01-01T00:00:00Z"}]}]` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/tools/search',
+          auth: 'bearer',
+          desc: 'Search cached MCP tools (alias of GET /mcp/tools with q filter).',
+          params: [
+            { in: 'query', name: 'q', type: 'string', required: false, desc: 'Case-insensitive search against tool name/description.' },
+            { in: 'query', name: 'server', type: 'string', required: false, desc: 'Server name filter.' },
+            { in: 'query', name: 'server_id', type: 'string', required: false, desc: 'Server UUID filter.' },
+            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max rows (default 50, max 200).' }
+          ],
+          example: `curl -s "${BASE}/api/v0/mcp/tools/search?q=calendar&limit=10" -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpTool', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"internal","name":"calendar_list_events","description":"List events for a calendar","input_schema":{"type":"object"},"output_schema":null,"metadata":null,"version":null,"created_at":"2025-01-01T00:00:00Z"}]` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/tools/live_search',
+          auth: 'bearer',
+          desc: 'Fetch tool metadata live from each configured server (does not persist results).',
+          params: [
+            { in: 'query', name: 'q', type: 'string', required: false, desc: 'Case-insensitive search against tool name/description.' },
+            { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max rows (default 50, max 200).' }
+          ],
+          example: `curl -s "${BASE}/api/v0/mcp/tools/live_search?q=hubspot&limit=5" -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpTool', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","server_id":"<uuid>","server_name":"hubspot","name":"search_deals","description":"Search deals with filters","input_schema":{"type":"object","properties":{"query":{"type":"string"}}},"output_schema":null,"metadata":null,"version":"1.0.0","created_at":"2025-01-01T12:00:00Z"}]` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/tools/{id}/examples',
+          auth: 'bearer',
+          desc: 'List stored examples/snippets for a tool.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Tool UUID' }
+          ],
+          example: `curl -s ${BASE}/api/v0/mcp/tools/<id>/examples -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'McpToolExample', array: true },
+          responses: [
+            { status: 200, body: `[{"id":"<uuid>","tool_id":"<id>","title":"Search deals","body":{"arguments":{"query":"stage:open"}},"created_at":"2025-01-01T00:00:00Z"}]` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/mcp/tools/{id}/examples',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Create an MCP tool example (stored JSON payload for reuse).',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Tool UUID' },
+            { in: 'body', name: 'title', type: 'string|null', required: false, desc: 'Optional display title.' },
+            { in: 'body', name: 'body', type: 'object', required: true, desc: 'Arbitrary JSON body (commonly { arguments: {...} }).' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/mcp/tools/<id>/examples -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"title":"List issues","body":{"arguments":{"query":"repo:octocat/Hello-World"}}}'`,
+          resp: { schema: 'McpToolExample' },
+          responses: [
+            { status: 201, body: `{"id":"<uuid>","tool_id":"<id>","title":"List issues","body":{"arguments":{"query":"repo:octocat/Hello-World"}},"created_at":"2025-01-01T00:00:00Z"}` }
           ]
         },
         {
@@ -99,7 +165,7 @@ export function getApiDocs(base) {
           path: '/api/v0/mcp/invoke',
           auth: 'bearer',
           adminOnly: true,
-          desc: 'Invoke a registered MCP tool via the registry.',
+          desc: 'Invoke a registered MCP tool via the registry (invocation id is persisted and retrievable via GET /mcp/invocations/{id}).',
           params: [
             { in: 'body', name: 'server', type: 'string', required: false, desc: 'Server name (or use server_id)' },
             { in: 'body', name: 'server_id', type: 'string', required: false, desc: 'Server UUID' },
@@ -112,7 +178,44 @@ export function getApiDocs(base) {
   -d '{"server":"github","tool":"search_repositories","arguments":{"query":"user:octocat","per_page":5}}'`,
           resp: { schema: 'Invocation' },
           responses: [
-            { status: 200, body: `{"id":"<uuid>","status":"ok","result":{"content":[{"text":"..."}]}}` }
+            { status: 200, body: `{"id":"<uuid>","status":"completed","result":{"content":[{"text":"..."}]},"error":null}` }
+          ]
+        },
+        {
+          method: 'POST',
+          path: '/api/v0/mcp/invoke/batch',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Invoke multiple tools on a single server in one request (persists each invocation).',
+          params: [
+            { in: 'body', name: 'server', type: 'string', required: false, desc: 'Server name (or use server_id).' },
+            { in: 'body', name: 'server_id', type: 'string', required: false, desc: 'Server UUID (preferred).' },
+            { in: 'body', name: 'calls', type: 'array', required: true, desc: 'List of { tool, arguments? } calls.' },
+            { in: 'body', name: 'sandbox_id', type: 'string', required: false, desc: 'Optional sandbox UUID for auditing.' },
+            { in: 'body', name: 'write_trace', type: 'boolean', required: false, desc: 'If true, write a trace JSON under target/mcp_traces/.' }
+          ],
+          example: `curl -s -X POST ${BASE}/api/v0/mcp/invoke/batch \\
+  -H "Authorization: Bearer <token>" -H "Content-Type: application/json" \\
+  -d '{"server":"github","calls":[{"tool":"search_repositories","arguments":{"query":"org:octocat"}},{"tool":"get_repository","arguments":{"owner":"octocat","repo":"Hello-World"}}],"write_trace":true}'`,
+          resp: { schema: 'BatchInvocation' },
+          responses: [
+            { status: 200, body: `{"batch_id":"<uuid>","server_id":"<uuid>","results":[{"invocation_id":"<uuid>","tool":"search_repositories","status":"completed","result":{"content":[{"text":"..."}]},"error":null},{"invocation_id":"<uuid>","tool":"get_repository","status":"failed","result":null,"error":"invoke failed: status 404"}]}` }
+          ]
+        },
+        {
+          method: 'GET',
+          path: '/api/v0/mcp/invocations/{id}',
+          auth: 'bearer',
+          adminOnly: true,
+          desc: 'Fetch a persisted invocation result.',
+          params: [
+            { in: 'path', name: 'id', type: 'string', required: true, desc: 'Invocation UUID' }
+          ],
+          example: `curl -s ${BASE}/api/v0/mcp/invocations/<id> -H "Authorization: Bearer <token>"`,
+          resp: { schema: 'Invocation' },
+          responses: [
+            { status: 200, body: `{"id":"<uuid>","status":"completed","result":{"content":[{"text":"ok"}]},"error":null}` },
+            { status: 404, body: `{"message":"invocation not found"}` }
           ]
         }
       ]
@@ -583,7 +686,7 @@ export function getApiDocs(base) {
           method: 'GET',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'List tasks for a sandbox in chronological order. Inputs include `file_reference` items when a request mentions files with `@path/to/file`.',
+          desc: 'List tasks for a sandbox in chronological order. Inputs include `file_reference` items for @mentions and `programmatic` payloads for MCP batches.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'query', name: 'limit', type: 'int', required: false, desc: 'Max records (default 100, max 1000).' },
@@ -592,25 +695,26 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks?limit=20 -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject', array: true },
           responses: [
-            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the attached notes "},{"type":"file_reference","path":"docs/notes.md","display":"@docs/notes.md"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":[{"type":"md","content":"hello"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
+            { status: 200, body: `[{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the attached notes "},{"type":"file_reference","path":"docs/notes.md","display":"@docs/notes.md"}],"steps":[{"type":"final","channel":"final","text":"hello"}],"output":{"items":[{"type":"md","content":"hello"}]},"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}]` }
           ]
         },
         {
           method: 'POST',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'Create a task (enqueue user input). Calls block until completion by default; set background=true to return immediately. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files you uploaded via the Files API.',
+          desc: 'Create a task (enqueue user input). Calls block until completion by default; set background=true to return immediately. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files. Use `task_type="PROGRAMMATIC"` with `input.programmatic` to execute MCP calls without inference.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
-            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] }. Use @relative/path in the text to automatically attach file_reference items or send { type: 'file_reference', path: 'docs/plan.md' } yourself." },
-            { in: 'body', name: 'task_type', type: "'NL'|'SH'|'PY'|'JS'", required: false, desc: "Task type: 'NL' (natural language/inference, default), 'SH' (shell), 'PY' (Python), 'JS' (JavaScript)." },
+            { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] } or { programmatic: { server?, server_id?, calls: [{ tool, arguments?, server?, server_id? }] } }." },
+            { in: 'body', name: 'task_type', type: "'NL'|'SH'|'PY'|'JS'|'PROGRAMMATIC'", required: false, desc: "Task type: 'NL' (natural language/inference, default), 'SH' (shell), 'PY' (Python), 'JS' (JavaScript), 'PROGRAMMATIC' (direct MCP batch)." },
+            { in: 'body', name: 'input.programmatic', type: 'object', required: false, desc: "Programmatic MCP payload used when task_type is 'PROGRAMMATIC' (top-level server/server_id are defaults; each call may override)." },
             { in: 'body', name: 'background', type: 'boolean', required: false, desc: 'Defaults to false (blocking). Set true to enqueue asynchronously.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Per-task timeout seconds (defaults to 300, 0 to disable).' }
           ],
-          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"content":[{"type":"text","content":"hello"}]},"task_type":"NL"}'`,
+          example: `curl -s -X POST ${BASE}/api/v0/sandboxes/<id>/tasks -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"input":{"programmatic":{"server":"hubspot","calls":[{"tool":"search_deals","arguments":{"query":"stage:open"}}]}},"task_type":"PROGRAMMATIC","background":true}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"Review the uploaded log "},{"type":"file_reference","path":"logs/build.log","display":"@logs/build.log"}],"steps":[{"type":"final","channel":"final","text":"hi there"}],"output":[{"type":"md","content":"hi there"}],"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"PROGRAMMATIC","input":[{"type":"programmatic","programmatic":{"server":"hubspot","calls":[{"tool":"search_deals","arguments":{"query":"stage:open"}}]}}],"steps":[{"type":"step","executor":"programmatic","status":"completed","content":"tool search_deals completed"},{"type":"final","executor":"programmatic","status":"completed","content":"programmatic MCP batch completed"}],"output":{"items":[{"type":"mcp_result","tool":"search_deals","content":{"content":[{"text":"..."}]}}]},"context_length":2048,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:00:10Z"}` },
             { status: 504, body: `{"message":"Timed out waiting for task to complete"}` }
           ]
         },
@@ -626,7 +730,7 @@ export function getApiDocs(base) {
           example: `curl -s ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>"`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","task_type":"NL","input":[{"type":"text","content":"hi"}],"steps":[],"output":[],"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"processing","task_type":"NL","input":[{"type":"text","content":"hi"}],"steps":[],"output":{"items":[]},"context_length":1024,"timeout_seconds":600,"timeout_at":"2025-01-01T12:10:00Z","created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {
@@ -639,14 +743,14 @@ export function getApiDocs(base) {
             { in: 'path', name: 'task_id', type: 'string', required: true, desc: 'Task ID (UUID)' },
             { in: 'body', name: 'status', type: "'queued'|'processing'|'completed'|'failed'|'cancelled'", required: false, desc: 'Status update.' },
             { in: 'body', name: 'input', type: 'object', required: false, desc: 'Optional input update (replaces existing input JSON).' },
-            { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges text/items into existing output.' },
+            { in: 'body', name: 'output', type: 'object', required: false, desc: 'Output update; merges TaskOutput { commentary?, items? } into existing output.' },
             { in: 'body', name: 'timeout_seconds', type: 'int|null', required: false, desc: 'Reset per-task timeout (<=0 clears).' },
             { in: 'body', name: 'context_length', type: 'int|null', required: false, desc: 'Update latest context length (tokens).' }
           ],
-          example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"text":"done"}}'`,
+          example: `curl -s -X PUT ${BASE}/api/v0/sandboxes/<id>/tasks/<task_id> -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"status":"completed","output":{"items":[{"type":"md","content":"done"}]}}'`,
           resp: { schema: 'TaskObject' },
           responses: [
-            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"done"}],"output":[{"type":"md","content":"done"}],"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
+            { status: 200, body: `{"id":"task_123","sandbox_id":"<id>","status":"completed","task_type":"NL","input":[{"type":"text","content":"hello"}],"steps":[{"type":"final","channel":"final","text":"done"}],"output":{"items":[{"type":"md","content":"done"}]},"context_length":3072,"timeout_seconds":null,"timeout_at":null,"created_at":"2025-01-01T12:00:00Z","updated_at":"2025-01-01T12:05:00Z"}` }
           ]
         },
         {

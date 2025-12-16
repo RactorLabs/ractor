@@ -156,7 +156,8 @@ export let data;
     { value: 'NL', label: 'Natural Language', short: 'NL', description: 'Use inference to complete multi-step instructions.' },
     { value: 'SH', label: 'Shell', short: 'SH', description: 'Run the prompt as a /bin/sh command.' },
     { value: 'PY', label: 'Python', short: 'PY', description: 'Execute the prompt with python3 -c.' },
-    { value: 'JS', label: 'JavaScript', short: 'JS', description: 'Execute the prompt via node -e.' }
+    { value: 'JS', label: 'JavaScript', short: 'JS', description: 'Execute the prompt via node -e.' },
+    { value: 'PROGRAMMATIC', label: 'Programmatic', short: 'PG', description: 'Send structured MCP calls without inference.' }
   ];
   const fallbackNonNlTaskType =
     taskTypeOptions.find((opt) => opt.value !== 'NL')?.value || 'NL';
@@ -197,6 +198,9 @@ export let data;
     const found = taskTypeOptions.find((opt) => opt.value === upper);
     return found?.description || '';
   }
+  $: taskPlaceholder = taskType === 'PROGRAMMATIC'
+    ? 'Paste JSON payload: {"server":"<name>","calls":[{"tool":"search_deals","arguments":{}}]}'
+    : 'Post a task to the sandbox…';
   let pollHandle = null;
   let runtimeSeconds = 0;
   let idleDurationLabel = '';
@@ -1349,6 +1353,7 @@ export let data;
       if (!items.length) return '';
       const mentions = [];
       let textPreview = '';
+      let programmaticPreview = '';
       for (const item of items) {
         const typ = String(item?.type || '').toLowerCase();
         if (typ === 'text') {
@@ -1359,6 +1364,15 @@ export let data;
               textPreview = textPreview ? `${textPreview} ${fragment}` : fragment;
             }
           }
+        } else if (typ === 'programmatic') {
+          try {
+            const calls = Array.isArray(item?.programmatic?.calls) ? item.programmatic.calls.length : 0;
+            const server = item?.programmatic?.server || item?.programmatic?.server_id || '';
+            const label = calls ? `${calls} call${calls === 1 ? '' : 's'}` : 'programmatic';
+            programmaticPreview = server ? `${label} via ${server}` : label;
+          } catch (_) {
+            programmaticPreview = 'programmatic payload';
+          }
         } else if (typ === 'file_reference') {
           const label = fileReferenceLabel(item);
           if (label) mentions.push(label);
@@ -1367,6 +1381,9 @@ export let data;
       const sections = [];
       if (textPreview) {
         sections.push(textPreview.length > 120 ? `${textPreview.slice(0, 117)}…` : textPreview);
+      }
+      if (programmaticPreview) {
+        sections.push(programmaticPreview);
       }
       if (mentions.length) {
         sections.push(mentions.join(' '));
@@ -1555,14 +1572,35 @@ export let data;
     e?.preventDefault?.();
     const content = (input || '').trim();
     if (!content) return;
+
+    let payloadInput = null;
+    if (taskType === 'PROGRAMMATIC') {
+      try {
+        payloadInput = JSON.parse(content);
+        if (typeof payloadInput !== 'object' || payloadInput === null) {
+          throw new Error('Programmatic payload must be an object.');
+        }
+      } catch (err) {
+        error = err?.message || 'Invalid JSON payload for programmatic task.';
+        return;
+      }
+    }
     sending = true;
     try {
+      const body =
+        taskType === 'PROGRAMMATIC'
+          ? {
+              input: { programmatic: payloadInput },
+              task_type: taskType
+            }
+          : {
+              input: { content: [{ type: 'text', content }] },
+              task_type: taskType
+            };
+
       const res = await apiFetch(`/sandboxes/${encodeURIComponent(sandboxId)}/tasks`, {
         method: 'POST',
-        body: JSON.stringify({
-          input: { content: [{ type: 'text', content }] },
-          task_type: taskType
-        })
+        body: JSON.stringify(body)
       });
       if (!res.ok) {
         if (res.status === 409) {
@@ -2219,7 +2257,7 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                   aria-label="Task instructions"
                   class="form-control shadow-none task-input"
                   disabled={taskInputDisabled}
-                  placeholder="Post a task to the sandbox…"
+                  placeholder={taskPlaceholder}
                   rows="3"
                   style="resize: none;"
                   bind:this={inputEl}
@@ -2241,7 +2279,11 @@ onDestroy(() => { fmRevokePreviewUrl(); });
                 </button>
               </div>
               <div class="form-text small text-body-secondary mt-2">
-                Tip: type <code>@path/to/file</code> or use the @ buttons in the Files panel to reference uploaded files (max {MAX_UPLOAD_MB}MB per upload).
+                {#if taskType === 'PROGRAMMATIC'}
+                  Programmatic tasks expect valid JSON and will send MCP calls directly; include <code>server</code>/<code>server_id</code> plus a <code>calls</code> array.
+                {:else}
+                  Tip: type <code>@path/to/file</code> or use the @ buttons in the Files panel to reference uploaded files (max {MAX_UPLOAD_MB}MB per upload).
+                {/if}
               </div>
             </form>
           </div>
@@ -2631,6 +2673,12 @@ onDestroy(() => { fmRevokePreviewUrl(); });
     color: white;
     background: rgb(218, 165, 32);
   }
+  /* PROGRAMMATIC - MCP batch (Teal) */
+  :global(.task-type-chip.task-type-programmatic) {
+    border-color: rgb(32, 178, 170);
+    color: white;
+    background: rgb(32, 178, 170);
+  }
 
   :global(.task-pane .task-list .list-group-item.active .task-type-chip) {
     border-color: rgba(var(--bs-theme-rgb), 0.5);
@@ -2691,6 +2739,17 @@ onDestroy(() => { fmRevokePreviewUrl(); });
   :global(.task-type-btn.task-type-js.selected) {
     border-color: rgb(218, 165, 32);
     background: rgb(218, 165, 32);
+    color: white;
+  }
+  /* PROGRAMMATIC button inactive */
+  :global(.task-type-btn.task-type-programmatic) {
+    border-color: rgb(32, 178, 170);
+    color: rgb(32, 178, 170);
+  }
+  /* PROGRAMMATIC button selected */
+  :global(.task-type-btn.task-type-programmatic.selected) {
+    border-color: rgb(32, 178, 170);
+    background: rgb(32, 178, 170);
     color: white;
   }
 
