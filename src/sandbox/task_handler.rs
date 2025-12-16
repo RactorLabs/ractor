@@ -6,8 +6,8 @@ use super::guardrails::Guardrails;
 use super::inference::{ChatMessage, InferenceClient, ModelResponse};
 use super::mcp::McpToolDescriptor;
 use super::tool_planner::{
-    filter_tools_for_planner, format_planner_hint, plan_tool_call, validate_suggestion,
-    PlannerSuggestion,
+    filter_tools_for_planner, format_planner_hint, format_structured_hint, plan_tool_call,
+    plan_tool_call_structured, validate_plan, validate_suggestion, PlannerPlan, PlannerSuggestion,
 };
 use super::toolkit::{ExecutionResult, IntentRouterHint, ToolCatalog};
 use chrono::{DateTime, Utc};
@@ -308,6 +308,55 @@ impl TaskHandler {
         }
     }
 
+    async fn planner_plan(
+        &self,
+        task_text: &str,
+        forced_server: Option<&str>,
+        tools: &[McpToolDescriptor],
+        previous_error: Option<&str>,
+        exclude: Option<(&str, &str)>,
+    ) -> Option<PlannerPlan> {
+        let successes = self.mcp_success.lock().await.clone();
+        let successes_ref = if successes.is_empty() {
+            None
+        } else {
+            Some(successes)
+        };
+
+        let filtered = filter_tools_for_planner(
+            task_text,
+            tools,
+            forced_server,
+            exclude.clone(),
+            successes_ref
+                .as_ref()
+                .map(|m| m as &HashMap<String, String>),
+        );
+        if filtered.is_empty() {
+            return None;
+        }
+
+        match plan_tool_call_structured(
+            &self.inference_client,
+            task_text,
+            &filtered,
+            forced_server,
+            successes_ref
+                .as_ref()
+                .map(|m| m as &HashMap<String, String>),
+            previous_error,
+        )
+        .await
+        {
+            Ok(Some(plan)) => validate_plan(plan, &filtered, forced_server),
+            Ok(None) => None,
+            Err(err) => {
+                warn!("Structured planner call failed: {}", err);
+                None
+            }
+        }
+    }
+
     fn inject_planner_hint(
         conversation: &mut Vec<ChatMessage>,
         suggestion: PlannerSuggestion,
@@ -398,7 +447,41 @@ impl TaskHandler {
         }
 
         if let Some(tools) = planner_candidates.as_ref() {
-            if let Some(suggestion) = self
+            let structured_plan = self
+                .planner_plan(input_text, forced_server.as_deref(), tools, None, None)
+                .await;
+
+            if let Some(plan) = structured_plan {
+                if plan.missing.unwrap_or(false) {
+                    conversation.push(ChatMessage {
+                        role: "user".to_string(),
+                        content: "Planner could not find an MCP tool to satisfy this task. Respond with <output> explaining that no available MCP tool fits the request; do not call tools."
+                            .to_string(),
+                        name: None,
+                        tool_call_id: None,
+                    });
+                } else if let Some(hint) = format_structured_hint(
+                    &plan,
+                    tools.iter().find(|d| {
+                        plan.server
+                            .as_ref()
+                            .map(|s| d.server.eq_ignore_ascii_case(s))
+                            .unwrap_or(false)
+                            && plan
+                                .tool
+                                .as_ref()
+                                .map(|t| d.tool.eq_ignore_ascii_case(t))
+                                .unwrap_or(false)
+                    }),
+                ) {
+                    conversation.push(ChatMessage {
+                        role: "user".to_string(),
+                        content: hint,
+                        name: None,
+                        tool_call_id: None,
+                    });
+                }
+            } else if let Some(suggestion) = self
                 .planner_suggestion(input_text, forced_server.as_deref(), tools, None, None)
                 .await
             {
@@ -975,7 +1058,50 @@ impl TaskHandler {
                                         .as_ref()
                                         .map(|server| (server.as_str(), meta.tool_name.as_str()))
                                 });
-                                if let Some(suggestion) = self
+                                if let Some(plan) = self
+                                    .planner_plan(
+                                        input_text,
+                                        forced_server.as_deref(),
+                                        tools,
+                                        Some(&error_display),
+                                        exclude,
+                                    )
+                                    .await
+                                {
+                                    if plan.missing.unwrap_or(false) {
+                                        conversation.push(ChatMessage {
+                                            role: "user".to_string(),
+                                            content: "Planner could not find a fallback MCP tool after the failure. Respond with <output> explaining no available MCP tool fits; do not call more tools."
+                                                .to_string(),
+                                            name: None,
+                                            tool_call_id: None,
+                                        });
+                                        planner_rehint_count =
+                                            planner_rehint_count.saturating_add(1);
+                                    } else if let Some(hint) = format_structured_hint(
+                                        &plan,
+                                        tools.iter().find(|d| {
+                                            plan.server
+                                                .as_ref()
+                                                .map(|s| d.server.eq_ignore_ascii_case(s))
+                                                .unwrap_or(false)
+                                                && plan
+                                                    .tool
+                                                    .as_ref()
+                                                    .map(|t| d.tool.eq_ignore_ascii_case(t))
+                                                    .unwrap_or(false)
+                                        }),
+                                    ) {
+                                        conversation.push(ChatMessage {
+                                            role: "user".to_string(),
+                                            content: hint,
+                                            name: None,
+                                            tool_call_id: None,
+                                        });
+                                        planner_rehint_count =
+                                            planner_rehint_count.saturating_add(1);
+                                    }
+                                } else if let Some(suggestion) = self
                                     .planner_suggestion(
                                         input_text,
                                         forced_server.as_deref(),

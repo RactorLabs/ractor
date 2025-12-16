@@ -9,6 +9,7 @@ use super::inference::{ChatMessage, InferenceClient};
 use super::mcp::McpToolDescriptor;
 
 const PLANNER_SYSTEM_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null}. Prefer tools whose required params can be filled from the task text and avoid inventing fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. If no tool clearly fits, return {\"server\":null,\"tool\":null,\"args\":null}. Never include natural language, markdown, or additional keys.";
+const PLANNER_STRUCTURED_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null,\"rationale\":string|null,\"pagination\":boolean|null,\"missing\":boolean|null}. Prefer tools whose required params can be filled from the task text; do not invent fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. If no tool clearly fits, set missing=true and leave server/tool null. Set pagination=true only when the task requires iterating pages to get the full result set. Never include natural language, markdown, or additional keys.";
 const MAX_PLANNER_TOOLS: usize = 50;
 const PLANNER_PAYLOAD_BUDGET_BYTES: usize = 60_000;
 const PLANNER_PAYLOAD_MIN_BUDGET_BYTES: usize = 40_000;
@@ -18,6 +19,16 @@ pub struct PlannerSuggestion {
     pub server: Option<String>,
     pub tool: Option<String>,
     pub args: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PlannerPlan {
+    pub server: Option<String>,
+    pub tool: Option<String>,
+    pub args: Option<Value>,
+    pub rationale: Option<String>,
+    pub pagination: Option<bool>,
+    pub missing: Option<bool>,
 }
 
 pub fn filter_tools_for_planner(
@@ -129,6 +140,69 @@ pub async fn plan_tool_call(
         return Ok(None);
     }
 
+    let raw = run_planner_request(
+        inference_client,
+        task,
+        tools,
+        forced_server,
+        recent_successes,
+        previous_error,
+        PLANNER_SYSTEM_PROMPT,
+    )
+    .await?;
+
+    let suggestion = parse_suggestion(&raw);
+    if suggestion.is_none() {
+        warn!(
+            "Planner returned no usable MCP suggestion; raw={}",
+            truncate_raw(&raw)
+        );
+    }
+    Ok(suggestion.and_then(|s| enforce_forced_server(s, forced_server)))
+}
+
+pub async fn plan_tool_call_structured(
+    inference_client: &InferenceClient,
+    task: &str,
+    tools: &[McpToolDescriptor],
+    forced_server: Option<&str>,
+    recent_successes: Option<&HashMap<String, String>>,
+    previous_error: Option<&str>,
+) -> Result<Option<PlannerPlan>> {
+    if tools.is_empty() {
+        return Ok(None);
+    }
+
+    let raw = run_planner_request(
+        inference_client,
+        task,
+        tools,
+        forced_server,
+        recent_successes,
+        previous_error,
+        PLANNER_STRUCTURED_PROMPT,
+    )
+    .await?;
+
+    let plan = parse_plan(&raw);
+    if plan.is_none() {
+        warn!(
+            "Structured planner returned no usable MCP plan; raw={}",
+            truncate_raw(&raw)
+        );
+    }
+    Ok(plan.and_then(|p| enforce_forced_server_plan(p, forced_server)))
+}
+
+async fn run_planner_request(
+    inference_client: &InferenceClient,
+    task: &str,
+    tools: &[McpToolDescriptor],
+    forced_server: Option<&str>,
+    recent_successes: Option<&HashMap<String, String>>,
+    previous_error: Option<&str>,
+    system_prompt: &str,
+) -> Result<String> {
     let (mut compact, trimmed_schemas) = compact_descriptors(tools);
     info!(
         "Planner candidates: {} (schemas trimmed: {})",
@@ -227,19 +301,11 @@ pub async fn plan_tool_call(
                 name: None,
                 tool_call_id: None,
             }],
-            Some(PLANNER_SYSTEM_PROMPT.to_string()),
+            Some(system_prompt.to_string()),
         )
         .await?;
 
-    let raw = response.content.unwrap_or_default();
-    let suggestion = parse_suggestion(&raw);
-    if suggestion.is_none() {
-        warn!(
-            "Planner returned no usable MCP suggestion; raw={}",
-            truncate_raw(&raw)
-        );
-    }
-    Ok(suggestion.and_then(|s| enforce_forced_server(s, forced_server)))
+    Ok(response.content.unwrap_or_default())
 }
 
 pub fn format_planner_hint(suggestion: &PlannerSuggestion) -> Option<String> {
@@ -252,6 +318,61 @@ pub fn format_planner_hint(suggestion: &PlannerSuggestion) -> Option<String> {
         "Suggested MCP tool: server={}, tool={}, args={}. Call it as <mcp_call server=\"{}\" tool=\"{}\"><![CDATA[{}]]></mcp_call>.",
         server, tool, args_str, server, tool, args_str
     ))
+}
+
+pub fn format_structured_hint(
+    plan: &PlannerPlan,
+    descriptor: Option<&McpToolDescriptor>,
+) -> Option<String> {
+    let server = plan.server.as_deref()?;
+    let tool = plan.tool.as_deref()?;
+    let args_value = plan.args.clone().unwrap_or_else(|| json!({}));
+    let args_str = serde_json::to_string(&args_value).unwrap_or_else(|_| "{}".to_string());
+
+    let mut parts = Vec::new();
+    parts.push(format!(
+        "Suggested MCP tool: server={}, tool={}, args={}. Call it as <mcp_call server=\"{}\" tool=\"{}\"><![CDATA[{}]]></mcp_call>.",
+        server, tool, args_str, server, tool, args_str
+    ));
+
+    if let Some(required) = descriptor.and_then(required_params) {
+        if !required.is_empty() {
+            parts.push(format!(
+                "Required params for {}: {}",
+                tool,
+                required.join(", ")
+            ));
+        }
+    }
+
+    if let Some(true) = plan.pagination {
+        parts.push(
+            "Pagination recommended: iterate pages until no results remain before finalizing."
+                .to_string(),
+        );
+    }
+
+    if let Some(rationale) = plan.rationale.as_ref() {
+        if !rationale.trim().is_empty() {
+            parts.push(format!("Rationale: {}", rationale.trim()));
+        }
+    }
+
+    Some(parts.join(" "))
+}
+
+fn required_params(descriptor: &McpToolDescriptor) -> Option<Vec<String>> {
+    descriptor
+        .input_schema
+        .as_ref()
+        .and_then(|schema| schema.get("required"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .filter(|v| !v.is_empty())
 }
 
 pub fn validate_suggestion(
@@ -297,6 +418,53 @@ pub fn validate_suggestion(
     Some(suggestion)
 }
 
+pub fn validate_plan(
+    plan: PlannerPlan,
+    tools: &[McpToolDescriptor],
+    forced_server: Option<&str>,
+) -> Option<PlannerPlan> {
+    if plan.missing.unwrap_or(false) {
+        return Some(plan);
+    }
+
+    let server = plan.server.as_deref()?;
+    let tool = plan.tool.as_deref()?;
+
+    if let Some(fs) = forced_server {
+        if !server.eq_ignore_ascii_case(fs) {
+            warn!(
+                "Planner plan ignored: server {} does not match forced server {}",
+                server, fs
+            );
+            return None;
+        }
+    }
+
+    let descriptor = tools
+        .iter()
+        .find(|t| t.server.eq_ignore_ascii_case(server) && t.tool.eq_ignore_ascii_case(tool));
+
+    let Some(descriptor) = descriptor else {
+        warn!(
+            "Planner plan ignored: tool {} on server {} not in descriptor list",
+            tool, server
+        );
+        return None;
+    };
+
+    if let Some(ref args) = plan.args {
+        if !args_match_schema(args, descriptor.input_schema.as_ref()) {
+            warn!(
+                "Planner plan ignored: args failed schema validation for {}:{}",
+                descriptor.server, descriptor.tool
+            );
+            return None;
+        }
+    }
+
+    Some(plan)
+}
+
 fn parse_suggestion(raw: &str) -> Option<PlannerSuggestion> {
     let cleaned = strip_code_fences(raw).trim();
     if cleaned.is_empty() {
@@ -310,6 +478,25 @@ fn parse_suggestion(raw: &str) -> Option<PlannerSuggestion> {
     if let Ok(value) = serde_json::from_str::<Value>(cleaned) {
         if let Ok(suggestion) = serde_json::from_value::<PlannerSuggestion>(value) {
             return normalize_suggestion(suggestion);
+        }
+    }
+
+    None
+}
+
+fn parse_plan(raw: &str) -> Option<PlannerPlan> {
+    let cleaned = strip_code_fences(raw).trim();
+    if cleaned.is_empty() {
+        return None;
+    }
+
+    if let Ok(plan) = serde_json::from_str::<PlannerPlan>(cleaned) {
+        return normalize_plan(plan);
+    }
+
+    if let Ok(value) = serde_json::from_str::<Value>(cleaned) {
+        if let Ok(plan) = serde_json::from_value::<PlannerPlan>(value) {
+            return normalize_plan(plan);
         }
     }
 
@@ -338,6 +525,31 @@ fn normalize_suggestion(mut suggestion: PlannerSuggestion) -> Option<PlannerSugg
     Some(suggestion)
 }
 
+fn normalize_plan(mut plan: PlannerPlan) -> Option<PlannerPlan> {
+    if plan.missing.unwrap_or(false) {
+        return Some(plan);
+    }
+
+    let server_empty = plan
+        .server
+        .as_ref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(true);
+    let tool_empty = plan
+        .tool
+        .as_ref()
+        .map(|t| t.trim().is_empty())
+        .unwrap_or(true);
+
+    if server_empty || tool_empty {
+        return None;
+    }
+
+    plan.server = plan.server.map(|s| s.trim().to_string());
+    plan.tool = plan.tool.map(|t| t.trim().to_string());
+    Some(plan)
+}
+
 fn enforce_forced_server(
     suggestion: PlannerSuggestion,
     forced_server: Option<&str>,
@@ -356,6 +568,29 @@ fn enforce_forced_server(
         }
     }
     Some(suggestion)
+}
+
+fn enforce_forced_server_plan(
+    plan: PlannerPlan,
+    forced_server: Option<&str>,
+) -> Option<PlannerPlan> {
+    if plan.missing.unwrap_or(false) {
+        return Some(plan);
+    }
+    if let Some(server) = forced_server {
+        if let Some(ref suggested) = plan.server {
+            if !suggested.eq_ignore_ascii_case(server) {
+                warn!(
+                    "Planner plan rejected: expected forced server {}, got {}",
+                    server, suggested
+                );
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+    Some(plan)
 }
 
 fn args_match_schema(args: &Value, schema: Option<&Value>) -> bool {
