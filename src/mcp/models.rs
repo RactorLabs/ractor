@@ -37,6 +37,7 @@ pub struct ToolResponse {
     pub metadata: Option<Value>,
     pub version: Option<String>,
     pub created_at: String,
+    pub examples: Option<Vec<ToolExampleResponse>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -54,6 +55,21 @@ pub struct InvocationResponse {
     pub status: String,
     pub result: Option<Value>,
     pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToolExampleInput {
+    pub title: Option<String>,
+    pub body: Value,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToolExampleResponse {
+    pub id: Uuid,
+    pub tool_id: Uuid,
+    pub title: Option<String>,
+    pub body: Value,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -81,4 +97,36 @@ pub struct AuthPayload {
     pub basic_password: Option<String>,
     #[serde(default)]
     pub headers: Option<std::collections::HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchInvokeCall {
+    pub tool: String,
+    pub arguments: Option<Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchInvokeRequest {
+    pub server: Option<String>,
+    pub server_id: Option<Uuid>,
+    pub calls: Vec<BatchInvokeCall>,
+    pub sandbox_id: Option<Uuid>,
+    #[serde(default)]
+    pub write_trace: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchInvokeResult {
+    pub invocation_id: Uuid,
+    pub tool: String,
+    pub status: String,
+    pub result: Option<Value>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchInvokeResponse {
+    pub batch_id: Uuid,
+    pub server_id: Uuid,
+    pub results: Vec<BatchInvokeResult>,
 }

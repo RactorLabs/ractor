@@ -53,7 +53,9 @@ pub async fn fetch_tools(
     let url = format!("{}/tools", base_url.trim_end_matches('/'));
     let mut request = state.http.post(&url);
     request = apply_auth(request, auth_type, auth_payload);
-    request = request.header("Mcp-Session-Id", session_id.clone());
+    request = request
+        .header("Mcp-Session-Id", session_id.clone())
+        .header("X-Session-ID", session_id.clone());
     request = request.header("Accept", "text/event-stream, application/json");
     request = request.header(CONTENT_TYPE, "application/json");
     let payload = serde_json::json!({
@@ -121,7 +123,9 @@ pub async fn invoke_tool(
     let url = format!("{}/invoke", base_url.trim_end_matches('/'));
     let mut builder = state.http.post(&url);
     builder = apply_auth(builder, auth_type, auth_payload);
-    builder = builder.header("Mcp-Session-Id", session_id.clone());
+    builder = builder
+        .header("Mcp-Session-Id", session_id.clone())
+        .header("X-Session-ID", session_id.clone());
     builder = builder.header("Accept", "text/event-stream, application/json");
     builder = builder.header(CONTENT_TYPE, "application/json");
 
@@ -146,14 +150,6 @@ pub async fn invoke_tool(
         .context("failed to reach MCP server for invocation")?;
 
     let status = resp.status();
-    if !status.is_success() {
-        let text = resp.text().await.unwrap_or_default();
-        return Err(McpError::Upstream(format!(
-            "invoke failed: status {}, body: {}",
-            status, text
-        )));
-    }
-
     let content_type = resp
         .headers()
         .get(CONTENT_TYPE)
@@ -161,23 +157,50 @@ pub async fn invoke_tool(
         .unwrap_or_default()
         .to_lowercase();
 
-    let value: serde_json::Value = if content_type.contains("text/event-stream") {
-        let text = resp
-            .text()
-            .await
-            .context("failed to read MCP invocation stream")?;
-        parse_sse_result(&text)
+    let body_text = resp
+        .text()
+        .await
+        .context("failed to read MCP invocation response")?;
+    if !status.is_success() {
+        return Err(McpError::Upstream(format!(
+            "invoke failed: status {}, body: {}",
+            status, body_text
+        )));
+    }
+
+    let parsed_value: serde_json::Value = if content_type.contains("text/event-stream") {
+        parse_sse_result(&body_text)
             .ok_or_else(|| McpError::Upstream("failed to parse invocation SSE".to_string()))?
     } else {
-        resp.json()
-            .await
-            .context("failed to decode MCP invocation response")?
+        match serde_json::from_str::<serde_json::Value>(&body_text) {
+            Ok(v) => v,
+            Err(err) => {
+                debug!(
+                    "Non-JSON MCP invocation response (treating as raw text): {} ({})",
+                    body_text, err
+                );
+                return Ok(InvocationResponse {
+                    id: invocation_id,
+                    status: "completed".to_string(),
+                    result: Some(Value::String(body_text)),
+                    error: None,
+                });
+            }
+        }
     };
 
-    let result_value = value
+    if let Some(err_obj) = parsed_value.get("error") {
+        let msg = err_obj
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("invoke failed");
+        return Err(McpError::Upstream(msg.to_string()));
+    }
+
+    let result_value = parsed_value
         .get("result")
         .cloned()
-        .unwrap_or_else(|| value.clone());
+        .unwrap_or_else(|| parsed_value.clone());
 
     Ok(InvocationResponse {
         id: invocation_id,
@@ -193,17 +216,11 @@ async fn ensure_session(
     auth_type: Option<&str>,
     auth_payload: Option<&AuthPayload>,
 ) -> Result<String, McpError> {
-    let mut sessions = state.sessions.lock().await;
-    if let Some(existing) = sessions.get(base_url) {
-        return Ok(existing.clone());
+    if let Some(existing) = state.sessions.lock().await.get(base_url).cloned() {
+        return Ok(existing);
     }
 
-    let url = format!("{}/session", base_url.trim_end_matches('/'));
-    let mut builder = state.http.post(&url);
-    builder = apply_auth(builder, auth_type, auth_payload);
-    builder = builder.header("Accept", "text/event-stream, application/json");
-    builder = builder.header(CONTENT_TYPE, "application/json");
-
+    let base_trimmed = base_url.trim_end_matches('/');
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -211,34 +228,97 @@ async fn ensure_session(
         "params": {}
     });
 
-    info!(
-        "Initializing MCP session at {} with payload {}",
-        url, payload
-    );
-    let resp = builder
-        .json(&payload)
-        .send()
-        .await
-        .context("failed to reach MCP server for session init")?;
+    // Try the standard /session handshake first, then fall back to direct initialize with a generated session id.
+    let attempts = vec![
+        (
+            format!("{}/session", base_trimmed),
+            None::<String>,
+            "session-endpoint".to_string(),
+        ),
+        (
+            base_trimmed.to_string(),
+            Some(Uuid::new_v4().to_string()),
+            "direct-initialize".to_string(),
+        ),
+    ];
 
-    let status = resp.status();
-    if !status.is_success() {
-        let text = resp.text().await.unwrap_or_default();
-        return Err(McpError::Upstream(format!(
-            "session init failed: status {}, body: {}",
-            status, text
-        )));
+    let mut errors = Vec::new();
+
+    for (url, provided_session, label) in attempts {
+        let mut builder = state.http.post(&url);
+        builder = apply_auth(builder, auth_type, auth_payload);
+        builder = builder.header("Accept", "text/event-stream, application/json");
+        builder = builder.header(CONTENT_TYPE, "application/json");
+        if let Some(ref sid) = provided_session {
+            builder = builder
+                .header("Mcp-Session-Id", sid.clone())
+                .header("X-Session-ID", sid.clone());
+        }
+
+        info!(
+            "Initializing MCP session ({}) at {} with payload {}",
+            label, url, payload
+        );
+
+        let resp = match builder.json(&payload).send().await {
+            Ok(r) => r,
+            Err(err) => {
+                errors.push(format!("{}: request failed: {}", label, err));
+                continue;
+            }
+        };
+
+        let status = resp.status();
+        let headers = resp.headers().clone();
+        let body_text = resp.text().await.unwrap_or_default();
+
+        if !status.is_success() {
+            errors.push(format!(
+                "{}: status {} body {}",
+                label,
+                status.as_u16(),
+                body_text
+            ));
+            continue;
+        }
+
+        let header_session = headers
+            .get("Mcp-Session-Id")
+            .or_else(|| headers.get("X-Session-ID"))
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let body_session = serde_json::from_str::<Value>(&body_text)
+            .ok()
+            .and_then(|v| {
+                v.get("result")
+                    .or_else(|| v.get("params"))
+                    .or_else(|| v.get("session"))
+                    .and_then(|r| {
+                        r.get("sessionId")
+                            .or_else(|| r.get("session_id"))
+                            .or_else(|| r.get("session"))
+                    })
+                    .and_then(|s| s.as_str().map(|s| s.to_string()))
+            });
+
+        if let Some(session_id) = header_session.or(body_session).or(provided_session.clone()) {
+            let mut guard = state.sessions.lock().await;
+            guard.insert(base_url.to_string(), session_id.clone());
+            return Ok(session_id);
+        }
+
+        errors.push(format!(
+            "{}: missing session id (headers/body); body {}",
+            label, body_text
+        ));
     }
 
-    let session_id = resp
-        .headers()
-        .get("Mcp-Session-Id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string())
-        .ok_or_else(|| McpError::Upstream("missing Mcp-Session-Id header".to_string()))?;
-
-    sessions.insert(base_url.to_string(), session_id.clone());
-    Ok(session_id)
+    Err(McpError::Upstream(format!(
+        "session init failed for {}: {}",
+        base_url,
+        errors.join("; ")
+    )))
 }
 
 fn parse_sse_result(body: &str) -> Option<serde_json::Value> {

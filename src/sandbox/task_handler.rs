@@ -193,11 +193,12 @@ impl TaskHandler {
     }
 
     async fn process_task(&self, task: &TaskSummary) -> Result<()> {
-        let input_text = extract_first_text(&task.input);
-        self.guardrails.validate_input(&input_text)?;
-
         match task.task_type {
-            TaskType::NL => self.process_nl_task(task, &input_text).await,
+            TaskType::NL => {
+                let input_text = extract_first_text(&task.input);
+                self.guardrails.validate_input(&input_text)?;
+                self.process_nl_task(task, &input_text).await
+            }
             TaskType::SH => {
                 let ctx = TaskExecutorContext::new(&self.api_client);
                 run_shell_task(&ctx, task).await
@@ -210,6 +211,7 @@ impl TaskHandler {
                 let ctx = TaskExecutorContext::new(&self.api_client);
                 run_javascript_task(&ctx, task).await
             }
+            TaskType::PROGRAMMATIC => self.process_programmatic_task(task).await,
         }
     }
 
@@ -219,9 +221,27 @@ impl TaskHandler {
             conversation.push(msg);
         }
 
+        let forced_server = detect_forced_server(input_text);
+
         let router_hint = {
             let pref = self.mcp_success.lock().await;
-            self.toolkit.intent_router_hint(input_text, Some(&*pref))
+            let mut hint = self.toolkit.intent_router_hint(input_text, Some(&*pref));
+            if let Some(target) = forced_server.as_ref() {
+                match hint {
+                    Some(IntentRouterHint::Direct {
+                        ref server_name, ..
+                    }) => {
+                        if !server_name.eq_ignore_ascii_case(target) {
+                            hint = None;
+                        }
+                    }
+                    Some(IntentRouterHint::Ambiguous { .. }) => {
+                        hint = None;
+                    }
+                    _ => {}
+                }
+            }
+            hint
         };
 
         if let Some(ref hint) = router_hint {
@@ -233,7 +253,22 @@ impl TaskHandler {
             });
         }
 
+        if let Some(server) = forced_server.as_ref() {
+            conversation.push(ChatMessage {
+                role: "user".to_string(),
+                content: format!(
+                    "Use only the `{}` MCP server for this task. Start by reading /sandbox/mcp_cache/{}_tools_all.json (fallback: /sandbox/mcp_cache/tools_all.json) to pick the exact tool name and arguments. Return the JSON payloads instead of invoking other servers.",
+                    server,
+                    server.to_lowercase()
+                ),
+                name: None,
+                tool_call_id: None,
+            });
+        }
+
         let mut finalize_hint_pending = false;
+        let mut cache_read_repeats: usize = 0;
+        let mut cache_read_seen: bool = false;
 
         loop {
             if !self.is_task_active(&task.id).await? {
@@ -374,6 +409,62 @@ impl TaskHandler {
             });
 
             let command_name = command.name.to_lowercase();
+            let mcp_meta = self.toolkit.resolve_mcp_metadata(&command);
+
+            if let Some(target_server) = forced_server.as_ref() {
+                let target_lower = target_server.to_lowercase();
+                if !enforce_forced_server(
+                    &command,
+                    &command_name,
+                    &target_lower,
+                    mcp_meta.as_ref(),
+                    &mut conversation,
+                ) {
+                    continue;
+                }
+
+                // If cache already read, block further tool calls and demand output unless it's output itself.
+                if cache_read_seen && command_name != "output" {
+                    conversation.pop();
+                    conversation.push(ChatMessage {
+                        role: "user".to_string(),
+                        content: format!(
+                            "You already have the `{}` MCP cache. Produce the final JSON programmatic payload now (no more tools).",
+                            target_lower
+                        ),
+                        name: None,
+                        tool_call_id: None,
+                    });
+                    continue;
+                }
+
+                // If we keep reading the same cache file, prompt the model to produce output instead of looping.
+                if command_name == "open_file" {
+                    let path = command.attributes.get("path").cloned().unwrap_or_default();
+                    if path.starts_with("/sandbox/mcp_cache/") {
+                        cache_read_repeats = cache_read_repeats.saturating_add(1);
+                        if cache_read_repeats >= 2 {
+                            conversation.pop(); // drop repeated tool call
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: format!(
+                                    "You already read /sandbox/mcp_cache/{}_tools_all.json. Stop rereading it and produce the final JSON payloads (programmatic calls) for the HubSpot server that: (1) search or list deals for private residences including contact/company location, (2) provide the programmatic JSON. Do not call more tools.",
+                                    target_lower
+                                ),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                            cache_read_repeats = 0;
+                            cache_read_seen = true;
+                            continue;
+                        }
+                    } else {
+                        cache_read_repeats = 0;
+                    }
+                } else {
+                    cache_read_repeats = 0;
+                }
+            }
 
             if command_name == "output" {
                 if let Some(IntentRouterHint::Direct { tool_name, .. }) = router_hint.as_ref() {
@@ -550,6 +641,64 @@ impl TaskHandler {
                         tool_call_id: None,
                     });
 
+                    if let Some(target_server) = forced_server.as_ref() {
+                        let target_lower = target_server.to_lowercase();
+                        if command_name == "open_file" {
+                            let path = command.attributes.get("path").cloned().unwrap_or_default();
+                            if path.starts_with("/sandbox/mcp_cache/")
+                                && (path.contains(&target_lower)
+                                    || path.ends_with("tools_all.json"))
+                            {
+                                if !cache_read_seen {
+                                    cache_read_seen = true;
+                                    conversation.push(ChatMessage {
+                                        role: "user".to_string(),
+                                        content: format!(
+                                            "You have already read the `{}` MCP cache. Stop rereading and produce the final JSON payloads (PROGRAMMATIC) for the HubSpot server now: (1) list/search deals related to \"private residences\" including contact and company location fields; (2) include exact tool names and arguments. Do not call more tools.",
+                                            target_lower
+                                        ),
+                                        name: None,
+                                        tool_call_id: None,
+                                    });
+                                    continue;
+                                } else {
+                                    // Second time reading: force output.
+                                    conversation.push(ChatMessage {
+                                        role: "user".to_string(),
+                                        content: "You re-read the cache. Immediately emit the <output> JSON payload now with the required PROGRAMMATIC body; no further tool calls.".to_string(),
+                                        name: None,
+                                        tool_call_id: None,
+                                    });
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    // Global guard: once an MCP cache file is read, force the model to emit output instead of wandering.
+                    if command_name == "open_file" {
+                        let path = command.attributes.get("path").cloned().unwrap_or_default();
+                        if path.starts_with("/sandbox/mcp_cache/") {
+                            if cache_read_seen {
+                                conversation.push(ChatMessage {
+                                    role: "user".to_string(),
+                                    content: "You already read the MCP cache file. Do not call any more tools. Immediately return the final JSON payload (PROGRAMMATIC) that answers the user.".to_string(),
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                            } else {
+                                cache_read_seen = true;
+                                conversation.push(ChatMessage {
+                                    role: "user".to_string(),
+                                    content: "You have the MCP cache contents. Do not call more tools; emit the final JSON payload now.".to_string(),
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                            }
+                            continue;
+                        }
+                    }
+
                     if matches!(
                         command_name.as_str(),
                         "create_file" | "insert" | "str_replace" | "remove_str"
@@ -678,6 +827,191 @@ impl TaskHandler {
         }
     }
 
+    async fn process_programmatic_task(&self, task: &TaskSummary) -> Result<()> {
+        let Some(programmatic) = extract_programmatic_payload(&task.input) else {
+            self.api_client
+                .update_task(
+                    &task.id,
+                    Some("failed".to_string()),
+                    Some(vec![json!({
+                        "type": "commentary",
+                        "content": "programmatic task missing `programmatic` payload"
+                    })]),
+                    Some(vec![json!({
+                        "type": "final",
+                        "executor": "programmatic",
+                        "status": "failed",
+                        "content": "programmatic task missing payload"
+                    })]),
+                    Some(task.context_length),
+                    None,
+                )
+                .await?;
+            return Ok(());
+        };
+
+        let mcp_client = match self.toolkit.mcp_client() {
+            Some(c) => c,
+            None => {
+                self.api_client
+                    .update_task(
+                        &task.id,
+                        Some("failed".to_string()),
+                        Some(vec![json!({
+                            "type": "commentary",
+                            "content": "MCP is not configured for this sandbox"
+                        })]),
+                        Some(vec![json!({
+                            "type": "final",
+                            "executor": "programmatic",
+                            "status": "failed",
+                            "content": "MCP client unavailable"
+                        })]),
+                        Some(task.context_length),
+                        None,
+                    )
+                    .await?;
+                return Ok(());
+            }
+        };
+
+        // Allow server/server_id at the top-level or per-call; top-level is default.
+        let server = programmatic
+            .get("server")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let server_id = programmatic
+            .get("server_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let calls = programmatic
+            .get("calls")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        if calls.is_empty() {
+            self.api_client
+                .update_task(
+                    &task.id,
+                    Some("failed".to_string()),
+                    Some(vec![json!({
+                        "type": "commentary",
+                        "content": "programmatic task requires `calls` array"
+                    })]),
+                    Some(vec![json!({
+                        "type": "final",
+                        "executor": "programmatic",
+                        "status": "failed",
+                        "content": "no calls provided"
+                    })]),
+                    Some(task.context_length),
+                    None,
+                )
+                .await?;
+            return Ok(());
+        }
+
+        let mut steps = Vec::new();
+        let mut output_items = Vec::new();
+        let mut any_failed = false;
+
+        for call in calls {
+            let tool = match call.get("tool").and_then(|v| v.as_str()) {
+                Some(t) => t.to_string(),
+                None => {
+                    any_failed = true;
+                    steps.push(json!({
+                        "type": "step",
+                        "executor": "programmatic",
+                        "status": "failed",
+                        "content": "call missing `tool`"
+                    }));
+                    continue;
+                }
+            };
+            // Per-call server/server_id override; fall back to top-level.
+            let call_server = call
+                .get("server")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| server.clone());
+            let call_server_id = call
+                .get("server_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| server_id.clone());
+
+            let args = call.get("arguments").cloned().unwrap_or_else(|| json!({}));
+            steps.push(json!({
+                "type": "step",
+                "executor": "programmatic",
+                "status": "running",
+                "content": format!("invoking tool {}", tool)
+            }));
+
+            match mcp_client
+                .invoke(
+                    call_server_id.as_deref(),
+                    call_server.as_deref(),
+                    &tool,
+                    args.clone(),
+                    self.api_client.sandbox_id(),
+                )
+                .await
+            {
+                Ok(result) => {
+                    steps.push(json!({
+                        "type": "step",
+                        "executor": "programmatic",
+                        "status": "completed",
+                        "content": format!("tool {} completed", tool)
+                    }));
+                    output_items.push(json!({
+                        "type": "mcp_result",
+                        "tool": tool,
+                        "content": result
+                    }));
+                }
+                Err(err) => {
+                    any_failed = true;
+                    let message = format!("tool {} failed: {}", tool, err);
+                    steps.push(json!({
+                        "type": "step",
+                        "executor": "programmatic",
+                        "status": "failed",
+                        "content": message
+                    }));
+                    output_items.push(json!({
+                        "type": "commentary",
+                        "content": format!("{} with args {}", message, args)
+                    }));
+                }
+            }
+        }
+
+        let status = if any_failed { "failed" } else { "completed" };
+        steps.push(json!({
+            "type": "final",
+            "executor": "programmatic",
+            "status": status,
+            "content": format!("programmatic MCP batch {}", status)
+        }));
+
+        self.api_client
+            .update_task(
+                &task.id,
+                Some(status.to_string()),
+                Some(output_items),
+                Some(steps),
+                Some(task.context_length),
+                None,
+            )
+            .await?;
+
+        Ok(())
+    }
+
     fn sanitize_output_items(&self, items: Vec<Value>) -> Result<Vec<Value>> {
         let mut sanitized = Vec::new();
         for item in items {
@@ -757,6 +1091,7 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- For MCP JSON bodies, wrap the payload in CDATA within the XML element; avoid malformed JSON errors.\n");
         prompt.push_str("- When an MCP call succeeds with the needed data, use that data directly—do NOT fabricate sample JSON or switch to web_fetch/run_bash for the same data. Parse the MCP result and persist it with create_file/open_file/etc.\n");
         prompt.push_str("- Stick to the user's instructions. Do not perform extra work unless it is clearly required to complete the request.\n");
+        prompt.push_str("- When the user asks to find or suggest the right MCP tool (or a programmatic payload), read the MCP cache first (/sandbox/mcp_cache/tools_all.json and per-server /sandbox/mcp_cache/<server>_tools_all.json). Use those to name the exact server/tool/arguments and return the JSON payload instead of guessing or firing arbitrary tool calls. If the user names a specific server (e.g., HubSpot), constrain tool selection to that server and avoid unrelated servers.\n");
         prompt.push_str("- When encountering difficulties, take time to gather information before concluding a root cause and acting upon it.\n");
         prompt.push_str("- If a tool call (including shell commands) fails, inspect the output, determine the cause, and rerun it with corrected parameters before moving on.\n");
         prompt.push_str("- When the request is a direct tool action (e.g., \"Create a file\", \"List folders\"), run all necessary tool invocations in one shot and return immediately.\n");
@@ -843,6 +1178,122 @@ impl TaskHandler {
             acc.saturating_add(approx_content_tokens + 4)
         })
     }
+}
+
+fn extract_programmatic_payload(items: &[Value]) -> Option<Value> {
+    for item in items {
+        let is_programmatic = item
+            .get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t.eq_ignore_ascii_case("programmatic"))
+            .unwrap_or(false);
+        if !is_programmatic {
+            continue;
+        }
+        if let Some(body) = item.get("programmatic").cloned() {
+            return Some(body);
+        }
+        if let Some(body) = item.get("content").cloned() {
+            return Some(body);
+        }
+    }
+    None
+}
+
+fn enforce_forced_server(
+    command: &CommandInvocation,
+    command_name: &str,
+    target_lower: &str,
+    mcp_meta: Option<&super::toolkit::McpRouting>,
+    conversation: &mut Vec<ChatMessage>,
+) -> bool {
+    // Only allow a narrow set of tools when a forced server is specified.
+    let allowed_non_mcp = ["open_file", "find_filecontent", "find_filename", "output"];
+
+    // Block mismatched MCP aliases or mcp_call to other servers.
+    if let Some(meta) = mcp_meta {
+        if let Some(server) = &meta.server_name {
+            if !server.eq_ignore_ascii_case(target_lower) {
+                conversation.pop();
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: format!(
+                        "Use only the `{}` MCP server. Re-read /sandbox/mcp_cache/{}_tools_all.json and retry with that server.",
+                        target_lower, target_lower
+                    ),
+                    name: None,
+                    tool_call_id: None,
+                });
+                return false;
+            }
+        }
+    }
+
+    if command_name == "mcp_call" {
+        let server_attr = command
+            .attributes
+            .get("server")
+            .or_else(|| command.attributes.get("server_id"))
+            .map(|s| s.to_lowercase());
+        if server_attr.as_deref() != Some(target_lower) {
+            conversation.pop();
+            conversation.push(ChatMessage {
+                role: "user".to_string(),
+                content: format!(
+                    "Use only the `{}` MCP server. Set server=\"{}\" (or server_id) on mcp_call and reference /sandbox/mcp_cache/{}_tools_all.json.",
+                    target_lower, target_lower, target_lower
+                ),
+                name: None,
+                tool_call_id: None,
+            });
+            return false;
+        }
+        return true;
+    }
+
+    // For file-search tools, ensure they target the forced server cache.
+    if allowed_non_mcp.contains(&command_name) {
+        if let Some(path) = command.attributes.get("path") {
+            let is_cache = path.starts_with("/sandbox/mcp_cache/");
+            let matches_server = path.contains(target_lower);
+            let is_global = path.ends_with("/tools_all.json");
+            if is_cache && (matches_server || is_global) {
+                return true;
+            }
+        }
+        conversation.pop();
+        conversation.push(ChatMessage {
+            role: "user".to_string(),
+            content: format!(
+                "When looking for tools, read /sandbox/mcp_cache/{}_tools_all.json (or tools_all.json) only. Do not open other files.",
+                target_lower
+            ),
+            name: None,
+            tool_call_id: None,
+        });
+        return false;
+    }
+
+    // Disallow other tools while forced server is active.
+    conversation.pop();
+    conversation.push(ChatMessage {
+        role: "user".to_string(),
+        content: format!(
+            "Stick to the `{}` MCP server and its cache. Use open_file on /sandbox/mcp_cache/{}_tools_all.json, then produce the JSON payload. No other tools are needed.",
+            target_lower, target_lower
+        ),
+        name: None,
+        tool_call_id: None,
+    });
+    false
+}
+
+fn detect_forced_server(text: &str) -> Option<String> {
+    let lower = text.to_lowercase();
+    if lower.contains("hubspot") {
+        return Some("hubspot".to_string());
+    }
+    None
 }
 
 fn extract_first_text(items: &[Value]) -> String {

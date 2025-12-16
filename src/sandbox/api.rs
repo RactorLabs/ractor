@@ -56,6 +56,10 @@ impl TSBXClient {
         }
     }
 
+    pub fn sandbox_id(&self) -> &str {
+        &self.sandbox_id
+    }
+
     pub async fn update_task_usage(
         &self,
         id: &str,

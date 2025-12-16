@@ -106,7 +106,7 @@ pub async fn run(api_url: &str, sandbox_id: &str) -> Result<()> {
     let mut mcp_tools = Vec::new();
     let mut mcp_client = None;
     if let Some(mcp_url) = &config.mcp_url {
-        match mcp::McpClient::new(mcp_url.clone()) {
+        match mcp::McpClient::new(mcp_url.clone(), sandbox_id) {
             Ok(client) => {
                 let client = Arc::new(client);
                 match client.list_tools().await {

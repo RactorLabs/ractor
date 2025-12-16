@@ -1,3 +1,5 @@
+use std::{collections::HashMap, fs, path::PathBuf};
+
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -5,15 +7,17 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use sqlx::Row;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::mcp::client;
 use crate::mcp::error::{McpError, McpResult};
 use crate::mcp::models::{
-    AuthPayload, InvocationResponse, InvokeRequest, McpToolDescriptor, ServerInput, ServerResponse,
-    ToolResponse,
+    AuthPayload, BatchInvokeRequest, BatchInvokeResponse, BatchInvokeResult, InvocationResponse,
+    InvokeRequest, McpToolDescriptor, ServerInput, ServerResponse, ToolExampleInput,
+    ToolExampleResponse, ToolResponse,
 };
 use crate::mcp::state::McpState;
 
@@ -21,6 +25,10 @@ use crate::mcp::state::McpState;
 pub struct ToolQuery {
     pub server: Option<String>,
     pub server_id: Option<Uuid>,
+    pub q: Option<String>,
+    #[serde(default)]
+    pub include_examples: bool,
+    pub limit: Option<u32>,
 }
 
 pub async fn list_servers(State(state): State<McpState>) -> McpResult<Json<Vec<ServerResponse>>> {
@@ -168,16 +176,31 @@ pub async fn list_tools(
     State(state): State<McpState>,
     Query(filter): Query<ToolQuery>,
 ) -> McpResult<Json<Vec<ToolResponse>>> {
-    let mut where_clause = String::new();
+    let mut clauses = Vec::new();
     let mut params: Vec<String> = Vec::new();
 
     if let Some(id) = filter.server_id {
-        where_clause.push_str("WHERE t.server_id = ?");
+        clauses.push("t.server_id = ?".to_string());
         params.push(id.to_string());
     } else if let Some(name) = filter.server {
-        where_clause.push_str("WHERE s.name = ?");
+        clauses.push("s.name = ?".to_string());
         params.push(name);
     }
+
+    if let Some(q) = filter.q.as_ref() {
+        let like = format!("%{}%", q.to_lowercase());
+        clauses.push("LOWER(t.name) LIKE ? OR LOWER(t.description) LIKE ?".to_string());
+        params.push(like.clone());
+        params.push(like);
+    }
+
+    let limit = filter.limit.unwrap_or(50).min(200);
+
+    let where_clause = if clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", clauses.join(" AND "))
+    };
 
     let sql = format!(
         r#"
@@ -186,6 +209,7 @@ pub async fn list_tools(
         JOIN mcp_servers s ON s.id = t.server_id
         {}
         ORDER BY t.created_at DESC
+        LIMIT ?
         "#,
         where_clause
     );
@@ -194,80 +218,130 @@ pub async fn list_tools(
     for param in params {
         query = query.bind(param);
     }
+    query = query.bind(limit as i64);
 
     let rows = query.fetch_all(&*state.db).await?;
-    let tools = rows
+    let mut tools = rows
         .into_iter()
         .filter_map(map_tool_row)
         .collect::<Vec<_>>();
+
+    if filter.include_examples {
+        let ids = tools.iter().map(|t| t.id).collect::<Vec<_>>();
+        let example_map = load_examples_for_tools(&state, &ids).await?;
+        for tool in &mut tools {
+            tool.examples = example_map.get(&tool.id).cloned();
+        }
+    }
+
     Ok(Json(tools))
+}
+
+pub async fn live_search_tools(
+    State(state): State<McpState>,
+    Query(filter): Query<ToolQuery>,
+) -> McpResult<Json<Vec<ToolResponse>>> {
+    let mut servers = Vec::new();
+    let rows = sqlx::query(
+        r#"
+        SELECT id, name, base_url, auth_type, auth_payload
+        FROM mcp_servers
+        ORDER BY created_at DESC
+        "#,
+    )
+    .fetch_all(&*state.db)
+    .await?;
+
+    for row in rows {
+        let id = parse_uuid(&row, "id")?;
+        let name: String = row.try_get("name")?;
+        let base_url: String = row.try_get("base_url")?;
+        let auth_type: Option<String> = row.try_get("auth_type")?;
+        let auth_payload_val: Option<Value> = row.try_get("auth_payload")?;
+        let auth_payload = auth_payload_val
+            .as_ref()
+            .and_then(|v| serde_json::from_value::<AuthPayload>(v.clone()).ok());
+        servers.push((id, name, base_url, auth_type, auth_payload));
+    }
+
+    let mut results = Vec::new();
+    let q_lower = filter.q.as_ref().map(|q| q.to_lowercase());
+    let limit = filter.limit.unwrap_or(50).min(200) as usize;
+
+    for (server_id, server_name, base_url, auth_type, auth_payload) in servers {
+        match client::fetch_tools(
+            &state,
+            &base_url,
+            auth_type.as_deref(),
+            auth_payload.as_ref(),
+        )
+        .await
+        {
+            Ok(tools) => {
+                for tool in tools {
+                    if let Some(ref q) = q_lower {
+                        let name_match = tool.name.to_lowercase().contains(q);
+                        let desc_match = tool
+                            .description
+                            .as_ref()
+                            .map(|d| d.to_lowercase().contains(q))
+                            .unwrap_or(false);
+                        if !name_match && !desc_match {
+                            continue;
+                        }
+                    }
+                    let now = Utc::now().to_rfc3339();
+                    results.push(ToolResponse {
+                        id: Uuid::new_v4(),
+                        server_id,
+                        server_name: server_name.clone(),
+                        name: tool.name,
+                        description: tool.description,
+                        input_schema: tool.input_schema,
+                        output_schema: tool.output_schema,
+                        metadata: tool.metadata,
+                        version: tool.version,
+                        created_at: now.clone(),
+                        examples: None,
+                    });
+                    if results.len() >= limit {
+                        break;
+                    }
+                }
+            }
+            Err(err) => {
+                warn!("Live MCP tool search failed for {}: {:?}", server_name, err);
+            }
+        }
+        if results.len() >= limit {
+            break;
+        }
+    }
+
+    Ok(Json(results))
 }
 
 pub async fn invoke_tool(
     State(state): State<McpState>,
     Json(payload): Json<InvokeRequest>,
 ) -> McpResult<Json<InvocationResponse>> {
-    let lookup_row = if let Some(id) = payload.server_id {
-        sqlx::query(
-            r#"
-            SELECT id, name, base_url, auth_type, auth_payload
-            FROM mcp_servers
-            WHERE id = ?
-            "#,
-        )
-        .bind(id.to_string())
-        .fetch_optional(&*state.db)
-        .await?
-    } else if let Some(name) = payload.server.as_ref() {
-        sqlx::query(
-            r#"
-            SELECT id, name, base_url, auth_type, auth_payload
-            FROM mcp_servers
-            WHERE name = ?
-            "#,
-        )
-        .bind(name)
-        .fetch_optional(&*state.db)
-        .await?
-    } else {
-        None
-    };
-
-    let Some(server_row) = lookup_row else {
-        return Err(McpError::BadRequest(
-            "server or server_id is required".to_string(),
-        ));
-    };
-
-    let server_id = parse_uuid(&server_row, "id")?;
-    let base_url: String = server_row.try_get("base_url")?;
-    let auth_type: Option<String> = server_row.try_get("auth_type")?;
-    let auth_payload_val: Option<serde_json::Value> = server_row.try_get("auth_payload")?;
-    let auth_payload_typed = auth_payload_val
-        .as_ref()
-        .and_then(|v| serde_json::from_value::<AuthPayload>(v.clone()).ok());
+    let server = resolve_server(&state, payload.server.as_ref(), payload.server_id).await?;
 
     // Persist invocation row
-    let invocation_id = Uuid::new_v4();
-    sqlx::query(
-        r#"
-        INSERT INTO mcp_invocations (id, server_id, tool_name, sandbox_id, request, status, started_at)
-        VALUES (?, ?, ?, ?, ?, 'pending', NOW())
-        "#,
+    let invocation_id = insert_invocation(
+        &state,
+        server.id,
+        &payload.tool,
+        payload.sandbox_id,
+        &payload.arguments,
     )
-    .bind(invocation_id.to_string())
-    .bind(server_id.to_string())
-    .bind(&payload.tool)
-    .bind(payload.sandbox_id.map(|v| v.to_string()))
-    .bind(&payload.arguments)
-    .execute(&*state.db)
     .await?;
 
     let result = client::invoke_tool(
         &state,
-        &base_url,
-        auth_type.as_deref(),
-        auth_payload_typed.as_ref(),
+        &server.base_url,
+        server.auth_type.as_deref(),
+        server.auth_payload.as_ref(),
         invocation_id,
         &payload,
     )
@@ -275,41 +349,89 @@ pub async fn invoke_tool(
 
     match result {
         Ok(response) => {
-            sqlx::query(
-                r#"
-                UPDATE mcp_invocations
-                SET status = 'completed', response = ?, finished_at = NOW()
-                WHERE id = ?
-                "#,
-            )
-            .bind(&response.result)
-            .bind(invocation_id.to_string())
-            .execute(&*state.db)
-            .await?;
+            finalize_invocation_success(&state, invocation_id, &response.result).await?;
             Ok(Json(response))
         }
         Err(err) => {
-            let message = match &err {
-                McpError::Upstream(msg) | McpError::BadRequest(msg) => msg.clone(),
-                McpError::Database(e) => e.to_string(),
-                McpError::Internal(e) => e.to_string(),
-                McpError::NotFound(msg) => msg.clone(),
-                McpError::Conflict(msg) => msg.clone(),
-            };
-            sqlx::query(
-                r#"
-                UPDATE mcp_invocations
-                SET status = 'failed', error_text = ?, finished_at = NOW()
-                WHERE id = ?
-                "#,
-            )
-            .bind(&message)
-            .bind(invocation_id.to_string())
-            .execute(&*state.db)
-            .await?;
+            let _message = finalize_invocation_error(&state, invocation_id, &err).await?;
             Err(err)
         }
     }
+}
+
+pub async fn batch_invoke(
+    State(state): State<McpState>,
+    Json(payload): Json<BatchInvokeRequest>,
+) -> McpResult<Json<BatchInvokeResponse>> {
+    if payload.calls.is_empty() {
+        return Err(McpError::BadRequest("calls are required".to_string()));
+    }
+
+    let server = resolve_server(&state, payload.server.as_ref(), payload.server_id).await?;
+    let batch_id = Uuid::new_v4();
+    let mut results = Vec::new();
+
+    for call in &payload.calls {
+        let invocation_id = insert_invocation(
+            &state,
+            server.id,
+            &call.tool,
+            payload.sandbox_id,
+            &call.arguments,
+        )
+        .await?;
+
+        let request = InvokeRequest {
+            server: None,
+            server_id: Some(server.id),
+            tool: call.tool.clone(),
+            arguments: call.arguments.clone(),
+            sandbox_id: payload.sandbox_id,
+        };
+
+        let result = client::invoke_tool(
+            &state,
+            &server.base_url,
+            server.auth_type.as_deref(),
+            server.auth_payload.as_ref(),
+            invocation_id,
+            &request,
+        )
+        .await;
+
+        match result {
+            Ok(resp) => {
+                finalize_invocation_success(&state, invocation_id, &resp.result).await?;
+                results.push(BatchInvokeResult {
+                    invocation_id,
+                    tool: call.tool.clone(),
+                    status: resp.status,
+                    result: resp.result,
+                    error: None,
+                });
+            }
+            Err(err) => {
+                let message = finalize_invocation_error(&state, invocation_id, &err).await?;
+                results.push(BatchInvokeResult {
+                    invocation_id,
+                    tool: call.tool.clone(),
+                    status: "failed".to_string(),
+                    result: None,
+                    error: Some(message),
+                });
+            }
+        }
+    }
+
+    if payload.write_trace {
+        let _ = write_batch_trace(batch_id, server.id, &results);
+    }
+
+    Ok(Json(BatchInvokeResponse {
+        batch_id,
+        server_id: server.id,
+        results,
+    }))
 }
 
 pub async fn get_invocation(
@@ -341,6 +463,54 @@ pub async fn get_invocation(
         result: response,
         error,
     }))
+}
+
+pub async fn list_tool_examples(
+    State(state): State<McpState>,
+    Path(tool_id): Path<Uuid>,
+) -> McpResult<Json<Vec<ToolExampleResponse>>> {
+    ensure_tool_exists(&state, tool_id).await?;
+    let examples_map = load_examples_for_tools(&state, &[tool_id]).await?;
+    Ok(Json(
+        examples_map.get(&tool_id).cloned().unwrap_or_default(),
+    ))
+}
+
+pub async fn create_tool_example(
+    State(state): State<McpState>,
+    Path(tool_id): Path<Uuid>,
+    Json(payload): Json<ToolExampleInput>,
+) -> McpResult<(StatusCode, Json<ToolExampleResponse>)> {
+    ensure_tool_exists(&state, tool_id).await?;
+
+    if payload.body.is_null() {
+        return Err(McpError::BadRequest("body cannot be null".to_string()));
+    }
+
+    let id = Uuid::new_v4();
+    sqlx::query(
+        r#"
+        INSERT INTO mcp_tool_examples (id, tool_id, title, body, created_at)
+        VALUES (?, ?, ?, ?, NOW())
+        "#,
+    )
+    .bind(id.to_string())
+    .bind(tool_id.to_string())
+    .bind(&payload.title)
+    .bind(&payload.body)
+    .execute(&*state.db)
+    .await?;
+
+    let created_at: DateTime<Utc> = Utc::now();
+    let response = ToolExampleResponse {
+        id,
+        tool_id,
+        title: payload.title,
+        body: payload.body,
+        created_at: created_at.to_rfc3339(),
+    };
+
+    Ok((StatusCode::CREATED, Json(response)))
 }
 
 fn map_server_row(row: sqlx::mysql::MySqlRow) -> Option<ServerResponse> {
@@ -379,6 +549,7 @@ fn map_tool_row(row: sqlx::mysql::MySqlRow) -> Option<ToolResponse> {
         metadata: row.try_get("metadata").unwrap_or(None),
         version: row.try_get("version").unwrap_or(None),
         created_at: created_at.to_rfc3339(),
+        examples: None,
     })
 }
 
@@ -480,4 +651,210 @@ async fn load_tools_for_server(state: &McpState, server_id: Uuid) -> McpResult<V
     .await?;
 
     Ok(rows.into_iter().filter_map(map_tool_row).collect())
+}
+
+async fn resolve_server(
+    state: &McpState,
+    server_name: Option<&String>,
+    server_id: Option<Uuid>,
+) -> McpResult<ResolvedServer> {
+    let lookup_row = if let Some(id) = server_id {
+        sqlx::query(
+            r#"
+            SELECT id, name, base_url, auth_type, auth_payload
+            FROM mcp_servers
+            WHERE id = ?
+            "#,
+        )
+        .bind(id.to_string())
+        .fetch_optional(&*state.db)
+        .await?
+    } else if let Some(name) = server_name {
+        sqlx::query(
+            r#"
+            SELECT id, name, base_url, auth_type, auth_payload
+            FROM mcp_servers
+            WHERE name = ?
+            "#,
+        )
+        .bind(name)
+        .fetch_optional(&*state.db)
+        .await?
+    } else {
+        None
+    };
+
+    let Some(row) = lookup_row else {
+        return Err(McpError::BadRequest(
+            "server or server_id is required".to_string(),
+        ));
+    };
+
+    let id = parse_uuid(&row, "id")?;
+    let base_url: String = row.try_get("base_url")?;
+    let auth_type: Option<String> = row.try_get("auth_type")?;
+    let auth_payload_val: Option<Value> = row.try_get("auth_payload")?;
+    let auth_payload = auth_payload_val
+        .as_ref()
+        .and_then(|v| serde_json::from_value::<AuthPayload>(v.clone()).ok());
+
+    Ok(ResolvedServer {
+        id,
+        base_url,
+        auth_type,
+        auth_payload,
+    })
+}
+
+async fn insert_invocation(
+    state: &McpState,
+    server_id: Uuid,
+    tool: &str,
+    sandbox_id: Option<Uuid>,
+    arguments: &Option<Value>,
+) -> McpResult<Uuid> {
+    let invocation_id = Uuid::new_v4();
+    sqlx::query(
+        r#"
+        INSERT INTO mcp_invocations (id, server_id, tool_name, sandbox_id, request, status, started_at)
+        VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+        "#,
+    )
+    .bind(invocation_id.to_string())
+    .bind(server_id.to_string())
+    .bind(tool)
+    .bind(sandbox_id.map(|v| v.to_string()))
+    .bind(arguments)
+    .execute(&*state.db)
+    .await?;
+    Ok(invocation_id)
+}
+
+async fn finalize_invocation_success(
+    state: &McpState,
+    invocation_id: Uuid,
+    result: &Option<Value>,
+) -> McpResult<()> {
+    sqlx::query(
+        r#"
+        UPDATE mcp_invocations
+        SET status = 'completed', response = ?, finished_at = NOW()
+        WHERE id = ?
+        "#,
+    )
+    .bind(result)
+    .bind(invocation_id.to_string())
+    .execute(&*state.db)
+    .await?;
+    Ok(())
+}
+
+async fn finalize_invocation_error(
+    state: &McpState,
+    invocation_id: Uuid,
+    err: &McpError,
+) -> McpResult<String> {
+    let message = error_message(err);
+    sqlx::query(
+        r#"
+        UPDATE mcp_invocations
+        SET status = 'failed', error_text = ?, finished_at = NOW()
+        WHERE id = ?
+        "#,
+    )
+    .bind(&message)
+    .bind(invocation_id.to_string())
+    .execute(&*state.db)
+    .await?;
+    Ok(message)
+}
+
+fn error_message(err: &McpError) -> String {
+    match err {
+        McpError::Upstream(msg) | McpError::BadRequest(msg) => msg.clone(),
+        McpError::Database(e) => e.to_string(),
+        McpError::Internal(e) => e.to_string(),
+        McpError::NotFound(msg) => msg.clone(),
+        McpError::Conflict(msg) => msg.clone(),
+    }
+}
+
+async fn load_examples_for_tools(
+    state: &McpState,
+    tool_ids: &[Uuid],
+) -> McpResult<HashMap<Uuid, Vec<ToolExampleResponse>>> {
+    if tool_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let mut ids: Vec<Uuid> = tool_ids.to_vec();
+    ids.sort();
+    ids.dedup();
+    let placeholders = vec!["?"; ids.len()].join(",");
+    let sql = format!(
+        r#"
+        SELECT id, tool_id, title, body, created_at
+        FROM mcp_tool_examples
+        WHERE tool_id IN ({})
+        ORDER BY created_at DESC
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query(&sql);
+    for id in ids {
+        query = query.bind(id.to_string());
+    }
+    let rows = query.fetch_all(&*state.db).await?;
+    let mut map: HashMap<Uuid, Vec<ToolExampleResponse>> = HashMap::new();
+    for row in rows {
+        let tool_id = parse_uuid(&row, "tool_id")?;
+        let id = parse_uuid(&row, "id")?;
+        let created_at: DateTime<Utc> = row.try_get("created_at")?;
+        let entry = map.entry(tool_id).or_default();
+        entry.push(ToolExampleResponse {
+            id,
+            tool_id,
+            title: row.try_get("title").unwrap_or(None),
+            body: row.try_get("body").unwrap_or(json!({})),
+            created_at: created_at.to_rfc3339(),
+        });
+    }
+    Ok(map)
+}
+
+async fn ensure_tool_exists(state: &McpState, tool_id: Uuid) -> McpResult<()> {
+    let exists: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT 1 FROM mcp_tools WHERE id = ? LIMIT 1
+        "#,
+    )
+    .bind(tool_id.to_string())
+    .fetch_optional(&*state.db)
+    .await?;
+    if exists.is_none() {
+        return Err(McpError::NotFound("tool not found".to_string()));
+    }
+    Ok(())
+}
+
+fn write_batch_trace(
+    batch_id: Uuid,
+    server_id: Uuid,
+    results: &[BatchInvokeResult],
+) -> std::io::Result<()> {
+    let dir = PathBuf::from("target/mcp_traces");
+    fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{}_{}.json", batch_id, server_id));
+    let body = serde_json::to_string_pretty(&json!({
+        "batch_id": batch_id,
+        "server_id": server_id,
+        "results": results,
+    }))?;
+    fs::write(path, body)
+}
+
+struct ResolvedServer {
+    id: Uuid,
+    base_url: String,
+    auth_type: Option<String>,
+    auth_payload: Option<AuthPayload>,
 }

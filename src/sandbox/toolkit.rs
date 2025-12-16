@@ -122,6 +122,10 @@ impl ToolCatalog {
         }
     }
 
+    pub fn mcp_client(&self) -> Option<Arc<McpClient>> {
+        self.mcp_client.clone()
+    }
+
     fn base_tools() -> Vec<&'static str> {
         vec![
             "run_bash",

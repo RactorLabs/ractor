@@ -20,6 +20,7 @@ pub enum TaskType {
     SH,
     PY,
     JS,
+    PROGRAMMATIC,
 }
 
 impl TaskType {
@@ -29,6 +30,7 @@ impl TaskType {
             TaskType::SH => "SH",
             TaskType::PY => "PY",
             TaskType::JS => "JS",
+            TaskType::PROGRAMMATIC => "PROGRAMMATIC",
         }
     }
 
@@ -58,6 +60,7 @@ impl FromStr for TaskType {
             "SH" => Ok(TaskType::SH),
             "PY" => Ok(TaskType::PY),
             "JS" => Ok(TaskType::JS),
+            "PROGRAMMATIC" | "PG" => Ok(TaskType::PROGRAMMATIC),
             _ => Err(()),
         }
     }

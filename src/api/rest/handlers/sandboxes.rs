@@ -12,7 +12,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::de::{self, Deserializer, SeqAccess, Visitor};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value as JsonValue};
+use serde_json::{json, Map, Value as JsonValue};
 use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
@@ -446,6 +446,16 @@ fn normalize_input_items(items: &[JsonValue]) -> Vec<JsonValue> {
 fn normalize_task_input_payload(
     raw: &serde_json::Value,
 ) -> Result<(Vec<JsonValue>, JsonValue), ApiError> {
+    if let Some(programmatic) = raw.get("programmatic") {
+        let item = json!({
+            "type": "programmatic",
+            "programmatic": programmatic.clone()
+        });
+        let mut map = Map::new();
+        map.insert("content".to_string(), JsonValue::Array(vec![item.clone()]));
+        return Ok((vec![item], JsonValue::Object(map)));
+    }
+
     let candidate_items = if raw.is_array() {
         raw.as_array().cloned().unwrap_or_default()
     } else if let Some(arr) = raw.get("content").and_then(|v| v.as_array()).cloned() {
