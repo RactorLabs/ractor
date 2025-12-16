@@ -4,6 +4,11 @@ use super::error::{HostError, Result};
 use super::executors::{run_javascript_task, run_python_task, run_shell_task, TaskExecutorContext};
 use super::guardrails::Guardrails;
 use super::inference::{ChatMessage, InferenceClient, ModelResponse};
+use super::mcp::McpToolDescriptor;
+use super::tool_planner::{
+    filter_tools_for_planner, format_planner_hint, plan_tool_call, validate_suggestion,
+    PlannerSuggestion,
+};
 use super::toolkit::{ExecutionResult, IntentRouterHint, ToolCatalog};
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
@@ -215,6 +220,118 @@ impl TaskHandler {
         }
     }
 
+    async fn load_planner_tools(&self) -> Option<Vec<McpToolDescriptor>> {
+        let client = self.toolkit.mcp_client()?;
+        match client.list_tool_descriptors().await {
+            Ok(list) => Some(list),
+            Err(err) => {
+                warn!("Failed to load MCP tools for planner: {}", err);
+                None
+            }
+        }
+    }
+
+    async fn live_search_planner_tools(
+        &self,
+        query: &str,
+        forced_server: Option<&str>,
+    ) -> Option<Vec<McpToolDescriptor>> {
+        let enabled = std::env::var("TSBX_MCP_LIVE_SEARCH")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if !enabled {
+            return None;
+        }
+        let client = self.toolkit.mcp_client()?;
+        match client.live_search_descriptors(query).await {
+            Ok(mut list) => {
+                if let Some(server) = forced_server {
+                    list.retain(|t| t.server.eq_ignore_ascii_case(server));
+                }
+                if list.is_empty() {
+                    return None;
+                }
+                Some(list)
+            }
+            Err(err) => {
+                warn!("Live search prefilter failed: {}", err);
+                None
+            }
+        }
+    }
+
+    async fn planner_suggestion(
+        &self,
+        task_text: &str,
+        forced_server: Option<&str>,
+        tools: &[McpToolDescriptor],
+        previous_error: Option<&str>,
+        exclude: Option<(&str, &str)>,
+    ) -> Option<PlannerSuggestion> {
+        let successes = self.mcp_success.lock().await.clone();
+        let successes_ref = if successes.is_empty() {
+            None
+        } else {
+            Some(successes)
+        };
+
+        let filtered = filter_tools_for_planner(
+            task_text,
+            tools,
+            forced_server,
+            exclude.clone(),
+            successes_ref
+                .as_ref()
+                .map(|m| m as &HashMap<String, String>),
+        );
+        if filtered.is_empty() {
+            return None;
+        }
+
+        match plan_tool_call(
+            &self.inference_client,
+            task_text,
+            &filtered,
+            forced_server,
+            successes_ref
+                .as_ref()
+                .map(|m| m as &HashMap<String, String>),
+            previous_error,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(err) => {
+                warn!("Planner call failed: {}", err);
+                None
+            }
+        }
+    }
+
+    fn inject_planner_hint(
+        conversation: &mut Vec<ChatMessage>,
+        suggestion: PlannerSuggestion,
+        tools: &[McpToolDescriptor],
+        forced_server: Option<&str>,
+    ) -> bool {
+        let Some(validated) = validate_suggestion(suggestion, tools, forced_server) else {
+            return false;
+        };
+        if let Some(hint) = format_planner_hint(&validated) {
+            if let (Some(server), Some(tool)) = (&validated.server, &validated.tool) {
+                info!("Injecting planner hint for server={} tool={}", server, tool);
+            }
+            conversation.push(ChatMessage {
+                role: "user".to_string(),
+                content: hint,
+                name: None,
+                tool_call_id: None,
+            });
+            return true;
+        }
+        false
+    }
+
     async fn process_nl_task(&self, task: &TaskSummary, input_text: &str) -> Result<()> {
         let mut conversation = Vec::new();
         if let Some(msg) = render_task_input(task) {
@@ -266,9 +383,38 @@ impl TaskHandler {
             });
         }
 
+        let planner_tools = self.load_planner_tools().await;
+        let mut planner_candidates = planner_tools.clone();
+
+        if let Some(tools) = planner_tools.as_ref() {
+            if tools.len() > 80 {
+                if let Some(live) = self
+                    .live_search_planner_tools(input_text, forced_server.as_deref())
+                    .await
+                {
+                    planner_candidates = Some(live);
+                }
+            }
+        }
+
+        if let Some(tools) = planner_candidates.as_ref() {
+            if let Some(suggestion) = self
+                .planner_suggestion(input_text, forced_server.as_deref(), tools, None, None)
+                .await
+            {
+                Self::inject_planner_hint(
+                    &mut conversation,
+                    suggestion,
+                    tools,
+                    forced_server.as_deref(),
+                );
+            }
+        }
+
         let mut finalize_hint_pending = false;
         let mut cache_read_repeats: usize = 0;
         let mut cache_read_seen: bool = false;
+        let mut planner_rehint_count: usize = 0;
 
         loop {
             if !self.is_task_active(&task.id).await? {
@@ -820,6 +966,38 @@ impl TaskHandler {
                         name: None,
                         tool_call_id: None,
                     });
+
+                    if let Some(tools) = planner_candidates.as_ref() {
+                        if command_name == "mcp_call" || command_name.starts_with("mcp_") {
+                            if planner_rehint_count < 2 {
+                                let exclude = mcp_meta.as_ref().and_then(|meta| {
+                                    meta.server_name
+                                        .as_ref()
+                                        .map(|server| (server.as_str(), meta.tool_name.as_str()))
+                                });
+                                if let Some(suggestion) = self
+                                    .planner_suggestion(
+                                        input_text,
+                                        forced_server.as_deref(),
+                                        tools,
+                                        Some(&error_display),
+                                        exclude,
+                                    )
+                                    .await
+                                {
+                                    if Self::inject_planner_hint(
+                                        &mut conversation,
+                                        suggestion,
+                                        tools,
+                                        forced_server.as_deref(),
+                                    ) {
+                                        planner_rehint_count =
+                                            planner_rehint_count.saturating_add(1);
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     continue;
                 }

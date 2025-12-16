@@ -11,6 +11,7 @@ mod mcp;
 #[path = "../shared/models/task.rs"]
 pub mod shared_task;
 mod task_handler;
+mod tool_planner;
 mod toolkit;
 mod tools;
 

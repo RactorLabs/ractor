@@ -25,6 +25,14 @@ pub struct McpTool {
     pub version: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct McpToolDescriptor {
+    pub server: String,
+    pub tool: String,
+    pub description: Option<String>,
+    pub input_schema: Option<Value>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct InvocationResponse {
     pub id: String,
@@ -112,6 +120,20 @@ impl McpClient {
         let _ = self.write_cache("tools_all.json", &tools);
         let _ = self.write_cache_per_server(&tools);
         Ok(tools)
+    }
+
+    pub async fn list_tool_descriptors(&self) -> Result<Vec<McpToolDescriptor>> {
+        let tools = self.list_tools().await?;
+        let descriptors = tools
+            .into_iter()
+            .map(|tool| McpToolDescriptor {
+                server: tool.server_name,
+                tool: tool.name,
+                description: tool.description,
+                input_schema: tool.input_schema,
+            })
+            .collect();
+        Ok(descriptors)
     }
 
     pub async fn invoke(
@@ -385,4 +407,48 @@ fn slugify(input: &str) -> String {
         out = out.replace("__", "_");
     }
     out.trim_matches('_').to_string()
+}
+
+impl McpClient {
+    pub async fn live_search_descriptors(&self, query: &str) -> Result<Vec<McpToolDescriptor>> {
+        let base = self.base_url.trim_end_matches('/');
+        let url = if base.ends_with("/api/v0/mcp") {
+            format!("{}/tools/live_search", base)
+        } else {
+            format!("{}/api/v0/mcp/tools/live_search", base)
+        };
+
+        let resp = self
+            .http
+            .get(url)
+            .query(&[("q", query)])
+            .send()
+            .await
+            .context("failed to reach MCP service for live search")?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(anyhow::anyhow!(
+                "MCP live search failed: status {} body {}",
+                status,
+                body
+            ));
+        }
+
+        let tools: Vec<McpTool> = resp
+            .json()
+            .await
+            .context("failed to decode MCP live search response")?;
+
+        Ok(tools
+            .into_iter()
+            .map(|tool| McpToolDescriptor {
+                server: tool.server_name,
+                tool: tool.name,
+                description: tool.description,
+                input_schema: tool.input_schema,
+            })
+            .collect())
+    }
 }
