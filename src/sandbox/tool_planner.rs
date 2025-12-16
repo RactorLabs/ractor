@@ -105,6 +105,18 @@ fn compact_descriptors(tools: &[McpToolDescriptor]) -> (Vec<McpToolDescriptor>, 
     (compacted, trimmed_schemas)
 }
 
+fn strip_schemas(tools: &[McpToolDescriptor]) -> Vec<McpToolDescriptor> {
+    tools
+        .iter()
+        .map(|t| McpToolDescriptor {
+            server: t.server.clone(),
+            tool: t.tool.clone(),
+            description: t.description.clone(),
+            input_schema: None,
+        })
+        .collect()
+}
+
 pub async fn plan_tool_call(
     inference_client: &InferenceClient,
     task: &str,
@@ -118,12 +130,38 @@ pub async fn plan_tool_call(
     }
 
     let (mut compact, trimmed_schemas) = compact_descriptors(tools);
+    info!(
+        "Planner candidates: {} (schemas trimmed: {})",
+        compact.len(),
+        trimmed_schemas
+    );
     let mut payload = json!({
         "task": task,
         "tools": compact,
     });
 
     let mut payload_bytes = serde_json::to_vec(&payload)?.len();
+    let mut schemas_stripped = false;
+
+    if payload_bytes > PLANNER_PAYLOAD_BUDGET_BYTES {
+        let stripped = strip_schemas(&compact);
+        let stripped_payload = json!({
+            "task": task,
+            "tools": stripped,
+        });
+        let stripped_bytes = serde_json::to_vec(&stripped_payload)?.len();
+        if stripped_bytes < payload_bytes {
+            info!(
+                "Planner payload over budget ({} bytes); dropping schemas reduces to {} bytes",
+                payload_bytes, stripped_bytes
+            );
+            payload = stripped_payload;
+            payload_bytes = stripped_bytes;
+            compact = stripped;
+            schemas_stripped = true;
+        }
+    }
+
     if payload_bytes > PLANNER_PAYLOAD_BUDGET_BYTES {
         let mut max_tools = MAX_PLANNER_TOOLS.min(compact.len());
         while payload_bytes > PLANNER_PAYLOAD_MIN_BUDGET_BYTES && max_tools > 5 {
@@ -137,21 +175,23 @@ pub async fn plan_tool_call(
         }
         if payload_bytes > PLANNER_PAYLOAD_BUDGET_BYTES {
             warn!(
-                "Planner payload remains large ({} bytes) even after truncation",
-                payload_bytes
+                "Planner payload remains large ({} bytes) after truncation (schemas_stripped={})",
+                payload_bytes, schemas_stripped
             );
         } else {
             info!(
-                "Planner payload truncated to {} tools ({} bytes, {} schemas trimmed)",
-                max_tools, payload_bytes, trimmed_schemas
+                "Planner payload truncated to {} tools ({} bytes, schemas_stripped={})",
+                compact.len(),
+                payload_bytes,
+                schemas_stripped
             );
         }
     } else {
         info!(
-            "Planner payload size {} bytes for {} tools ({} schemas trimmed)",
+            "Planner payload size {} bytes for {} tools (schemas_stripped={})",
             payload_bytes,
             compact.len(),
-            trimmed_schemas
+            schemas_stripped
         );
     }
 
