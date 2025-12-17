@@ -357,6 +357,130 @@ impl TaskHandler {
         }
     }
 
+    fn planner_auto_exec_enabled() -> bool {
+        std::env::var("TSBX_PLANNER_AUTO_EXEC")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    }
+
+    async fn execute_plan_programmatically(&self, plan: &PlannerPlan) -> Result<Value> {
+        let client = self
+            .toolkit
+            .mcp_client()
+            .ok_or_else(|| HostError::Api("MCP client unavailable for auto exec".to_string()))?;
+
+        let server = plan
+            .server
+            .clone()
+            .ok_or_else(|| HostError::Api("Planner missing server".to_string()))?;
+        let tool = plan
+            .tool
+            .clone()
+            .ok_or_else(|| HostError::Api("Planner missing tool".to_string()))?;
+        let sandbox_id = self.api_client.sandbox_id();
+        let mut args = plan.args.clone().unwrap_or_else(|| json!({}));
+
+        // Normalize args to an object for pagination mutation
+        if !args.is_object() {
+            args = json!({});
+        }
+
+        let wants_pagination = plan.pagination.unwrap_or(false);
+        if !wants_pagination {
+            let result = client
+                .invoke(None, Some(server.as_str()), &tool, args, sandbox_id)
+                .await
+                .map_err(|e| HostError::Api(format!("Auto exec failed: {}", e)))?;
+            return Ok(result);
+        }
+
+        // Simple pagination loop with a small cap to avoid runaway calls.
+        let mut page_counter: usize = 0;
+        let mut responses = Vec::new();
+        let mut next_token: Option<Value> = None;
+        let mut base_args = args
+            .as_object()
+            .cloned()
+            .unwrap_or_else(|| serde_json::Map::new());
+        let mut has_page_key = base_args.contains_key("page")
+            || base_args.contains_key("page_index")
+            || base_args.contains_key("offset");
+
+        loop {
+            page_counter = page_counter.saturating_add(1);
+            if page_counter > 10 {
+                warn!("Auto exec pagination capped at 10 iterations");
+                break;
+            }
+
+            let mut call_args = base_args.clone();
+            if let Some(token) = next_token.clone() {
+                call_args.insert("next_token".to_string(), token);
+            } else if has_page_key {
+                // Populate a page-style argument if present
+                if call_args.contains_key("page") {
+                    call_args.insert("page".to_string(), json!(page_counter));
+                }
+                if call_args.contains_key("page_index") {
+                    call_args.insert("page_index".to_string(), json!(page_counter));
+                }
+                if call_args.contains_key("offset") {
+                    let limit = call_args
+                        .get("limit")
+                        .or_else(|| call_args.get("per_page"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(50);
+                    let offset = (page_counter.saturating_sub(1) as u64) * limit;
+                    call_args.insert("offset".to_string(), json!(offset));
+                }
+            }
+
+            let result = client
+                .invoke(
+                    None,
+                    Some(server.as_str()),
+                    &tool,
+                    Value::Object(call_args.clone()),
+                    sandbox_id,
+                )
+                .await
+                .map_err(|e| HostError::Api(format!("Auto exec failed: {}", e)))?;
+
+            let is_empty = match &result {
+                Value::Null => true,
+                Value::Array(arr) => arr.is_empty(),
+                Value::Object(map) => map.is_empty(),
+                _ => false,
+            };
+            responses.push(result.clone());
+
+            // Detect next token to continue, otherwise break after first iteration.
+            next_token = match result {
+                Value::Object(ref map) => map
+                    .get("next_token")
+                    .cloned()
+                    .filter(|v| !v.is_null())
+                    .or_else(|| map.get("next").cloned().filter(|v| !v.is_null())),
+                _ => None,
+            };
+
+            if next_token.is_none() && (!has_page_key || is_empty) {
+                break;
+            }
+
+            // If we don't have explicit paging keys or next_token, don't loop forever.
+            if next_token.is_none() && !has_page_key {
+                break;
+            }
+        }
+
+        if responses.len() == 1 {
+            Ok(responses.remove(0))
+        } else {
+            Ok(Value::Array(responses))
+        }
+    }
+
     fn inject_planner_hint(
         conversation: &mut Vec<ChatMessage>,
         suggestion: PlannerSuggestion,
@@ -460,6 +584,39 @@ impl TaskHandler {
                         name: None,
                         tool_call_id: None,
                     });
+                } else if Self::planner_auto_exec_enabled() {
+                    match self.execute_plan_programmatically(&plan).await {
+                        Ok(result) => {
+                            let mut truncated = false;
+                            let display = truncate_output_text(
+                                &result,
+                                MAX_TOOL_OUTPUT_CHARS,
+                                &mut truncated,
+                            );
+                            conversation.push(ChatMessage {
+                                role: "tool".to_string(),
+                                content: display,
+                                name: None,
+                                tool_call_id: None,
+                            });
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: "The planned MCP call was executed programmatically. Summarize the result with <output> now; do not call additional tools unless strictly necessary."
+                                    .to_string(),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                        }
+                        Err(err) => {
+                            warn!("Auto-exec of planner plan failed: {}", err);
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: format!("Auto-execution of the planned MCP tool failed: {}. Continue with the normal tool loop and adjust parameters if needed.", err),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                        }
+                    }
                 } else if let Some(hint) = format_structured_hint(
                     &plan,
                     tools.iter().find(|d| {
