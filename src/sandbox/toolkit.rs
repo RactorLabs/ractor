@@ -976,6 +976,10 @@ const MCP_SYNONYMS: &[(&[&str], &str)] = &[
     (&["search issues"], "search_issues"),
     (&["my prs"], "search_pull_requests"),
     (&["my pull requests"], "search_pull_requests"),
+    (&["issue details"], "issue_read"),
+    (&["issue number"], "issue_read"),
+    (&["get issue"], "issue_read"),
+    (&["read issue"], "issue_read"),
 ];
 
 impl ToolCatalog {

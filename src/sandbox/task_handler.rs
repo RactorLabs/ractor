@@ -11,7 +11,7 @@ use super::tool_planner::{
 };
 use super::toolkit::{ExecutionResult, IntentRouterHint, ToolCatalog};
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -21,6 +21,8 @@ use super::shared_task::{normalize_output_items, TaskType};
 
 // Allow larger tool payloads (e.g., MCP search results) to avoid truncating useful JSON.
 const MAX_TOOL_OUTPUT_CHARS: usize = 20_000;
+const DEFAULT_MAX_TURNS: usize = 12;
+const DEFAULT_HISTORY_LIMIT: usize = 30;
 
 /// Extract content from channel-based model responses.
 /// Some models use format: `<|channel|>final<|message|>actual_xml_content`
@@ -512,6 +514,7 @@ impl TaskHandler {
         }
 
         let forced_server = detect_forced_server(input_text);
+        let tool_free_request = is_tool_free_request(input_text);
 
         let router_hint = {
             let pref = self.mcp_success.lock().await;
@@ -535,9 +538,38 @@ impl TaskHandler {
         };
 
         if let Some(ref hint) = router_hint {
+            let prompt = if tool_free_request {
+                match hint {
+                    IntentRouterHint::Direct {
+                        alias,
+                        server_name,
+                        tool_name,
+                    } => format!(
+                        "Router hint (no execution): This request maps to MCP tool `{alias}` (server `{server_name}`, tool `{tool_name}`). Provide the JSON payload for that tool without calling it."
+                    ),
+                    IntentRouterHint::Ambiguous { tool_name, servers } => {
+                        format!(
+                            "Router hint (no execution): Tool `{tool_name}` exists on multiple servers ({:?}). Pick the correct server and provide the JSON payload without calling it.",
+                            servers
+                        )
+                    }
+                }
+            } else {
+                hint.to_prompt()
+            };
             conversation.push(ChatMessage {
                 role: "user".to_string(),
-                content: hint.to_prompt(),
+                content: prompt,
+                name: None,
+                tool_call_id: None,
+            });
+        }
+
+        if tool_free_request {
+            conversation.push(ChatMessage {
+                role: "user".to_string(),
+                content: "User requested no tool execution. If you need context, read the MCP cache with <open_file>, then respond with one <output> containing raw JSON shaped exactly as {\"server\":string,\"tool\":string,\"args\":{...all required params...}}. No markdown fences, no XML outside <output>, and do not invoke any tools."
+                    .to_string(),
                 name: None,
                 tool_call_id: None,
             });
@@ -558,6 +590,8 @@ impl TaskHandler {
 
         let planner_tools = self.load_planner_tools().await;
         let mut planner_candidates = planner_tools.clone();
+        let mut planned_server: Option<String> = None;
+        let mut planned_tool: Option<String> = None;
 
         if let Some(tools) = planner_tools.as_ref() {
             if tools.len() > 80 {
@@ -576,6 +610,8 @@ impl TaskHandler {
                 .await;
 
             if let Some(plan) = structured_plan {
+                planned_server = plan.server.clone();
+                planned_tool = plan.tool.clone();
                 if plan.missing.unwrap_or(false) {
                     conversation.push(ChatMessage {
                         role: "user".to_string(),
@@ -655,8 +691,42 @@ impl TaskHandler {
         let mut cache_read_repeats: usize = 0;
         let mut cache_read_seen: bool = false;
         let mut planner_rehint_count: usize = 0;
+        let mut cache_open_attempts: usize = 0;
+        let mut invalid_reply_streak: usize = 0;
+        let max_turns = env_or_default("TSBX_MAX_TURNS", DEFAULT_MAX_TURNS);
+        let history_limit = env_or_default("TSBX_HISTORY_LIMIT", DEFAULT_HISTORY_LIMIT);
+        let mut turn: usize = 0;
 
         loop {
+            turn = turn.saturating_add(1);
+            if turn == max_turns {
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: "You have reached the turn limit. Do not call more tools. Respond with a single <output> summarizing results or clearly state missing data."
+                        .to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
+                continue;
+            } else if turn > max_turns + 1 {
+                if conversation
+                    .last()
+                    .map(|m| m.role.eq_ignore_ascii_case("assistant"))
+                    .unwrap_or(false)
+                {
+                    let _ = conversation.pop();
+                }
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: "emit <output> now".to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
+                return Err(HostError::Api(
+                    "Exceeded turn limit without final output".to_string(),
+                ));
+            }
+
             if !self.is_task_active(&task.id).await? {
                 return Ok(());
             }
@@ -673,7 +743,8 @@ impl TaskHandler {
             }
 
             let system_prompt = self.build_system_prompt().await;
-            let mut model_conversation = conversation.clone();
+            let start = conversation.len().saturating_sub(history_limit);
+            let mut model_conversation = conversation[start..].to_vec();
             for msg in &mut model_conversation {
                 if msg.role.eq_ignore_ascii_case("tool") {
                     msg.role = "user".to_string();
@@ -752,6 +823,7 @@ impl TaskHandler {
                     body,
                     children: Vec::new(),
                 };
+                invalid_reply_streak = 0;
 
                 let cmd_text = serde_json::to_string(&tool_call).unwrap_or_default();
                 (cmd, cmd_text)
@@ -770,17 +842,36 @@ impl TaskHandler {
                 let cmd = match parsed_command {
                     Ok(cmd) => cmd,
                     Err(err) => {
+                        invalid_reply_streak = invalid_reply_streak.saturating_add(1);
                         warn!("Invalid XML from model: {}", err);
-                        conversation.push(ChatMessage {
-                            role: "user".to_string(),
-                            content: "Your last reply was not valid XML. Respond with exactly one well-formed tool call element (e.g. `<open_file .../>` or `<output>...`). Do not include markdown fences, HTML, or extra text."
-                                .to_string(),
-                            name: None,
-                            tool_call_id: None,
-                        });
+                        if invalid_reply_streak >= 2 {
+                            if conversation
+                                .last()
+                                .map(|m| m.role.eq_ignore_ascii_case("assistant"))
+                                .unwrap_or(false)
+                            {
+                                let _ = conversation.pop();
+                            }
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: "Your reply must be exactly one well-formed tool XML (e.g., <mcp_call ...> or <output>...</output>). No prose."
+                                    .to_string(),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                        } else {
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: "Your last reply was not valid XML. Respond with exactly one well-formed tool call element (e.g. `<open_file .../>` or `<output>...`). Do not include markdown fences, HTML, or extra text."
+                                    .to_string(),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                        }
                         continue;
                     }
                 };
+                invalid_reply_streak = 0;
                 (cmd, command_text)
             } else {
                 warn!("Empty response from model (no content or tool_calls); retrying");
@@ -796,6 +887,27 @@ impl TaskHandler {
 
             let command_name = command.name.to_lowercase();
             let mcp_meta = self.toolkit.resolve_mcp_metadata(&command);
+
+            if command_name == "open_file" {
+                if let Some(path) = command.attributes.get("path") {
+                    if path.starts_with("/sandbox/mcp_cache/") {
+                        cache_open_attempts = cache_open_attempts.saturating_add(1);
+                        if cache_open_attempts >= 3 {
+                            conversation.pop();
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: "You have the cache; do not call any more tools; emit the programmatic JSON now with a single <output>."
+                                    .to_string(),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                            continue;
+                        }
+                    }
+                }
+            } else {
+                cache_open_attempts = 0;
+            }
 
             if let Some(target_server) = forced_server.as_ref() {
                 let target_lower = target_server.to_lowercase();
@@ -852,21 +964,35 @@ impl TaskHandler {
                 }
             }
 
+            if cache_read_seen && command_name != "output" {
+                conversation.pop();
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: "You have the cache; do not call any more tools; emit the programmatic JSON now."
+                        .to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
+                continue;
+            }
+
             if command_name == "output" {
-                if let Some(IntentRouterHint::Direct { tool_name, .. }) = router_hint.as_ref() {
-                    let pref = self.mcp_success.lock().await;
-                    if !pref.contains_key(tool_name) {
-                        conversation.pop();
-                        conversation.push(ChatMessage {
-                            role: "user".to_string(),
-                            content: format!(
-                                "Do not finalize yet. Call the hinted MCP tool (tool name `{}`) with a JSON body using `query`, not `q` (e.g., <mcp_call server=\"github\" tool=\"{}\"><![CDATA[{{\"query\":\"user:harshapalnati\",\"per_page\":100}}]]></mcp_call>) and write the results. Finish only after that succeeds.",
-                                tool_name, tool_name
-                            ),
-                            name: None,
-                            tool_call_id: None,
-                        });
-                        continue;
+                if !tool_free_request {
+                    if let Some(IntentRouterHint::Direct { tool_name, .. }) = router_hint.as_ref() {
+                        let pref = self.mcp_success.lock().await;
+                        if !pref.contains_key(tool_name) {
+                            conversation.pop();
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: format!(
+                                    "Do not finalize yet. Call the hinted MCP tool (tool name `{}`) with a JSON body using `query`, not `q` (e.g., <mcp_call server=\"github\" tool=\"{}\"><![CDATA[{{\"query\":\"user:harshapalnati\",\"per_page\":100}}]]></mcp_call>) and write the results. Finish only after that succeeds.",
+                                    tool_name, tool_name
+                                ),
+                                name: None,
+                                tool_call_id: None,
+                            });
+                            continue;
+                        }
                     }
                 }
 
@@ -920,6 +1046,18 @@ impl TaskHandler {
                 return Ok(());
             }
 
+            if tool_free_request && command_name != "output" && command_name != "open_file" {
+                conversation.pop();
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: "User said not to execute tools. Use <open_file> only if you must read the MCP cache; otherwise respond with one <output> containing the JSON payload (server/tool/arguments) without calling tools."
+                        .to_string(),
+                    name: None,
+                    tool_call_id: None,
+                });
+                continue;
+            }
+
             if !self.toolkit.has(&command_name) {
                 let allowed = self.toolkit.known_tools().join(", ");
                 warn!(
@@ -927,6 +1065,12 @@ impl TaskHandler {
                     command_name, allowed
                 );
                 conversation.pop();
+                conversation.push(ChatMessage {
+                    role: "user".to_string(),
+                    content: format!("Unknown tool `{}`. Allowed tools: {}. Respond with one valid tool call XML only.", command_name, allowed),
+                    name: None,
+                    tool_call_id: None,
+                });
                 continue;
             }
 
@@ -1035,28 +1179,51 @@ impl TaskHandler {
                                 && (path.contains(&target_lower)
                                     || path.ends_with("tools_all.json"))
                             {
-                                if !cache_read_seen {
-                                    cache_read_seen = true;
-                                    conversation.push(ChatMessage {
-                                        role: "user".to_string(),
-                                        content: format!(
-                                            "You have already read the `{}` MCP cache. Stop rereading and produce the final JSON payloads (PROGRAMMATIC) for the HubSpot server now: (1) list/search deals related to \"private residences\" including contact and company location fields; (2) include exact tool names and arguments. Do not call more tools.",
-                                            target_lower
-                                        ),
-                                        name: None,
-                                        tool_call_id: None,
-                                    });
-                                    continue;
-                                } else {
-                                    // Second time reading: force output.
-                                    conversation.push(ChatMessage {
-                                        role: "user".to_string(),
-                                        content: "You re-read the cache. Immediately emit the <output> JSON payload now with the required PROGRAMMATIC body; no further tool calls.".to_string(),
-                                        name: None,
-                                        tool_call_id: None,
-                                    });
-                                    continue;
+                                cache_read_seen = true;
+                                if tool_free_request {
+                                    if let Some((server, tool)) = select_tool_free_target(
+                                        input_text,
+                                        planned_server.as_ref(),
+                                        planned_tool.as_ref(),
+                                        &router_hint,
+                                        planner_candidates.as_ref(),
+                                        forced_server.as_deref(),
+                                    ) {
+                                        let descriptor = planner_candidates
+                                            .as_ref()
+                                            .and_then(|c| find_descriptor(c, &server, &tool));
+                                        self.complete_tool_free_task(
+                                            task,
+                                            &server,
+                                            &tool,
+                                            context_length,
+                                            descriptor,
+                                        )
+                                        .await?;
+                                        let payload =
+                                            json!({ "server": server, "tool": tool, "args": {} });
+                                        if let Ok(pretty) = serde_json::to_string_pretty(&payload) {
+                                            conversation.push(ChatMessage {
+                                                role: "assistant".to_string(),
+                                                content: pretty,
+                                                name: None,
+                                                tool_call_id: None,
+                                            });
+                                        }
+                                        return Ok(());
+                                    }
                                 }
+                                let msg = format!(
+                                "You have the `{}` MCP cache. Do not call more tools. Produce a single <output> containing the exact server/tool/arguments JSON for that server.",
+                                target_lower
+                            );
+                                conversation.push(ChatMessage {
+                                    role: "user".to_string(),
+                                    content: msg,
+                                    name: None,
+                                    tool_call_id: None,
+                                });
+                                continue;
                             }
                         }
                     }
@@ -1065,22 +1232,63 @@ impl TaskHandler {
                     if command_name == "open_file" {
                         let path = command.attributes.get("path").cloned().unwrap_or_default();
                         if path.starts_with("/sandbox/mcp_cache/") {
-                            if cache_read_seen {
-                                conversation.push(ChatMessage {
-                                    role: "user".to_string(),
-                                    content: "You already read the MCP cache file. Do not call any more tools. Immediately return the final JSON payload (PROGRAMMATIC) that answers the user.".to_string(),
-                                    name: None,
-                                    tool_call_id: None,
-                                });
-                            } else {
-                                cache_read_seen = true;
-                                conversation.push(ChatMessage {
-                                    role: "user".to_string(),
-                                    content: "You have the MCP cache contents. Do not call more tools; emit the final JSON payload now.".to_string(),
-                                    name: None,
-                                    tool_call_id: None,
-                                });
+                            cache_read_seen = true;
+                            if tool_free_request {
+                                if let Some((server, tool)) = select_tool_free_target(
+                                    input_text,
+                                    planned_server.as_ref(),
+                                    planned_tool.as_ref(),
+                                    &router_hint,
+                                    planner_candidates.as_ref(),
+                                    forced_server.as_deref(),
+                                ) {
+                                    let descriptor = planner_candidates
+                                        .as_ref()
+                                        .and_then(|c| find_descriptor(c, &server, &tool));
+                                    self.complete_tool_free_task(
+                                        task,
+                                        &server,
+                                        &tool,
+                                        context_length,
+                                        descriptor,
+                                    )
+                                    .await?;
+                                    let payload =
+                                        json!({ "server": server, "tool": tool, "args": {} });
+                                    if let Ok(pretty) = serde_json::to_string_pretty(&payload) {
+                                        conversation.push(ChatMessage {
+                                            role: "assistant".to_string(),
+                                            content: pretty,
+                                            name: None,
+                                            tool_call_id: None,
+                                        });
+                                    }
+                                    return Ok(());
+                                }
                             }
+                            let mut instruction = "You have the MCP cache; do not call any more tools. Emit a single <output> containing the exact programmatic JSON with server/tool/arguments."
+                                .to_string();
+                            if let Some(IntentRouterHint::Direct {
+                                alias,
+                                server_name,
+                                tool_name,
+                            }) = router_hint.as_ref()
+                            {
+                                instruction = format!(
+                                    "You have the MCP cache. Output one <output> with the exact programmatic JSON for server \"{server_name}\" tool \"{tool_name}\" (alias {alias}) including arguments. No more tool calls."
+                                );
+                            } else if let Some(server) = forced_server.as_ref() {
+                                instruction = format!(
+                                    "You have the `{}` MCP cache. Produce one <output> with the exact server/tool/arguments JSON for that server only. No further tools.",
+                                    server
+                                );
+                            }
+                            conversation.push(ChatMessage {
+                                role: "user".to_string(),
+                                content: instruction,
+                                name: None,
+                                tool_call_id: None,
+                            });
                             continue;
                         }
                     }
@@ -1473,6 +1681,45 @@ impl TaskHandler {
         Ok(())
     }
 
+    async fn complete_tool_free_task(
+        &self,
+        task: &TaskSummary,
+        server: &str,
+        tool: &str,
+        context_length: i64,
+        descriptor: Option<&McpToolDescriptor>,
+    ) -> Result<()> {
+        let base_args = schema_args(descriptor).unwrap_or_else(|| required_args_for_tool(server, tool));
+        let args = ensure_method_placeholder(base_args, tool);
+        let payload = json!({
+            "server": server,
+            "tool": tool,
+            "args": args
+        });
+        let pretty = serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string());
+        let items = vec![json!({
+            "type": "json",
+            "content": payload
+        })];
+        let final_segment = json!({
+            "type": "final",
+            "tool": "output",
+            "content": pretty
+        });
+
+        self.api_client
+            .update_task(
+                &task.id,
+                Some("completed".to_string()),
+                Some(items),
+                Some(vec![final_segment]),
+                Some(context_length),
+                None,
+            )
+            .await?;
+        Ok(())
+    }
+
     fn sanitize_output_items(&self, items: Vec<Value>) -> Result<Vec<Value>> {
         let mut sanitized = Vec::new();
         for item in items {
@@ -1578,6 +1825,9 @@ Current UTC time: {current_time_utc}\nSandbox ID: {sandbox_id}\n\n"
         prompt.push_str("- Keep attribute values short (for example, `commentary` should be a brief gerund like \"Inspecting\") and avoid ellipses (`...`).\n");
         prompt.push_str("- Do not batch multiple tool invocations inside one message. If you need another action after a tool result, wait for the next turn and send a new tool call.\n");
         prompt.push_str("- Communicate final answers via a single `<output>` element once the task is complete. Do not use `<output>` for intermediate updates.\n");
+        prompt.push_str("- Only call tools that appear in the catalog below; do not invent tool names or aliases.\n");
+        prompt.push_str("- When an MCP tool succeeds, use its data directly and stop instead of switching tools.\n");
+        prompt.push_str("- If you are unsure which MCP server/tool to call, ask for the exact server/tool before attempting any call.\n");
         prompt.push_str("- Router hints may appear as user messages starting with `Router hint:`. Follow them before improvising, and if multiple servers are listed ask which server to use, then call the matching MCP alias.\n");
         prompt.push_str("- Use only the tools listed below; do not invent new tool names.\n");
         prompt.push_str("- Continue issuing tool calls until the task is complete, then send the final result as described above.\n");
@@ -1639,6 +1889,14 @@ impl TaskHandler {
             acc.saturating_add(approx_content_tokens + 4)
         })
     }
+}
+
+fn env_or_default(name: &str, default: usize) -> usize {
+    std::env::var(name)
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(default)
 }
 
 fn extract_programmatic_payload(items: &[Value]) -> Option<Value> {
@@ -1754,6 +2012,182 @@ fn detect_forced_server(text: &str) -> Option<String> {
     if lower.contains("hubspot") {
         return Some("hubspot".to_string());
     }
+    if lower.contains("github") {
+        return Some("github".to_string());
+    }
+    None
+}
+
+fn is_tool_free_request(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    let patterns = [
+        "do not call tool",
+        "do not call tools",
+        "don't call tool",
+        "don't call tools",
+        "do not use tool",
+        "do not use tools",
+        "no tool call",
+        "no tool calls",
+        "do not invoke tool",
+        "do not invoke tools",
+        "do not run tool",
+        "do not run tools",
+    ];
+    patterns.iter().any(|p| lower.contains(p))
+}
+
+fn select_tool_free_target(
+    input_text: &str,
+    planned_server: Option<&String>,
+    planned_tool: Option<&String>,
+    router_hint: &Option<IntentRouterHint>,
+    planner_candidates: Option<&Vec<McpToolDescriptor>>,
+    forced_server: Option<&str>,
+) -> Option<(String, String)> {
+    if let Some(tool) = planned_tool {
+        let server = planned_server
+            .cloned()
+            .or_else(|| forced_server.map(|s| s.to_string()))
+            .or_else(|| planner_candidates.and_then(|c| c.first().map(|d| d.server.clone())));
+        if let Some(server) = server {
+            return Some((server, tool.clone()));
+        }
+    }
+
+    if let Some(IntentRouterHint::Direct {
+        server_name,
+        tool_name,
+        ..
+    }) = router_hint.as_ref()
+    {
+        return Some((server_name.clone(), tool_name.clone()));
+    }
+
+    let empty: Vec<McpToolDescriptor> = Vec::new();
+    let candidates = planner_candidates.unwrap_or(&empty);
+    if candidates.is_empty() {
+        return None;
+    }
+    let target_server = planned_server
+        .cloned()
+        .or_else(|| forced_server.map(|s| s.to_string()));
+
+    let mut filtered: Vec<&McpToolDescriptor> = candidates
+        .iter()
+        .filter(|d| {
+            target_server
+                .as_ref()
+                .map(|s| d.server.eq_ignore_ascii_case(s))
+                .unwrap_or(true)
+        })
+        .collect();
+    if filtered.is_empty() {
+        filtered = candidates.iter().collect();
+    }
+
+    let tokens: Vec<String> = input_text
+        .to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect();
+
+    let scored = filtered
+        .into_iter()
+        .map(|d| {
+            let name = d.tool.to_lowercase();
+            let desc = d.description.clone().unwrap_or_default().to_lowercase();
+            let score = tokens
+                .iter()
+                .filter(|t| name.contains(*t) || desc.contains(*t))
+                .count();
+            (score, d)
+        })
+        .max_by_key(|(score, _)| *score);
+
+    if let Some((_, best)) = scored {
+        return Some((best.server.clone(), best.tool.clone()));
+    }
+
+    candidates
+        .first()
+        .map(|d| (d.server.clone(), d.tool.clone()))
+}
+
+fn find_descriptor<'a>(
+    candidates: &'a [McpToolDescriptor],
+    server: &str,
+    tool: &str,
+) -> Option<&'a McpToolDescriptor> {
+    candidates
+        .iter()
+        .find(|d| d.server.eq_ignore_ascii_case(server) && d.tool.eq_ignore_ascii_case(tool))
+}
+
+fn required_args_for_tool(server: &str, tool: &str) -> Value {
+    let server_lower = server.to_lowercase();
+    let tool_lower = tool.to_lowercase();
+    let inferred_method = infer_method_from_tool(&tool_lower);
+
+    if server_lower == "github" {
+        match tool_lower.as_str() {
+            "issue_read" => {
+                let mut map = Map::new();
+                map.insert("owner".to_string(), Value::String("<repo-owner>".to_string()));
+                map.insert("repo".to_string(), Value::String("<repo-name>".to_string()));
+                map.insert(
+                    "issue_number".to_string(),
+                    Value::String("<issue-number>".to_string()),
+                );
+                return Value::Object(map);
+            }
+            "search_issues" => {
+                let mut map = Map::new();
+                map.insert(
+                    "query".to_string(),
+                    Value::String("<search-query>".to_string()),
+                );
+                map.insert("per_page".to_string(), Value::from(30));
+                map.insert("page".to_string(), Value::from(1));
+                return Value::Object(map);
+            }
+            _ => {}
+        }
+    }
+
+    json!({})
+}
+
+fn schema_args(descriptor: Option<&McpToolDescriptor>) -> Option<Value> {
+    let schema = descriptor?.input_schema.as_ref()?;
+    if schema.is_null() {
+        return None;
+    }
+    extract_schema_args(schema)
+}
+
+fn extract_schema_args(schema: &Value) -> Option<Value> {
+    // If the schema has properties, emit placeholders for each key.
+    if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
+        let mut map = Map::new();
+        for (k, _) in props {
+            map.insert(k.clone(), Value::String(format!("<{}>", k)));
+        }
+        return Some(Value::Object(map));
+    }
+
+    // If the schema itself is an object, use its top-level keys as placeholders.
+    if let Some(obj) = schema.as_object() {
+        let mut map = Map::new();
+        for k in obj.keys() {
+            map.insert(k.clone(), Value::String(format!("<{}>", k)));
+        }
+        if !map.is_empty() {
+            return Some(Value::Object(map));
+        }
+    }
+
     None
 }
 
@@ -1964,5 +2398,120 @@ fn collect_output_items(parsed: &Value) -> Option<Vec<Value>> {
         None
     } else {
         Some(items)
+    }
+}
+
+fn ensure_method_placeholder(args: Value, tool: &str) -> Value {
+    let mut map = match args {
+        Value::Object(m) => m,
+        other => {
+            if let Some(method) = infer_method_from_tool(tool) {
+                let mut m = Map::new();
+                m.insert("method".to_string(), Value::String(method.to_string()));
+                return Value::Object(m);
+            }
+            return other;
+        }
+    };
+
+    let has_method = map
+        .get("method")
+        .and_then(|v| v.as_str())
+        .map(|s| !s.is_empty())
+        .unwrap_or(false);
+
+    if !has_method {
+        if let Some(method) = infer_method_from_tool(tool) {
+            map.insert("method".to_string(), Value::String(method.to_string()));
+        }
+    }
+
+    Value::Object(map)
+}
+
+fn infer_method_from_tool(tool_lower: &str) -> Option<&'static str> {
+    if tool_lower.contains("delete") || tool_lower.contains("remove") {
+        return Some("DELETE");
+    }
+    if tool_lower.contains("update") || tool_lower.contains("edit") || tool_lower.contains("patch")
+    {
+        return Some("PUT");
+    }
+    if tool_lower.contains("create")
+        || tool_lower.contains("add")
+        || tool_lower.contains("write")
+        || tool_lower.contains("post")
+    {
+        return Some("POST");
+    }
+    if tool_lower.contains("get")
+        || tool_lower.contains("read")
+        || tool_lower.contains("list")
+        || tool_lower.contains("search")
+        || tool_lower.contains("fetch")
+    {
+        return Some("GET");
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_method_placeholder, infer_method_from_tool, required_args_for_tool};
+    use serde_json::json;
+
+    #[test]
+    fn required_args_for_github_issue_read_includes_method() {
+        let args = ensure_method_placeholder(required_args_for_tool("github", "issue_read"), "issue_read");
+        let expected = json!({
+            "method": "GET",
+            "owner": "<repo-owner>",
+            "repo": "<repo-name>",
+            "issue_number": "<issue-number>"
+        });
+        assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn required_args_for_github_search_issues_includes_method() {
+        let args =
+            ensure_method_placeholder(required_args_for_tool("github", "search_issues"), "search_issues");
+        let expected = json!({
+            "method": "GET",
+            "query": "<search-query>",
+            "per_page": 30,
+            "page": 1
+        });
+        assert_eq!(args, expected);
+    }
+
+    #[test]
+    fn infer_method_from_tool_matches_crud_verbs() {
+        assert_eq!(infer_method_from_tool("delete_user"), Some("DELETE"));
+        assert_eq!(infer_method_from_tool("remove_repo"), Some("DELETE"));
+        assert_eq!(infer_method_from_tool("update_profile"), Some("PUT"));
+        assert_eq!(infer_method_from_tool("edit_issue"), Some("PUT"));
+        assert_eq!(infer_method_from_tool("create_issue"), Some("POST"));
+        assert_eq!(infer_method_from_tool("add_comment"), Some("POST"));
+        assert_eq!(infer_method_from_tool("read_issue"), Some("GET"));
+        assert_eq!(infer_method_from_tool("search_repositories"), Some("GET"));
+    }
+
+    #[test]
+    fn fallback_required_args_use_inferred_method() {
+        let delete_args = ensure_method_placeholder(json!({}), "delete_widget");
+        assert_eq!(delete_args, json!({ "method": "DELETE" }));
+
+        let create_args = ensure_method_placeholder(json!({}), "create_widget");
+        assert_eq!(create_args, json!({ "method": "POST" }));
+
+        let read_args = ensure_method_placeholder(json!({}), "read_widget");
+        assert_eq!(read_args, json!({ "method": "GET" }));
+    }
+
+    #[test]
+    fn ensure_method_placeholder_keeps_existing_method() {
+        let args = ensure_method_placeholder(json!({ "method": "PATCH", "foo": "bar" }), "update_widget");
+        assert_eq!(args, json!({ "method": "PATCH", "foo": "bar" }));
     }
 }
