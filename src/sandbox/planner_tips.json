@@ -1,0 +1,6 @@
+{
+  "github.search_repositories": "Prefer query:\"user:...\" and per_page<=100; use page for pagination.",
+  "github": "Use query with qualifiers; per_page<=100; paginate via page.",
+  "hubspot.search_deals": "Use 'query' with address keywords; include 'limit'; pagination via 'offset'.",
+  "default": "Fill required params; prefer specific filters over generic query."
+}

@@ -1,5 +1,9 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+};
 
+use once_cell::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{info, warn};
@@ -8,11 +12,13 @@ use super::error::Result;
 use super::inference::{ChatMessage, InferenceClient};
 use super::mcp::McpToolDescriptor;
 
-const PLANNER_SYSTEM_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null}. Prefer tools whose required params can be filled from the task text and avoid inventing fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. If no tool clearly fits, return {\"server\":null,\"tool\":null,\"args\":null}. Never include natural language, markdown, or additional keys.";
-const PLANNER_STRUCTURED_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null,\"rationale\":string|null,\"pagination\":boolean|null,\"missing\":boolean|null}. Prefer tools whose required params can be filled from the task text; do not invent fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. If no tool clearly fits, set missing=true and leave server/tool null. Set pagination=true only when the task requires iterating pages to get the full result set. Never include natural language, markdown, or additional keys.";
+const PLANNER_SYSTEM_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null}. Prefer tools whose required params can be filled from the task text and avoid inventing fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. Use the provided tips to set arguments; do not invent params. If no tool clearly fits, return {\"server\":null,\"tool\":null,\"args\":null}. Never include natural language, markdown, or additional keys.";
+const PLANNER_STRUCTURED_PROMPT: &str = "You are a pre-loop MCP planner. Select exactly one MCP tool from the provided list and return only compact JSON in the shape {\"server\":string|null,\"tool\":string|null,\"args\":object|null,\"rationale\":string|null,\"pagination\":boolean|null,\"missing\":boolean|null}. Prefer tools whose required params can be filled from the task text; do not invent fields. When forced_server is present, only choose tools from that server. Use recent_successes to bias toward servers that recently worked. When previous_error is present, avoid repeating the failing tool/arguments. Use the provided tips to set arguments; do not invent params. If no tool clearly fits, set missing=true and leave server/tool null. Set pagination=true only when the task requires iterating pages to get the full result set. Never include natural language, markdown, or additional keys.";
 const MAX_PLANNER_TOOLS: usize = 50;
 const PLANNER_PAYLOAD_BUDGET_BYTES: usize = 60_000;
 const PLANNER_PAYLOAD_MIN_BUDGET_BYTES: usize = 40_000;
+const DEFAULT_TIPS_PATH: &str = "/sandbox/tips/planner_tips.json";
+const MAX_TIPS: usize = 3;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PlannerSuggestion {
@@ -30,6 +36,8 @@ pub struct PlannerPlan {
     pub pagination: Option<bool>,
     pub missing: Option<bool>,
 }
+
+static PLANNER_TIPS: OnceLock<std::collections::HashMap<String, String>> = OnceLock::new();
 
 pub fn filter_tools_for_planner(
     task: &str,
@@ -214,6 +222,20 @@ async fn run_planner_request(
         "tools": compact,
     });
 
+    // Optionally inject planner tips
+    let mut injected_tips = 0usize;
+    if planner_tips_enabled() {
+        let tips_map = load_planner_tips();
+        let selected = select_tips(task, &compact, forced_server, &tips_map);
+        if !selected.is_empty() {
+            injected_tips = selected.len();
+            payload
+                .as_object_mut()
+                .unwrap()
+                .insert("tips".to_string(), json!(selected));
+        }
+    }
+
     let mut payload_bytes = serde_json::to_vec(&payload)?.len();
     let mut schemas_stripped = false;
 
@@ -254,18 +276,20 @@ async fn run_planner_request(
             );
         } else {
             info!(
-                "Planner payload truncated to {} tools ({} bytes, schemas_stripped={})",
+                "Planner payload truncated to {} tools ({} bytes, schemas_stripped={}, tips={})",
                 compact.len(),
                 payload_bytes,
-                schemas_stripped
+                schemas_stripped,
+                injected_tips
             );
         }
     } else {
         info!(
-            "Planner payload size {} bytes for {} tools (schemas_stripped={})",
+            "Planner payload size {} bytes for {} tools (schemas_stripped={}, tips={})",
             payload_bytes,
             compact.len(),
-            schemas_stripped
+            schemas_stripped,
+            injected_tips
         );
     }
 
@@ -760,6 +784,93 @@ fn truncate_raw(raw: &str) -> String {
     } else {
         format!("{}...", &raw[..MAX_LEN])
     }
+}
+
+fn planner_tips_enabled() -> bool {
+    std::env::var("TSBX_PLANNER_TIPS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn load_planner_tips() -> &'static HashMap<String, String> {
+    PLANNER_TIPS.get_or_init(|| {
+        let path = std::env::var("TSBX_PLANNER_TIPS_PATH")
+            .unwrap_or_else(|_| DEFAULT_TIPS_PATH.to_string());
+        match fs::read_to_string(&path) {
+            Ok(contents) => match serde_json::from_str::<HashMap<String, String>>(&contents) {
+                Ok(map) => map,
+                Err(err) => {
+                    warn!(
+                        "Failed to parse planner tips at {}: {}; falling back to embedded defaults",
+                        path, err
+                    );
+                    load_embedded_tips()
+                }
+            },
+            Err(err) => {
+                info!(
+                    "Planner tips file not found at {} ({}); using embedded defaults",
+                    path, err
+                );
+                load_embedded_tips()
+            }
+        }
+    })
+}
+
+fn load_embedded_tips() -> HashMap<String, String> {
+    serde_json::from_str(include_str!("planner_tips.json")).unwrap_or_default()
+}
+
+fn select_tips(
+    task: &str,
+    tools: &[McpToolDescriptor],
+    forced_server: Option<&str>,
+    tips_map: &HashMap<String, String>,
+) -> Vec<String> {
+    if tips_map.is_empty() {
+        return Vec::new();
+    }
+
+    let mut selected = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+
+    if let Some(default_tip) = tips_map.get("default") {
+        if seen.insert("default".to_string()) {
+            selected.push(default_tip.clone());
+        }
+    }
+
+    if let Some(server) = forced_server {
+        let key = server.to_lowercase();
+        if let Some(tip) = tips_map.get(&key) {
+            if seen.insert(key) {
+                selected.push(tip.clone());
+            }
+        }
+    }
+
+    for tool in tools.iter().take(5) {
+        let server_key = tool.server.to_lowercase();
+        let combined_key = format!("{}.{}", server_key, tool.tool.to_lowercase());
+
+        if let Some(tip) = tips_map.get(&combined_key) {
+            if seen.insert(combined_key) {
+                selected.push(tip.clone());
+            }
+        } else if let Some(tip) = tips_map.get(&server_key) {
+            if seen.insert(server_key.clone()) {
+                selected.push(tip.clone());
+            }
+        }
+
+        if selected.len() >= MAX_TIPS {
+            break;
+        }
+    }
+
+    selected.truncate(MAX_TIPS);
+    selected
 }
 
 fn strip_code_fences(raw: &str) -> &str {
