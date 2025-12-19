@@ -126,9 +126,14 @@ impl ToolCatalog {
         self.mcp_client.clone()
     }
 
+    pub fn mcp_aliases(&self) -> Vec<McpToolAlias> {
+        self.mcp_tools.values().cloned().collect()
+    }
+
     fn base_tools() -> Vec<&'static str> {
         vec![
             "run_bash",
+            "code_execution",
             "open_file",
             "create_file",
             "str_replace",

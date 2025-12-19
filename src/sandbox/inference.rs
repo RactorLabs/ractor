@@ -73,6 +73,21 @@ struct Choice {
 #[derive(Debug, Deserialize)]
 struct ChoiceMessage {
     content: Option<String>,
+    #[serde(default)]
+    tool_calls: Vec<ChoiceToolCall>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChoiceToolCall {
+    id: Option<String>,
+    #[serde(default)]
+    function: ChoiceFunction,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct ChoiceFunction {
+    name: String,
+    arguments: String,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -288,9 +303,28 @@ fn parse_response(response_text: &str, estimated_context_length: i64) -> Result<
         .or(usage.total_tokens)
         .unwrap_or(estimated_context_length);
 
+    let tool_calls = if choice.message.tool_calls.is_empty() {
+        None
+    } else {
+        let mut calls = Vec::new();
+        for call in choice.message.tool_calls {
+            let args_value =
+                match serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
+                    Ok(v) => v,
+                    Err(_) => serde_json::Value::Null,
+                };
+            calls.push(ToolCall {
+                id: call.id,
+                name: call.function.name,
+                arguments: args_value,
+            });
+        }
+        Some(calls)
+    };
+
     Ok(ModelResponse {
         content: Some(raw_content.trim().to_string()),
-        tool_calls: None,
+        tool_calls,
         total_tokens: usage.total_tokens,
         prompt_tokens: usage.prompt_tokens,
         completion_tokens: usage.completion_tokens,

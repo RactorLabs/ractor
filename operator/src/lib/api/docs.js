@@ -702,7 +702,7 @@ export function getApiDocs(base) {
           method: 'POST',
           path: '/api/v0/sandboxes/{id}/tasks',
           auth: 'bearer',
-          desc: 'Create a task (enqueue user input). Calls block until completion by default; set background=true to return immediately. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files. Use `task_type="PROGRAMMATIC"` with `input.programmatic` to execute MCP calls without inference.',
+          desc: 'Create a task (enqueue user input). Calls block until completion by default; set background=true to return immediately. Include `@relative/path` inside the text body (or send `file_reference` items directly) to mention files. Use `task_type="PROGRAMMATIC"` with `input.programmatic` to execute MCP calls without inference. Optional fields: `input.programmatic.extract` (or `task`/`job` text) lets the controller extract a key from the MCP result (e.g., `"state"` or `"title"`) and return only that value instead of the raw JSON. Set `input.programmatic.extract_all=true` to return all matches for that key as a JSON array.',
           params: [
             { in: 'path', name: 'id', type: 'string', required: true, desc: 'Sandbox ID (UUID)' },
             { in: 'body', name: 'input', type: 'object', required: true, desc: "User input JSON; preferred shape { content: [{ type: 'text', content: string }] } or { programmatic: { server?, server_id?, calls: [{ tool, arguments?, server?, server_id? }] } }." },

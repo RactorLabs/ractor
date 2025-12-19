@@ -31,6 +31,7 @@ pub struct McpToolDescriptor {
     pub tool: String,
     pub description: Option<String>,
     pub input_schema: Option<Value>,
+    pub output_schema: Option<Value>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -131,6 +132,7 @@ impl McpClient {
                 tool: tool.name,
                 description: tool.description,
                 input_schema: tool.input_schema,
+                output_schema: tool.output_schema,
             })
             .collect();
         Ok(descriptors)
@@ -448,6 +450,7 @@ impl McpClient {
                 tool: tool.name,
                 description: tool.description,
                 input_schema: tool.input_schema,
+                output_schema: tool.output_schema,
             })
             .collect())
     }

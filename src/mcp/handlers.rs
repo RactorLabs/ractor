@@ -19,6 +19,7 @@ use crate::mcp::models::{
     InvokeRequest, McpToolDescriptor, ServerInput, ServerResponse, ToolExampleInput,
     ToolExampleResponse, ToolResponse,
 };
+use crate::mcp::output_schemas::{apply_output_schema_overrides, ensure_output_schema};
 use crate::mcp::state::McpState;
 
 #[derive(Debug, Deserialize)]
@@ -234,6 +235,11 @@ pub async fn list_tools(
         }
     }
 
+    // Ensure every tool has a non-null output schema for downstream caches/filters.
+    for tool in &mut tools {
+        ensure_output_schema(&tool.server_name, &tool.name, &mut tool.output_schema);
+    }
+
     Ok(Json(tools))
 }
 
@@ -277,7 +283,8 @@ pub async fn live_search_tools(
         )
         .await
         {
-            Ok(tools) => {
+            Ok(mut tools) => {
+                apply_output_schema_overrides(&server_name, &mut tools);
                 for tool in tools {
                     if let Some(ref q) = q_lower {
                         let name_match = tool.name.to_lowercase().contains(q);
@@ -291,7 +298,7 @@ pub async fn live_search_tools(
                         }
                     }
                     let now = Utc::now().to_rfc3339();
-                    results.push(ToolResponse {
+                    let mut tool_response = ToolResponse {
                         id: Uuid::new_v4(),
                         server_id,
                         server_name: server_name.clone(),
@@ -303,7 +310,13 @@ pub async fn live_search_tools(
                         version: tool.version,
                         created_at: now.clone(),
                         examples: None,
-                    });
+                    };
+                    ensure_output_schema(
+                        &tool_response.server_name,
+                        &tool_response.name,
+                        &mut tool_response.output_schema,
+                    );
+                    results.push(tool_response);
                     if results.len() >= limit {
                         break;
                     }
@@ -566,7 +579,8 @@ async fn sync_tools_for_server_internal(
     auth_type: Option<&str>,
     auth_payload: Option<&AuthPayload>,
 ) -> McpResult<usize> {
-    let tools = client::fetch_tools(state, base_url, auth_type, auth_payload).await?;
+    let mut tools = client::fetch_tools(state, base_url, auth_type, auth_payload).await?;
+    apply_output_schema_overrides(server_name, &mut tools);
 
     let mut inserted = 0usize;
     for tool in tools {
@@ -650,7 +664,14 @@ async fn load_tools_for_server(state: &McpState, server_id: Uuid) -> McpResult<V
     .fetch_all(&*state.db)
     .await?;
 
-    Ok(rows.into_iter().filter_map(map_tool_row).collect())
+    let mut tools = rows
+        .into_iter()
+        .filter_map(map_tool_row)
+        .collect::<Vec<_>>();
+    for tool in &mut tools {
+        ensure_output_schema(&tool.server_name, &tool.name, &mut tool.output_schema);
+    }
+    Ok(tools)
 }
 
 async fn resolve_server(

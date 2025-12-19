@@ -117,6 +117,7 @@ fn compact_descriptors(tools: &[McpToolDescriptor]) -> (Vec<McpToolDescriptor>, 
                     .as_ref()
                     .map(|d| truncate_string(d, 200).to_string()),
                 input_schema: compact_schema_value,
+                output_schema: t.output_schema.clone(),
             }
         })
         .collect();
@@ -131,6 +132,7 @@ fn strip_schemas(tools: &[McpToolDescriptor]) -> Vec<McpToolDescriptor> {
             tool: t.tool.clone(),
             description: t.description.clone(),
             input_schema: None,
+            output_schema: None,
         })
         .collect()
 }
