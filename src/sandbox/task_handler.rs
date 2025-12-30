@@ -2053,6 +2053,17 @@ impl TaskHandler {
         // Keep schema/default-based extract unless explicitly provided.
         // If no explicit extract was provided, we stick to schema/default-derived value.
 
+        // Rewrite obvious count queries to use GitHub search for accurate totals (no hardcoded per-tool
+        // branching; detect intent from task text and tool type).
+        if let Some(task_text) = programmatic.get("task").and_then(|v| v.as_str()) {
+            for call in &mut normalized_calls {
+                if rewrite_count_call(task_text, call, &server, &mut resolved_extract) {
+                    // Only need to rewrite the first applicable call.
+                    break;
+                }
+            }
+        }
+
         // If mode requests code execution, generate deterministic Python that calls the MCP tools
         // via call_tool/select and returns only the filtered result.
         if use_code_exec {
@@ -3517,6 +3528,89 @@ fn normalize_arg_aliases(args: &mut serde_json::Map<String, Value>, server: &str
             args.insert(new, val);
         }
     }
+}
+
+fn is_count_intent(task_text: &str, extract: &Option<String>) -> bool {
+    let lower = task_text.to_lowercase();
+    let count_terms = ["how many", "number of", "total", "count", "how much"];
+    if count_terms.iter().any(|t| lower.contains(t)) {
+        return true;
+    }
+    if let Some(key) = extract {
+        let k = key.to_lowercase();
+        return k.contains("total_count") || k == "length" || k == "count";
+    }
+    false
+}
+
+fn rewrite_count_call(
+    task_text: &str,
+    call: &mut Value,
+    default_server: &Option<String>,
+    resolved_extract: &mut Option<String>,
+) -> bool {
+    let Some(tool) = call.get("tool").and_then(|v| v.as_str()) else {
+        return false;
+    };
+    let server = call
+        .get("server")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .or_else(|| default_server.clone())
+        .unwrap_or_default();
+
+    if !server.eq_ignore_ascii_case("github") {
+        return false;
+    }
+
+    let tool_lower = tool.to_lowercase();
+    if !(tool_lower.contains("list_issues") || tool_lower.contains("list_pull_requests")) {
+        return false;
+    }
+
+    if !is_count_intent(task_text, resolved_extract) {
+        return false;
+    }
+
+    let Some(args) = call.get("arguments").and_then(|v| v.as_object()) else {
+        return false;
+    };
+    let owner = args
+        .get("owner")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let repo = args
+        .get("repo")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let state = args.get("state").and_then(|v| v.as_str()).unwrap_or("open");
+
+    let (Some(owner), Some(repo)) = (owner, repo) else {
+        return false;
+    };
+
+    let kind = if tool_lower.contains("pull") {
+        "pr"
+    } else {
+        "issue"
+    };
+    let q = format!("repo:{owner}/{repo} is:{kind} state:{state}");
+
+    let mut new_args = serde_json::Map::new();
+    new_args.insert("method".to_string(), Value::String("get".to_string()));
+    new_args.insert("q".to_string(), Value::String(q.clone()));
+    new_args.insert("query".to_string(), Value::String(q));
+
+    let obj = call.as_object_mut().unwrap();
+    obj.insert(
+        "tool".to_string(),
+        Value::String("search_issues".to_string()),
+    );
+    obj.insert("arguments".to_string(), Value::Object(new_args));
+
+    *resolved_extract = Some("total_count".to_string());
+
+    true
 }
 
 fn schema_args(descriptor: Option<&McpToolDescriptor>) -> Option<Value> {
